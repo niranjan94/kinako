@@ -7,11 +7,14 @@ T3 Connect is not built in.
 ## Branches
 
 - `main` is an exact mirror of upstream `main`. Never commit to it.
-- `fork/main` is the default branch: upstream plus this fork's patch layer, kept small and rebased.
-  `git log main..fork/main` is the complete list of what this fork changes.
+- `fork/main` is the default branch: upstream plus this fork's changes. Upstream comes in through
+  merges, so `fork/main` is never rewritten. `git diff main...fork/main` shows everything this fork
+  changes.
 
-`fork-sync.yml` fast-forwards `main` and rebases `fork/main` every 6 hours. Rebasing rewrites
-`fork/main`, so after a sync run reset any local checkout with `git fetch && git reset --hard origin/fork/main`.
+Every 6 hours `fork-sync.yml` fast-forwards `main` to upstream and, when `fork/main` is behind, opens a
+**chore(fork): sync upstream** pull request from `main` into `fork/main`. One PR stays open and keeps
+picking up new upstream commits until you merge it. Always merge it with a **merge commit**; squashing
+or rebasing would make the next sync replay the same upstream history.
 
 ## What the patch layer changes
 
@@ -25,7 +28,8 @@ T3 Connect is not built in.
 | `.env.example` no longer carries upstream's production Clerk and relay values                                               | `.env.example`                                                                   |
 | Fork workflows                                                                                                              | `.github/workflows/fork-*.yml`                                                   |
 
-Keep new patches out of `package.json` versions, `pnpm-lock.yaml`, upstream workflows, and busy UI
+Conflicts on the sync PR come from fork changes that touch the same lines as upstream. Keep new
+patches out of `package.json` versions, `pnpm-lock.yaml`, upstream workflows, and busy UI
 files. Prefer new fork-only files and environment variables.
 
 ## One-time setup
@@ -48,8 +52,9 @@ files. Prefer new fork-only files and environment variables.
    Re-run this when upstream adds a workflow.
 
 3. **Sync token:** create a fine-grained personal access token limited to this repository with
-   **Contents: read and write** and **Workflows: read and write**, and save it as the
+   **Contents**, **Workflows**, and **Pull requests** set to read and write, and save it as the
    `FORK_SYNC_TOKEN` Actions secret. The default `GITHUB_TOKEN` cannot push upstream's workflow changes.
+4. **Merge button:** Settings → General → Pull Requests, keep **Allow merge commits** enabled.
 
 ## Releasing
 
@@ -68,17 +73,20 @@ CLI archives and publishes them as a GitHub Release here.
 Adding the signing secrets that `release-desktop.yml` already reads (`CSC_LINK`, `APPLE_API_*`,
 `AZURE_*`, …) turns on signing without workflow changes.
 
-## Fixing a failed sync
+## Resolving a conflicted sync PR
 
-When `fork/main` stops rebasing cleanly, the sync job still mirrors `main`, leaves `fork/main` as it
-was, and fails. Rebase by hand:
+Small conflicts can be fixed in GitHub's web editor. Otherwise merge locally and push; the PR closes as
+merged:
 
 ```bash
 git fetch origin
-git checkout fork/main && git reset --hard origin/fork/main
-git rebase origin/main          # resolve conflicts; never hand-merge pnpm-lock.yaml, regenerate it
-git push --force-with-lease origin fork/main
+git checkout fork/main && git pull
+git merge origin/main           # resolve conflicts; never hand-merge pnpm-lock.yaml:
+                                # take main's copy, then run `pnpm install` to regenerate it
+git push origin fork/main
 ```
+
+Sync before cutting a release, so the release carries upstream's latest fixes.
 
 ## Not covered yet
 

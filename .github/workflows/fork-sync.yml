@@ -1,11 +1,12 @@
 name: Fork sync
 
-# Keeps `main` an exact mirror of upstream and replays this fork's patch layer
-# (`fork/main`) on top of it. See FORK.md.
+# Keeps `main` an exact mirror of upstream and opens a pull request merging it
+# into `fork/main`. See FORK.md.
 #
 # Needs the FORK_SYNC_TOKEN secret: a fine-grained token for this repository
-# with Contents and Workflows write access. The default GITHUB_TOKEN cannot push
-# commits that touch .github/workflows, and upstream changes them constantly.
+# with Contents, Workflows, and Pull requests write access. The default
+# GITHUB_TOKEN cannot push commits that touch .github/workflows, and upstream
+# changes them constantly.
 
 on:
   schedule:
@@ -55,22 +56,23 @@ jobs:
           git push origin upstream/main:refs/heads/main
           echo "main is at $(git rev-parse --short upstream/main)"
 
-      - name: Rebase fork/main onto upstream
+      # Merging main into fork/main is left to a person: conflicts with fork
+      # changes show up on the PR and get resolved there, and fork/main is
+      # never rewritten. An open PR picks up new upstream commits on its own.
+      - name: Open sync pull request
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          before="$(git rev-parse HEAD)"
           if git merge-base --is-ancestor upstream/main HEAD; then
             echo "fork/main already contains upstream/main."
             exit 0
           fi
-          if ! git rebase upstream/main; then
-            git status --short | sed 's/^/  /'
-            git rebase --abort
-            echo "::error::fork/main no longer rebases cleanly onto upstream/main. Rebase it by hand (see FORK.md)."
-            exit 1
+          open="$(gh pr list --repo "$GITHUB_REPOSITORY" --base fork/main --head main --state open --json url --jq '.[0].url')"
+          if [[ -n "$open" ]]; then
+            echo "Sync pull request already open: $open"
+            exit 0
           fi
-          git push --force-with-lease="fork/main:${before}" origin HEAD:refs/heads/fork/main
-          echo "fork/main patch layer:"
-          git log --oneline upstream/main..HEAD
+          gh pr create --repo "$GITHUB_REPOSITORY" --base fork/main --head main \
+            --title "chore(fork): sync upstream" \
+            --body "Merges upstream \`main\` into \`fork/main\`. Merge with a merge commit, never squash or rebase, so later syncs only bring new upstream commits. See FORK.md for resolving conflicts."
