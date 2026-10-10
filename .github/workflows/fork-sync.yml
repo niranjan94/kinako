@@ -1,0 +1,76 @@
+name: Fork sync
+
+# Keeps `main` an exact mirror of upstream and replays this fork's patch layer
+# (`fork/main`) on top of it. See FORK.md.
+#
+# Needs the FORK_SYNC_TOKEN secret: a fine-grained token for this repository
+# with Contents and Workflows write access. The default GITHUB_TOKEN cannot push
+# commits that touch .github/workflows, and upstream changes them constantly.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync upstream
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Require sync token
+        env:
+          FORK_SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+        run: |
+          if [[ -z "$FORK_SYNC_TOKEN" ]]; then
+            echo "::error::Set the FORK_SYNC_TOKEN secret (see FORK.md)."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: fork/main
+          fetch-depth: 0
+          token: ${{ secrets.FORK_SYNC_TOKEN }}
+
+      - name: Mirror upstream main
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/pingdotgg/t3code.git
+          git fetch --no-tags upstream main
+          git fetch --no-tags origin main
+          # main must never carry fork commits; refuse rather than drop them.
+          if ! git merge-base --is-ancestor origin/main upstream/main; then
+            echo "::error::origin/main has commits that are not in upstream/main. Move them to fork/main by hand."
+            exit 1
+          fi
+          git push origin upstream/main:refs/heads/main
+          echo "main is at $(git rev-parse --short upstream/main)"
+
+      - name: Rebase fork/main onto upstream
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          before="$(git rev-parse HEAD)"
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "fork/main already contains upstream/main."
+            exit 0
+          fi
+          if ! git rebase upstream/main; then
+            git status --short | sed 's/^/  /'
+            git rebase --abort
+            echo "::error::fork/main no longer rebases cleanly onto upstream/main. Rebase it by hand (see FORK.md)."
+            exit 1
+          fi
+          git push --force-with-lease="fork/main:${before}" origin HEAD:refs/heads/fork/main
+          echo "fork/main patch layer:"
+          git log --oneline upstream/main..HEAD
