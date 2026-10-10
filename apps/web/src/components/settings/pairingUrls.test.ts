@@ -14,6 +14,14 @@ describe("settings pairing URL helpers", () => {
     );
   });
 
+  it("uses direct pairing URLs for HTTPS endpoints when no hosted app is configured", () => {
+    vi.stubEnv("VITE_HOSTED_APP_URL", "");
+
+    expect(
+      resolveHostedPairingUrl("https://host.tailnet.example.ts.net:3773", "PAIRCODE"),
+    ).toBeNull();
+  });
+
   it("uses hosted pairing URLs for HTTPS endpoints", () => {
     vi.stubEnv("VITE_HOSTED_APP_URL", "https://preview.t3.codes");
 
