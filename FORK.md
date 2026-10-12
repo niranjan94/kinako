@@ -18,6 +18,7 @@ Resolving conflicts:
 
 - `pnpm-lock.yaml`: never hand-merge it. Take upstream's copy (`git checkout --theirs pnpm-lock.yaml`), then run `pnpm install` to regenerate it.
 - `.github/workflows/ci.yml`: take upstream's copy (`git checkout --theirs .github/workflows/ci.yml`), then rerun the runner substitution below.
+- `README.md`: keep this fork's copy (`git checkout --ours README.md`), then port anything from upstream's change that still applies, such as new providers or docs links.
 
 `git diff upstream/main...main` shows everything this fork changes. Merge before cutting a release so it carries upstream's latest fixes. Check the Actions tab after merging and disable any workflow upstream added.
 
