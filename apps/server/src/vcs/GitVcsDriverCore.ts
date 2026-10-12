@@ -3409,40 +3409,64 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
 
   // `.worktreeinclude` (gitignore syntax, the convention Claude Code and Conductor share)
   // selects local files such as `.env` that a fresh worktree lacks; without one, the
-  // `worktreeIncludePatterns` setting does. Only files git ignores in the source checkout
-  // qualify, so the list can never pull in work in progress.
+  // `worktreeIncludePatterns` setting does. Creation copies these files and storage cleanup
+  // treats them as recreatable, so both must resolve the list here.
+  const listWorktreeIncludedFiles: GitVcsDriver.GitVcsDriver["Service"]["listWorktreeIncludedFiles"] =
+    Effect.fn("listWorktreeIncludedFiles")(function* (input) {
+      const sourceRoot = (yield* runGitStdout(
+        "GitVcsDriver.listWorktreeIncludedFiles.sourceRoot",
+        input.sourceCwd,
+        ["rev-parse", "--show-toplevel"],
+      )).trim();
+      const includeFile = path.join(sourceRoot, WORKTREE_INCLUDE_FILE_NAME);
+      const hasIncludeFile = yield* fileSystem
+        .exists(includeFile)
+        .pipe(Effect.orElseSucceed(() => false));
+      const excludeArgs = worktreeIncludeExcludeArgs(
+        hasIncludeFile ? includeFile : null,
+        input.patterns,
+      );
+      if (excludeArgs.length === 0) return null;
+      // Without the node_modules exclusion git walks every dependency folder looking for
+      // matches such as a package's own `.env.example`.
+      const listed = yield* executeGit(
+        "GitVcsDriver.listWorktreeIncludedFiles",
+        input.cwd ?? sourceRoot,
+        [
+          "ls-files",
+          "-z",
+          "--others",
+          "--ignored",
+          ...excludeArgs,
+          "--",
+          ...(input.paths?.map((entry) => `:(literal)${entry}`) ?? ["."]),
+          ":(exclude,glob)**/node_modules/**",
+        ],
+        { maxOutputBytes: WORKTREE_INCLUDE_MAX_OUTPUT_BYTES },
+      );
+      return {
+        sourceRoot,
+        files: listed.stdout.split("\0").filter((entry) => entry.length > 0),
+        truncated: listed.stdoutTruncated,
+      };
+    });
+
+  // Only files git ignores in the source checkout qualify, so the list can never pull in
+  // work in progress.
   const copyWorktreeIncludedFiles = Effect.fn("copyWorktreeIncludedFiles")(function* (
     sourceCwd: string,
     worktreePath: string,
     defaultPatterns: string,
   ) {
-    const sourceRoot = (yield* runGitStdout(
-      "GitVcsDriver.createWorktree.includeSourceRoot",
-      sourceCwd,
-      ["rev-parse", "--show-toplevel"],
-    )).trim();
-    const includeFile = path.join(sourceRoot, WORKTREE_INCLUDE_FILE_NAME);
-    const patternArgs = worktreeIncludeExcludeArgs(
-      (yield* fileSystem.exists(includeFile)) ? includeFile : null,
-      defaultPatterns,
-    );
-    if (patternArgs.length === 0) return;
-
-    const matched = yield* executeGit(
-      "GitVcsDriver.createWorktree.listIncludedFiles",
-      sourceRoot,
-      ["ls-files", "-z", "--others", "--ignored", ...patternArgs],
-      { maxOutputBytes: WORKTREE_INCLUDE_MAX_OUTPUT_BYTES },
-    );
-    const candidates = matched.stdout.split("\0").filter((entry) => entry.length > 0);
-    if (matched.stdoutTruncated || candidates.length === 0) {
-      if (matched.stdoutTruncated) {
-        yield* Effect.logWarning(".worktreeinclude matches too many files; copying none", {
-          sourceRoot,
-        });
-      }
-      return;
+    const included = yield* listWorktreeIncludedFiles({ sourceCwd, patterns: defaultPatterns });
+    if (included === null) return;
+    if (included.truncated) {
+      return yield* Effect.logWarning(".worktreeinclude matches too many files; copying none", {
+        sourceRoot: included.sourceRoot,
+      });
     }
+    const { sourceRoot, files: candidates } = included;
+    if (candidates.length === 0) return;
     // check-ignore exits 1 when none of the paths are ignored.
     const ignored = yield* executeGit(
       "GitVcsDriver.createWorktree.filterIncludedFiles",
@@ -3459,8 +3483,20 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       files,
       (relativePath) => {
         const destination = path.join(worktreePath, relativePath);
-        return fileSystem.makeDirectory(path.dirname(destination), { recursive: true }).pipe(
-          Effect.andThen(fileSystem.copyFile(path.join(sourceRoot, relativePath), destination)),
+        // A path ignored in the main checkout can be tracked on the branch being checked
+        // out; never overwrite what the checkout produced.
+        return fileSystem.exists(destination).pipe(
+          Effect.flatMap((exists) =>
+            exists
+              ? Effect.void
+              : fileSystem
+                  .makeDirectory(path.dirname(destination), { recursive: true })
+                  .pipe(
+                    Effect.andThen(
+                      fileSystem.copyFile(path.join(sourceRoot, relativePath), destination),
+                    ),
+                  ),
+          ),
           Effect.catch((cause) =>
             Effect.logWarning("could not copy a .worktreeinclude file", { relativePath, cause }),
           ),
@@ -4182,5 +4218,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     initRepo: initRepoWithListRefsInvalidation,
     listLocalBranchNames,
     listWorktreePaths,
+    listWorktreeIncludedFiles,
   });
 });

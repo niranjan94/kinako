@@ -148,6 +148,12 @@ export interface CreateWorktreeProgress {
   }) => Effect.Effect<void, never>;
 }
 
+export interface WorktreeIncludedFiles {
+  readonly sourceRoot: string;
+  readonly files: ReadonlyArray<string>;
+  readonly truncated: boolean;
+}
+
 export interface CreateWorktreeOptions {
   readonly progress?: CreateWorktreeProgress;
   /**
@@ -405,6 +411,18 @@ export class GitVcsDriver extends Context.Service<
      * main checkout included. Worktrees whose directory is gone are left out.
      */
     readonly listWorktreePaths: (cwd: string) => Effect.Effect<string[], GitCommandError>;
+    /**
+     * Untracked files outside node_modules that the source checkout's `.worktreeinclude`,
+     * or `patterns` without one, selects for copying into new worktrees. Lists under
+     * `cwd` (default: the source root), limited to `paths` when given. Null when there are
+     * no patterns. Callers still filter to ignored files.
+     */
+    readonly listWorktreeIncludedFiles: (input: {
+      readonly sourceCwd: string;
+      readonly patterns: string;
+      readonly cwd?: string;
+      readonly paths?: ReadonlyArray<string>;
+    }) => Effect.Effect<WorktreeIncludedFiles | null, GitCommandError>;
     readonly deleteLocalBranch: (
       input: GitDeleteLocalBranchInput,
     ) => Effect.Effect<void, GitCommandError>;

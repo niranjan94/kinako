@@ -3307,7 +3307,7 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
         const { initialBranch } = yield* initRepoWithCommit(cwd);
-        yield* writeTextFile(cwd, ".gitignore", ".env*\ncerts/\n");
+        yield* writeTextFile(cwd, ".gitignore", ".env*\ncerts/\nnode_modules/\n");
         yield* writeTextFile(
           cwd,
           ".worktreeinclude",
@@ -3320,6 +3320,7 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
         yield* writeTextFile(cwd, "certs/local/dev.pem", "pem\n");
         yield* writeTextFile(cwd, "certs/local/dev.example", "example\n");
         yield* writeTextFile(cwd, "notes.txt", "untracked but not ignored\n");
+        yield* writeTextFile(cwd, "apps/web/node_modules/pkg/.env.example", "dependency\n");
         const pathService = yield* Path.Path;
         const worktreePath = pathService.join(yield* makeTmpDir("git-worktrees-"), "included");
         const driver = yield* GitVcsDriver.GitVcsDriver;
@@ -3344,6 +3345,39 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
           yield* fileSystem.exists(pathService.join(worktreePath, "certs/local/dev.example")),
         );
         assert.isFalse(yield* fileSystem.exists(pathService.join(worktreePath, "notes.txt")));
+        assert.isFalse(
+          yield* fileSystem.exists(pathService.join(worktreePath, "apps/web/node_modules")),
+        );
+      }),
+    );
+
+    it.effect("keeps a tracked file the branch checks out over an included local copy", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(cwd, ".gitignore", "*.local\n");
+        yield* git(cwd, ["add", "."]);
+        yield* git(cwd, ["commit", "-m", "add ignore rules"]);
+        yield* git(cwd, ["checkout", "-b", "tracks-local"]);
+        yield* writeTextFile(cwd, "settings.local", "tracked\n");
+        yield* git(cwd, ["add", "--force", "settings.local"]);
+        yield* git(cwd, ["commit", "-m", "track settings.local"]);
+        yield* git(cwd, ["checkout", initialBranch]);
+        yield* writeTextFile(cwd, "settings.local", "local\n");
+        const pathService = yield* Path.Path;
+        const worktreePath = pathService.join(yield* makeTmpDir("git-worktrees-"), "tracked");
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* driver.createWorktree(
+          { cwd, path: worktreePath, refName: "tracks-local", newRefName: "feature/tracked" },
+          { includePatterns: "*.local" },
+        );
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(
+          yield* fileSystem.readFileString(pathService.join(worktreePath, "settings.local")),
+          "tracked\n",
+        );
       }),
     );
 
