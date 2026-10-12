@@ -21,6 +21,7 @@ import { toastManager } from "../ui/toast";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { Textarea } from "../ui/textarea";
 import {
   NumberField,
   NumberFieldDecrement,
@@ -396,6 +397,64 @@ function CleanupSection() {
   );
 }
 
+function WorktreeIncludePatternsRow({ isProjectScope }: { isProjectScope: boolean }) {
+  const { connectedEnvironments, targets } = useSettingsScope();
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const mixed = useScopedSettingsMixed(["worktreeIncludePatterns"]);
+  const edited = useRef(false);
+  if (
+    connectedEnvironments.some(
+      (environment) =>
+        environment.serverConfig?.environment.capabilities.worktreeIncludePatterns !== true,
+    )
+  )
+    return null;
+  const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");
+
+  return (
+    <SettingsRow
+      {...searchableSetting("worktree-include-patterns")}
+      description="Gitignored files to copy from the main checkout into new worktrees, one .gitignore pattern per line. A repository's .worktreeinclude file replaces this list."
+      serverScoped
+      settingKeys={["worktreeIncludePatterns"]}
+      mixed={mixed}
+      resetAction={
+        !isProjectScope && settings.worktreeIncludePatterns !== "" ? (
+          <SettingResetButton
+            label="files to copy"
+            onClick={() => updateSettings({ worktreeIncludePatterns: "" })}
+          />
+        ) : null
+      }
+    >
+      <div className="mt-3 max-w-2xl pb-3.5">
+        <Textarea
+          key={`${scopeKey}:${mixed}:${settings.worktreeIncludePatterns}`}
+          aria-label="Files to copy"
+          spellCheck={false}
+          rows={4}
+          placeholder={
+            mixed
+              ? "Mixed. Enter patterns to apply to all selected targets."
+              : ".env*\nconfig/local.json"
+          }
+          defaultValue={mixed ? "" : settings.worktreeIncludePatterns}
+          onChange={() => {
+            edited.current = true;
+          }}
+          onBlur={(event) => {
+            const value = event.target.value.trim();
+            if (edited.current && (mixed || value !== settings.worktreeIncludePatterns))
+              updateSettings({ worktreeIncludePatterns: value });
+            edited.current = false;
+          }}
+        />
+      </div>
+    </SettingsRow>
+  );
+}
+
 export function StorageSettingsPanel() {
   const { scope, connectedEnvironments, targets, target } = useSettingsScope();
   const scopedSettings = useScopedSettings();
@@ -467,6 +526,7 @@ export function StorageSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="storage-worktrees" title="Worktrees">
         {!isProjectScope && <WorktreesDirectoryRow />}
+        <WorktreeIncludePatternsRow isProjectScope={isProjectScope} />
         {isProjectScope && (
           <SettingsRow
             title="Automatic worktree cleanup"

@@ -198,6 +198,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["worktree location folder directory path drive external disk"],
   },
   {
+    id: "worktree-include-patterns",
+    title: "Files to copy",
+    to: "/settings/storage",
+    scope: "project-defaults",
+    searchTerms: ["worktreeinclude .env gitignored local files copy new worktree secrets"],
+  },
+  {
     id: "storage-artifacts",
     title: "Artifacts and logs",
     to: "/settings/storage",

@@ -26,6 +26,7 @@ import {
   SettingsEnvironmentFilterHeader,
 } from "./components/SettingsEnvironmentFilterHeader";
 import { BranchNamingSettings } from "./components/BranchNamingSettings";
+import { WorktreeIncludePatternsSettings } from "./components/WorktreeIncludePatternsSettings";
 import { SettingsChoiceRow } from "./components/SettingsChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -49,7 +50,12 @@ const PAGE_TITLES: Record<SettingsPage, string> = {
 };
 
 const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettingKey[]> = {
-  "new-threads": ["defaultThreadEnvMode", "worktreeSubmodules", "defaultRuntimeMode"],
+  "new-threads": [
+    "defaultThreadEnvMode",
+    "worktreeSubmodules",
+    "worktreeIncludePatterns",
+    "defaultRuntimeMode",
+  ],
   "source-control": [
     "defaultAutoPull",
     "removeAgentCreditsOnMerge",
@@ -230,6 +236,10 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     (target) =>
       target.environment.serverConfig.environment.capabilities.threadRestartContinuation === true,
   );
+  const supportsIncludePatterns = targets.every(
+    (target) =>
+      target.environment.serverConfig.environment.capabilities.worktreeIncludePatterns === true,
+  );
   const disabledFor = (key: string) =>
     disabled ||
     (projectSelected &&
@@ -323,6 +333,16 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       />
                     ))}
                   </SettingsSection>
+                  {supportsIncludePatterns ? (
+                    <WorktreeIncludePatternsSettings
+                      key={targets
+                        .map((target) => `${target.environment.environmentId}:${target.projectId}`)
+                        .join(",")}
+                      patterns={uniform("worktreeIncludePatterns")}
+                      disabled={disabledFor("worktreeIncludePatterns")}
+                      onChange={write}
+                    />
+                  ) : null}
                   <SettingsSection
                     title="Default permissions"
                     trailing={
