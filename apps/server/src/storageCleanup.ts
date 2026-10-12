@@ -15,7 +15,8 @@ import type {
   StorageCleanupReport,
   StorageCleanupReportEntry,
 } from "@t3tools/contracts";
-import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
+import { WORKTREE_INCLUDE_FILE_NAME, worktreeIncludeExcludeArgs } from "@t3tools/shared/git";
+import { resolveProjectSettings, resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -63,6 +64,11 @@ function cleanupFailureReason(error: { readonly message: string }) {
   return isGitCommandError(error)
     ? `${error.command}: ${error.detail.split(/\r?\n/)[0]}${error.reason ? ` (${error.reason})` : ""}`
     : (error.message.split(/\r?\n/)[0] ?? error.message);
+}
+
+interface WorktreeIncludeSource {
+  readonly sourceCwd: string;
+  readonly patterns: string;
 }
 
 const worktreeCleanupEnabled = (rules: WorktreeCleanupRules) =>
@@ -328,9 +334,66 @@ const make = Effect.gen(function* () {
     return (name?.startsWith("(") ? null : name) !== branch;
   });
 
+  const sameContents = (left: string, right: string) =>
+    Effect.gen(function* () {
+      const [leftInfo, rightInfo] = yield* Effect.all([fs.stat(left), fs.stat(right)]);
+      if (leftInfo.type !== "File" || rightInfo.type !== "File") return false;
+      if (leftInfo.size !== rightInfo.size) return false;
+      const [leftBytes, rightBytes] = yield* Effect.all([fs.readFile(left), fs.readFile(right)]);
+      return Buffer.compare(leftBytes, rightBytes) === 0;
+    }).pipe(Effect.orElseSucceed(() => false));
+
+  // Files copied in by .worktreeinclude or the worktreeIncludePatterns setting come back
+  // with a recreated worktree, so they protect it only once they differ from the source
+  // checkout's copy. Returns the first ignored file that cannot be recreated.
+  const firstIrreplaceableIgnoredFile = Effect.fn("StorageCleanup.firstIrreplaceableIgnoredFile")(
+    function* (cwd: string, entries: ReadonlyArray<string>, include: WorktreeIncludeSource) {
+      const sourceRoot = (yield* git.execute({
+        operation: "StorageCleanup.includeSourceRoot",
+        cwd: include.sourceCwd,
+        args: ["rev-parse", "--show-toplevel"],
+      })).stdout.trim();
+      const includeFile = path.join(sourceRoot, WORKTREE_INCLUDE_FILE_NAME);
+      const patternArgs = worktreeIncludeExcludeArgs(
+        (yield* fs.exists(includeFile)) ? includeFile : null,
+        include.patterns,
+      );
+      if (patternArgs.length === 0) return entries[0]!;
+      const listUnder = (excludeArgs: ReadonlyArray<string>) =>
+        git.execute({
+          operation: "StorageCleanup.ignoredFilesUnder",
+          cwd,
+          args: [
+            "--literal-pathspecs",
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            ...excludeArgs,
+            "--",
+            ...entries,
+          ],
+          maxOutputBytes: 1024 * 1024,
+        });
+      const [ignored, included] = yield* Effect.all([
+        listUnder(["--exclude-standard"]),
+        listUnder(patternArgs),
+      ]);
+      if (ignored.stdoutTruncated || included.stdoutTruncated) return entries[0]!;
+      const includedFiles = new Set(included.stdout.split("\0"));
+      for (const file of new Set(ignored.stdout.split("\0"))) {
+        if (file === "" || /(^|\/)node_modules\//.test(file)) continue;
+        if (!includedFiles.has(file)) return file;
+        if (!(yield* sameContents(path.join(cwd, file), path.join(sourceRoot, file)))) return file;
+      }
+      return null;
+    },
+  );
+
   const localChangesReason = Effect.fn("StorageCleanup.localChangesReason")(function* (
     cwd: string,
     rules: WorktreeCleanupRules,
+    include: WorktreeIncludeSource,
   ) {
     const status = yield* git.execute({
       operation: "StorageCleanup.localChanges",
@@ -362,10 +425,12 @@ const make = Effect.gen(function* () {
       maxOutputBytes: 64 * 1024,
     });
     if (ignored.stdoutTruncated) return "ignored files exceed the inspection limit";
-    const file = ignored.stdout
+    const entries = ignored.stdout
       .split("\0")
-      .find((entry) => entry !== "" && !/(^|\/)node_modules\/$/.test(entry));
-    return file === undefined ? null : `has ignored files (${file})`;
+      .filter((entry) => entry !== "" && !/(^|\/)node_modules\/$/.test(entry));
+    if (entries.length === 0) return null;
+    const file = yield* firstIrreplaceableIgnoredFile(cwd, entries, include);
+    return file === null ? null : `has ignored files (${file})`;
   });
 
   const cleanupGit = Effect.fn("StorageCleanup.cleanupGit")(function* (
@@ -474,7 +539,12 @@ const make = Effect.gen(function* () {
           return keep("not a linked worktree");
         if (yield* branchChanged(worktreePath, thread.branch))
           return keep("repository or branch changed");
-        const changes = yield* localChangesReason(worktreePath, settings);
+        const include: WorktreeIncludeSource = {
+          sourceCwd: project.workspaceRoot,
+          patterns: resolveProjectSettings(serverSettings, thread.projectId).settings
+            .worktreeIncludePatterns,
+        };
+        const changes = yield* localChangesReason(worktreePath, settings, include);
         if (changes !== null) return keep(changes);
         const head = yield* git.resolveCommit({ cwd: worktreePath, revision: "HEAD" });
         const old =
@@ -600,7 +670,7 @@ const make = Effect.gen(function* () {
           head.commitSha
         )
           return keep("commit changed since check");
-        const finalChanges = yield* localChangesReason(worktreePath, settings);
+        const finalChanges = yield* localChangesReason(worktreePath, settings, include);
         if (finalChanges !== null) return keep(finalChanges);
         const current = resolveWorktreeCleanup(
           yield* settingsService.getSettings,

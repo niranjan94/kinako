@@ -314,9 +314,13 @@ const cleanupFixture = Effect.gen(function* () {
       editBeforeRemoval = true;
     },
     fs,
+    repo,
     worktree,
     config,
     command,
+    setIncludePatterns: (worktreeIncludePatterns: string) => {
+      settings = { ...settings, worktreeIncludePatterns };
+    },
     enableFiles: () => {
       settings = {
         ...settings,
@@ -572,6 +576,50 @@ describe("storage cleanup reports and local file policies", () => {
           expect(report.entries[0]?.reason).toContain(
             file === ".env" ? "ignored files (.env)" : "uncommitted changes (1 file)",
           );
+      }),
+    ),
+  );
+  it.live.each([
+    ["an identical copy", "SECRET=1\n", "removed"],
+    ["an edited copy", "SECRET=2\n", "kept"],
+    ["a copy without a source", null, "kept"],
+  ] as const)(
+    "treats %s of an included file under any-local-files",
+    ([, worktreeContents, outcome]) =>
+      runCleanupTest(
+        Effect.gen(function* () {
+          const { service, fs, repo, worktree, setPolicy, setIncludePatterns } =
+            yield* cleanupFixture;
+          setPolicy("any-local-files");
+          setIncludePatterns("# local secrets\n.env");
+          if (worktreeContents === null) {
+            yield* fs.writeFileString(`${worktree}/.env`, "SECRET=1\n");
+          } else {
+            yield* fs.writeFileString(`${repo}/.env`, "SECRET=1\n");
+            yield* fs.writeFileString(`${worktree}/.env`, worktreeContents);
+          }
+          const report = yield* service.runNow;
+          expect(report.entries[0]).toMatchObject({ outcome });
+          if (outcome === "kept")
+            expect(report.entries[0]?.reason).toContain("ignored files (.env)");
+          expect(yield* fs.exists(worktree)).toBe(outcome === "kept");
+        }),
+      ),
+  );
+  it.live("removes a worktree whose ignored folder .worktreeinclude copied unchanged", () =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        const { service, fs, repo, worktree, setPolicy, setIncludePatterns } =
+          yield* cleanupFixture;
+        setPolicy("any-local-files");
+        setIncludePatterns("nothing-matches");
+        yield* fs.writeFileString(`${repo}/.worktreeinclude`, "dist/**\n");
+        for (const root of [repo, worktree]) {
+          yield* fs.makeDirectory(`${root}/dist/nested`, { recursive: true });
+          yield* fs.writeFileString(`${root}/dist/nested/app.js`, "built\n");
+        }
+        expect((yield* service.runNow).entries[0]).toMatchObject({ outcome: "removed" });
+        expect(yield* fs.exists(worktree)).toBe(false);
       }),
     ),
   );

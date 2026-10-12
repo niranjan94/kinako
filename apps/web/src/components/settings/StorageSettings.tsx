@@ -633,7 +633,7 @@ export function StorageSettingsPanel() {
                 status={ruleStatus("worktreeKeepWhen")}
                 description={
                   settings.worktreeKeepWhen === "any-local-files"
-                    ? "Includes ignored files, except node_modules."
+                    ? "Includes ignored files, except node_modules and unchanged files to copy."
                     : settings.worktreeKeepWhen === "tracked-changes"
                       ? "Deletes untracked and ignored files, including .env."
                       : "Keeps edits and untracked files. Deletes ignored files, including .env."
