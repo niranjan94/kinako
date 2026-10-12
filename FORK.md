@@ -41,10 +41,10 @@ Merge conflicts come from fork changes that touch the same lines as upstream. Ke
 Upstream's `ci.yml` runs unchanged except for its runners. GitHub's standard runners are free for public repositories but have half the cores of upstream's Blacksmith machines, so job timeouts are doubled. The substitution is safe to rerun:
 
 ```bash
-perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-26.04/ || s/blacksmith-\d+vcpu-macos-26/macos-26/) { $d = 1; next } if ($d && s/^(    timeout-minutes: )(\d+)$/$1 . $2 * 2/e) { $d = 0 }' .github/workflows/ci.yml
+perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-24.04/ || s/blacksmith-\d+vcpu-macos-26/macos-26/) { $d = 1; next } if ($d && s/^(    timeout-minutes: )(\d+)$/$1 . $2 * 2/e) { $d = 0 }' .github/workflows/ci.yml
 ```
 
-CI uses Ubuntu 26.04, but `fork-release.yml` stays on Ubuntu 24.04: Linux artifacts link against the build machine's glibc, and a 26.04 build would not start on older distributions.
+CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does not support Ubuntu 26.04 yet, so the server browser tests cannot install Chromium there. Linux release artifacts also link against the build machine's glibc, so a 26.04 build would not start on older distributions.
 
 ## One-time setup
 
