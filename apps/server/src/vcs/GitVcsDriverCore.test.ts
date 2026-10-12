@@ -3303,6 +3303,77 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("copies gitignored files that .worktreeinclude selects into a new worktree", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(cwd, ".gitignore", ".env*\ncerts/\n");
+        yield* writeTextFile(
+          cwd,
+          ".worktreeinclude",
+          "# local secrets\n.env*\ncerts/local/**\n!certs/local/*.example\nnotes.txt\n",
+        );
+        yield* git(cwd, ["add", "."]);
+        yield* git(cwd, ["commit", "-m", "add ignore rules"]);
+        yield* writeTextFile(cwd, ".env", "ROOT=1\n");
+        yield* writeTextFile(cwd, "apps/web/.env.local", "NESTED=1\n");
+        yield* writeTextFile(cwd, "certs/local/dev.pem", "pem\n");
+        yield* writeTextFile(cwd, "certs/local/dev.example", "example\n");
+        yield* writeTextFile(cwd, "notes.txt", "untracked but not ignored\n");
+        const pathService = yield* Path.Path;
+        const worktreePath = pathService.join(yield* makeTmpDir("git-worktrees-"), "included");
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* driver.createWorktree(
+          {
+            cwd,
+            path: worktreePath,
+            refName: initialBranch,
+            newRefName: "feature/included",
+          },
+          { includePatterns: "certs/**" },
+        );
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        const read = (relativePath: string) =>
+          fileSystem.readFileString(pathService.join(worktreePath, relativePath));
+        assert.equal(yield* read(".env"), "ROOT=1\n");
+        assert.equal(yield* read("apps/web/.env.local"), "NESTED=1\n");
+        assert.equal(yield* read("certs/local/dev.pem"), "pem\n");
+        assert.isFalse(
+          yield* fileSystem.exists(pathService.join(worktreePath, "certs/local/dev.example")),
+        );
+        assert.isFalse(yield* fileSystem.exists(pathService.join(worktreePath, "notes.txt")));
+      }),
+    );
+
+    it.effect("copies files the include patterns setting selects without a .worktreeinclude", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(cwd, ".gitignore", ".env*\n*.local\n");
+        yield* git(cwd, ["add", "."]);
+        yield* git(cwd, ["commit", "-m", "add ignore rules"]);
+        yield* writeTextFile(cwd, ".env", "ROOT=1\n");
+        yield* writeTextFile(cwd, "config/settings.local", "local\n");
+        const pathService = yield* Path.Path;
+        const worktreePath = pathService.join(yield* makeTmpDir("git-worktrees-"), "defaults");
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* driver.createWorktree(
+          { cwd, path: worktreePath, refName: initialBranch, newRefName: "feature/defaults" },
+          { includePatterns: "# local config\n\n*.local" },
+        );
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(
+          yield* fileSystem.readFileString(pathService.join(worktreePath, "config/settings.local")),
+          "local\n",
+        );
+        assert.isFalse(yield* fileSystem.exists(pathService.join(worktreePath, ".env")));
+      }),
+    );
+
     it.effect("keeps a worktree whose untracked files status is configured to hide", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

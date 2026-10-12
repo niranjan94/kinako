@@ -156,6 +156,8 @@ export interface CreateWorktreeOptions {
    * own t3.json.
    */
   readonly submodules?: WorktreeSubmodules | null;
+  /** The `worktreeIncludePatterns` setting, used when the checkout has no `.worktreeinclude`. */
+  readonly includePatterns?: string;
   /** The `worktreesDirectory` setting, used when the input has no explicit path. */
   readonly worktreesDirectory?: string;
 }

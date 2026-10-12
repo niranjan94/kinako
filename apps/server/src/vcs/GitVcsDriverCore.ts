@@ -28,7 +28,12 @@ import {
   type ReviewDiffPreviewSource,
   type VcsRef,
 } from "@t3tools/contracts";
-import { dedupeRemoteBranchesWithLocalMatches, normalizeGitRemoteUrl } from "@t3tools/shared/git";
+import {
+  dedupeRemoteBranchesWithLocalMatches,
+  normalizeGitRemoteUrl,
+  WORKTREE_INCLUDE_FILE_NAME,
+  worktreeIncludeExcludeArgs,
+} from "@t3tools/shared/git";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { compactTraceAttributes } from "@t3tools/shared/observability";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
@@ -52,6 +57,7 @@ const gitProcesses = Semaphore.makeUnsafe(8);
 // machine). Give it generous headroom while still bounding a genuinely hung git.
 const WORKTREE_ADD_TIMEOUT_MS = 300_000;
 const WORKTREE_REMOVE_TIMEOUT_MS = Duration.toMillis(Duration.minutes(5));
+const WORKTREE_INCLUDE_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_MAX_OUTPUT_BYTES = 1_000_000;
 const OUTPUT_TRUNCATED_MARKER = "\n\n[truncated]";
 const PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES = 49_000;
@@ -3401,6 +3407,69 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     },
   );
 
+  // `.worktreeinclude` (gitignore syntax, the convention Claude Code and Conductor share)
+  // selects local files such as `.env` that a fresh worktree lacks; without one, the
+  // `worktreeIncludePatterns` setting does. Only files git ignores in the source checkout
+  // qualify, so the list can never pull in work in progress.
+  const copyWorktreeIncludedFiles = Effect.fn("copyWorktreeIncludedFiles")(function* (
+    sourceCwd: string,
+    worktreePath: string,
+    defaultPatterns: string,
+  ) {
+    const sourceRoot = (yield* runGitStdout(
+      "GitVcsDriver.createWorktree.includeSourceRoot",
+      sourceCwd,
+      ["rev-parse", "--show-toplevel"],
+    )).trim();
+    const includeFile = path.join(sourceRoot, WORKTREE_INCLUDE_FILE_NAME);
+    const patternArgs = worktreeIncludeExcludeArgs(
+      (yield* fileSystem.exists(includeFile)) ? includeFile : null,
+      defaultPatterns,
+    );
+    if (patternArgs.length === 0) return;
+
+    const matched = yield* executeGit(
+      "GitVcsDriver.createWorktree.listIncludedFiles",
+      sourceRoot,
+      ["ls-files", "-z", "--others", "--ignored", ...patternArgs],
+      { maxOutputBytes: WORKTREE_INCLUDE_MAX_OUTPUT_BYTES },
+    );
+    const candidates = matched.stdout.split("\0").filter((entry) => entry.length > 0);
+    if (matched.stdoutTruncated || candidates.length === 0) {
+      if (matched.stdoutTruncated) {
+        yield* Effect.logWarning(".worktreeinclude matches too many files; copying none", {
+          sourceRoot,
+        });
+      }
+      return;
+    }
+    // check-ignore exits 1 when none of the paths are ignored.
+    const ignored = yield* executeGit(
+      "GitVcsDriver.createWorktree.filterIncludedFiles",
+      sourceRoot,
+      ["check-ignore", "-z", "--stdin"],
+      {
+        stdin: `${candidates.join("\0")}\0`,
+        allowNonZeroExit: true,
+        maxOutputBytes: WORKTREE_INCLUDE_MAX_OUTPUT_BYTES,
+      },
+    );
+    const files = ignored.stdout.split("\0").filter((entry) => entry.length > 0);
+    yield* Effect.forEach(
+      files,
+      (relativePath) => {
+        const destination = path.join(worktreePath, relativePath);
+        return fileSystem.makeDirectory(path.dirname(destination), { recursive: true }).pipe(
+          Effect.andThen(fileSystem.copyFile(path.join(sourceRoot, relativePath), destination)),
+          Effect.catch((cause) =>
+            Effect.logWarning("could not copy a .worktreeinclude file", { relativePath, cause }),
+          ),
+        );
+      },
+      { concurrency: 8, discard: true },
+    );
+  });
+
   const createWorktree: GitVcsDriver.GitVcsDriver["Service"]["createWorktree"] = Effect.fn(
     "createWorktree",
   )(function* (input, options) {
@@ -3530,6 +3599,15 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         }),
       );
     }
+
+    yield* copyWorktreeIncludedFiles(input.cwd, worktreePath, options?.includePatterns ?? "").pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("copying .worktreeinclude files failed; the worktree may lack them", {
+          worktreePath,
+          cause,
+        }),
+      ),
+    );
 
     if (input.newRefName && input.baseRefName) {
       const remoteNames = yield* listRemoteNames(input.cwd).pipe(Effect.orElseSucceed(() => []));

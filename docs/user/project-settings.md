@@ -131,6 +131,8 @@ itself, or **Skip** to leave them for a setup script. It resolves in the same or
 workspace default: a `"worktreeSubmodules"` value in the `t3.json` of the branch being checked out
 applies when the project and environment are both on **Inherit**.
 
+New worktrees contain only tracked files, so local files such as `.env` are missing. To bring them along, list them in `.gitignore` syntax, for example `.env*` or `certs/local/**`, in **Settings → Storage → Files to copy** (with the project selected to override it there), or commit a `.worktreeinclude` file at the repository root to share the list with everyone. The file replaces the setting when both exist, and Claude Code and Conductor read the same file. When a worktree is created, files in the main checkout that match a pattern and are ignored by git are copied into it, before any setup script runs. Files git does not ignore are never copied.
+
 ## Worktree location
 
 New worktrees go in the `worktrees` folder of the T3 home directory. To put them somewhere else,

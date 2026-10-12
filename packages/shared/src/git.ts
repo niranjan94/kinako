@@ -122,6 +122,26 @@ export function deriveLocalBranchNameFromRemoteRef(branchName: string): string {
   return branchName.slice(firstSeparatorIndex + 1);
 }
 
+export const WORKTREE_INCLUDE_FILE_NAME = ".worktreeinclude";
+
+/**
+ * `git ls-files` exclude arguments selecting the files to copy into a new worktree:
+ * the checkout's `.worktreeinclude` when it has one, otherwise the setting's patterns.
+ */
+export function worktreeIncludeExcludeArgs(
+  includeFilePath: string | null,
+  settingPatterns: string,
+): string[] {
+  if (includeFilePath !== null) return [`--exclude-from=${includeFilePath}`];
+  // Command-line excludes skip the parsing git applies to an exclude file, so drop
+  // blank lines and comments here.
+  return settingPatterns
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+    .map((pattern) => `--exclude=${pattern}`);
+}
+
 export function buildTemporaryWorktreeBranchName(
   randomHex: (byteLength: number) => string,
 ): string {

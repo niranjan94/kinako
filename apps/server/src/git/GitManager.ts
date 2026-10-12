@@ -752,15 +752,21 @@ export const make = Effect.gen(function* () {
   const createWorktree: GitManager["Service"]["createWorktree"] = Effect.fn(
     "GitManager.createWorktree",
   )(function* (input, options) {
-    const submodules =
-      options?.submodules !== undefined
-        ? options.submodules
-        : yield* projectSettingsFor(input).pipe(
-            Effect.map(({ settings }) => settings.worktreeSubmodules),
-            Effect.orElseSucceed(() => null),
-          );
+    // Best effort: a settings read failure falls back to the checkout's own files.
+    const settings = yield* projectSettingsFor(input).pipe(
+      Effect.map(({ settings }) => settings),
+      Effect.orElseSucceed(() => null),
+    );
     const worktreesDirectory = yield* readWorktreesDirectory;
-    return yield* gitCore.createWorktree(input, { worktreesDirectory, ...options, submodules });
+    return yield* gitCore.createWorktree(input, {
+      worktreesDirectory,
+      includePatterns: settings?.worktreeIncludePatterns ?? "",
+      ...options,
+      submodules:
+        options?.submodules !== undefined
+          ? options.submodules
+          : (settings?.worktreeSubmodules ?? null),
+    });
   });
 
   const readRepositoryInstructions = (cwd: string, fileName: string) =>
@@ -2789,6 +2795,11 @@ export const make = Effect.gen(function* () {
         });
       }
 
+      // Best effort: a settings read failure falls back to the checkout's own files.
+      const settings = yield* projectSettingsFor(input).pipe(
+        Effect.map(({ settings }) => settings),
+        Effect.orElseSucceed(() => null),
+      );
       const worktree = yield* gitCore.createWorktree(
         {
           cwd: input.cwd,
@@ -2797,11 +2808,8 @@ export const make = Effect.gen(function* () {
         },
         {
           worktreesDirectory: yield* readWorktreesDirectory,
-          // Best effort: a settings read failure falls back to the checkout's t3.json.
-          submodules: yield* projectSettingsFor(input).pipe(
-            Effect.map(({ settings }) => settings.worktreeSubmodules),
-            Effect.orElseSucceed(() => null),
-          ),
+          submodules: settings?.worktreeSubmodules ?? null,
+          includePatterns: settings?.worktreeIncludePatterns ?? "",
         },
       );
       yield* ensureExistingWorktreeUpstream(worktree.worktree.path);
