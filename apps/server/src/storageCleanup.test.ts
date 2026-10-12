@@ -249,6 +249,7 @@ const cleanupFixture = Effect.gen(function* () {
   };
   let threads = [shell({ branch: "feature", worktreePath: worktree })];
   let editBeforeRemoval = false;
+  let afterIncludeListed: (() => void) | null = null;
   let openSessionCwd: string | null = null;
   let fullStatusCalls = 0;
   const context = yield* Layer.build(StorageCleanup.layer).pipe(
@@ -260,6 +261,10 @@ const cleanupFixture = Effect.gen(function* () {
             yield* fs.writeFileString(`${worktree}/tracked.txt`, "late edit\n");
           return yield* git.execute(input);
         }),
+      listWorktreeIncludedFiles: (input) =>
+        git
+          .listWorktreeIncludedFiles(input)
+          .pipe(Effect.tap(() => Effect.sync(() => afterIncludeListed?.()))),
       statusDetailsLocal: (...args) => {
         fullStatusCalls++;
         return git.statusDetailsLocal(...args);
@@ -318,8 +323,17 @@ const cleanupFixture = Effect.gen(function* () {
     worktree,
     config,
     command,
+    setDeleteEditedCopies: (worktreeDeleteEditedCopies: boolean) => {
+      settings = {
+        ...settings,
+        storageCleanup: { ...settings.storageCleanup, worktreeDeleteEditedCopies },
+      };
+    },
     setIncludePatterns: (worktreeIncludePatterns: string) => {
       settings = { ...settings, worktreeIncludePatterns };
+    },
+    afterIncludeListed: (callback: () => void) => {
+      afterIncludeListed = callback;
     },
     enableFiles: () => {
       settings = {
@@ -580,17 +594,27 @@ describe("storage cleanup reports and local file policies", () => {
     ),
   );
   it.live.each([
-    ["an identical copy", "SECRET=1\n", "removed"],
-    ["an edited copy", "SECRET=2\n", "kept"],
-    ["a copy without a source", null, "kept"],
+    ["an identical copy", true, "SECRET=1\n", "removed"],
+    ["an edited copy", true, "SECRET=2\n", "removed"],
+    ["a copy without a source", true, null, "kept"],
+    ["an identical copy", false, "SECRET=1\n", "removed"],
+    ["an edited copy", false, "SECRET=2\n", "kept"],
   ] as const)(
-    "treats %s of an included file under any-local-files",
-    ([, worktreeContents, outcome]) =>
+    "treats %s of an included file under any-local-files (delete edited copies: %s)",
+    ([, deleteEditedCopies, worktreeContents, outcome]) =>
       runCleanupTest(
         Effect.gen(function* () {
-          const { service, fs, repo, worktree, setPolicy, setIncludePatterns } =
-            yield* cleanupFixture;
+          const {
+            service,
+            fs,
+            repo,
+            worktree,
+            setPolicy,
+            setIncludePatterns,
+            setDeleteEditedCopies,
+          } = yield* cleanupFixture;
           setPolicy("any-local-files");
+          setDeleteEditedCopies(deleteEditedCopies);
           setIncludePatterns("# local secrets\n.env");
           if (worktreeContents === null) {
             yield* fs.writeFileString(`${worktree}/.env`, "SECRET=1\n");
@@ -605,6 +629,23 @@ describe("storage cleanup reports and local file policies", () => {
           expect(yield* fs.exists(worktree)).toBe(outcome === "kept");
         }),
       ),
+  );
+  it.live("keeps a worktree when its copied file's pattern is removed before removal", () =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        const fixture = yield* cleanupFixture;
+        const { service, fs, repo, worktree } = fixture;
+        fixture.setPolicy("any-local-files");
+        fixture.setIncludePatterns(".env");
+        yield* fs.writeFileString(`${repo}/.env`, "SECRET=1\n");
+        yield* fs.writeFileString(`${worktree}/.env`, "SECRET=1\n");
+        fixture.afterIncludeListed(() => fixture.setIncludePatterns(""));
+        const report = yield* service.runNow;
+        expect(report.entries[0]).toMatchObject({ outcome: "kept" });
+        expect(report.entries[0]?.reason).toContain("ignored files (.env)");
+        expect(yield* fs.exists(worktree)).toBe(true);
+      }),
+    ),
   );
   it.live("removes a worktree whose ignored folder .worktreeinclude copied unchanged", () =>
     runCleanupTest(

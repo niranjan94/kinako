@@ -67,6 +67,7 @@ describe("serverSettings helpers", () => {
       worktreeOnDelete: false,
       worktreeUnchanged: false,
       worktreeKeepWhen: "uncommitted-changes",
+      worktreeDeleteEditedCopies: true,
       browserArtifactsAfterDays: null,
       logsAfterDays: 30,
     });

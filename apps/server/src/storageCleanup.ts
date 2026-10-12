@@ -15,7 +15,6 @@ import type {
   StorageCleanupReport,
   StorageCleanupReportEntry,
 } from "@t3tools/contracts";
-import { WORKTREE_INCLUDE_FILE_NAME, worktreeIncludeExcludeArgs } from "@t3tools/shared/git";
 import { resolveProjectSettings, resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import * as Context from "effect/Context";
@@ -334,59 +333,64 @@ const make = Effect.gen(function* () {
     return (name?.startsWith("(") ? null : name) !== branch;
   });
 
-  const sameContents = (left: string, right: string) =>
-    Effect.gen(function* () {
-      const [leftInfo, rightInfo] = yield* Effect.all([fs.stat(left), fs.stat(right)]);
-      if (leftInfo.type !== "File" || rightInfo.type !== "File") return false;
-      if (leftInfo.size !== rightInfo.size) return false;
-      const [leftBytes, rightBytes] = yield* Effect.all([fs.readFile(left), fs.readFile(right)]);
-      return Buffer.compare(leftBytes, rightBytes) === 0;
-    }).pipe(Effect.orElseSucceed(() => false));
-
   // Files copied in by .worktreeinclude or the worktreeIncludePatterns setting come back
-  // with a recreated worktree, so they protect it only once they differ from the source
-  // checkout's copy. Returns the first ignored file that cannot be recreated.
+  // with a recreated worktree, so they protect it only when the main checkout no longer
+  // has the file or, with worktreeDeleteEditedCopies off, when the copy was edited.
+  // Returns the first ignored file that cannot be recreated.
   const firstIrreplaceableIgnoredFile = Effect.fn("StorageCleanup.firstIrreplaceableIgnoredFile")(
-    function* (cwd: string, entries: ReadonlyArray<string>, include: WorktreeIncludeSource) {
-      const sourceRoot = (yield* git.execute({
-        operation: "StorageCleanup.includeSourceRoot",
-        cwd: include.sourceCwd,
-        args: ["rev-parse", "--show-toplevel"],
-      })).stdout.trim();
-      const includeFile = path.join(sourceRoot, WORKTREE_INCLUDE_FILE_NAME);
-      const patternArgs = worktreeIncludeExcludeArgs(
-        (yield* fs.exists(includeFile)) ? includeFile : null,
-        include.patterns,
-      );
-      if (patternArgs.length === 0) return entries[0]!;
-      const listUnder = (excludeArgs: ReadonlyArray<string>) =>
-        git.execute({
-          operation: "StorageCleanup.ignoredFilesUnder",
-          cwd,
-          args: [
-            "--literal-pathspecs",
-            "ls-files",
-            "-z",
-            "--others",
-            "--ignored",
-            ...excludeArgs,
-            "--",
-            ...entries,
-          ],
-          maxOutputBytes: 1024 * 1024,
-        });
-      const [ignored, included] = yield* Effect.all([
-        listUnder(["--exclude-standard"]),
-        listUnder(patternArgs),
-      ]);
-      if (ignored.stdoutTruncated || included.stdoutTruncated) return entries[0]!;
-      const includedFiles = new Set(included.stdout.split("\0"));
+    function* (
+      cwd: string,
+      entries: ReadonlyArray<string>,
+      include: WorktreeIncludeSource,
+      deleteEditedCopies: boolean,
+    ) {
+      const included = yield* git.listWorktreeIncludedFiles({
+        sourceCwd: include.sourceCwd,
+        patterns: include.patterns,
+        cwd,
+        paths: entries,
+      });
+      if (included === null || included.truncated) return entries[0]!;
+      const ignored = yield* git.execute({
+        operation: "StorageCleanup.ignoredFilesUnder",
+        cwd,
+        args: [
+          "ls-files",
+          "-z",
+          "--others",
+          "--ignored",
+          "--exclude-standard",
+          "--",
+          ...entries.map((entry) => `:(literal)${entry}`),
+          ":(exclude,glob)**/node_modules/**",
+        ],
+        maxOutputBytes: 1024 * 1024,
+      });
+      if (ignored.stdoutTruncated) return entries[0]!;
+      const includedFiles = new Set(included.files);
+      const copies: Array<string> = [];
       for (const file of new Set(ignored.stdout.split("\0"))) {
-        if (file === "" || /(^|\/)node_modules\//.test(file)) continue;
+        if (file === "") continue;
         if (!includedFiles.has(file)) return file;
-        if (!(yield* sameContents(path.join(cwd, file), path.join(sourceRoot, file)))) return file;
+        const exists = yield* fs
+          .exists(path.join(included.sourceRoot, file))
+          .pipe(Effect.orElseSucceed(() => false));
+        if (!exists) return file;
+        copies.push(file);
       }
-      return null;
+      if (deleteEditedCopies || copies.length === 0) return null;
+      // One hash-object call compares every copy without loading files into memory.
+      const hashed = yield* git.execute({
+        operation: "StorageCleanup.hashIncludedFiles",
+        cwd,
+        args: ["hash-object", "--no-filters", "--stdin-paths"],
+        stdin: [
+          ...copies.map((file) => path.join(cwd, file)),
+          ...copies.map((file) => path.join(included.sourceRoot, file)),
+        ].join("\n"),
+      });
+      const hashes = hashed.stdout.trim().split("\n");
+      return copies.find((_, index) => hashes[index] !== hashes[index + copies.length]) ?? null;
     },
   );
 
@@ -429,7 +433,12 @@ const make = Effect.gen(function* () {
       .split("\0")
       .filter((entry) => entry !== "" && !/(^|\/)node_modules\/$/.test(entry));
     if (entries.length === 0) return null;
-    const file = yield* firstIrreplaceableIgnoredFile(cwd, entries, include);
+    const file = yield* firstIrreplaceableIgnoredFile(
+      cwd,
+      entries,
+      include,
+      rules.worktreeDeleteEditedCopies,
+    );
     return file === null ? null : `has ignored files (${file})`;
   });
 
@@ -539,12 +548,16 @@ const make = Effect.gen(function* () {
           return keep("not a linked worktree");
         if (yield* branchChanged(worktreePath, thread.branch))
           return keep("repository or branch changed");
-        const include: WorktreeIncludeSource = {
+        const includeFrom = (current: ServerSettings): WorktreeIncludeSource => ({
           sourceCwd: project.workspaceRoot,
-          patterns: resolveProjectSettings(serverSettings, thread.projectId).settings
+          patterns: resolveProjectSettings(current, thread.projectId).settings
             .worktreeIncludePatterns,
-        };
-        const changes = yield* localChangesReason(worktreePath, settings, include);
+        });
+        const changes = yield* localChangesReason(
+          worktreePath,
+          settings,
+          includeFrom(serverSettings),
+        );
         if (changes !== null) return keep(changes);
         const head = yield* git.resolveCommit({ cwd: worktreePath, revision: "HEAD" });
         const old =
@@ -670,12 +683,16 @@ const make = Effect.gen(function* () {
           head.commitSha
         )
           return keep("commit changed since check");
-        const finalChanges = yield* localChangesReason(worktreePath, settings, include);
-        if (finalChanges !== null) return keep(finalChanges);
-        const current = resolveWorktreeCleanup(
-          yield* settingsService.getSettings,
-          thread.projectId,
+        const latestSettings = yield* settingsService.getSettings;
+        // Re-read the include patterns too: dropping a pattern mid-run makes its files
+        // precious again.
+        const finalChanges = yield* localChangesReason(
+          worktreePath,
+          settings,
+          includeFrom(latestSettings),
         );
+        if (finalChanges !== null) return keep(finalChanges);
+        const current = resolveWorktreeCleanup(latestSettings, thread.projectId);
         if (
           Object.keys(settings).some(
             (key) =>

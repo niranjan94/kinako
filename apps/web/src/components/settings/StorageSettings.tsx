@@ -633,7 +633,7 @@ export function StorageSettingsPanel() {
                 status={ruleStatus("worktreeKeepWhen")}
                 description={
                   settings.worktreeKeepWhen === "any-local-files"
-                    ? "Includes ignored files, except node_modules and unchanged files to copy."
+                    ? "Includes ignored files, except node_modules and files to copy."
                     : settings.worktreeKeepWhen === "tracked-changes"
                       ? "Deletes untracked and ignored files, including .env."
                       : "Keeps edits and untracked files. Deletes ignored files, including .env."
@@ -667,6 +667,29 @@ export function StorageSettingsPanel() {
                 }
               />
             )}
+            {!ruleStatus("worktreeKeepWhen") &&
+              settings.worktreeKeepWhen === "any-local-files" &&
+              connectedEnvironments.every(
+                (environment) =>
+                  environment.serverConfig?.environment.capabilities.worktreeIncludePatterns ===
+                  true,
+              ) && (
+                <SettingsRow
+                  {...searchableSetting("storage-worktree-delete-edited-copies")}
+                  status={ruleStatus("worktreeDeleteEditedCopies")}
+                  description="Delete files to copy even when they were edited in the worktree. Turn off to keep worktrees whose copies differ from the main checkout."
+                  serverScoped={!isProjectScope}
+                  control={
+                    <Switch
+                      aria-label="Delete edited files to copy"
+                      checked={settings.worktreeDeleteEditedCopies}
+                      onCheckedChange={(worktreeDeleteEditedCopies) =>
+                        updateWorktree({ worktreeDeleteEditedCopies })
+                      }
+                    />
+                  }
+                />
+              )}
           </>
         )}
       </SettingsSection>

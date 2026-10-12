@@ -279,6 +279,7 @@ export function resolveWorktreeCleanup(
       worktreeOnMerge: false,
       worktreeOnDelete: false,
       worktreeUnchanged: false,
+      worktreeDeleteEditedCopies: settings.storageCleanup.worktreeDeleteEditedCopies,
     };
   const {
     worktreeKeepWhen,
@@ -286,6 +287,7 @@ export function resolveWorktreeCleanup(
     worktreeOnMerge,
     worktreeOnDelete,
     worktreeUnchanged,
+    worktreeDeleteEditedCopies,
   } = settings.storageCleanup;
   return {
     worktreeKeepWhen,
@@ -293,5 +295,6 @@ export function resolveWorktreeCleanup(
     worktreeOnMerge,
     worktreeOnDelete,
     worktreeUnchanged,
+    worktreeDeleteEditedCopies,
   };
 }

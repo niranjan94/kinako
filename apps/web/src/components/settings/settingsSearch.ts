@@ -175,6 +175,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "storage-worktree-delete-edited-copies",
+    targetId: "storage-worktrees",
+    title: "Delete edited files to copy",
+    to: "/settings/storage",
+    scope: "project-defaults",
+    searchTerms: ["worktreeinclude files to copy edited env cleanup any local files"],
+  },
+  {
     id: "storage-delete-now",
     title: "Delete now",
     to: "/settings/storage",
