@@ -34,6 +34,7 @@ Resolving conflicts:
 | `.env.example` no longer carries upstream's production Clerk and relay values                                               | `.env.example`                                                                   |
 | Upstream CI runs on GitHub-hosted runners instead of Blacksmith, with doubled job timeouts                                  | `.github/workflows/ci.yml`                                                       |
 | Fork release workflow                                                                                                       | `.github/workflows/fork-release.yml`                                             |
+| Settings → About shows the repository and commit a CI build came from                                                       | `apps/web/vite.config.ts`, `apps/web/src/components/settings/SettingsPanels.tsx` |
 
 Merge conflicts come from fork changes that touch the same lines as upstream. Keep new patches out of `package.json` versions, `pnpm-lock.yaml`, upstream workflows, and busy UI files. Prefer new fork-only files and environment variables.
 
