@@ -33,7 +33,7 @@ Resolving conflicts:
 | Desktop release-notes links point at this repo                                                                              | `apps/web/src/components/desktopUpdate.logic.ts`                                 |
 | `.env.example` no longer carries upstream's production Clerk and relay values                                               | `.env.example`                                                                   |
 | Upstream CI runs on GitHub-hosted runners instead of Blacksmith, with doubled job timeouts                                  | `.github/workflows/ci.yml`                                                       |
-| Fork release workflow                                                                                                       | `.github/workflows/fork-release.yml`                                             |
+| Fork nightly release workflow                                                                                               | `.github/workflows/fork-release.yml`                                             |
 | Settings → About shows the repository and commit a CI build came from                                                       | `apps/web/vite.config.ts`, `apps/web/src/components/settings/SettingsPanels.tsx` |
 
 Merge conflicts come from fork changes that touch the same lines as upstream. Keep new patches out of `package.json` versions, `pnpm-lock.yaml`, upstream workflows, and busy UI files. Prefer new fork-only files and environment variables.
@@ -60,10 +60,12 @@ CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does n
 
 ## Releasing
 
-Actions → **Fork release** → Run workflow on `main`. The version defaults to upstream's version in `apps/server/package.json`; pass one explicitly to re-release with fork-only fixes, for example `0.0.46` once upstream ships it. The workflow builds unsigned macOS, Windows, and Linux installers plus CLI archives and publishes them as a GitHub Release here.
+This fork ships nightlies only: `main` tracks upstream's `main`, not its release tags, so its builds match upstream's nightly train rather than a stable version.
 
-- Install the CLI with `curl -fsSL https://raw.githubusercontent.com/niranjan94/t3code/main/scripts/install.sh | sh`.
-- Desktop auto-update follows this repo's releases on Windows and Linux. macOS refuses updates for unsigned apps, so download new versions by hand there. Remove the quarantine flag after installing: `xattr -dr com.apple.quarantine "/Applications/T3 Code (Alpha).app"`.
+Actions → **Fork release** → Run workflow on `main`, usually after merging upstream and seeing CI pass. The version follows upstream's nightly scheme, `<next patch>-nightly.<UTC date>.<run number>` (for example `0.0.46-nightly.20261012.2`), and the release is published here as a prerelease named with the commit it was built from. The workflow builds unsigned macOS, Windows, and Linux installers plus CLI archives.
+
+- Install the CLI with `curl -fsSL https://raw.githubusercontent.com/niranjan94/t3code/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh`. Without it the script installs from the stable channel, which this fork does not publish. An installed nightly CLI updates along the nightly channel on its own.
+- The desktop app installs as **T3 Code (Nightly)** and follows the nightly update channel. Auto-update works on Windows and Linux. macOS refuses updates for unsigned apps, so download new versions by hand there. Remove the quarantine flag after installing: `xattr -dr com.apple.quarantine "/Applications/T3 Code (Nightly).app"`.
 - Windows SmartScreen warns on unsigned installers; choose **More info → Run anyway**.
 
 Adding the signing secrets that `release-desktop.yml` already reads (`CSC_LINK`, `APPLE_API_*`, `AZURE_*`, …) turns on signing without workflow changes.
