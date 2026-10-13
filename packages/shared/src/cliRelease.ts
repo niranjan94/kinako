@@ -7,7 +7,7 @@
 
 import { FORK_CLI_NAME } from "./forkBrand.ts";
 
-const CLI_RELEASE_REPOSITORY = "niranjan94/t3code";
+const CLI_RELEASE_REPOSITORY = "niranjan94/kinako";
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 /** Overrides the download origin for mirrors and air-gapped installs. */
 export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";

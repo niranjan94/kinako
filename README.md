@@ -10,7 +10,7 @@ The fork sends no traffic to upstream's infrastructure. Every change so far:
 
 - **Its own identity, so it runs alongside upstream T3 Code.** The app is called Kinako, the CLI is `kinako`, data lives in `~/.kinako`, links use `kinako://`, and the desktop and mobile apps, background service, default ports (3873, Tailscale Serve on 8443), SnapShot helpers and shortcut (Ctrl+Shift+3) are all separate from upstream's. Upgrading from an earlier build of this fork needs a one-time move; see [FORK.md](./FORK.md#moving-from-t3-code-to-kinako).
 - **Telemetry is off by default.** Upstream's PostHog project key is removed. To collect events into a PostHog project you control, set `T3CODE_TELEMETRY_ENABLED=true` and `T3CODE_POSTHOG_KEY` (and `T3CODE_POSTHOG_HOST` for self-hosted PostHog). See [telemetry](./docs/user/telemetry.md).
-- **Updates and installs come from this repository.** CLI self-update, `kinako update`, SSH remote installs, mobile environment updates, and the `install.sh` / `install.ps1` scripts all resolve releases from [niranjan94/t3code](https://github.com/niranjan94/t3code/releases).
+- **Updates and installs come from this repository.** CLI self-update, `kinako update`, SSH remote installs, mobile environment updates, and the `install.sh` / `install.ps1` scripts all resolve releases from [niranjan94/kinako](https://github.com/niranjan94/kinako/releases).
 - **Model manifest is fetched from this repository** instead of upstream.
 - **Pairing links stay on your server's own origin** instead of handing the pairing token to `app.t3.codes`. Hosted pairing links come back only if `VITE_HOSTED_APP_URL` is set at build time. Remote access works over LAN, Tailscale, and SSH; T3 Connect is not built in.
 - **Desktop release-notes links point at this repository.**
@@ -35,13 +35,13 @@ Upstream links that only open when you click them (marketing and legal pages, th
 ### Command line
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/niranjan94/t3code/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.sh | sh
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/niranjan94/t3code/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.ps1 | iex
 ```
 
 This fork publishes nightlies only, so add `T3CODE_CHANNEL=nightly` (`$env:T3CODE_CHANNEL = "nightly"` in PowerShell) before the install command.
@@ -50,7 +50,7 @@ Then run `kinako` to start the server and open the local web app. `kinako servic
 
 ### Desktop app
 
-Download the installer for your platform from [GitHub Releases](https://github.com/niranjan94/t3code/releases). Builds are unsigned:
+Download the installer for your platform from [GitHub Releases](https://github.com/niranjan94/kinako/releases). Builds are unsigned:
 
 - **macOS:** after installing, clear the quarantine flag with `xattr -dr com.apple.quarantine "/Applications/Kinako (Nightly).app"`. Auto-update does not work for unsigned macOS apps, so download new versions by hand.
 - **Windows:** SmartScreen warns on unsigned installers; choose **More info → Run anyway**.

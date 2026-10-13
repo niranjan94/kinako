@@ -70,7 +70,7 @@ Earlier builds of this fork installed as T3 Code and kept their data in `~/.t3`.
 1. Stop the old install: quit the desktop app and run `t3 service uninstall` if you installed the background service.
 2. Move the data: `mv ~/.t3 ~/.kinako`. If upstream T3 Code also uses `~/.t3` on this machine, copy instead (`cp -a ~/.t3 ~/.kinako`) and leave upstream's copy alone.
 3. Remove the old launcher and app: `rm ~/.local/bin/t3` (if it points into `~/.t3`) and delete the old `T3 Code (Nightly)` app.
-4. Install Kinako: `curl -fsSL https://raw.githubusercontent.com/niranjan94/t3code/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh`, then `kinako service install` if you want the background service, and install the Kinako desktop app.
+4. Install Kinako: `curl -fsSL https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh`, then `kinako service install` if you want the background service, and install the Kinako desktop app.
 
 What does not carry over:
 
@@ -96,9 +96,9 @@ CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does n
 1. **Actions:** enable Actions for the fork, then disable every upstream workflow except `ci.yml` and `release-desktop.yml`. The others expect upstream's runners, secrets, and accounts, and would otherwise queue or fail on every push. `fork-release.yml` calls `release-desktop.yml`.
 
    ```bash
-   gh workflow list --repo niranjan94/t3code --all --json path --jq '.[].path' \
+   gh workflow list --repo niranjan94/kinako --all --json path --jq '.[].path' \
      | grep -v -e '/ci.yml$' -e fork-release.yml -e release-desktop.yml \
-     | xargs -n1 basename | xargs -I{} gh workflow disable {} --repo niranjan94/t3code
+     | xargs -n1 basename | xargs -I{} gh workflow disable {} --repo niranjan94/kinako
    ```
 
 ## Releasing
@@ -107,7 +107,7 @@ This fork ships nightlies only: `main` tracks upstream's `main`, not its release
 
 Actions → **Fork release** → Run workflow on `main`, usually after merging upstream and seeing CI pass. The version follows upstream's nightly scheme, `<next patch>-nightly.<UTC date>.<run number>` (for example `0.0.46-nightly.20261012.2`), and the release is published here as a prerelease named with the commit it was built from. The workflow builds unsigned macOS, Windows, and Linux installers plus CLI archives.
 
-- Install the CLI with `curl -fsSL https://raw.githubusercontent.com/niranjan94/t3code/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh`. Without it the script installs from the stable channel, which this fork does not publish. An installed nightly CLI updates along the nightly channel on its own.
+- Install the CLI with `curl -fsSL https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh`. Without it the script installs from the stable channel, which this fork does not publish. An installed nightly CLI updates along the nightly channel on its own.
 - The desktop app installs as **Kinako (Nightly)** and follows the nightly update channel. Auto-update works on Windows and Linux. macOS refuses updates for unsigned apps, so download new versions by hand there. Remove the quarantine flag after installing: `xattr -dr com.apple.quarantine "/Applications/Kinako (Nightly).app"`.
 - Windows SmartScreen warns on unsigned installers; choose **More info → Run anyway**.
 

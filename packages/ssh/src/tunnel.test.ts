@@ -105,7 +105,7 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, "T3_NODE_SCRIPT_PATH=''");
     assert.include(
       script,
-      "T3_RELEASE_BASE_URL='https://github.com/niranjan94/t3code/releases/download'",
+      "T3_RELEASE_BASE_URL='https://github.com/niranjan94/kinako/releases/download'",
     );
     assert.include(script, 'T3_RUNTIME_DIR="$HOME/.kinako/runtime/versions/$T3_ARCHIVE_VERSION"');
     assert.include(script, 'T3_ARCHIVE="kinako-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"');

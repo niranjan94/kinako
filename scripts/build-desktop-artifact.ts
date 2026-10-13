@@ -3875,7 +3875,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     description: `${FORK_DISPLAY_NAME} is an open-source desktop app for coding agents, based on T3 Code. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.`,
     license: "MIT",
     // Required by the .deb control file.
-    homepage: "https://github.com/niranjan94/t3code",
+    homepage: "https://github.com/niranjan94/kinako",
     author: "Niranjan Rajendran",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
