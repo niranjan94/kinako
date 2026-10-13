@@ -1,8 +1,10 @@
 /**
  * Identity this fork ships under. Call sites import from here instead of
  * carrying literals, so upstream merges only conflict on one-line imports.
- * Shell and PowerShell installers and the Electron launcher cannot import
- * TypeScript and repeat these values; FORK.md lists them.
+ * Every name differs from upstream's so both apps can be installed and run on
+ * one machine. Shell and PowerShell installers, the Electron launcher, and the
+ * GNOME extension cannot import TypeScript and repeat these values; FORK.md
+ * lists them.
  */
 
 export const FORK_DISPLAY_NAME = "Kinako";
@@ -15,8 +17,26 @@ export const FORK_CLI_NAME = "kinako";
 
 export const FORK_DESKTOP_APP_ID = "io.niranjan.kinako";
 export const FORK_DESKTOP_DEV_APP_ID = `${FORK_DESKTOP_APP_ID}.dev`;
-export const FORK_LINUX_WM_CLASS = "kinako";
+
+/**
+ * Desktop package name, Linux executable, and X11 WM class. Distinct from
+ * `FORK_CLI_NAME` because a .deb links its executable into /usr/bin.
+ */
+export const FORK_DESKTOP_NAME = "kinako-desktop";
+
+/** Electron profile directory under the OS app-data directory. */
+export const FORK_DESKTOP_PROFILE_DIR = "kinako";
+export const FORK_DESKTOP_DEV_PROFILE_DIR = "kinako-dev";
+
+/** Freedesktop application id, also the D-Bus name prefix the GNOME extension trusts. */
+export const FORK_LINUX_APP_ID = "io.niranjan.Kinako";
+
+/** systemd unit, launchd label stem, and agent slice name for the background service. */
+export const FORK_SERVICE_NAME = "kinako";
 
 export const FORK_URL_SCHEME = "kinako";
 export const FORK_DEV_URL_SCHEME = "kinako-dev";
 export const FORK_PREVIEW_URL_SCHEME = "kinako-preview";
+
+export const FORK_DEFAULT_PORT = 3873;
+export const FORK_DEFAULT_TAILSCALE_SERVE_PORT = 8443;

@@ -6,15 +6,14 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 
-import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import { readChromiumLocalStorage } from "./chromiumLocalStorage.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
 /**
  * Carries the renderer's localStorage (prompt stash, unsent drafts, layout,
- * theme) over from the V1 desktop profile, which V2 replaced with its own
- * `t3code-v2` profile. The V1 profile is only read, never opened by Chromium,
- * so this works while V1 is still running.
+ * theme) over from the profile this fork used while it shipped as T3 Code,
+ * which also served the renderer from a different origin. That profile is only
+ * read, never opened by Chromium, so this works while T3 Code is running.
  *
  * `load` runs before the window opens; the preload takes the items once,
  * merges them into the new profile, and calls `complete`, which writes a
@@ -30,9 +29,9 @@ export class DesktopLegacyLocalStorage extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
 
-const MARKER_FILE_NAME = "v1-local-storage-imported";
-// V1 used "T3 Code (Alpha)" when that folder existed and "t3code" otherwise.
-const V1_PROFILE_NAMES = ["T3 Code (Alpha)", "t3code"];
+const MARKER_FILE_NAME = "t3code-local-storage-imported";
+const V1_PROFILE_NAMES = ["t3code-v2"];
+const V1_ORIGIN = "t3code://app";
 
 const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -89,8 +88,7 @@ const make = Effect.gen(function* () {
     yield* Ref.set(markerPath, Option.some(marker));
     const directory = yield* findV1LocalStorage;
     if (directory === null) return yield* writeMarker;
-    const origin = ElectronProtocol.getDesktopUrl(false).replace(/\/$/, "");
-    const read = yield* readChromiumLocalStorage(directory, origin).pipe(
+    const read = yield* readChromiumLocalStorage(directory, V1_ORIGIN).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
       Effect.tapError((error) =>

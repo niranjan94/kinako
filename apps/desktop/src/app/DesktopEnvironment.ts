@@ -17,7 +17,12 @@ import { resolveLinuxDesktopEntryName } from "./DesktopEarlyElectronStartup.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 import type { OtlpProtocol } from "@t3tools/shared/observability";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import {
+  FORK_DESKTOP_APP_ID,
+  FORK_DESKTOP_DEV_APP_ID,
+  FORK_DESKTOP_NAME,
+  FORK_DISPLAY_NAME,
+} from "@t3tools/shared/forkBrand";
 
 export interface MakeDesktopEnvironmentInput {
   readonly dirname: string;
@@ -237,10 +242,10 @@ const make = Effect.fn("desktop.environment.make")(function* (
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
+      isDevelopment ? FORK_DESKTOP_DEV_APP_ID : FORK_DESKTOP_APP_ID,
     ),
     linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
-    linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
+    linuxWmClass: isDevelopment ? `${FORK_DESKTOP_NAME}-dev` : FORK_DESKTOP_NAME,
     linuxApplicationsDir,
     appImagePath: config.appImagePath,
     defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
