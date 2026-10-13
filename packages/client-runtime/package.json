@@ -99,6 +99,10 @@
       "types": "./src/platform/index.ts",
       "default": "./src/platform/index.ts"
     },
+    "./agentSessionImport": {
+      "types": "./src/agentSessionImport.ts",
+      "default": "./src/agentSessionImport.ts"
+    },
     "./providerCliResume": {
       "types": "./src/providerCliResume.ts",
       "default": "./src/providerCliResume.ts"

@@ -1234,6 +1234,23 @@ export function createServerEnvironmentAtoms<R, E>(
           `${environmentId}:${input.instanceId}:${input.elicitationId}`,
       },
     }),
+    listAgentSessions: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:agent-sessions:list",
+      tag: WS_METHODS.agentSessionsList,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => `${environmentId}:${input.projectId}`,
+      },
+    }),
+    importAgentSession: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:agent-sessions:import-session",
+      tag: WS_METHODS.agentSessionsImportSession,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) =>
+          `${environmentId}:${input.providerInstanceId}:${input.providerSessionId}`,
+      },
+    }),
     listAcpRegistrySessions: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:acp-registry:list-sessions",
       tag: WS_METHODS.serverListAcpRegistrySessions,
