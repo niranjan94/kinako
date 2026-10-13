@@ -38,6 +38,7 @@ import {
   buildTriageLaunchPrompt,
   buildTriageSeedPrompt,
 } from "./triagePrompt.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 interface TriageAgent {
   readonly id: "claude" | "codex";
@@ -159,7 +160,7 @@ export const triageCommand = Command.make("triage", {
   model: modelFlag,
 }).pipe(
   Command.withDescription(
-    "Investigate a T3 Code problem on this machine with claude or codex, and help file a good issue.",
+    `Investigate a ${FORK_DISPLAY_NAME} problem on this machine with claude or codex, and help file a good issue.`,
   ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {

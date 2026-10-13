@@ -25,10 +25,12 @@ import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { serverEnvironment, updateOutdatedServer } from "~/state/server";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { manualServerUpdateCommand } from "~/versionSkew";
 import { Button } from "./ui/button";
 import { toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { APP_BASE_NAME } from "~/branding";
 
 // The wire "installing" stage is a sub-second launcher handoff, so the UI
 // folds it into the download phase; everything after the handoff is the
@@ -97,7 +99,7 @@ export function useServerUpdate() {
         description:
           selfUpdate === "desktop-managed"
             ? `Desktop app relaunched on ${result.value.targetVersion}.`
-            : `Reconnected on t3@${result.value.targetVersion}.`,
+            : `Reconnected on ${result.value.targetVersion}.`,
       });
     } catch (error) {
       toastManager.add({
@@ -141,7 +143,7 @@ export function ServerUpdatesAction({
       if (desktopTargets.length > 0) {
         const confirmed =
           (await requestConfirmDialog(
-            `Update the T3 Code desktop apps on ${desktopTargets.map((target) => target.serverLabel).join(", ")}? They will close and relaunch on those machines.`,
+            `Update the ${APP_BASE_NAME} desktop apps on ${desktopTargets.map((target) => target.serverLabel).join(", ")}? They will close and relaunch on those machines.`,
           )) ?? true;
         if (!confirmed) return;
       }
@@ -215,7 +217,6 @@ export function ServerUpdateAction({
   environmentId,
   serverLabel,
   selfUpdate,
-  installation,
   desktopAppUpdate = false,
   threadContinuation = false,
   targetVersion,
@@ -234,16 +235,12 @@ export function ServerUpdateAction({
   );
   const update = useServerUpdate();
   const { copyToClipboard } = useCopyToClipboard<{ command: string }>({
-    target: installation?.kind === "npm-global" ? "update command" : "relaunch command",
+    target: "update command",
     onCopy: ({ command }) => {
       toastManager.add({
         type: "success",
-        title:
-          installation?.kind === "npm-global" ? "Update command copied" : "Relaunch command copied",
-        description:
-          installation?.kind === "npm-global"
-            ? `Run \`${command}\` on ${serverLabel}, then restart t3 with your usual options.`
-            : `Stop t3 on ${serverLabel}, then relaunch with \`${command}\` using the same subcommand and options. This does not update an installed t3 command.`,
+        title: "Update command copied",
+        description: `Run \`${command}\` on ${serverLabel}, then restart ${FORK_CLI_NAME} with your usual options.`,
       });
     },
     onError: (error) => {
@@ -268,7 +265,7 @@ export function ServerUpdateAction({
       // remote machine installs without asking anyone there.
       const confirmed =
         (await requestConfirmDialog(
-          `Update the T3 Code desktop app that runs the ${serverLabel}? It will close and relaunch on that machine.`,
+          `Update the ${APP_BASE_NAME} desktop app that runs the ${serverLabel}? It will close and relaunch on that machine.`,
         )) ?? true;
       if (!confirmed) {
         return;
@@ -294,14 +291,8 @@ export function ServerUpdateAction({
     );
   }
 
-  const manualCommand =
-    selfUpdate === null ? manualServerUpdateCommand(targetVersion, installation) : null;
-  const actionLabel =
-    manualCommand !== null
-      ? installation?.kind === "npm-global"
-        ? "Copy update command"
-        : "Copy relaunch command"
-      : label;
+  const manualCommand = selfUpdate === null ? manualServerUpdateCommand() : null;
+  const actionLabel = manualCommand !== null ? "Copy update command" : label;
   const onClick =
     manualCommand !== null
       ? () => copyToClipboard(manualCommand, { command: manualCommand })
@@ -376,7 +367,7 @@ export function OutdatedServerUpdateAction({
       toastManager.add({
         type: "success",
         title: `${serverLabel} updated`,
-        description: `Reconnected on t3@${result.value.targetVersion}.`,
+        description: `Reconnected on ${result.value.targetVersion}.`,
       });
     } catch (error) {
       toastManager.add({

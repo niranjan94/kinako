@@ -1,6 +1,6 @@
 import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { FORK_DEV_URL_SCHEME, FORK_URL_SCHEME } from "./forkBrand.ts";
+import { FORK_DEV_URL_SCHEME, FORK_DISPLAY_NAME, FORK_URL_SCHEME } from "./forkBrand.ts";
 import { providerAuthReturnUrl } from "./providerAuthReturnUrl.ts";
 
 export const CodexAuthHandoff = Schema.Struct({
@@ -119,7 +119,7 @@ export function codexAuthDeliveryUrl(input: CodexAuthHandoff, callbackUrl: strin
   const request = codexAuthorizationRequest(input.authorizationUrl);
   codexCallbackUrl(callbackUrl, request.redirectUri, request.state);
   const destination = providerAuthReturnUrl(input.returnUrl);
-  if (!destination) throw new Error("Invalid T3 Code return address.");
+  if (!destination) throw new Error(`Invalid ${FORK_DISPLAY_NAME} return address.`);
   const url = new URL(destination);
   const delivery = {
     environmentId: input.environmentId,

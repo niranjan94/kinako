@@ -168,6 +168,7 @@ import { Separator } from "~/components/ui/separator";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { APP_BASE_NAME } from "~/branding";
 
 function getShortcutContext() {
   return {
@@ -1908,7 +1909,7 @@ function PullRequestsRouteView() {
       ) : !pullRequestsSupported ? (
         <PullRequestsUnavailableState
           title="Pull requests unavailable"
-          error="Update your T3 Code servers to browse pull requests."
+          error={`Update your ${APP_BASE_NAME} servers to browse pull requests.`}
         />
       ) : firstLoad ? (
         <PullRequestListGhost rows={7} />

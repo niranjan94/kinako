@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { RelayOkResponse } from "@t3tools/contracts/relay";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as RelayClient from "@t3tools/shared/relayClient";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import * as Cause from "effect/Cause";
@@ -187,7 +187,7 @@ function formatCloudStatus(status: CloudCliStatus, options?: { readonly json?: b
     : !status.desired
       ? `Run \`${FORK_CLI_NAME} connect link\` to enable T3 Connect.`
       : !status.linked
-        ? "Start T3 to provision the environment link and launch its managed tunnel."
+        ? `Start ${FORK_DISPLAY_NAME} to provision the environment link and launch its managed tunnel.`
         : undefined;
 
   return [
@@ -266,7 +266,7 @@ const withCloudCliSessionToken = <A, E, R>(
     environmentAuth.issueSession({
       scopes: [AuthRelayWriteScope],
       subject: "cloud-cli",
-      label: "t3 connect cli",
+      label: `${FORK_CLI_NAME} connect cli`,
     }),
     (issued) => run(issued.token),
     (issued) => environmentAuth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),
@@ -523,7 +523,7 @@ const connectLinkCommand = Command.make("link", {
           const serveCommand = yield* resolveCliCommand("serve");
           yield* Console.log(
             flags.publishOnly
-              ? `✓ Authorized${connectedAs(linked.identity)}\n\nNext\n  Start T3 to publish agent activity (no managed tunnel).`
+              ? `✓ Authorized${connectedAs(linked.identity)}\n\nNext\n  Start ${FORK_DISPLAY_NAME} to publish agent activity (no managed tunnel).`
               : `✓ Authorized${connectedAs(linked.identity)}\n\nNext\n  Start the server with \`${serveCommand}\` to make this machine reachable.`,
           );
         }
@@ -639,7 +639,7 @@ const connectPublishCommand = Command.make("publish", {
         }
         yield* CliState.setCliDesiredCloudLink(true, "publish_only");
         yield* Console.log(
-          "Restart T3 to finish authorizing this environment to publish (no managed tunnel is created).",
+          `Restart ${FORK_DISPLAY_NAME} to finish authorizing this environment to publish (no managed tunnel is created).`,
         );
       }),
     ),

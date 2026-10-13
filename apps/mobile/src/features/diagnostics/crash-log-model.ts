@@ -1,3 +1,5 @@
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+
 /**
  * The shape of an expo-updates log entry we care about. Mirrors
  * `UpdatesLogEntry` structurally so the model needs no native module at test
@@ -72,7 +74,7 @@ export function formatStartupCrashReport(
   records: ReadonlyArray<StartupCrashRecord>,
   app: { readonly version: string; readonly build: string },
 ): string {
-  const header = `T3 Code ${app.version} (${app.build})`;
+  const header = `${FORK_DISPLAY_NAME} ${app.version} (${app.build})`;
   if (records.length === 0) return `${header}\nNo startup crashes recorded.`;
   return [
     header,

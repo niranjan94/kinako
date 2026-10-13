@@ -40,6 +40,7 @@ import {
 } from "../serverRuntimeState.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 
 type ProjectMutationTarget = {
   readonly id: ProjectId;
@@ -220,7 +221,7 @@ const withProjectCliSessionToken = <A, E, R>(
   Effect.acquireUseRelease(
     environmentAuth.issueSession({
       scopes: AuthAdministrativeScopes,
-      label: "t3 project cli",
+      label: `${FORK_CLI_NAME} project cli`,
     }),
     (issued) => run(issued.token),
     (issued) => environmentAuth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),

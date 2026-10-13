@@ -23,7 +23,7 @@ import {
   EnvironmentThemeId,
   environmentThemeFileHasColors,
 } from "@t3tools/contracts";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
 import { BUILT_IN_THEME_IDS, UNPUBLISHABLE_THEME_IDS } from "@t3tools/shared/themePalettes";
 import * as Config from "effect/Config";
@@ -108,7 +108,7 @@ export class ThemeFileInvalidError extends Schema.TaggedError<ThemeFileInvalidEr
   { filePath: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `${this.filePath} is not a valid theme file. Use a theme exported from T3 Code, or a seeded file with name, appearance, canvas, and accent.`;
+    return `${this.filePath} is not a valid theme file. Use a theme exported from ${FORK_DISPLAY_NAME}, or a seeded file with name, appearance, canvas, and accent.`;
   }
 }
 

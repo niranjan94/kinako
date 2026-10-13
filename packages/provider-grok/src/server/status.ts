@@ -46,6 +46,7 @@ import {
 } from "./acpSupport.ts";
 import { sessionModelStateFromInitialize } from "@t3tools/provider-acp/server/runtimeModel";
 import { discoverGrokSkills } from "./skills.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const GROK_PRESENTATION = {
   displayName: "Grok",
@@ -89,7 +90,7 @@ export function buildInitialGrokProviderSnapshot(
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Grok is disabled in T3 Code settings.",
+          message: `Grok is disabled in ${FORK_DISPLAY_NAME} settings.`,
         },
       });
     }
@@ -393,7 +394,7 @@ export const checkGrokProviderStatus = Effect.fn("checkGrokProviderStatus")(func
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Grok is disabled in T3 Code settings.",
+        message: `Grok is disabled in ${FORK_DISPLAY_NAME} settings.`,
       },
     });
   }

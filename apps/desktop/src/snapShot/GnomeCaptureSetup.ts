@@ -7,6 +7,7 @@ import * as Schema from "effect/Schema";
 import type { DesktopCaptureExtensionState } from "@t3tools/contracts";
 
 import { GNOME_CAPTURE_FILES, GNOME_CAPTURE_UUID } from "./gnomeCaptureBundle.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 export { isGnomeCaptureSession } from "./linuxCaptureSession.ts";
 
 const SHELL = "org.gnome.Shell";
@@ -183,8 +184,7 @@ export class GnomeCaptureSetup {
       if (installed && (!info.state || (info.version && installed.version > info.version.value)))
         return {
           status: "restart-required",
-          message:
-            "Installed. Save your work, sign out of GNOME and sign back in, then return here to enable the extension. Restarting T3 Code alone is not enough.",
+          message: `Installed. Save your work, sign out of GNOME and sign back in, then return here to enable the extension. Restarting ${FORK_DISPLAY_NAME} alone is not enough.`,
         };
       if ((installed?.version ?? info.version?.value ?? 0) < bundled.version)
         return {
@@ -195,8 +195,7 @@ export class GnomeCaptureSetup {
       if (!properties.UserExtensionsEnabled.value)
         return {
           status: "extensions-disabled",
-          message:
-            "GNOME has disabled user extensions. Turn on Extensions in the GNOME Extensions app, then check again. T3 Code will not enable your other extensions for you.",
+          message: `GNOME has disabled user extensions. Turn on Extensions in the GNOME Extensions app, then check again. ${FORK_DISPLAY_NAME} will not enable your other extensions for you.`,
         };
       if (info.state?.value === 1)
         return {

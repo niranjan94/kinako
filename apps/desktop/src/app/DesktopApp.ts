@@ -36,7 +36,7 @@ import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { FORK_DEFAULT_PORT } from "@t3tools/shared/forkBrand";
+import { FORK_DEFAULT_PORT, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = FORK_DEFAULT_PORT;
 const MAX_TCP_PORT = 65_535;
@@ -137,7 +137,7 @@ const handleFatalStartupError = Effect.fn("desktop.startup.handleFatalStartupErr
   const wasQuitting = yield* Ref.getAndSet(state.quitting, true);
   if (!wasQuitting) {
     yield* electronDialog.showErrorBox(
-      "T3 Code failed to start",
+      `${FORK_DISPLAY_NAME} failed to start`,
       `Stage: ${stage}\n${message}${detail}`,
     );
   }

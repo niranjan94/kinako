@@ -57,6 +57,7 @@ import {
   withPiBuiltinSlashCommands,
   type PiDiscoveredCommands,
 } from "./commands.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const PI_PRESENTATION = {
   displayName: "Pi",
@@ -242,7 +243,7 @@ export function buildInitialPiProviderSnapshot(
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Pi is disabled in T3 Code settings.",
+          message: `Pi is disabled in ${FORK_DISPLAY_NAME} settings.`,
         },
       });
     }
@@ -281,7 +282,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Pi is disabled in T3 Code settings.",
+        message: `Pi is disabled in ${FORK_DISPLAY_NAME} settings.`,
       },
     });
   }
@@ -356,7 +357,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
         version: null,
         status: "error",
         auth: { status: "unknown" },
-        message: `T3 Code could not determine the Pi version. Pi ${MINIMUM_PI_VERSION} or newer is required.`,
+        message: `${FORK_DISPLAY_NAME} could not determine the Pi version. Pi ${MINIMUM_PI_VERSION} or newer is required.`,
       },
     });
   }
@@ -414,8 +415,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
         version,
         status: "ready",
         auth: { status: "unknown" },
-        message:
-          "Pi is available, but T3 Code could not refresh its models and commands. The live session will retry startup.",
+        message: `Pi is available, but ${FORK_DISPLAY_NAME} could not refresh its models and commands. The live session will retry startup.`,
       },
     });
   }

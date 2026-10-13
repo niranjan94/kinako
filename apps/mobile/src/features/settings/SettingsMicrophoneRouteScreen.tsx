@@ -21,6 +21,7 @@ import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/
 import { SettingsActionRow } from "./components/SettingsActionRow";
 import { SettingsDragHandle } from "./components/SettingsDragHandle";
 import { SettingsSection } from "./components/SettingsSection";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const REMOVE_SIZE = 20;
 
@@ -166,7 +167,7 @@ export function SettingsMicrophoneRouteScreen() {
             <Text className="px-2 text-sm text-foreground-muted">
               {permission === "ask"
                 ? "Voice input needs microphone access before it can record or list your microphones."
-                : "Microphone access is off for T3 Code. Turn it on in Settings to use voice input."}
+                : `Microphone access is off for ${FORK_DISPLAY_NAME}. Turn it on in Settings to use voice input.`}
             </Text>
           </>
         ) : null}

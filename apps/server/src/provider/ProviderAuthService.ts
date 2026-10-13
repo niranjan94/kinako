@@ -19,6 +19,7 @@ import * as ProviderSessionManager from "../orchestration-v2/ProviderSessionMana
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import type { ProviderAuthController } from "@t3tools/provider-core/server/auth";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 export type { ProviderAuthController } from "@t3tools/provider-core/server/auth";
 
@@ -80,7 +81,7 @@ export const makeProviderAuthService = Effect.gen(function* () {
         instanceId,
         operation,
         detail: instance
-          ? "This provider does not support sign-in in T3 Code."
+          ? `This provider does not support sign-in in ${FORK_DISPLAY_NAME}.`
           : "This provider instance is no longer available.",
       });
     }

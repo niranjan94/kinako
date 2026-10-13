@@ -2,6 +2,7 @@ import type { LinkedPrompt } from "@t3tools/shared/promptLinks";
 
 import { type ComposerThreadTarget, useComposerDraftStore } from "~/composerDraftStore";
 
+import { APP_BASE_NAME } from "~/branding";
 import { toastManager } from "../ui/toast";
 
 /** A warning that stays until dismissed when the link's prompt hid characters from the reader. */
@@ -10,7 +11,7 @@ export function warnAboutHiddenCharacters(prompt: LinkedPrompt): void {
   toastManager.add({
     type: "warning",
     title: "This prompt had hidden characters, it may be malicious",
-    description: `T3 Code removed ${prompt.hiddenCharacters} hidden character${prompt.hiddenCharacters === 1 ? "" : "s"}. Read the prompt before you send it.`,
+    description: `${APP_BASE_NAME} removed ${prompt.hiddenCharacters} hidden character${prompt.hiddenCharacters === 1 ? "" : "s"}. Read the prompt before you send it.`,
     timeout: 0,
   });
 }

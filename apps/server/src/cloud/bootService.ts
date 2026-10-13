@@ -1,5 +1,10 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { FORK_CLI_NAME, FORK_DESKTOP_APP_ID, FORK_SERVICE_NAME } from "@t3tools/shared/forkBrand";
+import {
+  FORK_CLI_NAME,
+  FORK_DESKTOP_APP_ID,
+  FORK_DISPLAY_NAME,
+  FORK_SERVICE_NAME,
+} from "@t3tools/shared/forkBrand";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -94,7 +99,7 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
   // The user manager has no reliable network-online target; server networking retries itself.
   return [
     "[Unit]",
-    "Description=T3 Code server",
+    `Description=${FORK_DISPLAY_NAME} server`,
     "StartLimitIntervalSec=300",
     "StartLimitBurst=5",
     "",
@@ -442,7 +447,7 @@ export class BootServiceInstallError extends Schema.TaggedError<BootServiceInsta
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Could not set up the T3 Code background service.";
+    return `Could not set up the ${FORK_DISPLAY_NAME} background service.`;
   }
 }
 
@@ -460,11 +465,11 @@ type BootServiceProblem = typeof BootServiceProblem.Type;
 export function formatBootServiceProblem(problem: BootServiceProblem): string {
   switch (problem) {
     case "user-manager-unavailable":
-      return "Cannot reach the systemd user manager. Run `systemctl --user status` in a login session for the service user. Install your distribution's systemd user-session support if it is missing; do not run T3 with sudo.";
+      return `Cannot reach the systemd user manager. Run \`systemctl --user status\` in a login session for the service user. Install your distribution's systemd user-session support if it is missing; do not run ${FORK_DISPLAY_NAME} with sudo.`;
     case "linger-unavailable":
       return 'Cannot check whether this user can run services after logout. Run `loginctl show-user "$(id -un)" --property=Linger` and check that systemd-logind is available.';
     case "linger-disabled":
-      return 'Lingering is disabled. T3 Code will stop when your last login session ends and will not start at boot. Run `sudo loginctl enable-linger "$(id -un)"` on this machine, then retry the service command as your normal user.';
+      return `Lingering is disabled. ${FORK_DISPLAY_NAME} will stop when your last login session ends and will not start at boot. Run \`sudo loginctl enable-linger "$(id -un)"\` on this machine, then retry the service command as your normal user.`;
     case "service-disabled":
       return `The service is not enabled to start automatically. Run \`${FORK_CLI_NAME} service install\` to repair it.`;
     case "service-stopped":
@@ -500,7 +505,7 @@ export class BootServiceDowngradeRefusedError extends Schema.TaggedError<BootSer
   },
 ) {
   override get message(): string {
-    return `Refusing to replace t3@${this.installedVersion} with older t3@${this.targetVersion}. Run the command again with --allow-downgrade to continue.`;
+    return `Refusing to replace ${FORK_CLI_NAME}@${this.installedVersion} with older ${FORK_CLI_NAME}@${this.targetVersion}. Run the command again with --allow-downgrade to continue.`;
   }
 }
 
@@ -787,7 +792,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
             Effect.mapError(
               (cause) =>
                 new PinnedRuntimeInstallError({
-                  step: "verifying the pinned t3 runtime",
+                  step: `verifying the pinned ${FORK_CLI_NAME} runtime`,
                   cause,
                 }),
             ),
@@ -797,7 +802,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
                 ? Effect.void
                 : Effect.fail(
                     new PinnedRuntimeInstallError({
-                      step: "verifying the pinned t3 runtime",
+                      step: `verifying the pinned ${FORK_CLI_NAME} runtime`,
                       exitCode: Number(result.code),
                       stdoutLength: result.stdout.length,
                       stderrLength: result.stderr.length,

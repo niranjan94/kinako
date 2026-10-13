@@ -19,6 +19,7 @@ import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydra
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import * as ProviderRegistry from "./ProviderRegistry.ts";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const ANTIGRAVITY = ProviderDriverKind.make("antigravity");
 const hasBinaryPath = Schema.is(Schema.Struct({ binaryPath: Schema.String }));
@@ -83,15 +84,14 @@ export const makeProviderInstallation = Effect.fn("makeProviderInstallation")(fu
       return yield* new ProviderSetupError({
         instanceId,
         operation,
-        detail: "Choose managed setup to install Codex in T3 Code.",
+        detail: `Choose managed setup to install Codex in ${FORK_DISPLAY_NAME}.`,
       });
     }
     if (managedOnly && config.binaryPath && (!isCodex || config.binaryPath !== "codex")) {
       return yield* new ProviderSetupError({
         instanceId,
         operation,
-        detail:
-          "This instance uses a custom executable. Clear its binary path to manage installation in T3 Code.",
+        detail: `This instance uses a custom executable. Clear its binary path to manage installation in ${FORK_DISPLAY_NAME}.`,
       });
     }
     return { installation, driver: instance.driverKind };

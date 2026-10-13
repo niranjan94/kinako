@@ -74,6 +74,7 @@ import {
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
 import * as CursorAgentSdk from "./CursorAgentSdk.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 export { cursorSdkModelSelection } from "./sdkModel.ts";
 
 export const CURSOR_DRIVER_KIND = CursorAgentSdk.CURSOR_PROVIDER;
@@ -313,7 +314,7 @@ export function makeCursorAgentOptions(input: {
   const mcpServers = cursorMcpServers(input.mcpSession);
   return {
     model: cursorSdkModelSelection(input.modelSelection),
-    name: `T3 Code ${input.threadId}`,
+    name: `${FORK_DISPLAY_NAME} ${input.threadId}`,
     mode: input.runtimePolicy.interactionMode === "plan" ? "plan" : "agent",
     ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
     local: {

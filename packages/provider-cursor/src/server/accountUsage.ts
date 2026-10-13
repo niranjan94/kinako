@@ -21,6 +21,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
 import * as CursorKeychain from "./CursorKeychain.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 function object(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -154,7 +155,7 @@ export const readCursorAccountUsage = Effect.fn("readCursorAccountUsage")(functi
         : typeof credentialSource === "string"
           ? "Cursor credentials could not be read."
           : CursorKeychain.isCursorKeychainTimeoutError(cause)
-            ? "Allow Keychain access on the Mac running T3 Code, then refresh."
+            ? `Allow Keychain access on the Mac running ${FORK_DISPLAY_NAME}, then refresh.`
             : "Cursor Keychain credentials could not be read.",
     };
   }

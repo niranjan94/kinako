@@ -12,6 +12,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 export const OpenCodeSettings = makeProviderSettingsSchema(
   {
@@ -35,7 +36,7 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
       Schema.withDecodingDefault(Effect.succeed("")),
       Schema.annotateKey({
         title: "Server URL",
-        description: "Leave blank to let T3 Code spawn the server when needed.",
+        description: `Leave blank to let ${FORK_DISPLAY_NAME} spawn the server when needed.`,
         providerSettingsForm: {
           placeholder: "http://127.0.0.1:4096",
           clearWhenEmpty: "omit",

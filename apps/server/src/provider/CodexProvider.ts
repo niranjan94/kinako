@@ -51,6 +51,7 @@ import {
   type CodexResetCreditsSummary,
 } from "./codexUsageLimits.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import packageJson from "../../package.json" with { type: "json" };
 const isCodexAppServerSpawnError = Schema.is(CodexErrors.CodexAppServerSpawnError);
 const RATE_LIMITS_PROBE_TIMEOUT_MS = 3_000;
@@ -582,7 +583,7 @@ const makePendingCodexProvider = (
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Codex is disabled in T3 Code settings.",
+          message: `Codex is disabled in ${FORK_DISPLAY_NAME} settings.`,
         },
       });
     }
@@ -675,7 +676,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Codex is disabled in T3 Code settings.",
+        message: `Codex is disabled in ${FORK_DISPLAY_NAME} settings.`,
       },
     });
   }

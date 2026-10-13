@@ -17,6 +17,7 @@ import {
   makeUsageLimits,
 } from "@t3tools/provider-core/server/usageLimits";
 import * as CursorKeychain from "./CursorKeychain.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const CursorCredentials = Schema.Struct({ accessToken: Schema.optional(Schema.String) });
 const DEFAULT_CURSOR_API_ENDPOINT = "https://api2.cursor.sh";
@@ -94,7 +95,7 @@ export const readCursorUsageLimits = Effect.fn("readCursorUsageLimits")(function
         return makeUnavailableUsageLimits({
           checkedAt,
           reason: "unsupported",
-          message: "Enable Cursor account usage in T3 Code to read its Keychain login.",
+          message: `Enable Cursor account usage in ${FORK_DISPLAY_NAME} to read its Keychain login.`,
         });
       }
       if (endpoint !== DEFAULT_CURSOR_API_ENDPOINT) {

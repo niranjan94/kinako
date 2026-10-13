@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import packageJson from "../../package.json" with { type: "json" };
 
 // Deliberately uses the shared CLI gate syntax: comparator groups joined by ||.
@@ -85,11 +86,11 @@ export function resolveProviderCompatibility(
       : "unknown";
   const message =
     status === "broken"
-      ? "This provider version is known to be incompatible with this T3 Code release."
+      ? `This provider version is known to be incompatible with this ${FORK_DISPLAY_NAME} release.`
       : status === "unsupported"
-        ? "This provider version is outside the supported range for this T3 Code release."
+        ? `This provider version is outside the supported range for this ${FORK_DISPLAY_NAME} release.`
         : status === "graceful"
-          ? "This provider version has limited compatibility with this T3 Code release."
+          ? `This provider version has limited compatibility with this ${FORK_DISPLAY_NAME} release.`
           : null;
   const recommendedVersion = policy.recommendedVersion ?? null;
   const recommendedRange = policy.recommendedRange ?? null;

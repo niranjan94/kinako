@@ -17,6 +17,7 @@ import {
   SettingsEnvironmentFilterHeader,
 } from "./components/SettingsEnvironmentFilterHeader";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 export function SettingsRouteScreen() {
   const navigation = useNavigation();
@@ -215,7 +216,11 @@ function SettingsIndexSections() {
 
       <SettingsSection title="App">
         <SettingsRow icon="chart.bar.xaxis" label="Usage" target="SettingsUsage" />
-        <SettingsRow icon="info.circle" label="About T3 Code" target="SettingsAbout" />
+        <SettingsRow
+          icon="info.circle"
+          label={`About ${FORK_DISPLAY_NAME}`}
+          target="SettingsAbout"
+        />
       </SettingsSection>
     </>
   );

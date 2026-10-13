@@ -41,6 +41,7 @@ import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { resolveAgentAwarenessPlatformPresentation } from "./SettingsRouteScreen.logic";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 type NotificationStatus = "checking" | "enabled" | "disabled" | "unsupported";
 type LiveActivityStatus = "checking" | "enabled" | "disabled" | "signed-out" | "linking";
@@ -338,7 +339,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
 
       Alert.alert(
         "Disable notifications",
-        "Open system Settings to disable notifications for T3 Code.",
+        `Open system Settings to disable notifications for ${FORK_DISPLAY_NAME}.`,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Open Settings", onPress: () => void Linking.openSettings() },
@@ -492,7 +493,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
                 void openAndroidLiveUpdateSettings().catch(() => {
                   Alert.alert(
                     "Couldn't open Settings",
-                    "Open Android Settings, select T3 Code, then enable Live Updates in Notifications.",
+                    `Open Android Settings, select ${FORK_DISPLAY_NAME}, then enable Live Updates in Notifications.`,
                   );
                 });
               }}

@@ -20,6 +20,7 @@ import {
   restartCancelledBackgroundWorkNote,
   restartContinuationNote,
 } from "./RestartBackgroundNote.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const CONTINUE_PROMPT = "Continue where you left off.";
 
@@ -253,8 +254,8 @@ export const continueRestartedRun = Effect.fn("RestartContinuation.continueResta
           source: { kind: "system" },
           outcome: "updated",
           summary: note.settled
-            ? "T3 Code restarted and stopped background work"
-            : "T3 Code restarted and resumed this turn",
+            ? `${FORK_DISPLAY_NAME} restarted and stopped background work`
+            : `${FORK_DISPLAY_NAME} restarted and resumed this turn`,
           detail: text,
         },
         attachments: [],

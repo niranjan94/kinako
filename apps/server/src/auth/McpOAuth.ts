@@ -37,6 +37,7 @@ import {
   signPayload,
   timingSafeEqualBase64Url,
 } from "./utils.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 /**
  * The OAuth authorization server MCP clients (Claude Code, Codex, any agent
@@ -88,7 +89,7 @@ export const protectedResourceMetadata = (
   authorization_servers: [urls.issuer],
   scopes_supported: MCP_OAUTH_SCOPES,
   bearer_methods_supported: ["header"],
-  resource_name: "T3 Code",
+  resource_name: FORK_DISPLAY_NAME,
 });
 
 export const authorizationServerMetadata = (

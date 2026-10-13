@@ -1,4 +1,5 @@
 import type { PinnedRuntimeProgress } from "../cloud/pinnedRuntime.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 /** A single status line below the download bar; redirected output remains plain. */
 export function createUpdateProgress(
@@ -40,7 +41,7 @@ export function createUpdateProgress(
         const labels = {
           download: "Downloading...",
           verify: "Verifying the download...",
-          extract: "Extracting T3 Code...",
+          extract: `Extracting ${FORK_DISPLAY_NAME}...`,
           validate: "Checking the new executable...",
           cached: "Using the downloaded release...",
         };

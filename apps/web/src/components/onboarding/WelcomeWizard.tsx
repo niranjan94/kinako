@@ -517,7 +517,7 @@ function ConnectAccountOption({
             </p>
             <CommandBlock command={`${FORK_CLI_NAME} connect`} className="mt-3" />
             <p className="mt-3 text-xs text-muted-foreground">
-              Keep T3 Code running. Select the computers you want to set up above.
+              Keep {APP_BASE_NAME} running. Select the computers you want to set up above.
             </p>
           </div>
         </CollapsiblePanel>
@@ -631,8 +631,9 @@ function PairingForm({
             </p>
             <CommandBlock command={`${FORK_CLI_NAME} pair`} className="mt-2" />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Start T3 Code first, or run <code className="font-mono">{FORK_CLI_NAME} serve</code>.
-              Add <code className="font-mono">--tailscale</code> to use your tailnet.
+              Start {APP_BASE_NAME} first, or run{" "}
+              <code className="font-mono">{FORK_CLI_NAME} serve</code>. Add{" "}
+              <code className="font-mono">--tailscale</code> to use your tailnet.
             </p>
           </CollapsiblePanel>
         </Collapsible>

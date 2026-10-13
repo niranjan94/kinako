@@ -1,14 +1,10 @@
-import type {
-  EnvironmentId,
-  ServerConfig,
-  ServerInstallation,
-  ServerSelfUpdateCapability,
-} from "@t3tools/contracts";
+import type { EnvironmentId, ServerConfig, ServerSelfUpdateCapability } from "@t3tools/contracts";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
 
-import { APP_VERSION } from "./branding";
+import { APP_BASE_NAME, APP_VERSION } from "./branding";
 import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 
 export interface VersionMismatch {
@@ -87,7 +83,7 @@ export function resolveVersionMismatch(
   return {
     clientVersion: normalizedClientVersion,
     serverVersion: normalizedServerVersion,
-    hint: "Version mismatch. Try syncing the client and server to the same T3 Code version.",
+    hint: `Version mismatch. Try syncing the client and server to the same ${APP_BASE_NAME} version.`,
   };
 }
 
@@ -122,17 +118,8 @@ export function supportsServerUpdateThreadContinuation(
 }
 
 /** The command to hand users whose server cannot update itself. */
-export function manualServerUpdateCommand(
-  targetVersion: string,
-  installation?: ServerInstallation,
-): string {
-  if (installation?.kind === "npm-global") {
-    const prefix = `'${installation.prefix.replaceAll("'", "'\\''")}'`;
-    return `npm install --global --prefix ${prefix} t3@${targetVersion}`;
-  }
-  const runner =
-    installation?.kind === "pnpm-dlx" ? "pnpm dlx" : installation?.kind === "bunx" ? "bunx" : "npx";
-  return `${runner} t3@${targetVersion}`;
+export function manualServerUpdateCommand(): string {
+  return `${FORK_CLI_NAME} update`;
 }
 
 export function serverUpdateGuidance(capability: ServerSelfUpdateCapability): string {

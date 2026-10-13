@@ -11,6 +11,7 @@ import {
   T3_PI_RUNTIME_MODE_ENV,
   T3_PI_MCP_EXTENSION_PATH_ENV,
 } from "./mcpExtensionSource.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const RESERVED_PI_LAUNCH_ARGUMENTS = new Set([
   "--continue",
@@ -119,7 +120,7 @@ export function resolvePiLaunchArgs(launchArgs: string): PiLaunchArgsResolution 
     if (reserved !== undefined) {
       return {
         ok: false,
-        message: `Pi launch argument '${reserved}' is controlled by T3 Code and cannot be overridden.`,
+        message: `Pi launch argument '${reserved}' is controlled by ${FORK_DISPLAY_NAME} and cannot be overridden.`,
       };
     }
     if (arg === "--") {
@@ -154,7 +155,10 @@ export function resolvePiLaunchArgs(launchArgs: string): PiLaunchArgsResolution 
       continue;
     }
     if (arg.startsWith("-")) {
-      return { ok: false, message: `Pi launch argument '${arg}' is not supported by T3 Code.` };
+      return {
+        ok: false,
+        message: `Pi launch argument '${arg}' is not supported by ${FORK_DISPLAY_NAME}.`,
+      };
     }
     return {
       ok: false,

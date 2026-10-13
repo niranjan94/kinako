@@ -19,6 +19,7 @@ import { isKdeCaptureSession, type KdeCapturePaths } from "./KdeSnapShot.ts";
 import { isGnomeCaptureSession, readPortalPng, resizeLinuxCapture } from "./linuxCaptureSession.ts";
 export { readPortalPng, resizeLinuxCapture } from "./linuxCaptureSession.ts";
 import { isHyprlandCaptureSession, type HyprlandCapturePaths } from "./HyprlandSnapShot.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const PORTAL = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH = "/org/freedesktop/portal/desktop";
@@ -306,7 +307,7 @@ export class LinuxCaptureConnection {
       this.bus.requestName(`${appId}.SnapShot`, NameFlag.DO_NOT_QUEUE),
     );
     if (result !== RequestNameReply.PRIMARY_OWNER) {
-      throw new Error("Another T3 Code instance is capturing a window. Try again.");
+      throw new Error(`Another ${FORK_DISPLAY_NAME} instance is capturing a window. Try again.`);
     }
     const withFeedback = this.feedbackAvailable && options !== undefined;
     const reply = await this.call({

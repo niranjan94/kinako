@@ -26,6 +26,7 @@ import { WorkspaceToolbar } from "./WorkspaceToolbar";
 import { WORKSPACE_DOCK, workspaceToolbarHeight } from "./workspace-tabs-state";
 import { WorkspaceSidebarTabs } from "./WorkspaceSidebarTabs";
 import { useSidebarWorkspaceTabs, useSystemWorkspaceTabBar } from "./useSystemWorkspaceTabBar";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const TAB_TITLES = {
   threads: "Threads",
@@ -42,7 +43,9 @@ function WorkspaceRootTitle(props: {
     <View style={{ width: props.maxWidth, minHeight: 32, justifyContent: "center" }}>
       <WorkspaceConnectionTitle
         brand={
-          <CompactBrandTitle accessibilityLabel={`T3 Code, ${TAB_TITLES[state.selectedTab]}`} />
+          <CompactBrandTitle
+            accessibilityLabel={`${FORK_DISPLAY_NAME}, ${TAB_TITLES[state.selectedTab]}`}
+          />
         }
         maxWidth={props.maxWidth}
         onPress={props.onOpenEnvironments}
@@ -114,7 +117,7 @@ function WorkspaceRootContent() {
           />
         ) : (
           <AndroidScreenHeader
-            title="T3 Code"
+            title={FORK_DISPLAY_NAME}
             titleContent={renderHeaderTitle()}
             actions={[
               {

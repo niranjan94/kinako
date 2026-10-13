@@ -2588,7 +2588,7 @@ describe("MessagesTimeline", () => {
 
     // The Kinako mark replaces the generic tool icon for T3 MCP calls.
     expect(markup).toContain('viewBox="15.5 20.5 92 92"');
-    expect(markup).toContain("Read a T3 thread");
+    expect(markup).toContain("Read a thread");
     expect(markup).not.toContain("mcp__t3-code__t3_thread_read");
   });
 

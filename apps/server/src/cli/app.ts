@@ -11,7 +11,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveDesktopAppControlAddress } from "@t3tools/shared/desktopAppControl";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Crypto from "effect/Crypto";
@@ -56,7 +56,7 @@ export class DesktopAppUnreachableError extends Schema.TaggedError<DesktopAppUnr
   },
 ) {
   override get message(): string {
-    return `Could not reach the T3 Code desktop app. Start or update the desktop app on this machine, then run \`${FORK_CLI_NAME} app\` again. A running T3 Code server is not enough.`;
+    return `Could not reach the ${FORK_DISPLAY_NAME} desktop app. Start or update the desktop app on this machine, then run \`${FORK_CLI_NAME} app\` again. A running ${FORK_DISPLAY_NAME} server is not enough.`;
   }
 }
 
@@ -70,7 +70,7 @@ export class DesktopAppRequestFailedError extends Schema.TaggedError<DesktopAppR
   },
 ) {
   override get message(): string {
-    return `T3 Code could not open ${this.workspaceRoot} (${this.code}).`;
+    return `${FORK_DISPLAY_NAME} could not open ${this.workspaceRoot} (${this.code}).`;
   }
 }
 
@@ -245,7 +245,7 @@ const runAppCommand = Effect.fn("cli.app")(function* (flags: {
     });
   }
 
-  yield* Console.log(`Opened ${workspaceRoot} in T3 Code.`);
+  yield* Console.log(`Opened ${workspaceRoot} in ${FORK_DISPLAY_NAME}.`);
 });
 
 export const appCommand = Command.make("app", {
@@ -255,6 +255,6 @@ export const appCommand = Command.make("app", {
     Argument.optional,
   ),
 }).pipe(
-  Command.withDescription("Open a project in the running T3 Code desktop app."),
+  Command.withDescription(`Open a project in the running ${FORK_DISPLAY_NAME} desktop app.`),
   Command.withHandler(runAppCommand),
 );

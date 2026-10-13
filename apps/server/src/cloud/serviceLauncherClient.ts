@@ -13,6 +13,7 @@ import {
   type ServiceLauncherChildMessage,
   type ServiceLauncherParentMessage,
 } from "./serviceProtocol.ts";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 
 export class ServiceLauncherClientError extends Schema.TaggedError<ServiceLauncherClientError>()(
   "ServiceLauncherClientError",
@@ -34,7 +35,7 @@ export class ServiceLauncherClientError extends Schema.TaggedError<ServiceLaunch
       case "decode-context":
         return "The service launcher supplied invalid startup context.";
       case "version-mismatch":
-        return "The service launcher started a different t3 version.";
+        return `The service launcher started a different ${FORK_CLI_NAME} version.`;
       case "ipc-unavailable":
         return "The service launcher IPC channel is unavailable.";
       case "unmanaged":

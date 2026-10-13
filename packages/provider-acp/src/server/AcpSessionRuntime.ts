@@ -49,6 +49,7 @@ import {
   type AcpSessionModeState,
   type AcpToolCallState,
 } from "./runtimeModel.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const MAX_SHOWN_TOOL_CALL_IDS = 256;
 
@@ -949,7 +950,8 @@ export function terminatePosixOwnedProcessTree(input: {
     discover(table);
     const byPid = new Map(table.map((entry) => [entry.pid, entry]));
     const current = input.controller.identity(process.pid);
-    if (current === undefined) throw fail("Cannot identify the current T3 process group");
+    if (current === undefined)
+      throw fail(`Cannot identify the current ${FORK_DISPLAY_NAME} process group`);
     const ledgerByPid = new Map(
       [...ledger.values()].map((process) => [process.pid, process] as const),
     );

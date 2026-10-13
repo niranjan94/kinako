@@ -6,6 +6,7 @@ import { HttpServer } from "effect/http";
 
 import * as ServerConfig from "./config.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 export interface HeadlessServeAccessInfo {
   readonly connectionString: string;
@@ -121,7 +122,7 @@ export const renderTerminalQrCode = (value: string, margin = 2): string => {
 
 export const formatHeadlessServeOutput = (accessInfo: HeadlessServeAccessInfo): string =>
   [
-    "T3 Code server is ready.",
+    `${FORK_DISPLAY_NAME} server is ready.`,
     `Connection string: ${accessInfo.connectionString}`,
     `Token: ${accessInfo.token}`,
     `Pairing URL: ${accessInfo.pairingUrl}`,

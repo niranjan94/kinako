@@ -29,8 +29,14 @@ export function SubscriptionUsage(props: SubscriptionUsageProps, environment: Wi
   });
   const muted = colors.onSurfaceVariant;
   const providers = props.providers ?? [
-    { name: "Codex", detail: "Open T3 to connect", windows: [], expiresAt: 0, totalWindows: 0 },
-    { name: "Claude", detail: "Open T3 to connect", windows: [], expiresAt: 0, totalWindows: 0 },
+    { name: "Codex", detail: "Open Kinako to connect", windows: [], expiresAt: 0, totalWindows: 0 },
+    {
+      name: "Claude",
+      detail: "Open Kinako to connect",
+      windows: [],
+      expiresAt: 0,
+      totalWindows: 0,
+    },
   ];
   return (
     // The card is one Button so a tap reaches the app's interaction listener,
@@ -60,7 +66,7 @@ export function SubscriptionUsage(props: SubscriptionUsageProps, environment: Wi
               </Text>
               {shown.length === 0 ? (
                 <Text color={muted} maxLines={1} style={{ fontSize: 11 }}>
-                  {stale ? "Open T3 to refresh" : provider.detail}
+                  {stale ? "Open Kinako to refresh" : provider.detail}
                 </Text>
               ) : null}
               {shown.map((window) => {
@@ -90,7 +96,7 @@ export function SubscriptionUsage(props: SubscriptionUsageProps, environment: Wi
               })}
               {hidden > 0 ? (
                 <Text color={muted} maxLines={1} style={{ fontSize: 10 }}>
-                  {`${hidden} more in T3`}
+                  {`${hidden} more in Kinako`}
                 </Text>
               ) : null}
             </Column>
@@ -104,7 +110,7 @@ export function SubscriptionUsage(props: SubscriptionUsageProps, environment: Wi
         >
           {props.checkedAt
             ? `As of ${new Date(props.checkedAt).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" })}`
-            : "Tap to connect in T3"}
+            : "Tap to connect in Kinako"}
         </Text>
       </Column>
     </Button>

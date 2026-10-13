@@ -129,6 +129,7 @@ import {
   useThreadSettingsSheetPresentation,
   type NavigationWithFinishTransitioning,
 } from "./use-thread-settings-sheet-presentation";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 /**
  * Height of the collapsed composer (pill + vertical padding, excluding safe-area inset).
@@ -635,7 +636,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
         armAgentAwarenessLiveActivityForLocalWork({
           environmentId: props.environmentId,
           threadTitle: props.selectedThread.title,
-          projectTitle: props.environmentLabel ?? "T3 Code",
+          projectTitle: props.environmentLabel ?? FORK_DISPLAY_NAME,
         });
       } finally {
         inFlightThreadIdsRef.current.delete(threadKey);

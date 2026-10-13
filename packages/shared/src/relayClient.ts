@@ -21,6 +21,7 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { FORK_DISPLAY_NAME } from "./forkBrand.ts";
 import * as HostProcess from "./HostProcess.ts";
 
 export const CLOUDFLARED_VERSION = "2026.10.0";
@@ -536,7 +537,7 @@ export const makeCloudflaredRelayClient = Effect.fn("cloudflared.make")(function
     if (!releaseAsset) {
       return yield* new RelayClientInstallError({
         reason: "unsupported_platform",
-        message: `T3 Code does not provide a managed relay client binary for ${platform}-${arch}.`,
+        message: `${FORK_DISPLAY_NAME} does not provide a managed relay client binary for ${platform}-${arch}.`,
       });
     }
 

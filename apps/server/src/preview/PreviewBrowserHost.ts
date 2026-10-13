@@ -13,6 +13,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 /** The subcommand that sets the host up; callers render it, with `sudo`, for how T3 was launched. */
 export const SETUP_SUBCOMMAND = "browser setup";
@@ -33,7 +34,7 @@ export const APPARMOR_PROFILE_PATH = "/etc/apparmor.d/t3-chrome-headless-shell";
  * the user namespace Chrome's sandbox runs in. Modelled on the profile Ubuntu
  * ships for Google Chrome; `unconfined` adds nothing beyond `userns`.
  */
-export const APPARMOR_PROFILE = `# Written by \`t3 browser setup\`: lets T3 Code's headless browser use Chrome's sandbox.
+export const APPARMOR_PROFILE = `# Written by \`${FORK_CLI_NAME} browser setup\`: lets ${FORK_DISPLAY_NAME}'s headless browser use Chrome's sandbox.
 abi <abi/4.0>,
 include <tunables/global>
 
@@ -74,7 +75,7 @@ export class PreviewBrowserSandboxError extends Schema.TaggedError<PreviewBrowse
   { setupCommand: Schema.String },
 ) {
   override get message(): string {
-    return `This host blocks the sandbox T3's browser runs in (AppArmor on Ubuntu 23.10+). Run \`${this.setupCommand}\` on the host once to allow it, then try again.`;
+    return `This host blocks the sandbox ${FORK_DISPLAY_NAME}'s browser runs in (AppArmor on Ubuntu 23.10+). Run \`${this.setupCommand}\` on the host once to allow it, then try again.`;
   }
 }
 
@@ -83,7 +84,7 @@ export class PreviewBrowserLibrariesError extends Schema.TaggedError<PreviewBrow
   { setupCommand: Schema.String, libraries: Schema.Array(Schema.String) },
 ) {
   override get message(): string {
-    return `This host is missing libraries T3's browser needs (${this.libraries.join(", ")}). Run \`${this.setupCommand}\` on the host to install them, then try again.`;
+    return `This host is missing libraries ${FORK_DISPLAY_NAME}'s browser needs (${this.libraries.join(", ")}). Run \`${this.setupCommand}\` on the host to install them, then try again.`;
   }
 }
 

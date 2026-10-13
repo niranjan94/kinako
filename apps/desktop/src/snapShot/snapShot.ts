@@ -15,6 +15,7 @@ import {
   type SnapShotModifier,
   type SnapShotShortcut,
 } from "@t3tools/contracts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 interface AccessibilityTreeNode {
   readonly name?: string;
@@ -447,7 +448,7 @@ export function hideAndWaitForBlur(window: {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       window.removeListener("blur", onBlur);
-      reject(new Error("Timed out waiting for T3 Code to lose focus."));
+      reject(new Error(`Timed out waiting for ${FORK_DISPLAY_NAME} to lose focus.`));
     }, WINDOW_BLUR_TIMEOUT_MS);
     const onBlur = () => {
       clearTimeout(timeout);

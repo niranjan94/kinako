@@ -100,6 +100,7 @@ import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter"
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import { OPENCODE_PROVIDER, openCodePermissionRequestKind } from "../adapter.ts";
 import { openCodeToolTurnItem } from "../toolItems.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const OpenCode2ProviderCapabilities = {
   sessions: {
@@ -681,8 +682,7 @@ const RECONCILE_TIMEOUT = "15 seconds";
 /** How long a new turn waits for a reconnect in progress. */
 const RECONNECT_WAIT = "30 seconds";
 /** A background subagent's result when its end was lost with the event stream. */
-const LOST_BACKGROUND =
-  "T3 Code lost its connection to OpenCode while this subagent ran, so its result is not shown.";
+const LOST_BACKGROUND = `${FORK_DISPLAY_NAME} lost its connection to OpenCode while this subagent ran, so its result is not shown.`;
 /** How long a turn waits on the directory's commands or skills before sending the text as is. */
 const INVENTORY_TIMEOUT = "5 seconds";
 const ACTIVE_CHECK_TIMEOUT = "5 seconds";
@@ -761,8 +761,7 @@ const boundaryAfter = (
     return Effect.fail(
       new ProviderAdapter.ProviderAdapterProtocolError({
         driver: OPENCODE_PROVIDER,
-        detail:
-          "This OpenCode conversation has turns from an earlier T3 Code version, so it can't be cut there.",
+        detail: `This OpenCode conversation has turns from an earlier ${FORK_DISPLAY_NAME} version, so it can't be cut there.`,
       }),
     );
   }
@@ -1868,7 +1867,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       yield* finishTurn(state, {
         status: "failed",
         failure: makeProviderFailure({
-          message: "OpenCode is waiting on a request T3 Code couldn't answer.",
+          message: `OpenCode is waiting on a request ${FORK_DISPLAY_NAME} couldn't answer.`,
           class: "provider_error",
         }),
       });
@@ -2135,7 +2134,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       }
       // Cancelling ends OpenCode's execution as a user stop, so the turn is
       // failed here with the reason and that stop's end is skipped.
-      yield* Effect.logWarning("Declined an OpenCode form T3 Code cannot show.", {
+      yield* Effect.logWarning(`Declined an OpenCode form ${FORK_DISPLAY_NAME} cannot show.`, {
         reason: mapped.unsupported,
       });
       const cancelled = yield* deliver(
@@ -2150,7 +2149,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       yield* finishTurn(asker, {
         status: "failed",
         failure: makeProviderFailure({
-          message: `OpenCode asked for ${mapped.unsupported}, which T3 Code can't show. The question was declined.`,
+          message: `OpenCode asked for ${mapped.unsupported}, which ${FORK_DISPLAY_NAME} can't show. The question was declined.`,
           class: "provider_error",
         }),
       });
@@ -2879,8 +2878,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
               ? {
                   status: "failed",
                   failure: makeProviderFailure({
-                    message:
-                      "OpenCode ended the turn with an error while T3 Code was reconnecting.",
+                    message: `OpenCode ended the turn with an error while ${FORK_DISPLAY_NAME} was reconnecting.`,
                     class: "provider_error",
                   }),
                 }
@@ -3405,9 +3403,10 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
             Effect.timeout(INVENTORY_TIMEOUT),
             Effect.as(true),
             Effect.catchCause((cause) =>
-              Effect.logWarning("Could not add T3 Code's MCP server to OpenCode.", cause).pipe(
-                Effect.as(false),
-              ),
+              Effect.logWarning(
+                `Could not add ${FORK_DISPLAY_NAME}'s MCP server to OpenCode.`,
+                cause,
+              ).pipe(Effect.as(false)),
             ),
           );
         if (added) state.mcp = wanted;

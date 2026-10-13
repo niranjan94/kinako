@@ -2490,7 +2490,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       assert.equal(ended?.status, "failed");
       assert.equal(
         ended?.status === "failed" ? ended.failure.message : undefined,
-        "OpenCode is waiting on a request T3 Code couldn't answer.",
+        "OpenCode is waiting on a request Kinako couldn't answer.",
       );
     }).pipe(Effect.scoped),
   );
@@ -2525,7 +2525,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       yield* runtime.startTurn(turnInput(thread, bigPickle, "approval-required"));
       const request = yield* Fiber.join(requested);
       yield* runtime.respondToRuntimeRequest({ requestId: request!.id, decision: "accept" });
-      // Not "waiting on a request T3 Code couldn't answer": nothing waits on it.
+      // Not "waiting on a request Kinako couldn't answer": nothing waits on it.
       assert.equal((yield* Fiber.join(terminal))?.status, "completed");
     }).pipe(Effect.scoped),
   );

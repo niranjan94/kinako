@@ -81,6 +81,7 @@ import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const SERVER_HOST_CLIENT_ID = SERVER_BROWSER_AUTOMATION_CLIENT_ID;
 const RENDER_SCALE = 2;
@@ -2391,7 +2392,7 @@ const make = Effect.gen(function* () {
     (yield* PreviewBrowserHost.sandboxBlocked)
   ) {
     yield* Effect.logWarning(
-      `This host blocks the sandbox T3's browser runs in, so browser tabs and HTML previews will not start. Run \`${setupCommand}\` once to allow it.`,
+      `This host blocks the sandbox ${FORK_DISPLAY_NAME}'s browser runs in, so browser tabs and HTML previews will not start. Run \`${setupCommand}\` once to allow it.`,
     );
   }
   // The desktop took its page back (closed, swapped, crashed, or devtools opened).

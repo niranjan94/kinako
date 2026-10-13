@@ -11,7 +11,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import { buildRemoteNodeEnvScript } from "@t3tools/ssh/tunnel";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
-import { FORK_CLI_NAME, FORK_HOME_DIR_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_HOME_DIR_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { parseWslDistroList, type WslDistro } from "./wslPathParsing.ts";
@@ -506,7 +506,7 @@ const NODE_PTY_BINARY_MISSING_EXIT_CODE = 4;
 
 const formatNodePtyProbeFailureReason = (exitCode: number): string | null =>
   exitCode === NODE_PTY_BINARY_MISSING_EXIT_CODE
-    ? "WSL support is missing from this T3 Code build: the packaged Linux node-pty binary was not included. Install a build that includes WSL support."
+    ? `WSL support is missing from this ${FORK_DISPLAY_NAME} build: the packaged Linux node-pty binary was not included. Install a build that includes WSL support.`
     : null;
 
 // Captures the login-shell PATH as `resolvedPath:` so the launch can forward the

@@ -617,6 +617,7 @@ const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_MODELS: ServerProvider["models"] = [];
 const EMPTY_USAGE_LIMIT_SOURCES: UsageLimitSourceSnapshots = [];
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
+import { APP_BASE_NAME } from "~/branding";
 
 const TIMELINE_SCROLL_CANCEL_SENTINEL = Object.freeze({});
 const EMPTY_FEEDBACK_SUBMISSIONS: ReadonlyArray<CodexFeedbackSubmission> = [];
@@ -11159,7 +11160,7 @@ export default function ChatView(props: ChatViewProps) {
     ) : renderedRightPanelSurface?.kind === "pull-request" && !supportsPullRequests ? (
       <PullRequestsUnavailableState
         title="Pull requests unavailable"
-        error="Update this environment's T3 Code server to browse pull requests."
+        error={`Update this environment's ${APP_BASE_NAME} server to browse pull requests.`}
       />
     ) : renderedRightPanelSurface?.kind === "pull-request" ? (
       // No onClose: the surface tab's own X owns closing here, and a second X in the header

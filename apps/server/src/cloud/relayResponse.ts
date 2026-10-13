@@ -1,5 +1,5 @@
 import { RelayProtectedError } from "@t3tools/contracts/relay";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -43,10 +43,10 @@ function recoveryHint(error: RelayProtectedError): string {
     case "RelayEnvironmentLinkLimitExceededError":
       return "Unlink an unused environment in T3 Connect, then restart T3 Code on this machine.";
     case "RelayAuthInvalidError":
-      return `Run \`${FORK_CLI_NAME} connect login\` to check this machine's authorization. If the stored credential was revoked, sign out with \`${FORK_CLI_NAME} connect logout\`, then run \`${FORK_CLI_NAME} connect\` again. Restart T3 Code after signing in.`;
+      return `Run \`${FORK_CLI_NAME} connect login\` to check this machine's authorization. If the stored credential was revoked, sign out with \`${FORK_CLI_NAME} connect logout\`, then run \`${FORK_CLI_NAME} connect\` again. Restart ${FORK_DISPLAY_NAME} after signing in.`;
     case "RelayEnvironmentLinkProofExpiredError":
     case "RelayEnvironmentLinkProofInvalidError":
-      return "Check this machine's date and time, update T3 Code, then restart it.";
+      return `Check this machine's date and time, update ${FORK_DISPLAY_NAME}, then restart it.`;
     default:
       return "Retry when the relay is available. If this continues, include the trace ID when reporting it.";
   }

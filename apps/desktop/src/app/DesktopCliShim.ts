@@ -2,7 +2,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import { makeComponentLogger } from "./DesktopObservability.ts";
@@ -25,7 +25,7 @@ const shellWord = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 const cmdText = (value: string) => value.replaceAll("%", "%%");
 const cmdWord = (value: string) => `"${cmdText(value)}"`;
 
-const MOVED = "T3 Code has moved or been removed. Open the app once to update this command.";
+const MOVED = `${FORK_DISPLAY_NAME} has moved or been removed. Open the app once to update this command.`;
 
 export type CliShimTarget =
   | { readonly kind: "appimage"; readonly appImage: string; readonly executableName: string }

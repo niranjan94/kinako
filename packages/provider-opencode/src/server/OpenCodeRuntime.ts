@@ -40,6 +40,7 @@ import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 const OPENCODE_EMPTY_CONFIG_CONTENT = "{}";
 
@@ -161,7 +162,7 @@ export const verifyOpenCodeServerVersion = Effect.fn("verifyOpenCodeServerVersio
       (cause) =>
         new OpenCodeRuntimeError({
           operation: "global.health",
-          detail: `OpenCode server returned an invalid health response. T3 Code requires OpenCode v${MINIMUM_OPENCODE_VERSION} or newer.`,
+          detail: `OpenCode server returned an invalid health response. ${FORK_DISPLAY_NAME} requires OpenCode v${MINIMUM_OPENCODE_VERSION} or newer.`,
           cause,
         }),
     ),
@@ -169,7 +170,7 @@ export const verifyOpenCodeServerVersion = Effect.fn("verifyOpenCodeServerVersio
   if (parseSemver(health.version) === null) {
     return yield* new OpenCodeRuntimeError({
       operation: "global.health",
-      detail: `OpenCode server returned an invalid version. T3 Code requires OpenCode v${MINIMUM_OPENCODE_VERSION} or newer.`,
+      detail: `OpenCode server returned an invalid version. ${FORK_DISPLAY_NAME} requires OpenCode v${MINIMUM_OPENCODE_VERSION} or newer.`,
     });
   }
   if (compareSemverVersions(health.version, MINIMUM_OPENCODE_VERSION) < 0) {

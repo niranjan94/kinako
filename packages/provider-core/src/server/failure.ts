@@ -1,3 +1,4 @@
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import type {
   NodeId,
   OrchestrationV2ProviderFailure,
@@ -49,7 +50,7 @@ function causeMessage(cause: unknown): string | undefined {
         case "ClaudeBackgroundWorkBlocksQueryReplacementError":
           return stringField(cause, "message");
         case "ContextHandoffDeliveryUncertainError":
-          return "T3 could not confirm whether conversation history reached the provider. Retry the turn to recover the session.";
+          return `${FORK_DISPLAY_NAME} could not confirm whether conversation history reached the provider. Retry the turn to recover the session.`;
         case "ProviderAdapterTurnStartError":
           message =
             "The provider could not start this turn. Retry the turn; if it keeps failing, check the provider setup and server logs.";

@@ -22,6 +22,7 @@ import {
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
 import * as CursorSdkCatalog from "./CursorSdkCatalog.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const CURSOR_PRESENTATION = {
   displayName: "Cursor",
@@ -52,7 +53,7 @@ export function buildInitialCursorProviderSnapshot(
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Cursor is disabled in T3 Code settings.",
+          message: `Cursor is disabled in ${FORK_DISPLAY_NAME} settings.`,
         },
       });
     }
@@ -265,7 +266,7 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Cursor is disabled in T3 Code settings.",
+        message: `Cursor is disabled in ${FORK_DISPLAY_NAME} settings.`,
       },
     });
   }

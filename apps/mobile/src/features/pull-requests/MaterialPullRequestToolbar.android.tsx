@@ -7,6 +7,7 @@ import { MaterialSearchField } from "../../components/MaterialSearchField";
 import { WorkspaceConnectionTitle } from "../home/WorkspaceConnectionTitle";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
 import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 /** PR search shares the thread list's native Android header placement. */
 export function MaterialPullRequestToolbar(props: { readonly onRequestVisibility?: () => void }) {
@@ -69,7 +70,7 @@ export function MaterialPullRequestToolbar(props: { readonly onRequestVisibility
               brand={
                 <CompactBrandTitle
                   allowFontScaling={false}
-                  accessibilityLabel="T3 Code, Pull requests"
+                  accessibilityLabel={`${FORK_DISPLAY_NAME}, Pull requests`}
                 />
               }
               onPress={() =>

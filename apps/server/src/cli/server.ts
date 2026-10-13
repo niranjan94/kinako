@@ -1,5 +1,5 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -54,13 +54,13 @@ export const runDefaultServerCommand = (flags: CliServerFlags) =>
   });
 
 export const startCommand = Command.make("start", { ...sharedServerCommandFlags }).pipe(
-  Command.withDescription("Run the T3 Code server."),
+  Command.withDescription(`Run the ${FORK_DISPLAY_NAME} server.`),
   Command.withHandler((flags) => runServerCommand(flags, { rejectRunningServer: true })),
 );
 
 export const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe(
   Command.withDescription(
-    "Run the T3 Code server without opening a browser and print headless pairing details.",
+    `Run the ${FORK_DISPLAY_NAME} server without opening a browser and print headless pairing details.`,
   ),
   Command.withHandler((flags) =>
     runServerCommand(flags, {

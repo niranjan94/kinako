@@ -9,6 +9,7 @@ import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
 import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
 import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const OpenCodeTextGenerationOperation = Schema.Literals([
   "generateCommitMessage",
@@ -188,7 +189,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
         const session = yield* Effect.tryPromise({
           try: () =>
             client.session.create({
-              title: `T3 Code ${input.operation}`,
+              title: `${FORK_DISPLAY_NAME} ${input.operation}`,
               permission: [{ permission: "*", pattern: "*", action: "deny" }],
             }),
           catch: (cause) =>

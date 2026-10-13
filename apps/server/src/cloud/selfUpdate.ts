@@ -34,6 +34,7 @@ import {
 import { decodeServicePreflightResult } from "./servicePreflight.ts";
 import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 import { isExactServiceVersion, SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const PREFLIGHT_TIMEOUT = Duration.seconds(30);
 
@@ -204,18 +205,18 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
         return yield* desktopAppUpdate.run(reportProgress);
       }
       return yield* failWith(
-        "This server is managed by the T3 Code desktop app on its machine; update the desktop app to update it.",
+        `This server is managed by the ${FORK_DISPLAY_NAME} desktop app on its machine; update the desktop app to update it.`,
       );
     }
     if (capability === null) {
       return yield* failWith(
-        "Remote updates require the T3 Code background service. Run `t3 service install` on the server machine.",
+        `Remote updates require the ${FORK_DISPLAY_NAME} background service. Run \`${FORK_CLI_NAME} service install\` on the server machine.`,
       );
     }
 
     const targetVersion = input.targetVersion.trim();
     if (!isExactServiceVersion(targetVersion)) {
-      return yield* failWith(`'${targetVersion}' is not an exact t3 version.`);
+      return yield* failWith(`'${targetVersion}' is not an exact ${FORK_CLI_NAME} version.`);
     }
     if (yield* Ref.getAndSet(inFlight, true)) {
       return yield* failWith("A server update is already in progress.");
@@ -306,7 +307,7 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
         Effect.mapError((error) =>
           error._tag === "PinnedRuntimePreflightBlockedError"
             ? failWith(error.reason, error)
-            : failWith(`Could not prepare t3@${targetVersion}.`, error),
+            : failWith(`Could not prepare ${FORK_CLI_NAME}@${targetVersion}.`, error),
         ),
       );
 

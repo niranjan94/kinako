@@ -1,4 +1,5 @@
 import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { useAuth } from "@clerk/expo";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
@@ -369,7 +370,7 @@ function PairingScanCard(props: {
           )}
         </View>
         <Text className={cn("text-center text-sm", light ? "text-black/70" : "text-white/80")}>
-          Scan the code from t3 pair or desktop Connections settings
+          Scan the code from {FORK_CLI_NAME} pair or desktop Connections settings
         </Text>
       </View>
     </Pressable>

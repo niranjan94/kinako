@@ -34,8 +34,8 @@ it("reports the installed service version and host paths", () => {
   assert.equal(
     formatServiceStatus(status, "0.0.29"),
     [
-      "T3 Code service",
-      "  Status: installed · t3@0.0.29",
+      "Kinako service",
+      "  Status: installed · kinako@0.0.29",
       "  Unit: /home/me/.config/systemd/user/t3code.service",
       "  Logs: /home/me/.t3/userdata/logs/boot-service.log",
     ].join("\n"),
@@ -90,7 +90,7 @@ it("reports a newer installed service and tells the CLI to catch up to it", () =
     "0.0.31",
   );
 
-  assert.include(output, "t3@0.0.32-nightly.1 (newer than this t3@0.0.31 CLI)");
+  assert.include(output, "kinako@0.0.32-nightly.1 (newer than this kinako@0.0.31 CLI)");
   assert.include(output, "Run `kinako update 0.0.32-nightly.1` to match it");
   assert.notInclude(output, "npx");
 });

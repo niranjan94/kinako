@@ -119,6 +119,7 @@ import {
   requestAbsoluteUrl,
 } from "./linkChecks.ts";
 import { desktopUpdateRestartPending, pendingUpdateHandoffExists } from "./updateHandoff.ts";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 
 const CLOUD_MINT_NONCE_PREFIX = "cloud-mint-nonce-";
 const CLOUD_MINT_JTI_PREFIX = "cloud-mint-jti-";
@@ -198,7 +199,7 @@ export class CloudLinkAuthorizationMissingError extends Schema.TaggedError<Cloud
   {},
 ) {
   override get message(): string {
-    return "Run `t3 connect link` to authorize this environment.";
+    return `Run \`${FORK_CLI_NAME} connect link\` to authorize this environment.`;
   }
 }
 

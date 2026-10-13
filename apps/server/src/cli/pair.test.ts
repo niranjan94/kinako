@@ -144,7 +144,7 @@ const withDescriptorServer = <A, E, R>(run: (origin: string) => Effect.Effect<A,
     (server) => Effect.sync(() => server.close()),
   );
 
-describe("t3 pair", () => {
+describe("kinako pair", () => {
   it.effect("mints a token and prints a QR pairing URL for a live server", () =>
     withDescriptorServer((origin) =>
       Effect.gen(function* () {
@@ -179,7 +179,7 @@ describe("t3 pair", () => {
           readonly scopes: ReadonlyArray<string>;
         }>;
         assert.equal(credentials.length, 1);
-        assert.equal(credentials[0]?.label, "t3 pair");
+        assert.equal(credentials[0]?.label, "kinako pair");
         assert.deepEqual(credentials[0]?.scopes, AuthStandardClientScopes);
       }),
     ).pipe(
@@ -269,7 +269,7 @@ describe("t3 pair", () => {
       const rendered = String(
         typeof error === "object" && error !== null && "cause" in error ? error.cause : error,
       );
-      assert.include(rendered, "No running T3 Code server found.");
+      assert.include(rendered, "No running Kinako server found.");
       assert.include(rendered, "npx t3 serve");
       assert.include(rendered, "npx t3 connect");
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -300,7 +300,7 @@ describe("t3 pair", () => {
         const rendered = String(
           typeof error === "object" && error !== null && "cause" in error ? error.cause : error,
         );
-        assert.include(rendered, "No running T3 Code server found.");
+        assert.include(rendered, "No running Kinako server found.");
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -326,7 +326,7 @@ describe("t3 pair", () => {
       const rendered = String(
         typeof error === "object" && error !== null && "cause" in error ? error.cause : error,
       );
-      assert.include(rendered, "No running T3 Code server found.");
+      assert.include(rendered, "No running Kinako server found.");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

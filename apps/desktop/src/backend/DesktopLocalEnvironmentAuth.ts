@@ -15,6 +15,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as HttpClient from "effect/http/HttpClient";
 
 import * as DesktopBackendPool from "./DesktopBackendPool.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 // A loopback /oauth/token exchange can fail transiently while the backend
 // settles (a 502-504, a refused or reset connection, a timeout). Retry those
@@ -104,7 +105,7 @@ export const make = Effect.gen(function* () {
           httpBaseUrl: config.httpBaseUrl.href,
           credential,
           clientMetadata: {
-            label: "T3 Code Desktop",
+            label: `${FORK_DISPLAY_NAME} Desktop`,
             deviceType: "desktop",
           },
         }).pipe(

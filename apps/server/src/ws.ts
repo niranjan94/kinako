@@ -252,6 +252,7 @@ import {
 import * as AgentSessionScanner from "./project/AgentSessionScanner.ts";
 import * as AgentSessionImporter from "./project/AgentSessionImporter.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const CONFIG_DISCOVERY_TIMEOUT = Duration.seconds(5);
 const isProviderUploadFeedbackError = Schema.is(ProviderUploadFeedbackError);
@@ -1537,7 +1538,7 @@ const layerWsRpc = (
               if (racedImport !== null) return { threadId, imported: false } as const;
               return yield* new AcpRegistryOperationError({
                 reason: "session_import_failed",
-                message: "Could not create a T3 thread for the ACP session.",
+                message: `Could not create a ${FORK_DISPLAY_NAME} thread for the ACP session.`,
                 cause: launched.failure,
               });
             }
@@ -1578,7 +1579,7 @@ const layerWsRpc = (
             if (importedThread !== null) {
               return yield* new AcpRegistryOperationError({
                 reason: "session_delete_failed",
-                message: "Delete the imported T3 thread before deleting its native ACP session.",
+                message: `Delete the imported ${FORK_DISPLAY_NAME} thread before deleting its native ACP session.`,
               });
             }
             yield* manager.deleteSession({

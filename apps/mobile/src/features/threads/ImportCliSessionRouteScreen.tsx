@@ -32,6 +32,7 @@ import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/Stac
 import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 type ImportCliSessionRouteParams = {
   readonly environmentId?: string | string[];
@@ -209,7 +210,7 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
     return (
       <EmptyState
         title="Not available on this environment"
-        detail="Update T3 Code on this environment to import CLI sessions."
+        detail={`Update ${FORK_DISPLAY_NAME} on this environment to import CLI sessions.`}
       />
     );
   }
