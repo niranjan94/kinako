@@ -1,5 +1,10 @@
 import { PermissionUpdateNotice } from "./components/PermissionUpdateNotice";
 import * as Linking from "expo-linking";
+import {
+  FORK_DEV_URL_SCHEME,
+  FORK_PREVIEW_URL_SCHEME,
+  FORK_URL_SCHEME,
+} from "@t3tools/shared/forkBrand";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { StatusBar } from "react-native";
@@ -40,7 +45,12 @@ void SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 const appLinking = {
-  prefixes: [Linking.createURL("/"), "t3code://", "t3code-dev://", "t3code-preview://"],
+  prefixes: [
+    Linking.createURL("/"),
+    `${FORK_URL_SCHEME}://`,
+    `${FORK_DEV_URL_SCHEME}://`,
+    `${FORK_PREVIEW_URL_SCHEME}://`,
+  ],
   // Keep the compact thread list available beneath a directly opened thread.
   config: { initialRouteName: "Home" },
   filter: shouldHandleAppLink,

@@ -21,7 +21,9 @@ import {
   FORK_CLI_NAME,
   FORK_DESKTOP_APP_ID,
   FORK_DESKTOP_NAME,
+  FORK_DEV_URL_SCHEME,
   FORK_DISPLAY_NAME,
+  FORK_URL_SCHEME,
 } from "@t3tools/shared/forkBrand";
 import { clerkFrontendApiHostnameFromPublishableKey } from "@t3tools/shared/relayAuth";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
@@ -2842,10 +2844,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       },
       protocols: [
         {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
+          name: FORK_DISPLAY_NAME,
+          schemes: [FORK_URL_SCHEME, FORK_DEV_URL_SCHEME],
         },
-        // Lets people choose T3 Code as their default web browser, which opens
+        // Lets people choose the app as their default web browser, which opens
         // each link in a new thread's browser panel.
         {
           name: "Web site URL",
@@ -2906,11 +2908,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       maintainer: "Niranjan Rajendran <niranjan94@users.noreply.github.com>",
       // electron-builder turns these into MimeType=x-scheme-handler/<scheme>;
       // in the .desktop entry (Exec already gets %U), so browsers can hand
-      // t3code:// OAuth callbacks to the app.
+      // kinako:// OAuth callbacks to the app.
       protocols: [
         {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
+          name: FORK_DISPLAY_NAME,
+          schemes: [FORK_URL_SCHEME, FORK_DEV_URL_SCHEME],
         },
       ],
       desktop: {

@@ -189,7 +189,7 @@ export const make = Effect.gen(function* () {
         );
         return true;
       };
-      // Prompt links and thread links (`t3code://new?…`, `t3code://threads/…`) reach the
+      // Prompt links and thread links (`kinako://new?…`, `kinako://threads/…`) reach the
       // renderer through the same queue as web links; it routes them in the app.
       const openAppLink = (value: string | undefined) => {
         if (!value || promptLinkAppPath(value) === null) return false;

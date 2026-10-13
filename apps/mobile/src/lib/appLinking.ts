@@ -1,3 +1,5 @@
+import { FORK_URL_SCHEME } from "@t3tools/shared/forkBrand";
+
 /**
  * The Expo dev client launches the app via
  * <scheme>://expo-development-client/?url=<packager> — that URL addresses
@@ -12,6 +14,6 @@ export function shouldHandleAppLink(url: string): boolean {
   return (
     !url.includes("expo-development-client") &&
     !url.includes("://expo-sharing") &&
-    !/^t3code(-dev|-preview)?:\/*$/.test(url)
+    !new RegExp(`^${FORK_URL_SCHEME}(-dev|-preview)?:\\/*$`).test(url)
   );
 }

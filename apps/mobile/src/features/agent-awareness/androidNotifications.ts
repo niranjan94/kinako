@@ -1,6 +1,7 @@
 import Constants from "expo-constants";
 import { requireOptionalNativeModule } from "expo";
 import { Linking, Platform } from "react-native";
+import { FORK_URL_SCHEME } from "@t3tools/shared/forkBrand";
 
 interface AndroidAgentNotifications {
   configure(deviceId: string, userId: string, scheme: string, ongoingEnabled: boolean): void;
@@ -21,7 +22,7 @@ export function supportsAndroidAgentNotifications(): boolean {
 
 function appScheme(): string {
   const scheme = Constants.expoConfig?.scheme;
-  return (Array.isArray(scheme) ? scheme[0] : scheme) ?? "t3code";
+  return (Array.isArray(scheme) ? scheme[0] : scheme) ?? FORK_URL_SCHEME;
 }
 
 export function configureAndroidAgentNotifications(

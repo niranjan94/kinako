@@ -19,7 +19,7 @@ const APP_DISPLAY_NAME = isDevelopment ? "Kinako (Dev)" : "Kinako (Alpha)";
 const APP_BUNDLE_ID = isDevelopment
   ? `io.niranjan.kinako.dev.${devBundleIdSuffix || "local"}`
   : "io.niranjan.kinako";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
+const APP_PROTOCOL_SCHEMES = isDevelopment ? ["kinako-dev"] : ["kinako"];
 const LAUNCHER_VERSION = 19;
 const developmentMacIconPngPath = NodePath.join(
   repoRoot,
