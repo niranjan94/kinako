@@ -1,10 +1,23 @@
-# Kinako
+<p align="center">
+  <img src="./assets/nightly/nightly-macos-1024.png" alt="" width="128" height="128">
+</p>
+
+<h1 align="center">Kinako</h1>
 
 Kinako is a personal, opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code), a GUI for driving the coding agents on your machine from web, desktop, and mobile clients.
 
 This fork exists so I can run T3 Code the way I want it. It is kept up to date with upstream on a best-effort basis, with my own changes layered on top. It is built for my own use first; anyone else is welcome to use it, but there are no support or stability promises. For the official app, use upstream.
 
 ## How it differs from upstream
+
+### Features
+
+- **Import CLI sessions.** A project lists the Claude Code and Codex sessions you started from its directory in a terminal, and imports any of them as a thread, on web and mobile. Importing the same session again opens the existing thread.
+- **Copy a CLI resume command.** Continue a Claude or Codex thread in its own CLI on the environment's host. The command is in the thread's Copy menu in the chat header and sidebar, in the command palette, and in the thread's long-press menu on mobile.
+- **Files to copy into new worktrees.** New worktrees get the gitignored files from the main checkout, such as `.env`, that match the repository's `.worktreeinclude` (the same file Claude Code and Conductor read) or the **Files to copy** setting under Settings → Storage, which projects can override. Copied files, even edited ones, do not stop worktree cleanup as long as the main checkout still has the file; a Storage setting makes edited copies protect their worktree instead.
+- **Build provenance in Settings → About.** CI builds show the repository and commit they were built from.
+
+### Changes
 
 The fork sends no traffic to upstream's infrastructure. Every change so far:
 
@@ -14,11 +27,12 @@ The fork sends no traffic to upstream's infrastructure. Every change so far:
 - **Model manifest is fetched from this repository** instead of upstream.
 - **Pairing links stay on your server's own origin** instead of handing the pairing token to `app.t3.codes`. Hosted pairing links come back only if `VITE_HOSTED_APP_URL` is set at build time. Remote access works over LAN, Tailscale, and SSH; T3 Connect is not built in.
 - **Desktop release-notes links point at this repository.**
+- **`kinako triage` works against this repository.** The agent it starts fetches the playbook, clones the source, searches issues, and files new ones here, labelled `via-triage`.
 - **`.env.example` no longer carries upstream's production Clerk and relay values.**
 - **CI runs on GitHub-hosted runners** (Ubuntu 24.04 and macOS) instead of Blacksmith, with job timeouts doubled to match the slower machines.
 - **Own release workflow.** `fork-release.yml` builds unsigned macOS, Windows, and Linux desktop installers plus CLI archives and publishes them to this repository's GitHub Releases.
 
-Upstream links that only open when you click them (marketing and legal pages, the `t3 triage` playbook, npm upgrade hints) are left as-is. [FORK.md](./FORK.md) maps each change to the files it touches and covers merging upstream and cutting releases.
+Upstream links that only open when you click them (marketing and legal pages, npm upgrade hints) are left as-is. [FORK.md](./FORK.md) maps each change to the files it touches and covers merging upstream and cutting releases.
 
 ## Installation
 
