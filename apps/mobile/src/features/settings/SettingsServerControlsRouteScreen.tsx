@@ -1,3 +1,4 @@
+import { FORK_PROJECT_FILE_NAME } from "@t3tools/shared/forkBrand";
 import { useNavigation } from "@react-navigation/native";
 import { SettingsRow } from "./components/SettingsRow";
 import { AuthSettingsWriteScope } from "@t3tools/contracts";
@@ -77,7 +78,7 @@ const SUBMODULE_CHOICES: ReadonlyArray<{
   {
     mode: null,
     label: "Inherit",
-    description: "Use the repository's t3.json, or initialize recursively.",
+    description: `Use the repository's ${FORK_PROJECT_FILE_NAME} or t3.json, or initialize recursively.`,
   },
   { mode: "recursive", label: "Recursive", description: "Initialize nested submodules too." },
   {
@@ -97,7 +98,7 @@ const WORKSPACE_CHOICES: ReadonlyArray<{
   {
     mode: null,
     label: "Inherit",
-    description: "Use the repository's t3.json, or the current checkout.",
+    description: `Use the repository's ${FORK_PROJECT_FILE_NAME} or t3.json, or the current checkout.`,
   },
   {
     mode: "local",

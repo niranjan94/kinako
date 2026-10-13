@@ -1,3 +1,4 @@
+import { FORK_PROJECT_FILE_NAME } from "@t3tools/shared/forkBrand";
 import { SettingsGroup } from "./SettingsGroup";
 import { AuthSettingsWriteScope } from "@t3tools/contracts";
 import { usePrimaryEnvironmentId, usePrimaryEnvironment } from "../../state/environments";
@@ -429,7 +430,10 @@ export function SettingsRow({
     : source === "project"
       ? { state: "overridden", summary: "Overridden for this project" }
       : source === "t3.json"
-        ? { state: "inherited", summary: "Inherited from the repository's t3.json" }
+        ? {
+            state: "inherited",
+            summary: `Inherited from the repository's ${FORK_PROJECT_FILE_NAME} or t3.json`,
+          }
         : source === "environment" && scopedKeys.length > 0
           ? { state: "inherited", summary: `Inherited from ${inheritedFrom}` }
           : customized

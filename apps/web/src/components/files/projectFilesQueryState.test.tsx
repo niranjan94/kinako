@@ -206,6 +206,7 @@ describe("project query refresh", () => {
       );
       expect(useT3ProjectFileState(environmentId, "/repo")).toEqual({
         status: "valid",
+        fileName: "kinako.json",
         file: config,
         scripts: config.scripts,
       });
@@ -247,6 +248,7 @@ describe("project query refresh", () => {
         });
         expect(useT3ProjectFileState(environmentId, "/repo")).toEqual({
           status: "valid",
+          fileName: "kinako.json",
           file: config,
           scripts: config.scripts,
         });

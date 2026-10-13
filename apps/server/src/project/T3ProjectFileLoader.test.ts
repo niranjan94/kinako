@@ -20,10 +20,14 @@ const makeTempDir = Effect.gen(function* () {
   });
 });
 
-const writeProjectFile = Effect.fn("writeProjectFile")(function* (cwd: string, contents: string) {
+const writeProjectFile = Effect.fn("writeProjectFile")(function* (
+  cwd: string,
+  contents: string,
+  fileName = "t3.json",
+) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  yield* fileSystem.writeFileString(path.join(cwd, "t3.json"), contents).pipe(Effect.orDie);
+  yield* fileSystem.writeFileString(path.join(cwd, fileName), contents).pipe(Effect.orDie);
 });
 
 it.layer(layerTest)("T3ProjectFileLoader", (it) => {
@@ -51,7 +55,33 @@ it.layer(layerTest)("T3ProjectFileLoader", (it) => {
       }),
     );
 
-    it.effect("returns none when t3.json is missing", () =>
+    it.effect("prefers kinako.json over t3.json", () =>
+      Effect.gen(function* () {
+        const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
+        const cwd = yield* makeTempDir;
+        yield* writeProjectFile(cwd, '{ "iconPath": "upstream.svg" }');
+        yield* writeProjectFile(cwd, '{ "iconPath": "fork.svg" }', "kinako.json");
+
+        const loaded = yield* loader.load(cwd);
+
+        expect(Option.getOrNull(loaded)?.iconPath).toBe("fork.svg");
+      }),
+    );
+
+    it.effect("does not fall back to t3.json when kinako.json is invalid", () =>
+      Effect.gen(function* () {
+        const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
+        const cwd = yield* makeTempDir;
+        yield* writeProjectFile(cwd, '{ "iconPath": "upstream.svg" }');
+        yield* writeProjectFile(cwd, "{ not json", "kinako.json");
+
+        const loaded = yield* loader.load(cwd);
+
+        expect(Option.isNone(loaded)).toBe(true);
+      }),
+    );
+
+    it.effect("returns none when no project file exists", () =>
       Effect.gen(function* () {
         const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
         const cwd = yield* makeTempDir;

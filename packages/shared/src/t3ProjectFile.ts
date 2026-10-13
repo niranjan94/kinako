@@ -1,9 +1,17 @@
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 
-import { T3ProjectFile, T3_PROJECT_FILE_SCHEMA_URL } from "@t3tools/contracts";
+import {
+  T3ProjectFile,
+  T3_PROJECT_FILE_NAME,
+  T3_PROJECT_FILE_SCHEMA_URL,
+} from "@t3tools/contracts";
 
+import { FORK_PROJECT_FILE_NAME } from "./forkBrand.ts";
 import { fromLenientJson } from "./schemaJson.ts";
+
+/** Project file names in read order: the first one that exists is the project's file. */
+export const PROJECT_FILE_NAMES = [FORK_PROJECT_FILE_NAME, T3_PROJECT_FILE_NAME] as const;
 
 /**
  * Codec between the raw `t3.json` file contents (lenient JSONC string) and the

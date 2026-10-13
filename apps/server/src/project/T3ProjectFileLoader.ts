@@ -1,6 +1,6 @@
 /**
- * T3ProjectFileLoader - Effect service that loads the checked-in `t3.json`
- * project file from a workspace root.
+ * T3ProjectFileLoader - Effect service that loads the checked-in project file
+ * (`kinako.json`, else upstream's `t3.json`) from a workspace root.
  *
  * Loading is best-effort: a missing file resolves to `Option.none`, and
  * unreadable or invalid files are logged and treated as absent so callers
@@ -16,8 +16,8 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import { T3_PROJECT_FILE_NAME, type T3ProjectFile } from "@t3tools/contracts";
-import { T3ProjectFileFromJson } from "@t3tools/shared/t3ProjectFile";
+import { type T3ProjectFile } from "@t3tools/contracts";
+import { PROJECT_FILE_NAMES, T3ProjectFileFromJson } from "@t3tools/shared/t3ProjectFile";
 
 const decodeT3ProjectFileJson = Schema.decodeEffect(T3ProjectFileFromJson);
 
@@ -31,16 +31,16 @@ export class T3ProjectFileLoadError extends Schema.TaggedError<T3ProjectFileLoad
   },
 ) {
   override get message(): string {
-    return `Failed to ${this.operation} ${T3_PROJECT_FILE_NAME} at ${this.filePath}.`;
+    return `Failed to ${this.operation} the project file at ${this.filePath}.`;
   }
 }
 
-/** Service tag for t3.json project file loading. */
+/** Service tag for project file loading. */
 export class T3ProjectFileLoader extends Context.Service<
   T3ProjectFileLoader,
   {
     /**
-     * Load and decode `t3.json` at the workspace root.
+     * Load and decode the project file at the workspace root.
      *
      * Never fails: missing, unreadable, or invalid files resolve to
      * `Option.none` (invalid files are logged as warnings).
@@ -66,23 +66,32 @@ export const make = Effect.gen(function* () {
 
   const load: T3ProjectFileLoader["Service"]["load"] = Effect.fn("T3ProjectFileLoader.load")(
     function* (workspaceRoot) {
-      const filePath = path.join(workspaceRoot, T3_PROJECT_FILE_NAME);
-      const raw = yield* fileSystem.readFileString(filePath).pipe(
-        Effect.asSome,
-        Effect.catchTags({
-          PlatformError: (error) =>
-            error.reason._tag === "NotFound"
-              ? Effect.succeed(Option.none<string>())
-              : logT3ProjectFileLoadError(
-                  new T3ProjectFileLoadError({
-                    operation: "read",
-                    workspaceRoot,
-                    filePath,
-                    cause: error,
-                  }),
-                ).pipe(Effect.as(Option.none<string>())),
-        }),
-      );
+      let filePath = "";
+      let raw = Option.none<string>();
+      for (const fileName of PROJECT_FILE_NAMES) {
+        filePath = path.join(workspaceRoot, fileName);
+        const candidate = filePath;
+        const read = yield* fileSystem.readFileString(candidate).pipe(
+          Effect.map((contents) => ({ found: true, contents: Option.some(contents) })),
+          Effect.catchTags({
+            PlatformError: (error) =>
+              error.reason._tag === "NotFound"
+                ? Effect.succeed({ found: false, contents: Option.none<string>() })
+                : logT3ProjectFileLoadError(
+                    new T3ProjectFileLoadError({
+                      operation: "read",
+                      workspaceRoot,
+                      filePath: candidate,
+                      cause: error,
+                    }),
+                  ).pipe(Effect.as({ found: true, contents: Option.none<string>() })),
+          }),
+        );
+        if (read.found) {
+          raw = read.contents;
+          break;
+        }
+      }
       if (Option.isNone(raw)) {
         return Option.none<T3ProjectFile>();
       }

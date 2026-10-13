@@ -1,3 +1,4 @@
+import { FORK_PROJECT_FILE_NAME } from "@t3tools/shared/forkBrand";
 import { resolveFilesystemReadAccess } from "@t3tools/client-runtime/state/filesystem";
 import { useEnvironmentPresentation } from "../../state/presentation";
 import { environmentSession } from "../../state/session";
@@ -505,15 +506,30 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   const { canReadFiles } = fileAccess;
   const fileAccessPending =
     selectedProject !== null && selectedProject.workspaceRoot !== "" && fileAccess.isPending;
-  const t3ProjectFileQuery = useEnvironmentQuery(
+  const forkProjectFileQuery = useEnvironmentQuery(
     canReadFiles && selectedProject !== null && selectedProject.workspaceRoot !== ""
+      ? projectEnvironment.readFile({
+          environmentId: selectedProject.environmentId,
+          input: { cwd: selectedProject.workspaceRoot, relativePath: FORK_PROJECT_FILE_NAME },
+        })
+      : null,
+  );
+  const forkProjectFileData = forkProjectFileQuery.data as ProjectReadFileResult | null;
+  const upstreamProjectFileQuery = useEnvironmentQuery(
+    canReadFiles &&
+      selectedProject !== null &&
+      selectedProject.workspaceRoot !== "" &&
+      !forkProjectFileQuery.isPending &&
+      forkProjectFileData === null
       ? projectEnvironment.readFile({
           environmentId: selectedProject.environmentId,
           input: { cwd: selectedProject.workspaceRoot, relativePath: T3_PROJECT_FILE_NAME },
         })
       : null,
   );
-  const t3ProjectFileData = t3ProjectFileQuery.data as ProjectReadFileResult | null;
+  const projectFilePending = forkProjectFileQuery.isPending || upstreamProjectFileQuery.isPending;
+  const t3ProjectFileData =
+    forkProjectFileData ?? (upstreamProjectFileQuery.data as ProjectReadFileResult | null);
   const t3ProjectFile = useMemo(
     () =>
       t3ProjectFileData === null || t3ProjectFileData.truncated
@@ -559,7 +575,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   const defaultWorkspaceModeSettled =
     selectedProjectDraft.workspaceSelection?.mode !== undefined ||
     projectSettings.sources.defaultThreadEnvMode !== "environment" ||
-    (!t3ProjectFileQuery.isPending && !fileAccessPending);
+    (!projectFilePending && !fileAccessPending);
   const workspaceMode = canChooseWorkspace
     ? (selectedProjectDraft.workspaceSelection?.mode ?? defaultWorkspaceMode)
     : "local";

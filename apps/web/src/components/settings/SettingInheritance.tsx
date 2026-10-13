@@ -1,3 +1,4 @@
+import { FORK_PROJECT_FILE_NAME } from "@t3tools/shared/forkBrand";
 import {
   DEFAULT_SERVER_SETTINGS,
   PROJECT_FILE_BACKED_SETTINGS,
@@ -116,7 +117,7 @@ export function settingInheritanceLayers(
   if (fileBacked && target.projectId !== null) {
     layers.push({
       key: "t3.json",
-      label: "t3.json",
+      label: FORK_PROJECT_FILE_NAME,
       value: source === "t3.json" ? formatValue(key, target.settings[key]) : "Inherits",
       effective: source === "t3.json",
       set: source === "t3.json",

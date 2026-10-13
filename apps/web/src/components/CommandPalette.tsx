@@ -2335,6 +2335,7 @@ function OpenCommandPaletteDialog(props: {
         "grouping",
         "checkout",
         "remove",
+        "kinako.json",
         "t3.json",
       ],
       title: "Project settings",

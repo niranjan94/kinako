@@ -4,6 +4,7 @@ import {
   type T3ProjectFile,
   type T3ProjectFileScript,
 } from "@t3tools/contracts";
+import { FORK_PROJECT_FILE_NAME } from "@t3tools/shared/forkBrand";
 import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
 import { useMemo } from "react";
 
@@ -13,47 +14,68 @@ const NO_SCRIPTS: ReadonlyArray<T3ProjectFileScript> = [];
 
 export interface T3ProjectFileState {
   /**
-   * - `valid`: t3.json exists and decoded.
-   * - `invalid`: t3.json exists but fails to decode (the server then ignores
-   *   the whole file, including `iconPath` and every script).
-   * - `missing`: no readable t3.json at the workspace root.
+   * - `valid`: the project file exists and decoded.
+   * - `invalid`: the project file exists but fails to decode (the server then
+   *   ignores the whole file, including `iconPath` and every script).
+   * - `missing`: no readable project file at the workspace root.
    * - `loading`: the file query has not settled yet.
    */
   status: "loading" | "missing" | "invalid" | "valid";
+  /** `kinako.json` unless only upstream's `t3.json` exists. */
+  fileName: string;
   /** The decoded file when status is `valid`, null otherwise. */
   file: T3ProjectFile | null;
   scripts: ReadonlyArray<T3ProjectFileScript>;
 }
 
 /**
- * Decoded state of the project's checked-in `t3.json`, including whether the
- * file exists but is broken — which the runtime otherwise swallows silently.
+ * Decoded state of the project's checked-in project file (`kinako.json`, else
+ * upstream's `t3.json`), including whether the file exists but is broken —
+ * which the runtime otherwise swallows silently.
  */
 export function useT3ProjectFileState(
   environmentId: EnvironmentId,
   cwd: string | null,
 ): T3ProjectFileState {
-  const query = useProjectFileQuery(environmentId, cwd ?? "", T3_PROJECT_FILE_NAME, cwd !== null);
-  const contents = query.data && !query.data.truncated ? query.data.contents : null;
-  const isPending = query.isPending;
+  const forkQuery = useProjectFileQuery(
+    environmentId,
+    cwd ?? "",
+    FORK_PROJECT_FILE_NAME,
+    cwd !== null,
+  );
+  const readUpstream = cwd !== null && !forkQuery.isPending && forkQuery.data === null;
+  const upstreamQuery = useProjectFileQuery(
+    environmentId,
+    cwd ?? "",
+    T3_PROJECT_FILE_NAME,
+    readUpstream,
+  );
+  const active =
+    readUpstream && upstreamQuery.data !== null
+      ? { fileName: T3_PROJECT_FILE_NAME, data: upstreamQuery.data }
+      : { fileName: FORK_PROJECT_FILE_NAME, data: forkQuery.data };
+  const fileName = active.fileName;
+  const contents = active.data && !active.data.truncated ? active.data.contents : null;
+  const isPending = forkQuery.isPending || upstreamQuery.isPending;
   return useMemo(() => {
     if (contents === null) {
       return {
         status: isPending ? "loading" : "missing",
+        fileName,
         file: null,
         scripts: NO_SCRIPTS,
       } as const;
     }
     const file = parseT3ProjectFile(contents);
     if (file === null) {
-      return { status: "invalid", file: null, scripts: NO_SCRIPTS } as const;
+      return { status: "invalid", fileName, file: null, scripts: NO_SCRIPTS } as const;
     }
-    return { status: "valid", file, scripts: file.scripts ?? NO_SCRIPTS } as const;
-  }, [contents, isPending]);
+    return { status: "valid", fileName, file, scripts: file.scripts ?? NO_SCRIPTS } as const;
+  }, [contents, fileName, isPending]);
 }
 
 /**
- * Scripts declared in the project's checked-in `t3.json`, offered in the
+ * Scripts declared in the project file, offered in the
  * scripts menu for import. Missing, truncated, or invalid files resolve to
  * an empty list.
  */
