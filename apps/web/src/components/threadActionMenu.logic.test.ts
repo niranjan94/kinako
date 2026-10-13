@@ -9,6 +9,7 @@ import {
 const baseState: ThreadActionMenuState = {
   canOperate: true,
   branch: null,
+  cliResumeCommand: null,
   projectFilter: null,
   isPinned: false,
   isSettled: false,
@@ -144,6 +145,13 @@ describe("buildThreadActionMenuItems", () => {
     expect(withBranch).toContain("copy-branch");
     expect(allIds(baseState)).not.toContain("new-thread-on-branch");
     expect(allIds(baseState)).not.toContain("copy-branch");
+  });
+
+  it("offers the CLI resume command only when the provider can resume", () => {
+    expect(allIds(baseState)).not.toContain("copy-cli-resume");
+    expect(
+      allIds({ ...baseState, cliResumeCommand: "cd /srv/app && claude --resume abc" }),
+    ).toContain("copy-cli-resume");
   });
 
   it("flips lifecycle labels with thread state", () => {

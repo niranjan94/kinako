@@ -75,6 +75,7 @@ import {
   RotateCcwIcon,
   SettingsIcon,
   SquarePenIcon,
+  SquareTerminalIcon,
   SunIcon,
   TextSearchIcon,
 } from "lucide-react";
@@ -130,7 +131,13 @@ import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
-import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
+import {
+  readThreadCliResumeCommand,
+  useProjects,
+  useServerConfigs,
+  useThreadShells,
+  waitForProject,
+} from "../state/entities";
 import { useThreadSearch } from "../state/queries";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
 import {
@@ -1931,6 +1938,32 @@ function OpenCommandPaletteDialog(props: {
       icon: <LinkIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "thread.copyReference",
       run: copyActiveThreadReference,
+    });
+  }
+
+  const activeThreadCliResumeCommand =
+    activeThread === null
+      ? null
+      : readThreadCliResumeCommand(
+          activeThread,
+          activeThread.worktreePath ??
+            projectByKey.get(`${activeThread.environmentId}:${activeThread.projectId}`)
+              ?.workspaceRoot ??
+            null,
+        );
+  if (activeThreadCliResumeCommand !== null) {
+    const command = activeThreadCliResumeCommand;
+    actionItems.push({
+      kind: "action",
+      value: "action:copy-cli-resume-command",
+      searchTerms: ["copy", "cli", "resume", "terminal", "claude", "codex", "session"],
+      title: "Copy CLI resume command",
+      description: command,
+      icon: <SquareTerminalIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        if (!(await writeTextToClipboard(command, "CLI resume command"))) return;
+        toastManager.add({ type: "success", title: "Resume command copied", description: command });
+      },
     });
   }
 

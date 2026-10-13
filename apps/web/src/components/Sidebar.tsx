@@ -154,6 +154,7 @@ import {
   usePrimaryEnvironmentId,
 } from "../state/environments";
 import {
+  readThreadCliResumeCommand,
   readThreadShell,
   useAllEnvironmentProjectSnapshotsReady,
   useProjects,
@@ -2507,6 +2508,21 @@ export default function Sidebar() {
       );
     },
   });
+  const { copyToClipboard: copyCliResumeToClipboard } = useCopyToClipboard<{ command: string }>({
+    target: "CLI resume command",
+    onCopy: ({ command }) => {
+      toastManager.add({ type: "success", title: "Resume command copied", description: command });
+    },
+    onError: (error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Failed to copy resume command",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    },
+  });
   const newThreadContext = useHandleNewThread();
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
@@ -4654,6 +4670,7 @@ export default function Sidebar() {
           thread.worktreePath ??
           projectByKey.get(`${thread.environmentId}:${thread.projectId}`)?.workspaceRoot ??
           null;
+        const cliResumeCommand = readThreadCliResumeCommand(thread, threadWorkspacePath);
         // Un-settle pins the thread active until real activity clears the pin.
         // Environments without
         // the settlement capability get no lifecycle items at all.
@@ -4692,6 +4709,7 @@ export default function Sidebar() {
                 AuthOrchestrationOperateScope,
               ),
               branch: thread.branch ?? null,
+              cliResumeCommand,
               projectFilter: threadProjectGroup
                 ? {
                     label: threadProjectGroup.displayName,
@@ -4847,6 +4865,11 @@ export default function Sidebar() {
           case "copy-thread-id":
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
             return;
+          case "copy-cli-resume":
+            if (cliResumeCommand) {
+              copyCliResumeToClipboard(cliResumeCommand, { command: cliResumeCommand });
+            }
+            return;
           case "archive": {
             if (confirmThreadArchive) {
               const confirmed = await settlePromise(() =>
@@ -4918,6 +4941,7 @@ export default function Sidebar() {
       confirmThreadArchive,
       confirmThreadDelete,
       copyBranchToClipboard,
+      copyCliResumeToClipboard,
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,

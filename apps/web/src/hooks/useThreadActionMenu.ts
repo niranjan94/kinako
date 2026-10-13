@@ -31,6 +31,7 @@ import {
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentSupportsTitleRegeneration,
+  readThreadCliResumeCommand,
   readThreadShell,
   useProjects,
 } from "../state/entities";
@@ -126,6 +127,13 @@ export function useThreadActionMenu(input: {
     },
     onError: (error) => failureToast("Failed to copy thread ID", error),
   });
+  const { copyToClipboard: copyCliResumeToClipboard } = useCopyToClipboard<{ command: string }>({
+    target: "CLI resume command",
+    onCopy: ({ command }) => {
+      toastManager.add({ type: "success", title: "Resume command copied", description: command });
+    },
+    onError: (error) => failureToast("Failed to copy resume command", error),
+  });
 
   const openMenu = useCallback(
     (position: { x: number; y: number }) => {
@@ -147,9 +155,14 @@ export function useThreadActionMenu(input: {
         };
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const snoozePresets = resolveSnoozePresets(now, timestampFormat);
+        const cliResumeCommand = readThreadCliResumeCommand(
+          thread,
+          thread.worktreePath ?? projectCwd,
+        );
         const items = buildThreadActionMenuItems({
           canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
           branch: thread.branch ?? null,
+          cliResumeCommand,
           projectFilter: null,
           isPinned: thread.pinnedAt != null,
           isSettled: supports.settlement && thread.settledOverride === "settled",
@@ -288,6 +301,11 @@ export function useThreadActionMenu(input: {
           case "copy-thread-id":
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
             return;
+          case "copy-cli-resume":
+            if (cliResumeCommand) {
+              copyCliResumeToClipboard(cliResumeCommand, { command: cliResumeCommand });
+            }
+            return;
           case "archive": {
             if (confirmThreadArchive) {
               const confirmed = await settlePromise(() =>
@@ -346,6 +364,7 @@ export function useThreadActionMenu(input: {
       confirmThreadDelete,
       confirmAndUnpinThread,
       copyBranchToClipboard,
+      copyCliResumeToClipboard,
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,

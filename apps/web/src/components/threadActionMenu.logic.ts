@@ -27,6 +27,7 @@ export type ThreadActionMenuId =
   | "copy-path"
   | "copy-branch"
   | "copy-thread-id"
+  | "copy-cli-resume"
   | "archive"
   | "delete";
 
@@ -72,6 +73,8 @@ export function buildDraftActionMenuItems(options: {
 export interface ThreadActionMenuState {
   readonly canOperate: boolean;
   readonly branch: string | null;
+  /** Shell command that resumes the thread in its provider's CLI, when the provider supports it. */
+  readonly cliResumeCommand: string | null;
   /**
    * Project scoping for the thread list. Null on surfaces with no scoped
    * list behind the menu (the chat header), where the item must not show.
@@ -111,6 +114,7 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
     "copy-path",
     "copy-branch",
     "copy-thread-id",
+    "copy-cli-resume",
   ].includes(action);
 }
 
@@ -227,6 +231,15 @@ export function buildThreadActionMenuItems(
           ? [{ id: "copy-branch" as const, label: "Branch", icon: "git-branch" }]
           : []),
         { id: "copy-thread-id", label: "Thread ID", icon: "hash" },
+        ...(state.cliResumeCommand
+          ? [
+              {
+                id: "copy-cli-resume" as const,
+                label: "CLI resume command",
+                icon: "square-terminal",
+              },
+            ]
+          : []),
       ],
     },
     { id: "project-settings", label: "Project settings", icon: "settings" },
