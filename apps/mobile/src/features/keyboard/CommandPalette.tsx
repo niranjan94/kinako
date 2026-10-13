@@ -1,5 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
+import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { THREAD_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -290,9 +291,13 @@ export function CommandPalette(props: {
           }),
       });
     }
+    const activeProjectServerConfig = activeProject
+      ? serverConfigs.get(activeProject.environmentId)
+      : undefined;
     if (
       activeProject &&
-      supportsAgentSessionImport(serverConfigs.get(activeProject.environmentId))
+      supportsAgentSessionImport(activeProjectServerConfig) &&
+      !isScratchProject(activeProject, activeProjectServerConfig?.scratchWorkspaceRoot)
     ) {
       actions.push({
         key: "importCliSession",
