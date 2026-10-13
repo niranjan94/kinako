@@ -235,17 +235,15 @@ const installFromArchive = Effect.fn("cloud.pinned_runtime.install_archive")(fun
   }
 
   const archivePath = path.join(stagingDir, PINNED_RUNTIME_ARCHIVE_FILE);
-  yield* fs
-    .writeFile(archivePath, archive)
-    .pipe(
-      Effect.mapError(
-        (cause) =>
-          new PinnedRuntimeInstallError({
-            step: `writing the ${FORK_CLI_NAME} release archive`,
-            cause,
-          }),
-      ),
-    );
+  yield* fs.writeFile(archivePath, archive).pipe(
+    Effect.mapError(
+      (cause) =>
+        new PinnedRuntimeInstallError({
+          step: `writing the ${FORK_CLI_NAME} release archive`,
+          cause,
+        }),
+    ),
+  );
   input.onProgress?.({ stage: "extract" });
   const extractStep = `extracting the ${FORK_CLI_NAME} release archive`;
   // The archive wraps everything in one directory named after its stem;
