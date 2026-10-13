@@ -81,6 +81,10 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import { detachStackFrame } from "./detachStackFrame.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as ServerConfig from "../config.ts";
+import { managedWorktreesDirectories } from "../worktreesDirectory.ts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import type { GitManagerServiceError } from "@t3tools/contracts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as SourceControlProvider from "@t3tools/source-control-core/server/SourceControlProvider";
@@ -321,7 +325,7 @@ function resolvePullRequestWorktreeLocalBranchName(
 
   const sanitizedHeadBranch = sanitizeBranchFragment(pullRequest.headBranch).trim();
   const suffix = sanitizedHeadBranch.length > 0 ? sanitizedHeadBranch : "head";
-  return `t3code/pr-${pullRequest.number}/${suffix}`;
+  return `${FORK_CLI_NAME}/pr-${pullRequest.number}/${suffix}`;
 }
 
 /** The repository's `owner/name` from a remote URL, as `provider` reads its remote paths. */
@@ -729,6 +733,7 @@ export const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const serverConfig = yield* ServerConfig.ServerConfig;
 
   const sourceControlProvider = (cwd: string) => sourceControlProviders.resolve({ cwd });
   const serverSettingsService = yield* ServerSettings.ServerSettingsService;
@@ -1087,6 +1092,28 @@ export const make = Effect.gen(function* () {
   const tempDir = process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? "/tmp";
   const canonicalizeExistingPath = (value: string) =>
     fileSystem.realPath(value).pipe(Effect.orElseSucceed(() => value));
+  /** Whether `worktreePath` sits under one of this environment's worktree roots. */
+  const isManagedWorktree = Effect.fn("GitManager.isManagedWorktree")(function* (
+    worktreePath: string,
+  ) {
+    const settings = yield* serverSettingsService.getSettings.pipe(
+      Effect.orElseSucceed(() => ({ worktreesDirectory: "", previousWorktreesDirectories: [] })),
+    );
+    const candidate = yield* canonicalizeExistingPath(worktreePath);
+    const home = yield* HostProcess.HomeDirectory;
+    for (const directory of managedWorktreesDirectories(
+      settings,
+      serverConfig.worktreesDir,
+      path,
+      home,
+    )) {
+      const relative = path.relative(yield* canonicalizeExistingPath(directory), candidate);
+      if (relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+        return true;
+      }
+    }
+    return false;
+  });
   const normalizeStatusCacheKey = canonicalizeExistingPath;
   const nonRepositoryStatusDetails: GitVcsDriver.GitStatusDetails = {
     isRepo: false,
@@ -2764,6 +2791,15 @@ export const make = Effect.gen(function* () {
         worktreePath: string,
         checkedOutBranch: string,
       ) {
+        // Another app on this machine (upstream T3 Code) may own the checkout and
+        // clean it up under this thread, so only this environment's worktrees are reused.
+        if (!(yield* isManagedWorktree(worktreePath))) {
+          return yield* new GitManagerError({
+            operation: "preparePullRequestThread",
+            cwd: worktreePath,
+            detail: `This PR branch is checked out in a worktree outside ${FORK_DISPLAY_NAME}'s worktrees folder. Remove that worktree or switch it to another branch, then try again.`,
+          });
+        }
         if (checkedOutBranch !== localPullRequestBranch) {
           // findLocalHeadBranch also accepts a branch that merely shares the head's bare name —
           // a fork PR opened from "main" matches the user's own local main. That checkout is

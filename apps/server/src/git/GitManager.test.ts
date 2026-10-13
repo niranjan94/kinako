@@ -1,6 +1,7 @@
 import { SourceControlProviderKind } from "@t3tools/contracts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeChildProcess from "node:child_process";
 
@@ -752,7 +753,12 @@ function makeManager(input?: {
     prefix: "t3-git-manager-test-",
   });
 
-  const layerServerSettings = ServerSettings.ServerSettingsService.layerTest(input?.serverSettings);
+  // Fixture worktrees live in the temp dir; treating it as a managed root keeps
+  // the reuse paths reachable.
+  const layerServerSettings = ServerSettings.ServerSettingsService.layerTest({
+    previousWorktreesDirectories: [NodeOS.tmpdir()],
+    ...input?.serverSettings,
+  });
 
   const gitCommands = input?.gitCommands;
   const gitSpawnGate = input?.gitSpawnGate;
@@ -5719,7 +5725,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         pullRequestNumber: 93,
         headRepository: "octocat/codething-mvp",
         headBranch: "feature/missing-fork-branch",
-        localBranch: "t3code/pr-93/feature/missing-fork-branch",
+        localBranch: "kinako/pr-93/feature/missing-fork-branch",
       });
       if (!(error.cause instanceof AggregateError)) {
         return yield* Effect.die(error.cause);
@@ -6010,6 +6016,47 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
       // worktree another thread may be sitting in.
       expect(setupCalls).toHaveLength(0);
       expect(result.isOnPullRequestHead).toBe(false);
+    }),
+  );
+
+  it.effect("refuses to reuse a PR worktree outside its managed worktree roots", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-foreign-worktree"]);
+      NodeFS.writeFileSync(NodePath.join(repoDir, "foreign.txt"), "foreign\n");
+      yield* runGit(repoDir, ["add", "foreign.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Foreign worktree branch"]);
+      yield* runGit(repoDir, ["checkout", "main"]);
+      const worktreePath = NodePath.join(repoDir, "..", `pr-foreign-${NodePath.basename(repoDir)}`);
+      yield* runGit(repoDir, ["worktree", "add", worktreePath, "feature/pr-foreign-worktree"]);
+
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          pullRequest: {
+            number: 79,
+            title: "Foreign worktree PR",
+            url: "https://github.com/pingdotgg/codething-mvp/pull/79",
+            baseRefName: "main",
+            headRefName: "feature/pr-foreign-worktree",
+            state: "open",
+          },
+        },
+        serverSettings: { previousWorktreesDirectories: [] },
+      });
+
+      const error = yield* preparePullRequestThread(manager, {
+        cwd: repoDir,
+        reference: "79",
+        mode: "worktree",
+        threadId: asThreadId("thread-pr-foreign-worktree"),
+      }).pipe(Effect.flip);
+
+      expect(error).toMatchObject({ _tag: "GitManagerError" });
+      expect(error.message).toContain("outside");
+      expect(NodeFS.readFileSync(NodePath.join(worktreePath, "foreign.txt"), "utf8")).toBe(
+        "foreign\n",
+      );
     }),
   );
 
@@ -6601,7 +6648,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
           mode: "worktree",
         });
 
-        expect(result.branch).toBe("t3code/pr-91/main");
+        expect(result.branch).toBe("kinako/pr-91/main");
         expect(result.worktreePath).not.toBeNull();
         expect((yield* runGit(repoDir, ["branch", "--show-current"])).stdout.trim()).toBe("main");
         expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim()).toBe(mainBefore);
@@ -6610,7 +6657,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
             "branch",
             "--show-current",
           ])).stdout.trim(),
-        ).toBe("t3code/pr-91/main");
+        ).toBe("kinako/pr-91/main");
       }),
   );
 
@@ -6662,7 +6709,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
           mode: "worktree",
         });
 
-        expect(result.branch).toBe("t3code/pr-92/main");
+        expect(result.branch).toBe("kinako/pr-92/main");
         expect((yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim()).toBe(localMainBefore);
         expect(
           (yield* runGit(result.worktreePath as string, [
