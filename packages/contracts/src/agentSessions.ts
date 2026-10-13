@@ -1,5 +1,11 @@
 import * as Schema from "effect/Schema";
-import { IsoDateTime, NonNegativeInt, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
+  IsoDateTime,
+  NonNegativeInt,
+  ProjectId,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 
 /** Coding agent home directories the scanner knows how to read. */
@@ -97,6 +103,62 @@ export const AgentSessionImportResult = Schema.Struct({
   skippedCount: NonNegativeInt,
 });
 export type AgentSessionImportResult = typeof AgentSessionImportResult.Type;
+
+export const AgentSessionListInput = Schema.Struct({
+  projectId: ProjectId,
+});
+export type AgentSessionListInput = typeof AgentSessionListInput.Type;
+
+/**
+ * A session started in a terminal from the project's directory. `importedThreadId` is the live
+ * thread an earlier import made of it, if any.
+ */
+export const AgentSessionListItem = Schema.Struct({
+  provider: AgentSessionSource,
+  providerInstanceId: ProviderInstanceId,
+  providerSessionId: TrimmedNonEmptyString,
+  title: Schema.String,
+  updatedAt: IsoDateTime,
+  importedThreadId: Schema.NullOr(ThreadId),
+});
+export type AgentSessionListItem = typeof AgentSessionListItem.Type;
+
+export const AgentSessionListResult = Schema.Struct({
+  sessions: Schema.Array(AgentSessionListItem),
+});
+export type AgentSessionListResult = typeof AgentSessionListResult.Type;
+
+export const AgentSessionImportSessionInput = Schema.Struct({
+  projectId: ProjectId,
+  providerInstanceId: ProviderInstanceId,
+  providerSessionId: TrimmedNonEmptyString,
+});
+export type AgentSessionImportSessionInput = typeof AgentSessionImportSessionInput.Type;
+
+/** `imported` is false when the session already had a live thread, which is returned instead. */
+export const AgentSessionImportSessionResult = Schema.Struct({
+  threadId: ThreadId,
+  imported: Schema.Boolean,
+});
+export type AgentSessionImportSessionResult = typeof AgentSessionImportSessionResult.Type;
+
+export class AgentSessionNotFoundError extends Schema.TaggedError<AgentSessionNotFoundError>()(
+  "AgentSessionNotFoundError",
+  { providerInstanceId: ProviderInstanceId, providerSessionId: TrimmedNonEmptyString },
+) {
+  override get message(): string {
+    return `Session '${this.providerSessionId}' is not available to import into this project.`;
+  }
+}
+
+export class AgentSessionImportFailedError extends Schema.TaggedError<AgentSessionImportFailedError>()(
+  "AgentSessionImportFailedError",
+  { providerSessionId: TrimmedNonEmptyString, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Could not import session '${this.providerSessionId}'.`;
+  }
+}
 
 export class AgentSessionScanError extends Schema.TaggedError<AgentSessionScanError>()(
   "AgentSessionScanError",

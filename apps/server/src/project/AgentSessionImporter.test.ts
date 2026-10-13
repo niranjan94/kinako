@@ -30,6 +30,8 @@ it.effect("imports messages once and preserves the provider native resume bindin
   let imported = false;
   const scanner = AgentSessionScanner.AgentSessionScanner.of({
     scan: Effect.die("unused"),
+    listSessions: () => Effect.die("unused"),
+    readSession: () => Effect.die("unused"),
     recentThreads: () =>
       Stream.succeed({
         _tag: "Importable",
@@ -143,5 +145,130 @@ it.effect("imports messages once and preserves the provider native resume bindin
       }),
     ]);
     expect(recorded).toHaveLength(2);
+  }).pipe(Effect.provide(layerTest));
+});
+
+it.effect("imports one listed session and imports it again after its thread is deleted", () => {
+  const threads = new Map<string, { id: string; projectId: ProjectId; deletedAt: string | null }>();
+  const writes: Array<ReadonlyArray<OrchestrationV2DomainEvent>> = [];
+  const source = {
+    provider: "codex" as const,
+    providerInstanceId,
+    providerSessionId,
+    filePath: "/tmp/native-codex-thread.jsonl",
+    size: 100,
+    mtimeMs: 2,
+    device: 3,
+    inode: 4,
+    birthtimeMs: 1,
+  };
+  const scanner = AgentSessionScanner.AgentSessionScanner.of({
+    scan: Effect.die("unused"),
+    recentThreads: () => Stream.die("unused"),
+    listSessions: () =>
+      Effect.succeed([
+        {
+          source: "codex",
+          providerInstanceId,
+          providerSessionId,
+          title: "Imported thread",
+          updatedAt: "2026-09-01T10:01:00.000Z",
+        },
+      ]),
+    readSession: (input) =>
+      Effect.succeed(
+        input.providerSessionId === providerSessionId
+          ? Option.some({
+              source,
+              thread: {
+                source: "codex",
+                providerInstanceId,
+                providerSessionId,
+                title: "Imported thread",
+                model: "gpt-5.4",
+                createdAt: "2026-09-01T10:00:00.000Z",
+                updatedAt: "2026-09-01T10:01:00.000Z",
+                messages: [{ role: "user", text: "Fix it", createdAt: "2026-09-01T10:00:00.000Z" }],
+              },
+            })
+          : Option.none(),
+      ),
+  });
+  const layerTest = AgentSessionImporter.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(AgentSessionScanner.AgentSessionScanner, scanner),
+        Layer.mock(ProjectService.ProjectService)({
+          getById: () =>
+            Effect.succeed(
+              Option.some({ id: projectId, workspaceRoot: "/workspace/project" } as never),
+            ),
+        }),
+        Layer.mock(Orchestrator.OrchestratorV2)({
+          getThreadRecords: (id) => {
+            const thread = threads.get(id);
+            return thread === undefined
+              ? Effect.fail(new Orchestrator.OrchestratorProjectionError({ threadId: id }))
+              : Effect.succeed({ thread: { ...thread, historyOrigin: "v1_import" } } as never);
+          },
+        }),
+        Layer.mock(EventSink.EventSinkV2)({
+          write: (input) =>
+            Effect.sync(() => {
+              writes.push(input.events);
+              for (const event of input.events) {
+                if (event.type === "thread.created") {
+                  threads.set(event.payload.id, {
+                    id: event.payload.id,
+                    projectId: event.payload.projectId,
+                    deletedAt: null,
+                  });
+                }
+              }
+              return [];
+            }),
+        }),
+        Layer.mock(ProviderSessionRuntime.ProviderSessionRuntimeRepository)({
+          list: () => Effect.succeed([]),
+          upsert: () => Effect.void,
+          recordImportedTranscript: () => Effect.void,
+        }),
+        IdAllocator.layer,
+      ),
+    ),
+  );
+
+  return Effect.gen(function* () {
+    const importer = yield* AgentSessionImporter.AgentSessionImporter;
+    const listedThreadId = () =>
+      importer
+        .listSessions({ projectId })
+        .pipe(Effect.map(({ sessions }) => sessions[0]?.importedThreadId));
+
+    expect(yield* listedThreadId()).toBeNull();
+    const input = { projectId, providerInstanceId, providerSessionId };
+    expect(yield* importer.importSession(input)).toEqual({ threadId, imported: true });
+    expect(yield* importer.importSession(input)).toEqual({ threadId, imported: false });
+    expect(writes).toHaveLength(1);
+    expect(yield* listedThreadId()).toBe(threadId);
+    const providerThread = writes[0]?.find((event) => event.type === "provider-thread.updated");
+    expect(providerThread?.payload.nativeMetadata).toEqual({
+      importedNativeThreadId: providerSessionId,
+    });
+
+    threads.set(threadId, { id: threadId, projectId, deletedAt: "2026-09-02T00:00:00.000Z" });
+    expect(yield* listedThreadId()).toBeNull();
+    const reimportedThreadId = ThreadId.make(`${threadId}:1`);
+    expect(yield* importer.importSession(input)).toEqual({
+      threadId: reimportedThreadId,
+      imported: true,
+    });
+    const reimported = writes[1]?.find((event) => event.type === "provider-thread.updated");
+    expect(reimported?.payload.id).not.toBe(providerThread?.payload.id);
+
+    const missing = yield* Effect.flip(
+      importer.importSession({ ...input, providerSessionId: "missing" }),
+    );
+    expect(missing._tag).toBe("AgentSessionNotFoundError");
   }).pipe(Effect.provide(layerTest));
 });

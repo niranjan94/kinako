@@ -3,19 +3,27 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
+  AgentSessionImportFailedError,
   AgentSessionImportProjectChangedError,
   AgentSessionImportProjectNotFoundError,
   AgentSessionImportSource,
+  AgentSessionNotFoundError,
   AgentSessionScanError,
   AgentSessionSource,
   EventId,
   MessageId,
   ProjectId,
   ProviderDriverKind,
+  ProviderThreadId,
   ThreadId,
   TurnItemId,
   type AgentSessionImportInput,
   type AgentSessionImportResult,
+  type AgentSessionImportSessionInput,
+  type AgentSessionImportSessionResult,
+  type AgentSessionListInput,
+  type AgentSessionListItem,
+  type AgentSessionListResult,
   type OrchestrationV2AppThread,
   type OrchestrationV2ConversationMessage,
   type OrchestrationV2DomainEvent,
@@ -165,13 +173,22 @@ function messageEvents(input: {
   ];
 }
 
-/** The thread an imported native session becomes, the same for every import of it. */
-export function importedThreadId(source: {
-  readonly providerInstanceId: AgentSessionImportSource["providerInstanceId"];
-  readonly providerSessionId: string;
-}): ThreadId {
-  return ThreadId.make(`import:${source.providerInstanceId}:${source.providerSessionId}`);
+/**
+ * The thread an imported native session becomes, the same for every import of it. A later
+ * generation replaces a thread the user deleted, since deleted threads cannot be restored.
+ */
+export function importedThreadId(
+  source: {
+    readonly providerInstanceId: AgentSessionImportSource["providerInstanceId"];
+    readonly providerSessionId: string;
+  },
+  generation = 0,
+): ThreadId {
+  const base = `import:${source.providerInstanceId}:${source.providerSessionId}`;
+  return ThreadId.make(generation === 0 ? base : `${base}:${generation}`);
 }
+
+const MAX_IMPORT_GENERATIONS = 100;
 
 /** Events that create an imported thread with its visible history, bound to its native session. */
 export function importedThreadEvents(input: {
@@ -280,9 +297,11 @@ const make = Effect.gen(function* () {
     readonly workspaceRoot: string;
     readonly thread: AgentSessionScanner.AgentSessionThread;
     readonly source: AgentSessionImportSource;
+    readonly generation?: number;
   }) {
     const { thread, source } = input;
-    const threadId = importedThreadId(source);
+    const generation = input.generation ?? 0;
+    const threadId = importedThreadId(source, generation);
     if (
       thread.source === "claudeAgent" &&
       !CLAUDE_SESSION_ID_PATTERN.test(thread.providerSessionId)
@@ -326,14 +345,19 @@ const make = Effect.gen(function* () {
       },
       { onConflict: "ignore" },
     );
+    const providerThreadId = idAllocator.derive.providerThread({
+      driver,
+      nativeThreadId: thread.providerSessionId,
+    });
     yield* eventSink.write({
       events: importedThreadEvents({
         threadId,
         projectId: input.projectId,
-        providerThreadId: idAllocator.derive.providerThread({
-          driver,
-          nativeThreadId: thread.providerSessionId,
-        }),
+        // Provider thread ids are global, so a deleted import keeps its own.
+        providerThreadId:
+          generation === 0
+            ? providerThreadId
+            : ProviderThreadId.make(`${providerThreadId}:${generation}`),
         thread,
       }),
     });
@@ -341,19 +365,88 @@ const make = Effect.gen(function* () {
     return { threadId, imported: true } as const;
   });
 
-  const importRecentAgentThreads = Effect.fn("importRecentAgentThreadsV2")(function* (
-    input: AgentSessionImportInput,
-  ) {
-    const project = yield* projects.getById(input.projectId).pipe(
+  const readProject = (projectId: ProjectId) =>
+    projects.getById(projectId).pipe(
       Effect.mapError((cause) => new AgentSessionScanError({ operation: "read-projects", cause })),
       Effect.flatMap(
         Option.match({
-          onNone: () =>
-            Effect.fail(new AgentSessionImportProjectNotFoundError({ projectId: input.projectId })),
+          onNone: () => Effect.fail(new AgentSessionImportProjectNotFoundError({ projectId })),
           onSome: Effect.succeed,
         }),
       ),
     );
+
+  /** The generation an import of this session uses, and its live thread if there is one. */
+  const resolveImportGeneration = Effect.fn("resolveAgentSessionImportGeneration")(function* (
+    session: Parameters<typeof importedThreadId>[0],
+  ) {
+    for (let generation = 0; generation < MAX_IMPORT_GENERATIONS; generation++) {
+      const threadId = importedThreadId(session, generation);
+      const existing = yield* Effect.option(orchestrator.getThreadRecords(threadId, []));
+      if (Option.isNone(existing)) return { generation, liveThreadId: null };
+      if (existing.value.thread.deletedAt === null) return { generation, liveThreadId: threadId };
+    }
+    return { generation: MAX_IMPORT_GENERATIONS, liveThreadId: null };
+  });
+
+  const listSessions = Effect.fn("listAgentSessions")(function* (input: AgentSessionListInput) {
+    const project = yield* readProject(input.projectId);
+    const summaries = yield* scanner.listSessions(project.workspaceRoot);
+    const sessions = yield* Effect.forEach(
+      summaries,
+      (summary) =>
+        resolveImportGeneration(summary).pipe(
+          Effect.map(({ liveThreadId }): AgentSessionListItem => ({
+            provider: summary.source,
+            providerInstanceId: summary.providerInstanceId,
+            providerSessionId: summary.providerSessionId,
+            title: summary.title,
+            updatedAt: summary.updatedAt,
+            importedThreadId: liveThreadId,
+          })),
+        ),
+      { concurrency: 16 },
+    );
+    return { sessions } satisfies AgentSessionListResult;
+  });
+
+  const importSession = Effect.fn("importAgentSession")(function* (
+    input: AgentSessionImportSessionInput,
+  ) {
+    const project = yield* readProject(input.projectId);
+    const session = yield* scanner.readSession({
+      workspaceRoot: project.workspaceRoot,
+      providerInstanceId: input.providerInstanceId,
+      providerSessionId: input.providerSessionId,
+    });
+    if (Option.isNone(session)) {
+      return yield* new AgentSessionNotFoundError({
+        providerInstanceId: input.providerInstanceId,
+        providerSessionId: input.providerSessionId,
+      });
+    }
+    const { generation, liveThreadId } = yield* resolveImportGeneration(input);
+    if (liveThreadId !== null) {
+      return { threadId: liveThreadId, imported: false } satisfies AgentSessionImportSessionResult;
+    }
+    return yield* importThread({
+      projectId: input.projectId,
+      workspaceRoot: project.workspaceRoot,
+      thread: session.value.thread,
+      source: session.value.source,
+      generation,
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AgentSessionImportFailedError({ providerSessionId: input.providerSessionId, cause }),
+      ),
+    );
+  });
+
+  const importRecentAgentThreads = Effect.fn("importRecentAgentThreadsV2")(function* (
+    input: AgentSessionImportInput,
+  ) {
+    const project = yield* readProject(input.projectId);
     if (
       input.expectedWorkspaceRoot !== undefined &&
       normalizeProjectPathForComparison(project.workspaceRoot) !==
@@ -432,7 +525,7 @@ const make = Effect.gen(function* () {
     return { importedCount, skippedCount } satisfies AgentSessionImportResult;
   });
 
-  return { importRecentAgentThreads };
+  return { importRecentAgentThreads, listSessions, importSession };
 });
 
 type AgentSessionImporterShape = Effect.Success<typeof make>;

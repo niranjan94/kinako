@@ -159,7 +159,194 @@ function makeRecordLimitTranscript(cwd: string, overflow: boolean): string {
     : records;
 }
 
+const runListSessions = (input: ScannerTestInput & { readonly workspaceRoot: string }) =>
+  Effect.gen(function* () {
+    const scanner = yield* AgentSessionScanner.AgentSessionScanner;
+    return yield* scanner.listSessions(input.workspaceRoot);
+  }).pipe(Effect.provide(layerScannerTest(input)));
+
+const runReadSession = (
+  input: ScannerTestInput & {
+    readonly workspaceRoot: string;
+    readonly providerInstanceId: string;
+    readonly providerSessionId: string;
+  },
+) =>
+  Effect.gen(function* () {
+    const scanner = yield* AgentSessionScanner.AgentSessionScanner;
+    return yield* scanner.readSession({
+      workspaceRoot: input.workspaceRoot,
+      providerInstanceId: ProviderInstanceId.make(input.providerInstanceId),
+      providerSessionId: input.providerSessionId,
+    });
+  }).pipe(Effect.provide(layerScannerTest(input)));
+
+/** Terminal sessions of each kind, plus app-started ones the list must leave out. */
+const writeSessionListFixture = Effect.fn("AgentSessionScanner.test.writeSessionListFixture")(
+  function* (input: {
+    readonly claudeHomePath: string;
+    readonly codexHomePath: string;
+    readonly workspace: string;
+    readonly otherWorkspace: string;
+    readonly nowMs: number;
+  }) {
+    const path = yield* Path.Path;
+    const day = 24 * 60 * 60 * 1000;
+    const claudeTranscript = (
+      cwd: string,
+      sessionId: string,
+      entrypoint: string,
+      extra: ReadonlyArray<object> = [],
+    ) =>
+      [
+        { type: "user", cwd, sessionId, entrypoint, message: { role: "user", content: "Fix it" } },
+        {
+          type: "assistant",
+          sessionId,
+          entrypoint,
+          message: { role: "assistant", content: [{ type: "text", text: "Fixed" }] },
+        },
+        ...extra,
+      ]
+        .map((record) => encodeTranscriptRecord(record))
+        .join("\n") + "\n";
+    const codexTranscript = (cwd: string, id: string, meta: object, prompt: string) =>
+      [
+        { type: "session_meta", payload: { id, cwd, ...meta } },
+        { type: "event_msg", payload: { type: "user_message", message: prompt } },
+      ]
+        .map((record) => encodeTranscriptRecord(record))
+        .join("\n");
+    const claudeDir = path.join(input.claudeHomePath, "projects", "-workspace");
+    const codexDir = path.join(input.codexHomePath, "sessions", "2026", "08", "24");
+
+    yield* writeTranscript({
+      filePath: path.join(claudeDir, "claude-old.jsonl"),
+      contents: claudeTranscript(input.workspace, "claude-old", "cli", [
+        { type: "ai-title", sessionId: "claude-old", aiTitle: "Old work" },
+        { type: "custom-title", sessionId: "claude-old", customTitle: "Renamed work" },
+      ]),
+      mtimeMs: input.nowMs - 90 * day,
+    });
+    yield* writeTranscript({
+      filePath: path.join(claudeDir, "claude-sdk.jsonl"),
+      contents: claudeTranscript(input.workspace, "claude-sdk", "sdk-ts"),
+      mtimeMs: input.nowMs - day,
+    });
+    yield* writeTranscript({
+      filePath: path.join(input.claudeHomePath, "projects", "-other", "claude-other.jsonl"),
+      contents: claudeTranscript(input.otherWorkspace, "claude-other", "cli"),
+      mtimeMs: input.nowMs - day,
+    });
+    yield* writeTranscript({
+      filePath: path.join(codexDir, "rollout-2026-08-24T10-00-00-codex-cli.jsonl"),
+      contents: codexTranscript(
+        input.workspace,
+        "codex-cli",
+        { originator: "codex_cli_rs" },
+        "Review",
+      ),
+      mtimeMs: input.nowMs - 60 * 60 * 1000,
+    });
+    yield* writeTranscript({
+      filePath: path.join(codexDir, "rollout-2026-08-24T11-00-00-codex-t3.jsonl"),
+      contents: codexTranscript(input.workspace, "codex-t3", { originator: "T3 Code" }, "From T3"),
+      mtimeMs: input.nowMs - 30 * 60 * 1000,
+    });
+    yield* writeTranscript({
+      filePath: path.join(codexDir, "rollout-2026-08-24T11-30-00-codex-agent.jsonl"),
+      contents: codexTranscript(
+        input.workspace,
+        "codex-agent",
+        { originator: "codex_cli_rs", thread_source: "subagent" },
+        "Sub-agent task",
+      ),
+      mtimeMs: input.nowMs - 10 * 60 * 1000,
+    });
+  },
+);
+
 it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
+  describe("listSessions and readSession", () => {
+    it.effect("lists a project's terminal sessions of any age, newest first", () =>
+      Effect.gen(function* () {
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-list-claude-");
+        const codexHomePath = yield* makeTempDir("t3code-list-codex-");
+        const workspace = yield* makeTempDir("t3code-list-workspace-");
+        const otherWorkspace = yield* makeTempDir("t3code-list-other-");
+        yield* writeSessionListFixture({
+          claudeHomePath,
+          codexHomePath,
+          workspace,
+          otherWorkspace,
+          nowMs,
+        });
+
+        const sessions = yield* runListSessions({
+          claudeHomePath,
+          codexHomePath,
+          workspaceRoot: workspace,
+        });
+
+        expect(
+          sessions.map((session) => [session.source, session.providerSessionId, session.title]),
+        ).toEqual([
+          ["codex", "codex-cli", "Review"],
+          ["claudeAgent", "claude-old", "Renamed work"],
+        ]);
+      }),
+    );
+
+    it.effect("reads one terminal session with its history", () =>
+      Effect.gen(function* () {
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-read-claude-");
+        const codexHomePath = yield* makeTempDir("t3code-read-codex-");
+        const workspace = yield* makeTempDir("t3code-read-workspace-");
+        const otherWorkspace = yield* makeTempDir("t3code-read-other-");
+        yield* writeSessionListFixture({
+          claudeHomePath,
+          codexHomePath,
+          workspace,
+          otherWorkspace,
+          nowMs,
+        });
+        const read = (providerInstanceId: string, providerSessionId: string) =>
+          runReadSession({
+            claudeHomePath,
+            codexHomePath,
+            workspaceRoot: workspace,
+            providerInstanceId,
+            providerSessionId,
+          });
+
+        const claude = yield* read("claudeAgent", "claude-old");
+        expect(
+          Option.map(claude, ({ thread, source }) => ({
+            messages: thread.messages.map((message) => message.text),
+            provider: source.provider,
+            providerSessionId: source.providerSessionId,
+          })),
+        ).toEqual(
+          Option.some({
+            messages: ["Fix it", "Fixed"],
+            provider: "claudeAgent",
+            providerSessionId: "claude-old",
+          }),
+        );
+        expect(Option.isSome(yield* read("codex", "codex-cli"))).toBe(true);
+        // Another project's session, app-started ones, and an unknown id are not importable here.
+        expect(Option.isNone(yield* read("claudeAgent", "claude-other"))).toBe(true);
+        expect(Option.isNone(yield* read("codex", "codex-t3"))).toBe(true);
+        expect(Option.isNone(yield* read("claudeAgent", "claude-sdk"))).toBe(true);
+        expect(Option.isNone(yield* read("codex", "missing"))).toBe(true);
+      }),
+    );
+  });
+
   describe("scan", () => {
     it.effect("reads Claude project cwds from transcripts, newest first", () =>
       Effect.gen(function* () {

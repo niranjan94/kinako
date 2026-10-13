@@ -84,10 +84,16 @@ import {
   FilesystemBrowseError,
 } from "./filesystem.ts";
 import {
+  AgentSessionImportFailedError,
   AgentSessionImportInput,
   AgentSessionImportProjectChangedError,
   AgentSessionImportProjectNotFoundError,
   AgentSessionImportResult,
+  AgentSessionImportSessionInput,
+  AgentSessionImportSessionResult,
+  AgentSessionListInput,
+  AgentSessionListResult,
+  AgentSessionNotFoundError,
   AgentSessionScanInput,
   AgentSessionScanResult,
   AgentSessionScanError,
@@ -391,6 +397,8 @@ export const WS_METHODS = {
   filesystemGetMetadata: "filesystem.getMetadata",
   agentSessionsScan: "agentSessions.scan",
   agentSessionsImport: "agentSessions.import",
+  agentSessionsList: "agentSessions.list",
+  agentSessionsImportSession: "agentSessions.importSession",
   assetsCreateUrl: "assets.createUrl",
   assetsPersistChatAttachments: "assets.persistChatAttachments",
   attachmentsCreateUploadUrl: "attachments.createUploadUrl",
@@ -1293,6 +1301,28 @@ const WsAgentSessionsImportRpc = Rpc.make(WS_METHODS.agentSessionsImport, {
   ]),
 });
 
+const WsAgentSessionsListRpc = Rpc.make(WS_METHODS.agentSessionsList, {
+  payload: AgentSessionListInput,
+  success: AgentSessionListResult,
+  error: Schema.Union([
+    AgentSessionImportProjectNotFoundError,
+    AgentSessionScanError,
+    EnvironmentAuthorizationError,
+  ]),
+});
+
+const WsAgentSessionsImportSessionRpc = Rpc.make(WS_METHODS.agentSessionsImportSession, {
+  payload: AgentSessionImportSessionInput,
+  success: AgentSessionImportSessionResult,
+  error: Schema.Union([
+    AgentSessionImportFailedError,
+    AgentSessionImportProjectNotFoundError,
+    AgentSessionNotFoundError,
+    AgentSessionScanError,
+    EnvironmentAuthorizationError,
+  ]),
+});
+
 const WsAssetsCreateUrlRpc = Rpc.make(WS_METHODS.assetsCreateUrl, {
   payload: AssetCreateUrlInput,
   success: AssetCreateUrlResult,
@@ -1993,6 +2023,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsFilesystemGetMetadataRpc,
   WsAgentSessionsScanRpc,
   WsAgentSessionsImportRpc,
+  WsAgentSessionsListRpc,
+  WsAgentSessionsImportSessionRpc,
   WsAssetsCreateUrlRpc,
   WsAssetsPersistChatAttachmentsRpc,
   WsAttachmentsCreateUploadUrlRpc,
