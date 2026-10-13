@@ -2,11 +2,11 @@
 
 /**
  * Rebuild an isolated dev database from a pruned snapshot of the real
- * ~/.t3 database, then run this checkout's migrations against it.
+ * ~/.kinako database, then run this checkout's migrations against it.
  *
  * `vp run migrate-dev-db` from a worktree:
  *   1. Nukes `<worktree>/.t3/userdata/statev2.sqlite`.
- *   2. Copies a slice of the real db (`~/.t3/userdata/statev2.sqlite`,
+ *   2. Copies a slice of the real db (`~/.kinako/userdata/statev2.sqlite`,
  *      attached read-only): the schema, and every row except those of
  *      deleted, archived, and settled threads, which are nearly all of a
  *      long-lived database. It then prunes that to the most recently updated
@@ -33,6 +33,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeOS from "node:os";
 import * as NodeURL from "node:url";
 import { resolveWorktreeT3Home } from "@t3tools/shared/devHome";
+import { FORK_HOME_DIR_NAME } from "@t3tools/shared/forkBrand";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -61,7 +62,7 @@ export class MigrateDevDbSharedHomeError extends Schema.TaggedError<MigrateDevDb
   {},
 ) {
   override get message(): string {
-    return "Refusing to rebuild the shared ~/.t3 database. Use an isolated --base-dir.";
+    return `Refusing to rebuild the shared ~/${FORK_HOME_DIR_NAME} database. Use an isolated --base-dir.`;
   }
 }
 
@@ -150,7 +151,7 @@ export class MigrateDevDbPhaseError extends Schema.TaggedError<MigrateDevDbPhase
 export interface RunMigrateDevDbInput {
   /** Isolated .t3 directory. Defaults to `<worktree>/.t3` of the cwd. */
   readonly baseDir?: string | undefined;
-  /** Source database. Defaults to `~/.t3/userdata/statev2.sqlite`. */
+  /** Source database. Defaults to `~/.kinako/userdata/statev2.sqlite`. */
   readonly source?: string | undefined;
   readonly projects: number;
   readonly threadsPerProject: number;
@@ -479,7 +480,9 @@ export const runMigrateDevDb = Effect.fn("runMigrateDevDb")(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
-  const sharedHome = path.resolve(options.sharedHome ?? path.join(NodeOS.homedir(), ".t3"));
+  const sharedHome = path.resolve(
+    options.sharedHome ?? path.join(NodeOS.homedir(), FORK_HOME_DIR_NAME),
+  );
   const sourcePath = path.resolve(
     input.source ?? path.join(sharedHome, "userdata", "statev2.sqlite"),
   );
@@ -639,7 +642,9 @@ export const migrateDevDbCommand = Command.make(
     ),
     source: Flag.String("source").pipe(
       Flag.optional,
-      Flag.withDescription("Source database. Defaults to ~/.t3/userdata/statev2.sqlite."),
+      Flag.withDescription(
+        `Source database. Defaults to ~/${FORK_HOME_DIR_NAME}/userdata/statev2.sqlite.`,
+      ),
     ),
   },
   ({ projects, threadsPerProject, baseDir, source }) =>
@@ -666,7 +671,7 @@ export const migrateDevDbCommand = Command.make(
     }),
 ).pipe(
   Command.withDescription(
-    "Rebuild the worktree dev database from a pruned snapshot of the real ~/.t3 data, then run migrations.",
+    `Rebuild the worktree dev database from a pruned snapshot of the real ~/${FORK_HOME_DIR_NAME} data, then run migrations.`,
   ),
 );
 
