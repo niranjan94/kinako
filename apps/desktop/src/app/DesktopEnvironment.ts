@@ -17,6 +17,7 @@ import { resolveLinuxDesktopEntryName } from "./DesktopEarlyElectronStartup.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 import type { OtlpProtocol } from "@t3tools/shared/observability";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 export interface MakeDesktopEnvironmentInput {
   readonly dirname: string;
@@ -93,7 +94,7 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "T3 Code";
+const APP_BASE_NAME = FORK_DISPLAY_NAME;
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;

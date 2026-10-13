@@ -17,6 +17,7 @@ import {
 
 import { fromYaml } from "@t3tools/shared/schemaYaml";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { clerkFrontendApiHostnameFromPublishableKey } from "@t3tools/shared/relayAuth";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import rootPackageJson from "../package.json" with { type: "json" };
@@ -2745,8 +2746,8 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+    ? `${FORK_DISPLAY_NAME} (Nightly)`
+    : (desktopPackageJson.productName ?? FORK_DISPLAY_NAME);
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -2821,10 +2822,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
       extendInfo: {
-        NSLocalNetworkUsageDescription:
-          "T3 Code connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
-        NSScreenCaptureUsageDescription:
-          "T3 Code captures the active window when you use the window capture shortcut.",
+        NSLocalNetworkUsageDescription: `${FORK_DISPLAY_NAME} connects to devices on your local network for remote environments and commands run by terminals and coding agents.`,
+        NSScreenCaptureUsageDescription: `${FORK_DISPLAY_NAME} captures the active window when you use the window capture shortcut.`,
         // macOS lists an app under Default web browser only when it opens web
         // pages as documents as well as http and https links (see protocols).
         CFBundleDocumentTypes: [
