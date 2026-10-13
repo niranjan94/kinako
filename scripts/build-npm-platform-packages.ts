@@ -19,6 +19,7 @@
  * bundleDependencies needs an arborist tree these flattened installs are
  * not), whereas `npm publish <tarball>` uploads the bytes as given.
  */
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { legacyCliLauncherScript } from "@t3tools/shared/legacyCliLauncher";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -112,7 +113,7 @@ export function npmPlatformPackageManifest(
     repository: serverPackageJson.repository,
     os: [os],
     cpu: [cpu],
-    files: ["t3", "t3.exe", "client", "resource-monitor", "node_modules"],
+    files: [FORK_CLI_NAME, `${FORK_CLI_NAME}.exe`, "client", "resource-monitor", "node_modules"],
     preferUnplugged: true,
     dependencies: Object.fromEntries(bundleDependencies.map((name) => [name, bundled[name]])),
     bundleDependencies,
@@ -217,7 +218,7 @@ try {
   process.exit(1);
 }
 
-const executable = join(packageDir, process.platform === "win32" ? "t3.exe" : "t3");
+const executable = join(packageDir, process.platform === "win32" ? "${FORK_CLI_NAME}.exe" : "${FORK_CLI_NAME}");
 const result = spawnSync(executable, process.argv.slice(2), { stdio: "inherit" });
 if (result.error) {
   process.stderr.write("t3: failed to start " + executable + ": " + result.error.message + "\\n");
@@ -332,7 +333,7 @@ const stagePlatformPackage = Effect.fn("stagePlatformPackage")(function* (input:
   const extractDir = path.join(scratch, "extract");
   yield* fs.makeDirectory(extractDir);
   const contentDir = yield* extractArchive(input.archive, extractDir);
-  const executableName = input.key.startsWith("win32") ? "t3.exe" : "t3";
+  const executableName = input.key.startsWith("win32") ? `${FORK_CLI_NAME}.exe` : FORK_CLI_NAME;
   const executable = path.join(contentDir, executableName);
   if (!(yield* fs.exists(executable))) {
     return yield* new NpmPackagesArchiveLayoutError({
@@ -341,7 +342,7 @@ const stagePlatformPackage = Effect.fn("stagePlatformPackage")(function* (input:
     });
   }
   // The tarball carries the on-disk mode, so the bit must be set before packing.
-  if (executableName === "t3") {
+  if (executableName === FORK_CLI_NAME) {
     yield* fs.chmod(executable, 0o755);
   }
   const bundled = yield* readBundledPackages(path.join(contentDir, "node_modules"));

@@ -17,6 +17,7 @@ import {
   cliReleaseDownloadBaseUrl,
   parseChecksums,
 } from "@t3tools/shared/cliRelease";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 
 import * as ProcessRunner from "../processRunner.ts";
 
@@ -65,7 +66,7 @@ export function pinnedRuntimePaths(
   const versionDir = path.join(pinnedRuntimeVersionsDir(path, baseDir), version);
   return {
     versionDir,
-    entryPath: path.join(versionDir, platform === "win32" ? "t3.exe" : "t3"),
+    entryPath: path.join(versionDir, platform === "win32" ? `${FORK_CLI_NAME}.exe` : FORK_CLI_NAME),
     sentinelPath: path.join(versionDir, ".install-complete"),
   };
 }

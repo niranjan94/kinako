@@ -6,6 +6,7 @@ import * as Schema from "effect/Schema";
 
 import type { ServerInstallation } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { isCommandAvailable } from "@t3tools/shared/shell";
 
 import packageJson from "../../package.json" with { type: "json" };
@@ -128,7 +129,7 @@ export function formatCliCommand(input: {
 }): string {
   const runner = detectCliRunner(input.entryPath);
   if (runner === null) {
-    return `t3 ${input.subcommand}`;
+    return `${FORK_CLI_NAME} ${input.subcommand}`;
   }
   return `${runner} ${suggestedPackageSpec(input.version)} ${input.subcommand}`;
 }
@@ -172,8 +173,8 @@ const resolveInstallLauncher = Effect.gen(function* () {
 const resolveHostCliCommand = (subcommand: string) =>
   Effect.gen(function* () {
     const command = yield* resolveCliCommand(subcommand);
-    if (command !== `t3 ${subcommand}`) return { command, launcher: false };
-    if (yield* isCommandAvailable("t3")) return { command, launcher: false };
+    if (command !== `${FORK_CLI_NAME} ${subcommand}`) return { command, launcher: false };
+    if (yield* isCommandAvailable(FORK_CLI_NAME)) return { command, launcher: false };
     const launcher = yield* resolveInstallLauncher;
     return Option.isSome(launcher)
       ? { command: `${shellWord(launcher.value)} ${subcommand}`, launcher: true }

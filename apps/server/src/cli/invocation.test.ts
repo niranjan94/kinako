@@ -47,7 +47,7 @@ it("treats stable installs as direct invocations", () => {
   ]) {
     assert.equal(
       formatCliCommand({ subcommand: "serve", entryPath, version: "0.0.31" }),
-      "t3 serve",
+      "kinako serve",
     );
   }
 });
@@ -93,7 +93,7 @@ it("formats serve suggestions to match the launching command", () => {
       entryPath: "/usr/local/lib/node_modules/t3/dist/bin.mjs",
       version: "0.0.31-nightly.20260729",
     }),
-    "t3 serve",
+    "kinako serve",
   );
 });
 
@@ -119,7 +119,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const bin = yield* fs.makeTempDirectoryScoped();
-    yield* fs.writeFileString(path.join(bin, "t3"), "#!/bin/sh\n", { mode: 0o755 });
+    yield* fs.writeFileString(path.join(bin, "kinako"), "#!/bin/sh\n", { mode: 0o755 });
     return bin;
   });
 
@@ -140,7 +140,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
           entry: "/home/theo/.local/lib/node_modules/t3/dist/bin.mjs",
           path: yield* pathWithT3,
         }),
-      ).toBe('sudo env "PATH=$PATH" t3 browser setup');
+      ).toBe('sudo env "PATH=$PATH" kinako browser setup');
     }).pipe(Effect.scoped),
   );
 
@@ -161,7 +161,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
       expect(yield* rootCommand(desktop)).toBe(`sudo '${shim}' browser setup`);
       // A `t3` the person put on PATH still wins.
       expect(yield* rootCommand({ ...desktop, path: yield* pathWithT3 })).toBe(
-        'sudo env "PATH=$PATH" t3 browser setup',
+        'sudo env "PATH=$PATH" kinako browser setup',
       );
       // A standalone binary names itself.
       expect(
@@ -174,7 +174,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
       // A stale shim path, then no launcher at all, fall back to plain `t3`.
       expect(
         yield* rootCommand({ ...desktop, env: { T3CODE_CLI_PATH: path.join(home, "gone") } }),
-      ).toBe('sudo env "PATH=$PATH" t3 browser setup');
+      ).toBe('sudo env "PATH=$PATH" kinako browser setup');
     }).pipe(Effect.scoped),
   );
 });
