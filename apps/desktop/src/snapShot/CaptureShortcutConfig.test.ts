@@ -42,7 +42,7 @@ it("reads without writing, then applies only the approved diff with a backup", a
   expect(await NodeFSP.readdir(directory)).toEqual(["config.kdl"]);
   expect(tools.validateNiri).not.toHaveBeenCalled();
   expect(preview.before).toBe(before);
-  expect(preview.after).toContain("Ctrl+Shift+2");
+  expect(preview.after).toContain("Ctrl+Shift+3");
   const applied = await setup.apply(preview.id, "niri");
   expect(await NodeFSP.readFile(path, "utf8")).toBe(preview.after);
   expect(await NodeFSP.readFile(applied.backupPath!, "utf8")).toBe(before);
@@ -65,7 +65,7 @@ it("rechecks Hyprland conflicts before writing", async () => {
   await NodeFSP.writeFile(hypr.path, "# unchanged\n");
   const preview = await setup.preview(hypr, install);
   tools.hyprlandBindings.mockResolvedValue([
-    { modmask: 5, key: "2", dispatcher: "exec", arg: "kitty" },
+    { modmask: 5, key: "3", dispatcher: "exec", arg: "kitty" },
   ]);
   await expect(setup.apply(preview.id, "hyprland")).rejects.toThrow("already used");
   expect(await NodeFSP.readFile(hypr.path, "utf8")).toBe(preview.before);
@@ -131,7 +131,7 @@ it("validates symlinked configs from their original directory so relative includ
   await NodeFSP.writeFile(NodePath.join(active, "keys.kdl"), "binds {}\n");
   tools.validateNiri.mockImplementation(async (file) => {
     expect(NodePath.dirname(file)).toBe(active);
-    expect(await NodeFSP.readFile(file, "utf8")).toContain("Ctrl+Shift+2");
+    expect(await NodeFSP.readFile(file, "utf8")).toContain("Ctrl+Shift+3");
     expect(await NodeFSP.readFile(NodePath.join(NodePath.dirname(file), "keys.kdl"), "utf8")).toBe(
       "binds {}\n",
     );
@@ -178,7 +178,7 @@ it("rejects a conflict from another Hyprland config or dynamic Lua bind", async 
   };
   await NodeFSP.writeFile(hypr.path, "-- user bindings\n");
   tools.hyprlandBindings.mockResolvedValue([
-    { modmask: 5, key: "2", dispatcher: "exec", arg: "kitty" },
+    { modmask: 5, key: "3", dispatcher: "exec", arg: "kitty" },
   ]);
   await expect(setup.preview(hypr, install)).rejects.toThrow("already used");
   expect(await NodeFSP.readFile(hypr.path, "utf8")).toBe("-- user bindings\n");

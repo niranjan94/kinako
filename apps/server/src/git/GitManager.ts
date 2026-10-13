@@ -82,7 +82,7 @@ import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 import { detachStackFrame } from "./detachStackFrame.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ServerConfig from "../config.ts";
-import { managedWorktreesDirectories } from "../worktreesDirectory.ts";
+import { isFilesystemRoot, managedWorktreesDirectories } from "../worktreesDirectory.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import type { GitManagerServiceError } from "@t3tools/contracts";
@@ -1107,7 +1107,10 @@ export const make = Effect.gen(function* () {
       path,
       home,
     )) {
-      const relative = path.relative(yield* canonicalizeExistingPath(directory), candidate);
+      const root = yield* canonicalizeExistingPath(directory);
+      // A root reached through a symlink can resolve to `/`, which would make every path managed.
+      if (isFilesystemRoot(root, path)) continue;
+      const relative = path.relative(root, candidate);
       if (relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)) {
         return true;
       }

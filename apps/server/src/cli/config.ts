@@ -6,6 +6,7 @@ import {
 } from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
+import { DEFAULT_TAILSCALE_SERVE_PORT } from "@t3tools/tailscale";
 import { DesktopBackendBootstrap, PortSchema } from "@t3tools/contracts";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
@@ -396,7 +397,7 @@ export const resolveServerConfig = (
         Option.fromUndefinedOr(env.tailscaleServePort),
         Option.fromUndefinedOr(bootstrap?.tailscaleServePort),
       ),
-      () => 443,
+      () => DEFAULT_TAILSCALE_SERVE_PORT,
     );
     const staticDir = devUrl ? undefined : yield* ServerConfig.resolveStaticDir();
     const host = Option.getOrElse(

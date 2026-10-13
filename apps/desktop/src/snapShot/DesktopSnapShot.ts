@@ -1220,7 +1220,7 @@ export const make = Effect.gen(function* () {
           linuxAppId,
           isModifierPairShortcut(shortcut)
             ? {
-                key: "2",
+                key: "3",
                 ctrlKey: true,
                 modKey: false,
                 altKey: false,

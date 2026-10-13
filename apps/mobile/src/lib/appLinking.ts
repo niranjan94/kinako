@@ -1,4 +1,12 @@
-import { FORK_URL_SCHEME } from "@t3tools/shared/forkBrand";
+import {
+  FORK_DEV_URL_SCHEME,
+  FORK_PREVIEW_URL_SCHEME,
+  FORK_URL_SCHEME,
+} from "@t3tools/shared/forkBrand";
+
+const SCHEME_ONLY_URL = new RegExp(
+  `^(?:${[FORK_URL_SCHEME, FORK_DEV_URL_SCHEME, FORK_PREVIEW_URL_SCHEME].join("|")}):\\/*$`,
+);
 
 /**
  * The Expo dev client launches the app via
@@ -14,6 +22,6 @@ export function shouldHandleAppLink(url: string): boolean {
   return (
     !url.includes("expo-development-client") &&
     !url.includes("://expo-sharing") &&
-    !new RegExp(`^${FORK_URL_SCHEME}(-dev|-preview)?:\\/*$`).test(url)
+    !SCHEME_ONLY_URL.test(url)
   );
 }

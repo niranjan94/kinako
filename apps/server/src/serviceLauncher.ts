@@ -10,6 +10,7 @@ import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import type {
   PendingServiceUpdate,
   ServiceLauncherChildMessage,
@@ -49,7 +50,7 @@ interface ManagedChild {
 const runtimePaths = (baseDir: string, version: string) => {
   const versionDir = NodePath.join(baseDir, "runtime", "versions", version);
   // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone launcher has no Effect runtime.
-  const executableName = process.platform === "win32" ? "kinako.exe" : "kinako";
+  const executableName = process.platform === "win32" ? `${FORK_CLI_NAME}.exe` : FORK_CLI_NAME;
   return {
     versionDir,
     entryPath: NodePath.join(versionDir, executableName),
