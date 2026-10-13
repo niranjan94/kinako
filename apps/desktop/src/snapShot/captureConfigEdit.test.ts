@@ -8,7 +8,7 @@ import {
 import { readKdlNodes } from "./captureConfigKdl.ts";
 
 const app = "com.t3tools.T3Code";
-const binding = captureConfigBinding("niri", app, "Ctrl+Shift+2");
+const binding = captureConfigBinding("niri", app, "Ctrl+Shift+3");
 
 describe("Niri capture config edits", () => {
   it("inserts into the existing top-level binds, preserving unrelated text", () => {
@@ -19,7 +19,7 @@ describe("Niri capture config edits", () => {
     expect(readKdlNodes(result.after).filter((node) => node.name === "binds")).toHaveLength(1);
   });
   it("ignores commented, nested, and string-valued binds and braces", () => {
-    const before = `// binds { fake\n/* binds { /* nested */ } */\n/- binds { Ctrl+Shift+2 { quit; } }\nrecent-windows { binds { Alt+Tab { next-window; } }; }\nspawn-at-startup "echo" r#"binds { }"#\n"binds" {\n    Mod+Q { spawn "a } \\" b"; }\n}\n`;
+    const before = `// binds { fake\n/* binds { /* nested */ } */\n/- binds { Ctrl+Shift+3 { quit; } }\nrecent-windows { binds { Alt+Tab { next-window; } }; }\nspawn-at-startup "echo" r#"binds { }"#\n"binds" {\n    Mod+Q { spawn "a } \\" b"; }\n}\n`;
     // A quoted brace in a valid shell argument must not close the binds section.
     const valid = before.replace('"a } \\" b"', '"a } b"');
     const result = editCaptureConfig(valid, "niri", app, "install");
@@ -31,7 +31,7 @@ describe("Niri capture config edits", () => {
     (before) => {
       const result = editCaptureConfig(before, "niri", app, "install");
       const block = readKdlNodes(result.after).find((node) => node.name === "binds")!;
-      expect(block.children.some((node) => node.name === "Ctrl+Shift+2")).toBe(true);
+      expect(block.children.some((node) => node.name === "Ctrl+Shift+3")).toBe(true);
     },
   );
   it("preserves CRLF and the UTF-8 BOM", () => {
@@ -49,7 +49,7 @@ describe("Niri capture config edits", () => {
     );
   });
   it("does not duplicate an existing binding, including a custom chord", () => {
-    const before = `binds {\n    ${binding.replace("Ctrl+Shift+2", "Alt+Ctrl+Y")}\n}\n`;
+    const before = `binds {\n    ${binding.replace("Ctrl+Shift+3", "Alt+Ctrl+Y")}\n}\n`;
     const result = editCaptureConfig(before, "niri", app, "install");
     expect(result.after).toBe(before);
     expect(result.shortcut).toBe("Ctrl+Alt+Y");
@@ -59,18 +59,18 @@ describe("Niri capture config edits", () => {
     const before = `binds {\n    ${binding}\n    ${other}\n}\n`;
     const result = editCaptureConfig(before, "niri", app, "install", "Ctrl+Alt+Y");
     expect(result.after).toContain(other);
-    expect(result.after).not.toContain("Ctrl+Shift+2");
+    expect(result.after).not.toContain("Ctrl+Shift+3");
     expect(result.after).toContain("Ctrl+Alt+Y");
     const removed = editCaptureConfig(result.after, "niri", app, "remove");
     expect(removed.after).toBe(`binds {\n    ${other}\n}\n`);
   });
   it("refuses occupied keys regardless of modifier order, without removing them", () => {
-    const before = "binds { Shift+Control+2 { quit; } }";
-    expect(niriConfigConflict(before, app, "Ctrl+Shift+2")).toBe(true);
+    const before = "binds { Shift+Control+3 { quit; } }";
+    expect(niriConfigConflict(before, app, "Ctrl+Shift+3")).toBe(true);
     expect(() => editCaptureConfig(before, "niri", app, "install")).toThrow("already used");
   });
   it("does not count a slash-dash-disabled key as occupied", () => {
-    expect(niriConfigConflict("binds { /- Ctrl+Shift+2 { quit; }; }", app, "Ctrl+Shift+2")).toBe(
+    expect(niriConfigConflict("binds { /- Ctrl+Shift+3 { quit; }; }", app, "Ctrl+Shift+3")).toBe(
       false,
     );
   });
@@ -104,7 +104,7 @@ describe("Hyprland capture config edits", () => {
       expect(added.after.startsWith(before)).toBe(true);
       expect(editCaptureConfig(added.after, format, app, "install").after).toBe(added.after);
       const changed = editCaptureConfig(added.after, format, app, "install", "Ctrl+Alt+Y");
-      expect(changed.after).not.toContain(captureConfigBinding(format, app, "Ctrl+Shift+2"));
+      expect(changed.after).not.toContain(captureConfigBinding(format, app, "Ctrl+Shift+3"));
       expect(changed.after).toContain(captureConfigBinding(format, app, "Ctrl+Alt+Y"));
       expect(editCaptureConfig(changed.after, format, app, "remove").after.trim()).toBe(
         before.trim(),
@@ -113,7 +113,7 @@ describe("Hyprland capture config edits", () => {
   );
   it("does not steal an existing legacy shortcut", () => {
     expect(() =>
-      editCaptureConfig("bind = SHIFT CTRL, 2, exec, kitty\n", "hyprland", app, "install"),
+      editCaptureConfig("bind = SHIFT CTRL, 3, exec, kitty\n", "hyprland", app, "install"),
     ).toThrow("already used");
   });
   it("leaves commented bindings alone", () => {

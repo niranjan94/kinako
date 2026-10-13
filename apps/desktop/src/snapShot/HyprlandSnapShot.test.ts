@@ -127,8 +127,8 @@ it.each([true, false])("uses the active config syntax and user bindings (Lua: %s
   );
   expect(result.shortcutBinding).toBe(
     lua
-      ? 'hl.bind("CTRL + SHIFT + 2", hl.dsp.global("com.t3tools.T3Code:capture-window"))'
-      : "bind = CTRL SHIFT, 2, global, com.t3tools.T3Code:capture-window",
+      ? 'hl.bind("CTRL + SHIFT + 3", hl.dsp.global("com.t3tools.T3Code:capture-window"))'
+      : "bind = CTRL SHIFT, 3, global, com.t3tools.T3Code:capture-window",
   );
   expect(await NodeFSP.readFile(result.shortcutConfigPath, "utf8")).toBe("custom bindings");
 });

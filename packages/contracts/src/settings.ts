@@ -219,7 +219,12 @@ export function snapShotModifierPairLabel(modifier: SnapShotModifier, apple: boo
   return `${label} + ${label}`;
 }
 const DEFAULT_SNAP_SHOT_SHORTCUT: SnapShotShortcut = {
-  kind: "both-shift-keys",
+  key: "3",
+  metaKey: false,
+  ctrlKey: true,
+  shiftKey: true,
+  altKey: false,
+  modKey: false,
 };
 
 export const NotificationMode = Schema.Literals([

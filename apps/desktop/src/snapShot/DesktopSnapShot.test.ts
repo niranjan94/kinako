@@ -3223,7 +3223,11 @@ it.effect("starts the Shift listener outside the Electron main process", () => {
   shortcutForkArgs.length = 0;
   shortcutForkOptions.length = 0;
   shortcutProcesses.length = 0;
-  const settings = { ...DEFAULT_CLIENT_SETTINGS, snapShotEnabled: true };
+  const settings = {
+    ...DEFAULT_CLIENT_SETTINGS,
+    snapShotEnabled: true,
+    snapShotShortcut: { kind: "both-shift-keys" as const },
+  };
 
   return Effect.scoped(
     Effect.gen(function* () {
@@ -3396,7 +3400,7 @@ it.effect("uses an external Niri shortcut without registering an Electron accele
       const state = yield* service.state;
       assert.isFalse(state.shortcutRegistered);
       assert.include(state.shortcutBinding, "gdbus");
-      assert.match(state.shortcutBinding ?? "", /^Ctrl\+Shift\+2 repeat=false \{/);
+      assert.match(state.shortcutBinding ?? "", /^Ctrl\+Shift\+3 repeat=false \{/);
       assert.include(state.shortcutMessage, "Niri config");
       assert.isTrue(state.shortcutActionRegistered);
       assert.lengthOf(registerShortcutMock.mock.calls, 0);
@@ -3555,7 +3559,11 @@ it.effect(
 it.effect("does not register a Wayland modifier-pair shortcut when enabled", () => {
   vi.stubEnv("XDG_SESSION_TYPE", "wayland");
   registerShortcutMock.mockReset().mockReturnValue(true);
-  const settings = { ...DEFAULT_CLIENT_SETTINGS, snapShotEnabled: true };
+  const settings = {
+    ...DEFAULT_CLIENT_SETTINGS,
+    snapShotEnabled: true,
+    snapShotShortcut: { kind: "both-shift-keys" as const },
+  };
 
   return Effect.scoped(
     Effect.gen(function* () {
@@ -3565,7 +3573,7 @@ it.effect("does not register a Wayland modifier-pair shortcut when enabled", () 
       const state = yield* service.state;
       assert.lengthOf(registerShortcutMock.mock.calls, 0);
       assert.isFalse(state.shortcutRegistered);
-      assert.deepEqual(state.shortcut, DEFAULT_CLIENT_SETTINGS.snapShotShortcut);
+      assert.deepEqual(state.shortcut, settings.snapShotShortcut);
       assert.match(state.shortcutMessage ?? "", /Modifier-pair shortcuts aren't available/);
     }),
   ).pipe(

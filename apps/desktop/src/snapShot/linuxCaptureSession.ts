@@ -32,7 +32,7 @@ export function isHyprlandCaptureSession(env = process.env): boolean {
 }
 
 export function niriCaptureBinding(appId: string): string {
-  return `Ctrl+Shift+2 repeat=false { spawn "gdbus" "call" "--session" "--dest" "${appId}.SnapShot" "--object-path" "${NIRI_CAPTURE_PATH}" "--method" "${NIRI_CAPTURE_INTERFACE}.Capture"; }`;
+  return `Ctrl+Shift+3 repeat=false { spawn "gdbus" "call" "--session" "--dest" "${appId}.SnapShot" "--object-path" "${NIRI_CAPTURE_PATH}" "--method" "${NIRI_CAPTURE_INTERFACE}.Capture"; }`;
 }
 
 const KEY_NAMES: Readonly<Record<string, string>> = {

@@ -4,7 +4,7 @@ import { niriCaptureBinding } from "./linuxCaptureSession.ts";
 
 export type CaptureConfigFormat = "niri" | "hyprland" | "hyprland-lua";
 
-export function captureConfigKeys(input = "Ctrl+Shift+2") {
+export function captureConfigKeys(input = "Ctrl+Shift+3") {
   const keys = parseKeybindingShortcut(input.replace(/super/gi, "meta"));
   if (
     !keys ||
@@ -42,7 +42,7 @@ function sameKeys(left: string, right: string) {
 export function captureConfigBinding(format: CaptureConfigFormat, appId: string, keys: string) {
   if (!/^[A-Za-z0-9_.-]+$/.test(appId)) throw new Error("Invalid capture application ID.");
   const chord = captureConfigKeys(keys);
-  if (format === "niri") return niriCaptureBinding(appId).replace("Ctrl+Shift+2", chord.label);
+  if (format === "niri") return niriCaptureBinding(appId).replace("Ctrl+Shift+3", chord.label);
   const action = `${appId}:capture-window`;
   return format === "hyprland-lua"
     ? `hl.bind("${chord.label.toUpperCase().replaceAll("+", " + ")}", hl.dsp.global("${action}"))`
@@ -57,7 +57,7 @@ function niriBinds(source: string) {
 }
 
 function niriCaptureNode(node: KdlNode, appId: string) {
-  const expected = readKdlNodes(captureConfigBinding("niri", appId, "Ctrl+Shift+2"))[0]!
+  const expected = readKdlNodes(captureConfigBinding("niri", appId, "Ctrl+Shift+3"))[0]!
     .children[0]!;
   const action = node.children[0];
   return (

@@ -15,15 +15,20 @@ export { isHyprlandCaptureSession } from "./linuxCaptureSession.ts";
 export const HYPRLAND_CAPTURE_EXECUTABLE = "t3-hyprland-snap-shot";
 export type HyprlandCapturePaths = { readonly bundle: string; readonly dataHome: string };
 export function hyprlandCaptureExecutable(paths: HyprlandCapturePaths) {
-  return NodePath.join(paths.dataHome, "t3code", "hyprland-capture", HYPRLAND_CAPTURE_EXECUTABLE);
+  return NodePath.join(
+    paths.dataHome,
+    "kinako-desktop",
+    "hyprland-capture",
+    HYPRLAND_CAPTURE_EXECUTABLE,
+  );
 }
 
 function hyprlandCaptureBinding(appId: string, lua: boolean): string {
   if (!/^[A-Za-z0-9_.-]+$/.test(appId)) throw new Error("Invalid capture application ID.");
   const action = `${appId}:${HYPRLAND_CAPTURE_ACTION}`;
   return lua
-    ? `hl.bind("CTRL + SHIFT + 2", hl.dsp.global("${action}"))`
-    : `bind = CTRL SHIFT, 2, global, ${action}`;
+    ? `hl.bind("CTRL + SHIFT + 3", hl.dsp.global("${action}"))`
+    : `bind = CTRL SHIFT, 3, global, ${action}`;
 }
 
 /** Omarchy owns its defaults; instructions always point at a user-owned config. */
