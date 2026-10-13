@@ -55,6 +55,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `apps/mobile/src/widgets/AgentActivity.tsx`: widget deep link scheme (widgets are serialized, so they cannot import).
 - `packages/contracts/src/settings.ts`: default SnapShot shortcut (contracts do not depend on shared).
 - `.github/workflows/fork-release.yml`, `.github/workflows/release-desktop.yml`: `kinako-*` archive globs.
+- `AGENTS.md`: the live database path in rule 2 and Test data.
 
 The icon glyph is in `assets/{prod,nightly,dev}/app-icon.icon/Assets/text.svg`, `assets/prod/logo.svg`, both `T3Wordmark.tsx` components, `apps/mobile/assets/widget/T3Mark.svg`, the Android notification drawable, and the DMG backgrounds. After changing it, run `vp run icons:export` (needs Icon Composer.app) and `vp run icons:export:android`. The dev icon's `annotations.svg` still draws dimension lines for the old T3 glyph.
 
@@ -115,4 +116,3 @@ Adding the signing secrets that `release-desktop.yml` already reads (`CSC_LINK`,
 - Mobile releases. The app has its own bundle IDs, Apple team (`6456AUQBLS`), and EAS project, but no App Store Connect app or Play listing yet, so `eas.json` has no submit target for iOS. The Clerk config plugin is still loaded even though the fork does not use Clerk.
 - Upstream links left as-is because they are user-initiated: marketing and legal pages, the `t3 triage` playbook, the npm `t3` package in upgrade hints, and the `app.t3.codes` entry in `packages/shared/src/providerAuthReturnUrl.ts`.
 - Most "T3 Code" strings in the UI, CLI messages, and docs. Only the names users see first (window titles, installers, permission prompts, the sidebar) say Kinako.
-- `AGENTS.md` still calls `~/.t3/userdata` the live database; for this fork it is `~/.kinako/userdata`.
