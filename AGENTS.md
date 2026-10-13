@@ -4,6 +4,8 @@ T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provid
 
 You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
 
+**This checkout is Kinako**, a fork of T3 Code that installs and runs alongside upstream. Read [FORK.md](FORK.md) before touching anything that carries the app's identity (names, home and data paths, URL schemes, app and bundle IDs, service names, default ports) or the release and CI workflows. Identity values come from `packages/shared/src/forkBrand.ts`; never add a new upstream literal for them, or the build collides with an installed T3 Code. To bring in upstream changes, use the `merge-upstream` skill.
+
 ## What makes T3 Code special?
 
 We have over 500,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.

@@ -57,7 +57,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `apps/mobile/src/widgets/AgentActivity.tsx`: widget deep link scheme (widgets are serialized, so they cannot import).
 - `packages/contracts/src/settings.ts`: default SnapShot shortcut (contracts do not depend on shared).
 - `.github/workflows/fork-release.yml`, `.github/workflows/release-desktop.yml`: `kinako-*` archive globs.
-- `AGENTS.md`: the live database path in rule 2 and Test data.
+- `AGENTS.md`: the Kinako paragraph under the introduction, and the live database path in rule 2 and Test data.
 
 The icon glyph is in `assets/{prod,nightly,dev}/app-icon.icon/Assets/text.svg`, `assets/prod/logo.svg`, both `T3Wordmark.tsx` components, `apps/mobile/assets/widget/T3Mark.svg`, the Android notification drawable, and the DMG backgrounds. After changing it, run `vp run icons:export` (needs Icon Composer.app) and `vp run icons:export:android`. The dev icon's `annotations.svg` still draws dimension lines for the old T3 glyph.
 
