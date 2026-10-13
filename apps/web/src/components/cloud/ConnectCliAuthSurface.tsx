@@ -1,5 +1,6 @@
 import { useAuth, useClerk } from "@clerk/react";
 import { readConnectAuthorizeRequest } from "@t3tools/shared/connectAuth";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -34,8 +35,7 @@ function ConnectCliAuthMessage({
 const invalidLinkMessage = {
   eyebrow: "Authorization request",
   title: "This connect link is incomplete",
-  description:
-    "The link is missing its authorization request. Re-run `t3 connect` in your terminal and open the freshly printed URL.",
+  description: `The link is missing its authorization request. Re-run \`${FORK_CLI_NAME} connect\` in your terminal and open the freshly printed URL.`,
 } as const;
 
 /**

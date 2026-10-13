@@ -11,6 +11,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveDesktopAppControlAddress } from "@t3tools/shared/desktopAppControl";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Crypto from "effect/Crypto";
@@ -32,7 +33,7 @@ export class DesktopAppSshUnsupportedError extends Schema.TaggedError<DesktopApp
   {},
 ) {
   override get message(): string {
-    return "`t3 app` only controls a desktop app on the same machine. It cannot run over SSH.";
+    return `\`${FORK_CLI_NAME} app\` only controls a desktop app on the same machine. It cannot run over SSH.`;
   }
 }
 
@@ -41,7 +42,7 @@ export class DesktopAppPlatformUnsupportedError extends Schema.TaggedError<Deskt
   { platform: Schema.String },
 ) {
   override get message(): string {
-    return `\`t3 app\` is not supported on ${this.platform}.`;
+    return `\`${FORK_CLI_NAME} app\` is not supported on ${this.platform}.`;
   }
 }
 
@@ -55,7 +56,7 @@ export class DesktopAppUnreachableError extends Schema.TaggedError<DesktopAppUnr
   },
 ) {
   override get message(): string {
-    return "Could not reach the T3 Code desktop app. Start or update the desktop app on this machine, then run `t3 app` again. A running T3 Code server is not enough.";
+    return `Could not reach the T3 Code desktop app. Start or update the desktop app on this machine, then run \`${FORK_CLI_NAME} app\` again. A running T3 Code server is not enough.`;
   }
 }
 

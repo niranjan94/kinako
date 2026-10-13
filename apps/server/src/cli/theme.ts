@@ -23,6 +23,7 @@ import {
   EnvironmentThemeId,
   environmentThemeFileHasColors,
 } from "@t3tools/contracts";
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
 import { BUILT_IN_THEME_IDS, UNPUBLISHABLE_THEME_IDS } from "@t3tools/shared/themePalettes";
 import * as Config from "effect/Config";
@@ -174,7 +175,7 @@ export class ThemeTargetMissingError extends Schema.TaggedError<ThemeTargetMissi
   {},
 ) {
   override get message(): string {
-    return "Provide a theme id or file, or run `t3 theme clear` to remove the theme.";
+    return `Provide a theme id or file, or run \`${FORK_CLI_NAME} theme clear\` to remove the theme.`;
   }
 }
 

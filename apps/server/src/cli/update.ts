@@ -101,7 +101,7 @@ export function launcherOwnsVersionsDir(
 
 /**
  * The launcher the install scripts leave behind: a symlink at `<bin>/kinako` on
- * POSIX, a `kinako.cmd` shim on Windows. `t3 update` repoints it so the next `t3`
+ * POSIX, a `kinako.cmd` shim on Windows. `kinako update` repoints it so the next `kinako`
  * invocation is the new version. Only a launcher that already points into
  * this home's `runtime/versions` tree is touched; a plain copy of the
  * executable, or a launcher for some other install, is left alone.
@@ -124,7 +124,7 @@ export const repointLauncher = Effect.fn("cli.update.repoint_launcher")(function
     // The shim runs the executable by absolute path, so the executable sees
     // itself as argv0; the shim is the `kinako.cmd` next to it only when launched
     // from an install script's bin directory. Find it by searching the
-    // directories that would resolve `t3` on this shell's PATH.
+    // directories that would resolve `kinako` on this shell's PATH.
     const shimPath = yield* findWindowsShim(input.launchedAs);
     if (shimPath === undefined) return Option.none<string>();
     const current = yield* fs.readFileString(shimPath).pipe(Effect.option);
@@ -367,7 +367,7 @@ const runUpdate = Effect.fn("cli.update.run")(function* (input: {
         `t3@${targetVersion} is a preview build.`,
         "  Preview builds are cut by maintainers from unreleased branches to exercise the release",
         "  pipeline. They can be broken, receive no fixes, and are never offered as updates; you",
-        `  will have to switch back to ${currentChannel} yourself with \`t3 update --channel ${currentChannel} --allow-downgrade\`.`,
+        `  will have to switch back to ${currentChannel} yourself with \`${FORK_CLI_NAME} update --channel ${currentChannel} --allow-downgrade\`.`,
       ].join("\n"),
     );
     if (!(process.stdin.isTTY && process.stdout.isTTY)) {
@@ -424,8 +424,8 @@ const runUpdate = Effect.fn("cli.update.run")(function* (input: {
   if (executableCurrent && serviceCurrent) {
     yield* Console.log(
       serviceVersion !== undefined
-        ? `t3 and its background service are already on ${targetVersion} (${targetChannel}).`
-        : `t3 is already on ${targetVersion} (${targetChannel}).`,
+        ? `${FORK_CLI_NAME} and its background service are already on ${targetVersion} (${targetChannel}).`
+        : `${FORK_CLI_NAME} is already on ${targetVersion} (${targetChannel}).`,
     );
     return;
   }
@@ -470,7 +470,7 @@ const runUpdate = Effect.fn("cli.update.run")(function* (input: {
       ).pipe(Effect.catchTags({ QuitError: () => Effect.succeed(false) }));
     } else {
       yield* Console.log(
-        "  Not a terminal, so the service keeps running its current version. Rerun with --yes to restart it now, or run `t3 service restart` later.",
+        `  Not a terminal, so the service keeps running its current version. Rerun with --yes to restart it now, or run \`${FORK_CLI_NAME} service restart\` later.`,
       );
     }
   }
@@ -578,7 +578,7 @@ const runUpdate = Effect.fn("cli.update.run")(function* (input: {
     yield* Console.log(`  Background service already on ${targetVersion}`);
   } else if (serviceInstalled) {
     yield* Console.log(
-      `  Background service still running ${serviceVersion ?? "an unknown version"}. Run \`t3 service restart\` when you are ready to switch it to ${targetVersion}.`,
+      `  Background service still running ${serviceVersion ?? "an unknown version"}. Run \`${FORK_CLI_NAME} service restart\` when you are ready to switch it to ${targetVersion}.`,
     );
   } else if (status.installed && !servesThisHome) {
     yield* Console.log(
