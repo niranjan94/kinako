@@ -5,7 +5,7 @@
  * ~/.kinako database, then run this checkout's migrations against it.
  *
  * `vp run migrate-dev-db` from a worktree:
- *   1. Nukes `<worktree>/.t3/userdata/statev2.sqlite`.
+ *   1. Nukes `<worktree>/.kinako/userdata/statev2.sqlite`.
  *   2. Copies a slice of the real db (`~/.kinako/userdata/statev2.sqlite`,
  *      attached read-only): the schema, and every row except those of
  *      deleted, archived, and settled threads, which are nearly all of a
@@ -149,7 +149,7 @@ export class MigrateDevDbPhaseError extends Schema.TaggedError<MigrateDevDbPhase
 }
 
 export interface RunMigrateDevDbInput {
-  /** Isolated .t3 directory. Defaults to `<worktree>/.t3` of the cwd. */
+  /** Isolated state directory. Defaults to `<worktree>/.kinako` of the cwd. */
   readonly baseDir?: string | undefined;
   /** Source database. Defaults to `~/.kinako/userdata/statev2.sqlite`. */
   readonly source?: string | undefined;
