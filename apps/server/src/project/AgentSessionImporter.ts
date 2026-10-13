@@ -240,6 +240,7 @@ export function importedThreadEvents(input: {
     handoffIds: [],
     forkedFrom: null,
     pendingBackgroundTasks: [],
+    nativeMetadata: { importedNativeThreadId: thread.providerSessionId },
     createdAt,
     updatedAt,
   };

@@ -54,6 +54,8 @@ import * as ProjectionMaintenance from "../ProjectionMaintenance.ts";
 import * as ProjectionStore from "../ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../ProviderAdapterRegistry.ts";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import { deriveProviderThread } from "@t3tools/provider-core/server/IdAllocator";
+import { importedThreadEvents, importedThreadId } from "../../project/AgentSessionImporter.ts";
 import {
   CLAUDE_MODEL_SELECTION,
   CODEX_MODEL_SELECTION,
@@ -1196,6 +1198,104 @@ describe("orchestration v2 provider switching", () => {
           );
         }),
       ),
+  );
+
+  it.live("resumes an imported native session without resending its history", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const cwd = yield* checkpointWorkspace("imported-native-session");
+        const capturedTurns = yield* Ref.make<ReadonlyArray<CapturedTurn>>([]);
+        const layerRegistry = ProviderAdapterRegistry.layerFromAdapters([
+          makeTestAdapter({
+            instanceId: CLAUDE_MODEL_SELECTION.instanceId,
+            driver: CLAUDE_DRIVER,
+            capabilities: ClaudeProviderCapabilitiesV2,
+            modelSelection: CLAUDE_MODEL_SELECTION,
+            responseByRunOrdinal: {},
+            capturedTurns,
+          }),
+        ]);
+        yield* Effect.gen(function* () {
+          const orchestrator = yield* Orchestrator.OrchestratorV2;
+          const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+          const nativeSessionId = "49dff1f3-ac3d-4034-833d-65d935692c20";
+          const importedThread = importedThreadId({
+            providerInstanceId: CLAUDE_MODEL_SELECTION.instanceId,
+            providerSessionId: nativeSessionId,
+          });
+          yield* (yield* EventSink.EventSinkV2).write({
+            events: importedThreadEvents({
+              threadId: importedThread,
+              projectId,
+              providerThreadId: deriveProviderThread({
+                driver: CLAUDE_DRIVER,
+                nativeThreadId: nativeSessionId,
+              }),
+              thread: {
+                source: "claudeAgent",
+                providerInstanceId: CLAUDE_MODEL_SELECTION.instanceId,
+                providerSessionId: nativeSessionId,
+                title: "Imported session",
+                model: CLAUDE_MODEL_SELECTION.model,
+                createdAt: "2026-09-01T10:00:00.000Z",
+                updatedAt: "2026-09-01T10:01:00.000Z",
+                messages: [
+                  {
+                    role: "user",
+                    text: "The release marker is violet.",
+                    createdAt: "2026-09-01T10:00:00.000Z",
+                  },
+                  { role: "assistant", text: "Noted.", createdAt: "2026-09-01T10:01:00.000Z" },
+                ],
+              },
+            }),
+          });
+          yield* orchestrator.dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make("imported-native-session:1"),
+            threadId: importedThread,
+            messageId: MessageId.make("imported-native-session:1"),
+            createdBy: "user",
+            creationSource: "web",
+            text: "What is the release marker?",
+            attachments: [],
+            modelSelection: CLAUDE_MODEL_SELECTION,
+            dispatchMode: { type: "start_immediately" },
+          });
+          yield* orchestrator.streamStoredEvents.pipe(
+            Stream.filter(
+              ({ event }) =>
+                event.type === "run.updated" &&
+                event.threadId === importedThread &&
+                (event.payload.status === "completed" || event.payload.status === "failed"),
+            ),
+            Stream.runHead,
+          );
+          yield* worker.drain();
+
+          const turns = yield* Ref.get(capturedTurns);
+          assert.equal(turns.length, 1);
+          // The native session already holds the imported turns, so the
+          // provider resumes it and receives only the new prompt.
+          assert.equal(turns[0]?.nativeThreadId, nativeSessionId);
+          assert.notInclude(turns[0]?.text ?? "", "violet");
+        }).pipe(
+          Effect.provide(
+            ProviderReplayHarness.layerWithRegistry(
+              {
+                name: "imported-native-session",
+                runtimePolicyOverride: {
+                  cwd,
+                  approvalPolicy: "never",
+                  sandboxPolicy: { type: "readOnly" },
+                },
+              },
+              layerRegistry,
+            ),
+          ),
+        );
+      }),
+    ),
   );
 
   it.live("keeps the native session after turns refused before reaching the provider", () =>

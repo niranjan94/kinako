@@ -2037,22 +2037,40 @@ describe("ClaudeAdapterV2 MCP credential channel", () => {
 });
 
 describe("ClaudeAdapterV2 native session identity", () => {
-  const openTurnWithOrdinal = (providerTurnOrdinal: number, nativeThreadHasTurns?: boolean) =>
+  const openTurnWithOrdinal = (
+    providerTurnOrdinal: number,
+    nativeThreadHasTurns?: boolean,
+    configDirTranscript?: "present" | "absent",
+  ) =>
     Effect.scoped(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
         const idAllocator = yield* IdAllocator.IdAllocatorV2;
         const attachmentsDir = yield* fileSystem.makeTempDirectoryScoped({
           prefix: "t3-claude-v2-session-identity-",
         });
+        const configDir =
+          configDirTranscript === undefined
+            ? undefined
+            : yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-claude-v2-config-" });
+        if (configDir !== undefined && configDirTranscript === "present") {
+          const projectDir = path.join(configDir, "projects", "-Users-me-project");
+          yield* fileSystem.makeDirectory(projectDir, { recursive: true });
+          yield* fileSystem.writeFileString(
+            path.join(projectDir, "native-session-identity.jsonl"),
+            "{}\n",
+          );
+        }
         const openedQueries: Array<ClaudeAdapterV2.ClaudeAgentSdkQueryOpenInput> = [];
         const adapter = yield* ClaudeAdapterV2.makeClaudeAdapterV2({
           instanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
           settings: DEFAULT_CLAUDE_SETTINGS,
           environment: {},
+          ...(configDir === undefined ? {} : { configDir }),
           attachmentsDir,
           fileSystem,
-          path: yield* Path.Path,
+          path,
           crypto: yield* Crypto.Crypto,
           idAllocator,
           queryRunner: {
@@ -2132,6 +2150,22 @@ describe("ClaudeAdapterV2 native session identity", () => {
   it.effect("creates a fresh native session despite earlier provider-thread turns", () =>
     Effect.gen(function* () {
       const openedQueries = yield* openTurnWithOrdinal(4, false);
+      assert.equal(openedQueries[0]?.options.sessionId, "native-session-identity");
+      assert.equal(openedQueries[0]?.options.resume, undefined);
+    }),
+  );
+
+  it.effect("resumes a native session the CLI already holds, such as an imported one", () =>
+    Effect.gen(function* () {
+      const openedQueries = yield* openTurnWithOrdinal(1, false, "present");
+      assert.equal(openedQueries[0]?.options.resume, "native-session-identity");
+      assert.equal(openedQueries[0]?.options.sessionId, undefined);
+    }),
+  );
+
+  it.effect("creates the native session when the config directory has no transcript for it", () =>
+    Effect.gen(function* () {
+      const openedQueries = yield* openTurnWithOrdinal(1, false, "absent");
       assert.equal(openedQueries[0]?.options.sessionId, "native-session-identity");
       assert.equal(openedQueries[0]?.options.resume, undefined);
     }),

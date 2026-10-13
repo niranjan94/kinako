@@ -111,6 +111,7 @@ import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import {
   claudeSignedOutMessage,
   makeClaudeEnvironment,
+  resolveClaudeHomePath,
 } from "../../provider/Drivers/ClaudeHome.ts";
 import {
   BUNDLED_CLAUDE_MODEL_CATALOG,
@@ -3333,6 +3334,8 @@ export interface ClaudeAdapterV2Options {
   readonly queryRunner: ClaudeAgentSdkQueryRunnerShape;
   readonly scopedLimitNames?: Ref.Ref<ClaudeScopedLimitNames>;
   readonly onUsageLimits?: ManagedServerProvider["applyUsageLimits"];
+  /** Claude config directory whose transcripts this instance resumes. */
+  readonly configDir?: string;
   /** Sink for wake-turn continuation requests; defaults to dropping them. */
   readonly continuationRequests?: {
     readonly offer: (
@@ -3340,6 +3343,34 @@ export interface ClaudeAdapterV2Options {
     ) => Effect.Effect<void>;
   };
 }
+
+const CLAUDE_SESSION_FILE_NAME_PATTERN = /^[A-Za-z0-9-]+$/;
+
+/**
+ * Whether the CLI already holds a transcript for this session. It refuses to start one it already
+ * has, as with a session imported from the terminal, and finds it in any project directory on resume.
+ */
+const claudeSessionTranscriptExists = Effect.fn("ClaudeAdapterV2.sessionTranscriptExists")(
+  function* (input: {
+    readonly fileSystem: FileSystem.FileSystem;
+    readonly path: Path.Path;
+    readonly configDir: string;
+    readonly nativeThreadId: string;
+  }) {
+    if (!CLAUDE_SESSION_FILE_NAME_PATTERN.test(input.nativeThreadId)) return false;
+    const projectsDir = input.path.join(input.configDir, "projects");
+    const projectDirs = yield* input.fileSystem
+      .readDirectory(projectsDir)
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+    for (const projectDir of projectDirs) {
+      const exists = yield* input.fileSystem
+        .exists(input.path.join(projectsDir, projectDir, `${input.nativeThreadId}.jsonl`))
+        .pipe(Effect.orElseSucceed(() => false));
+      if (exists) return true;
+    }
+    return false;
+  },
+);
 
 export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
   adapterOptions: ClaudeAdapterV2Options,
@@ -8270,7 +8301,16 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const hasPersistedProviderTurn =
             turnInput.nativeThreadHasTurns ?? turnInput.providerTurnOrdinal > 1;
           const shouldResume =
-            resumeSessionAt !== undefined || openedWithResume || hasPersistedProviderTurn;
+            resumeSessionAt !== undefined ||
+            openedWithResume ||
+            hasPersistedProviderTurn ||
+            (adapterOptions.configDir !== undefined &&
+              (yield* claudeSessionTranscriptExists({
+                fileSystem,
+                path,
+                configDir: adapterOptions.configDir,
+                nativeThreadId,
+              })));
           const queryOptions = makeClaudeQueryOptions({
             modelSelection: turnInput.modelSelection,
             nativeThreadId,
@@ -9233,6 +9273,7 @@ export const createClaudeAdapterV2 = Effect.fn("ClaudeAdapterV2Driver.create")(
       instanceId,
       settings: { ...config, enabled, binaryPath },
       environment: claudeEnvironment,
+      configDir: yield* resolveClaudeHomePath(config, claudeEnvironment),
       attachmentsDir: serverConfig.attachmentsDir,
       fileSystem,
       path,
@@ -9281,6 +9322,7 @@ const makeDefaultClaudeAdapterV2 = Effect.fn("ClaudeAdapterV2.layer")(function* 
     instanceId: CLAUDE_DEFAULT_INSTANCE_ID,
     settings: DEFAULT_CLAUDE_SETTINGS,
     environment: hostEnvironment,
+    configDir: yield* resolveClaudeHomePath(DEFAULT_CLAUDE_SETTINGS, hostEnvironment),
     attachmentsDir: serverConfig.attachmentsDir,
     fileSystem,
     path,
