@@ -63,6 +63,12 @@ To pick up a Claude thread in a terminal, open the thread's menu in the chat hea
 
 Run it on the machine T3 Code's server runs on, and not while the thread is working in T3 Code. Claude Code's `/resume` picker does not list sessions started from T3 Code, so use the copied command instead of searching for the session there. The option is unavailable after you roll a Claude thread back, until its next turn finishes.
 
+## Bring a Claude Code session into T3 Code
+
+To continue a session you started with `claude` in a terminal, search the command palette for **Import CLI session** while in the project, or open the project's settings and choose **Import** under **Terminal sessions**. With per-project thread trees enabled, the project's menu in the sidebar has it too. On mobile, start a new task in the project and choose **Import CLI session**. The list shows sessions started from the project's folder under the instance's config directory, newest first. Importing one opens a thread with the session's earlier messages, and its next turn continues the same Claude Code session. Importing a session again opens its existing thread.
+
+Close the session in the terminal before importing it. A session updated in the last few minutes is marked as possibly still open. The earlier part of the conversation shows its text only, and turns from before the import cannot be diffed or restored. Sessions started from T3 Code or from other apps built on the Claude Agent SDK are not listed.
+
 ## Usage limits
 
 If your Claude subscription runs out of usage mid-turn, the thread shows which
