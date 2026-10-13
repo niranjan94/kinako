@@ -11,6 +11,8 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/cli";
 
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+
 export interface NightlyReleaseMetadata {
   readonly baseVersion: string;
   readonly version: string;
@@ -121,7 +123,7 @@ export const resolveNightlyReleaseMetadata = (
     baseVersion,
     version,
     tag: `v${version}`,
-    name: `T3 Code ${CHANNEL_RELEASE_LABELS[channel]} ${version} (${shortSha})`,
+    name: `${FORK_DISPLAY_NAME} ${CHANNEL_RELEASE_LABELS[channel]} ${version} (${shortSha})`,
     shortSha,
   };
 };
