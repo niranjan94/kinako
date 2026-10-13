@@ -100,8 +100,32 @@ describe("buildProviderCliResumeCommand", () => {
         instance: instance("codex", { config: { homePath: "D:\\codex" } }),
       }),
     ).toBe(
-      "cd 'C:\\Users\\me\\it''s here'; $env:CODEX_HOME = 'D:\\codex'; codex resume 019a2b3c-codex",
+      "cd -LiteralPath 'C:\\Users\\me\\it''s here'; $env:CODEX_HOME = 'D:\\codex'; codex resume 019a2b3c-codex",
     );
+  });
+
+  it("expands a home-relative home directory on Windows hosts", () => {
+    expect(
+      buildProviderCliResumeCommand({
+        nativeThread: nativeThread("claudeAgent"),
+        cwd: "C:\\work",
+        platform: "windows",
+        instance: instance("claudeAgent", { config: { homePath: "~/.claude-work" } }),
+      }),
+    ).toBe(
+      "cd -LiteralPath C:\\work; $env:CLAUDE_CONFIG_DIR = (Join-Path $HOME '.claude-work'); claude --resume 313e3168-da32-4d75-b890-d27f8afa84fc",
+    );
+  });
+
+  it("does not offer managed Codex, whose binary and sign-in belong to T3", () => {
+    expect(
+      buildProviderCliResumeCommand({
+        nativeThread: nativeThread("codex", { nativeId: "019a2b3c-codex" }),
+        cwd: "/srv/app",
+        platform: "linux",
+        instance: instance("codex", { config: { setupMode: "managed" } }),
+      }),
+    ).toBeNull();
   });
 
   it("has no command for providers without a CLI resume", () => {

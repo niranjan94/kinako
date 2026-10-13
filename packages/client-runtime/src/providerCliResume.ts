@@ -52,6 +52,18 @@ function quoteShellWord(value: string, platform: ExecutionEnvironmentPlatformOs)
   return quotePosix(value);
 }
 
+/** Quote a home directory the way the server expands it: a leading `~` is the host user's home. */
+function quoteHomePath(value: string, platform: ExecutionEnvironmentPlatformOs): string {
+  const homeRelative =
+    value === "~" ? "" : value.startsWith("~/") || value.startsWith("~\\") ? value.slice(2) : null;
+  if (platform === "windows") {
+    if (homeRelative === null) return quotePowerShell(value);
+    return homeRelative === "" ? "$HOME" : `(Join-Path $HOME ${quotePowerShell(homeRelative)})`;
+  }
+  if (homeRelative === null) return quoteShellWord(value, platform);
+  return homeRelative === "" ? "~" : `~/${quotePosix(homeRelative)}`;
+}
+
 interface HomeEnvironmentVariable {
   readonly name: "CLAUDE_CONFIG_DIR" | "CODEX_HOME";
   readonly value: string;
@@ -72,7 +84,7 @@ function homeVariable(
   name: HomeEnvironmentVariable["name"],
   value: string | null,
 ): HomeEnvironmentVariable | null {
-  return value === null || value.length === 0 ? null : { name, value };
+  return value === null ? null : { name, value };
 }
 
 interface ResumeInvocation {
@@ -101,6 +113,9 @@ function resolveResumeInvocation(
   }
   if (nativeThread.driver === "codex") {
     const config = Option.getOrNull(decodeCodexSettings(instance?.config ?? {}));
+    // Managed Codex runs a T3-installed binary with a T3-held token, neither of
+    // which a plain terminal has.
+    if (config?.setupMode === "managed") return null;
     // A shadow home holds this account's auth and links the shared sessions,
     // so it is the home T3 ran the conversation in.
     return {
@@ -140,13 +155,13 @@ export function buildProviderCliResumeCommand(input: {
     const home =
       invocation.home === null
         ? ""
-        : `$env:${invocation.home.name} = ${quotePowerShell(invocation.home.value)}; `;
-    return `cd ${cwd}; ${home}${command}`;
+        : `$env:${invocation.home.name} = ${quoteHomePath(invocation.home.value, input.platform)}; `;
+    return `cd -LiteralPath ${cwd}; ${home}${command}`;
   }
   const home =
     invocation.home === null
       ? ""
-      : `${invocation.home.name}=${quoteShellWord(invocation.home.value, input.platform)} `;
+      : `${invocation.home.name}=${quoteHomePath(invocation.home.value, input.platform)} `;
   return `cd ${cwd} && ${home}${command}`;
 }
 

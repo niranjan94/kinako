@@ -18,6 +18,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { AuthOrchestrationOperateScope, type EnvironmentMachineKind } from "@t3tools/contracts";
+import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
@@ -34,7 +35,7 @@ import { ProviderIcon, ProviderInstanceIcon } from "../../components/ProviderIco
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
-import { readThreadCliResumeCommand } from "../../state/entities";
+import { useEnvironmentServerConfig } from "../../state/entities";
 import { useEnvironmentScope } from "../../state/session";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useThreadPr } from "../../state/use-thread-pr";
@@ -605,9 +606,16 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   } = props;
   const snoozedRow = props.snoozed === true;
   const pinnedRow = props.pinned === true;
-  const cliResumeCommand = readThreadCliResumeCommand(
-    thread,
-    thread.worktreePath ?? props.project?.workspaceRoot ?? null,
+  const serverConfig = useEnvironmentServerConfig(thread.environmentId);
+  const threadCwd = thread.worktreePath ?? props.project?.workspaceRoot ?? null;
+  const cliResumeCommand = useMemo(
+    () =>
+      resolveThreadCliResumeCommand({
+        nativeThread: thread.activeNativeThread,
+        cwd: threadCwd,
+        serverConfig,
+      }),
+    [thread.activeNativeThread, threadCwd, serverConfig],
   );
   const dormant = useSwipeRowDormant(props.activationKey);
 

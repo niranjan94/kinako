@@ -130,14 +130,9 @@ import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
-import {
-  readThreadCliResumeCommand,
-  useProjects,
-  useServerConfigs,
-  useThreadShells,
-  waitForProject,
-} from "../state/entities";
+import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
 import { useThreadSearch } from "../state/queries";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
 import {
@@ -1944,13 +1939,15 @@ function OpenCommandPaletteDialog(props: {
   const activeThreadCliResumeCommand =
     activeThread === null
       ? null
-      : readThreadCliResumeCommand(
-          activeThread,
-          activeThread.worktreePath ??
+      : resolveThreadCliResumeCommand({
+          nativeThread: activeThread.activeNativeThread,
+          cwd:
+            activeThread.worktreePath ??
             projectByKey.get(`${activeThread.environmentId}:${activeThread.projectId}`)
               ?.workspaceRoot ??
             null,
-        );
+          serverConfig: activeThreadServerConfig,
+        });
   if (activeThreadCliResumeCommand !== null) {
     const command = activeThreadCliResumeCommand;
     actionItems.push({
