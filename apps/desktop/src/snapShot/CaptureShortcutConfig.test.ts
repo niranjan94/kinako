@@ -75,7 +75,7 @@ it("notices an optional include created while the diff is open", async () => {
   const preview = await setup.preview(target(), install);
   await NodeFSP.writeFile(
     NodePath.join(directory, "later.kdl"),
-    "binds {\n Ctrl+Shift+2 { quit; }\n}\n",
+    "binds {\n Ctrl+Shift+3 { quit; }\n}\n",
   );
   await expect(setup.apply(preview.id, "niri")).rejects.toThrow("changed since");
   expect(await NodeFSP.readFile(path, "utf8")).toBe(preview.before);
@@ -158,7 +158,7 @@ it("leaves already configured files unchanged, without creating a backup", async
 });
 it("detects conflicts in included Niri configs without changing either file", async () => {
   await NodeFSP.appendFile(path, 'include "keys.kdl"\n');
-  await NodeFSP.writeFile(NodePath.join(directory, "keys.kdl"), "binds { Shift+Ctrl+2 { quit; } }");
+  await NodeFSP.writeFile(NodePath.join(directory, "keys.kdl"), "binds { Shift+Ctrl+3 { quit; } }");
   await expect(setup.preview(target(), install)).rejects.toThrow("already used");
   expect((await NodeFSP.readdir(directory)).sort()).toEqual(["config.kdl", "keys.kdl"]);
 });
@@ -167,7 +167,7 @@ it("detects included config changes before applying", async () => {
   const included = NodePath.join(directory, "keys.kdl");
   await NodeFSP.writeFile(included, "binds { Ctrl+Alt+Q { quit; } }");
   const preview = await setup.preview(target(), install);
-  await NodeFSP.writeFile(included, "binds { Ctrl+Shift+2 { quit; } }");
+  await NodeFSP.writeFile(included, "binds { Ctrl+Shift+3 { quit; } }");
   await expect(setup.apply(preview.id, "niri")).rejects.toThrow("changed since");
 });
 it("rejects a conflict from another Hyprland config or dynamic Lua bind", async () => {

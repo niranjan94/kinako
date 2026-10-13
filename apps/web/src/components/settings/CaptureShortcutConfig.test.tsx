@@ -42,8 +42,8 @@ const preview: DesktopCaptureConfigPreview = {
   path: "/config/niri/config.kdl",
   resolvedPath: "/config/niri/config.kdl",
   before: "binds {\n}\n",
-  after: 'binds {\n    Ctrl+Shift+2 { spawn "gdbus"; }\n}\n',
-  shortcut: "Ctrl+Shift+2",
+  after: 'binds {\n    Ctrl+Shift+3 { spawn "gdbus"; }\n}\n',
+  shortcut: "Ctrl+Shift+3",
   operation: "install",
 };
 const complete = vi.fn<() => Promise<void>>();
@@ -118,7 +118,7 @@ it.each(["niri", "hyprland"] as const)(
   async (desktop) => {
     let tree = render(desktop);
     expect(shortcutInput(tree)["aria-label"]).toBe(
-      "Record snapshot shortcut, currently Ctrl+Shift+2",
+      "Record snapshot shortcut, currently Ctrl+Shift+3",
     );
     expect(bridge.previewSnapShotConfig).not.toHaveBeenCalled();
     expect(bridge.applySnapShotConfig).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ it.each(["niri", "hyprland"] as const)(
     await finish(bridge.previewSnapShotConfig.mock.results[0]!.value);
     tree = render(desktop);
     expect(shortcutInput(tree)["aria-label"]).toBe(
-      "Record snapshot shortcut, currently Ctrl+Shift+2",
+      "Record snapshot shortcut, currently Ctrl+Shift+3",
     );
     expect(bridge.applySnapShotConfig).not.toHaveBeenCalled();
     const diff = visitElements(tree, (element) => "fileDiff" in element.props);
@@ -156,7 +156,7 @@ it.each(["niri", "hyprland"] as const)(
       ...preview,
       id: "custom-keys",
       shortcut: "Ctrl+Alt+Y",
-      after: preview.after.replace("Ctrl+Shift+2", "Ctrl+Alt+Y"),
+      after: preview.after.replace("Ctrl+Shift+3", "Ctrl+Alt+Y"),
     };
     bridge.previewSnapShotConfig.mockResolvedValue(custom);
     button(render(desktop), "Review changes").onClick();
@@ -232,7 +232,7 @@ it("cancelling a reviewed diff does not write or finish setup", async () => {
   await finish(bridge.previewSnapShotConfig.mock.results[0]!.value);
   button(render(), "Cancel").onClick();
   expect(shortcutInput(render())["aria-label"]).toBe(
-    "Record snapshot shortcut, currently Ctrl+Shift+2",
+    "Record snapshot shortcut, currently Ctrl+Shift+3",
   );
   expect(button(render(), "Review changes")).toBeDefined();
   expect(bridge.applySnapShotConfig).not.toHaveBeenCalled();
