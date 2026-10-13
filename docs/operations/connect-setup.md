@@ -117,8 +117,8 @@ HMR, install a signed build, start `vp run dev:web`, and launch the installed ex
 actual web and server ports. For example, with the default ports:
 
 ```sh
-VITE_DEV_SERVER_URL=http://127.0.0.1:5733 \
-T3CODE_PORT=13773 \
+VITE_DEV_SERVER_URL=http://127.0.0.1:5833 \
+T3CODE_PORT=13873 \
   "/Applications/T3 Code (Alpha).app/Contents/MacOS/T3 Code (Alpha)"
 ```
 

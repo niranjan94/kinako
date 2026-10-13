@@ -39,13 +39,13 @@
   ],
   "onCreateCommand": "bash .devcontainer/on-create.sh",
   "updateContentCommand": "bash .devcontainer/update-content.sh",
-  "forwardPorts": [5733, 13773],
+  "forwardPorts": [5833, 13873],
   "portsAttributes": {
-    "5733": {
+    "5833": {
       "label": "t3 web (open via the pairing URL, not the bare origin)",
       "onAutoForward": "notify"
     },
-    "13773": {
+    "13873": {
       "label": "t3 server",
       "onAutoForward": "silent"
     }

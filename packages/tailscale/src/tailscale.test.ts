@@ -168,11 +168,11 @@ describe("tailscale", () => {
     Effect.sync(() => {
       assert.equal(
         buildTailscaleHttpsBaseUrl({ magicDnsName: "desktop.tail.ts.net" }),
-        "https://desktop.tail.ts.net/",
+        "https://desktop.tail.ts.net:8443/",
       );
       assert.equal(
-        buildTailscaleHttpsBaseUrl({ magicDnsName: "desktop.tail.ts.net", servePort: 8443 }),
-        "https://desktop.tail.ts.net:8443/",
+        buildTailscaleHttpsBaseUrl({ magicDnsName: "desktop.tail.ts.net", servePort: 443 }),
+        "https://desktop.tail.ts.net/",
       );
     }),
   );

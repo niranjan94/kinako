@@ -1,5 +1,6 @@
 import { SessionPermissions } from "./SessionPermissions";
 import { AUTH_SCOPE_OPTIONS as PAIRING_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
+import { FORK_DEFAULT_TAILSCALE_SERVE_PORT } from "@t3tools/shared/forkBrand";
 import {
   ChevronRightIcon,
   ChevronsLeftRightEllipsisIcon,
@@ -203,7 +204,7 @@ import {
   threadJumpIndexFromCommand,
 } from "../../keybindings";
 
-const DEFAULT_TAILSCALE_SERVE_PORT = 443;
+const DEFAULT_TAILSCALE_SERVE_PORT = FORK_DEFAULT_TAILSCALE_SERVE_PORT;
 const EMPTY_ADVERTISED_ENDPOINTS: ReadonlyArray<AdvertisedEndpoint> = [];
 const EMPTY_DISCOVERED_SSH_HOSTS: ReadonlyArray<DesktopDiscoveredSshHost> = [];
 

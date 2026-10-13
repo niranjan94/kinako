@@ -1,4 +1,5 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { FORK_DEFAULT_TAILSCALE_SERVE_PORT } from "@t3tools/shared/forkBrand";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -7,7 +8,7 @@ import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-export const DEFAULT_TAILSCALE_SERVE_PORT = 443;
+export const DEFAULT_TAILSCALE_SERVE_PORT = FORK_DEFAULT_TAILSCALE_SERVE_PORT;
 export const TAILSCALE_STATUS_TIMEOUT = Duration.millis(1_500);
 const TAILSCALE_SERVE_TIMEOUT = Duration.seconds(10);
 const TAILSCALE_PROBE_TIMEOUT = Duration.millis(2_500);
@@ -277,10 +278,8 @@ export function buildTailscaleHttpsBaseUrl(input: {
   readonly servePort?: number;
 }): string {
   const url = new URL(`https://${input.magicDnsName}`);
-  const servePort = input.servePort ?? DEFAULT_TAILSCALE_SERVE_PORT;
-  if (servePort !== DEFAULT_TAILSCALE_SERVE_PORT) {
-    url.port = String(servePort);
-  }
+  // URL drops the port when it is https's default 443.
+  url.port = String(input.servePort ?? DEFAULT_TAILSCALE_SERVE_PORT);
   url.pathname = "/";
   return url.toString();
 }

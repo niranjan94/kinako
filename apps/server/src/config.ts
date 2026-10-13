@@ -19,8 +19,9 @@ import * as Schema from "effect/Schema";
 import { sweepStalePendingAttachments } from "./attachmentStore.ts";
 import { DEFAULT_SIGNAL_EXPORT, type SignalExport } from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
+import { FORK_DEFAULT_PORT } from "@t3tools/shared/forkBrand";
 
-export const DEFAULT_PORT = 3773;
+export const DEFAULT_PORT = FORK_DEFAULT_PORT;
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
 export type RuntimeMode = typeof RuntimeMode.Type;

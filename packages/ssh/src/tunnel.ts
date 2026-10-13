@@ -7,7 +7,7 @@ import {
   waitForHttpReady as waitForHttpReadyShared,
 } from "@t3tools/shared/httpReadiness";
 import { cliReleaseDownloadBaseUrl } from "@t3tools/shared/cliRelease";
-import { FORK_CLI_NAME, FORK_HOME_DIR_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DEFAULT_PORT, FORK_HOME_DIR_NAME } from "@t3tools/shared/forkBrand";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as NetService from "@t3tools/shared/Net";
 import { extractJsonObject, fromLenientJson } from "@t3tools/shared/schemaJson";
@@ -47,7 +47,7 @@ import {
   SshReadinessError,
 } from "./errors.ts";
 
-const DEFAULT_REMOTE_PORT = 3773;
+const DEFAULT_REMOTE_PORT = FORK_DEFAULT_PORT;
 const REMOTE_PORT_SCAN_WINDOW = 200;
 const SSH_READY_TIMEOUT_MS = 20_000;
 const SSH_READY_PROBE_TIMEOUT_MS = 1_000;

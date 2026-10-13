@@ -6,6 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
 import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
+import { FORK_DEFAULT_TAILSCALE_SERVE_PORT } from "@t3tools/shared/forkBrand";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -57,7 +58,7 @@ export interface DesktopSettingsChange {
   readonly changed: boolean;
 }
 
-const DEFAULT_TAILSCALE_SERVE_PORT = 443;
+const DEFAULT_TAILSCALE_SERVE_PORT = FORK_DEFAULT_TAILSCALE_SERVE_PORT;
 const MIN_MAIN_WINDOW_SIZE = {
   width: 840,
   height: 620,

@@ -73,7 +73,7 @@ describe("tailscale endpoint provider", () => {
           description: "Reachable from devices on the same Tailnet.",
         },
         {
-          id: "tailscale-magicdns:https://desktop.tail.ts.net/",
+          id: "tailscale-magicdns:https://desktop.tail.ts.net:8443/",
           label: "Tailscale HTTPS",
           provider: {
             id: "tailscale",
@@ -81,8 +81,8 @@ describe("tailscale endpoint provider", () => {
             kind: "private-network",
             isAddon: true,
           },
-          httpBaseUrl: "https://desktop.tail.ts.net/",
-          wsBaseUrl: "wss://desktop.tail.ts.net/",
+          httpBaseUrl: "https://desktop.tail.ts.net:8443/",
+          wsBaseUrl: "wss://desktop.tail.ts.net:8443/",
           reachability: "private-network",
           compatibility: {
             hostedHttpsApp: "requires-configuration",
@@ -110,7 +110,7 @@ describe("tailscale endpoint provider", () => {
       assert.equal(readerCalls, 1);
       assert.deepEqual(
         endpoints.map((endpoint) => endpoint.httpBaseUrl),
-        ["https://desktop.tail.ts.net/"],
+        ["https://desktop.tail.ts.net:8443/"],
       );
     }).pipe(Effect.provide(layerUnusedTailscaleExternalServices)),
   );
@@ -128,7 +128,7 @@ describe("tailscale endpoint provider", () => {
         });
         assert.deepEqual(endpoints, [
           {
-            id: "tailscale-magicdns:https://desktop.tail.ts.net/",
+            id: "tailscale-magicdns:https://desktop.tail.ts.net:8443/",
             label: "Tailscale HTTPS",
             provider: {
               id: "tailscale",
@@ -136,8 +136,8 @@ describe("tailscale endpoint provider", () => {
               kind: "private-network",
               isAddon: true,
             },
-            httpBaseUrl: "https://desktop.tail.ts.net/",
-            wsBaseUrl: "wss://desktop.tail.ts.net/",
+            httpBaseUrl: "https://desktop.tail.ts.net:8443/",
+            wsBaseUrl: "wss://desktop.tail.ts.net:8443/",
             reachability: "private-network",
             compatibility: {
               hostedHttpsApp: "compatible",
