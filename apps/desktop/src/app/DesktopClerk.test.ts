@@ -30,14 +30,12 @@ vi.mock("@clerk/electron/storage", () => ({
 
 import * as Option from "effect/Option";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopWebLinks from "./DesktopWebLinks.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
-import * as DesktopPreReadyFileSystem from "./DesktopPreReadyFileSystem.ts";
 
 /** Clerk forwards web links; tests that are not about links ignore them. */
 const ignoreWebLinks = DesktopWebLinks.DesktopWebLinks.of({
@@ -49,9 +47,6 @@ const layerDesktopClerk = (
   isDevelopment = true,
   events: string[] = [],
   platform: NodeJS.Platform = "darwin",
-  fileSystemLayer: Layer.Layer<FileSystem.FileSystem> = FileSystem.layerNoop({
-    exists: () => Effect.succeed(false),
-  }),
   shell: ElectronShell.ElectronShell["Service"] = {
     openExternal: () => Effect.succeed(true),
     openSystemSettings: () => Effect.succeed(false),
@@ -79,7 +74,6 @@ const layerDesktopClerk = (
         Layer.succeed(DesktopEnvironment.DesktopEnvironment, environment),
         Layer.succeed(ElectronApp.ElectronApp, electronApp),
         Layer.succeed(ElectronShell.ElectronShell, shell),
-        fileSystemLayer,
       ),
     ),
   );
@@ -145,14 +139,10 @@ describe("DesktopClerk", () => {
         return { cleanup: vi.fn(), isPrimaryInstance: true };
       });
       // runSync throws if the layer ever suspends, which would let Electron emit
-      // ready before the bridge exists. main.ts provides the same FileSystem.
+      // ready before the bridge exists.
       // oxlint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- The assertion IS that the layer builds synchronously; it.effect would mask a regression to async.
       Effect.runSync(
-        Effect.scoped(
-          Layer.build(
-            layerDesktopClerk(isDevelopment, events, platform, DesktopPreReadyFileSystem.layer),
-          ),
-        ),
+        Effect.scoped(Layer.build(layerDesktopClerk(isDevelopment, events, platform))),
       );
 
       assert.deepEqual(events, [`setPath:userData:${userData}`, "createClerkBridge"]);
@@ -384,7 +374,7 @@ it.effect.each(["startup", "open-url"] as const)(
         assert.strictEqual(delivery?.flowId, request.flowId);
         assert.strictEqual(delivery?.returnUrl, request.returnUrl);
       }).pipe(
-        Effect.provide(layerDesktopClerk(true, [], "darwin", undefined, shell)),
+        Effect.provide(layerDesktopClerk(true, [], "darwin", shell)),
         Effect.provideService(HostProcess.Arguments, entry === "startup" ? ["t3", link] : ["t3"]),
         Effect.provideService(ElectronApp.ElectronApp, electronApp),
         Effect.provideService(

@@ -11,9 +11,9 @@ import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
 /**
  * Carries the renderer's localStorage (prompt stash, unsent drafts, layout,
- * theme) over from the profile this fork used while it shipped as T3 Code,
- * which also served the renderer from a different origin. That profile is only
- * read, never opened by Chromium, so this works while T3 Code is running.
+ * theme) over from the profiles in `V1_PROFILE_NAMES`. Kinako lists none: the
+ * profiles upstream T3 Code uses belong to that app, and Kinako never imports
+ * from them.
  *
  * `load` runs before the window opens; the preload takes the items once,
  * merges them into the new profile, and calls `complete`, which writes a
@@ -30,7 +30,7 @@ export class DesktopLegacyLocalStorage extends Context.Service<
 >()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
 
 const MARKER_FILE_NAME = "t3code-local-storage-imported";
-const V1_PROFILE_NAMES = ["t3code-v2"];
+const V1_PROFILE_NAMES: ReadonlyArray<string> = [];
 const V1_ORIGIN = "t3code://app";
 
 const make = Effect.gen(function* () {

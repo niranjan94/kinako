@@ -58,6 +58,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `packages/contracts/src/settings.ts`: default SnapShot shortcut (contracts do not depend on shared).
 - `.github/workflows/fork-release.yml`, `.github/workflows/release-desktop.yml`: `kinako-*` archive globs.
 - `AGENTS.md`: the Kinako paragraph under the introduction, and the live database path in rule 2 and Test data.
+- `apps/desktop/src/app/DesktopUserData.ts`, `apps/desktop/src/app/DesktopLegacyLocalStorage.ts`: no import from upstream's desktop profiles. `resolveUserDataPath` copies nothing and `V1_PROFILE_NAMES` stays empty.
 
 The icon glyph is in `assets/{prod,nightly,dev}/app-icon.icon/Assets/text.svg`, `assets/prod/logo.svg`, both `T3Wordmark.tsx` components, `apps/mobile/assets/widget/T3Mark.svg`, the Android notification drawable, and the DMG backgrounds. After changing it, run `vp run icons:export` (needs Icon Composer.app) and `vp run icons:export:android`. The dev icon's `annotations.svg` still draws dimension lines for the old T3 glyph.
 
@@ -79,7 +80,7 @@ What does not carry over:
 - **The "No project" Scratch project** is recorded at `~/.t3/scratch`. Kinako creates a new one under `~/.kinako/scratch`; archive the old entry. Screenshots in older messages also link to `~/.t3/userdata`.
 - **SnapShot setup** on Linux (GNOME extension, KDE and Hyprland helpers, Niri and Hyprland bindings) installs under new names. Run setup again from Settings, and remove the old `snap-shot@t3.codes` extension and old bindings unless upstream T3 Code uses them.
 
-Desktop client preferences (drafts, layout, theme) are copied once from the old `t3code-v2` profile on first launch. If you use Tailscale Serve, it now defaults to port 8443.
+Nothing migrates automatically: Kinako never reads `~/.t3` or upstream's desktop profiles (`t3code`, `t3code-v2`), so desktop drafts, layout, and theme start fresh. If you use Tailscale Serve, it now defaults to port 8443.
 
 ## CI
 
