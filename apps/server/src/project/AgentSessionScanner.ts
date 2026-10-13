@@ -693,8 +693,15 @@ export const make = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const projectStore = yield* ProjectStore.ProjectStoreV2;
-  const baseDir = path.resolve(serverConfig.baseDir);
-  const worktreesDir = path.resolve(serverConfig.worktreesDir);
+  // A candidate is compared by its realpath, so the T3 directories need theirs too: on macOS
+  // the temp and data directories can sit under a symlink such as `/var` to `/private/var`.
+  const withRealPath = (directory: string) =>
+    fileSystem.realPath(directory).pipe(
+      Effect.map((realPath) => Array.from(new Set([directory, realPath]))),
+      Effect.orElseSucceed(() => [directory]),
+    );
+  const baseDirs = yield* withRealPath(path.resolve(serverConfig.baseDir));
+  const worktreesDirs = yield* withRealPath(path.resolve(serverConfig.worktreesDir));
   // Windows filesystems are case-insensitive, so path prefix checks there
   // must case fold.
   const foldWorktreeCase = (yield* HostProcess.Platform) === "win32";
@@ -721,10 +728,14 @@ export const make = Effect.gen(function* () {
         normalizeForWorktreeMatch(ancestor, foldWorktreeCase),
       ),
     ) ||
-    normalizeForWorktreeMatch(candidatePath, foldWorktreeCase).startsWith(
-      normalizeForWorktreeMatch(baseDir, foldWorktreeCase),
+    baseDirs.some((baseDir) =>
+      normalizeForWorktreeMatch(candidatePath, foldWorktreeCase).startsWith(
+        normalizeForWorktreeMatch(baseDir, foldWorktreeCase),
+      ),
     ) ||
-    isT3ManagedWorktree(candidatePath, worktreesDir, foldWorktreeCase);
+    worktreesDirs.some((worktreesDir) =>
+      isT3ManagedWorktree(candidatePath, worktreesDir, foldWorktreeCase),
+    );
 
   const listDirectory = (directory: string) =>
     fileSystem.readDirectory(directory).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
