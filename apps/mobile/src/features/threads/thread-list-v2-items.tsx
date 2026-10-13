@@ -34,6 +34,7 @@ import { ProviderIcon, ProviderInstanceIcon } from "../../components/ProviderIco
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { readThreadCliResumeCommand } from "../../state/entities";
 import { useEnvironmentScope } from "../../state/session";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useThreadPr } from "../../state/use-thread-pr";
@@ -604,6 +605,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   } = props;
   const snoozedRow = props.snoozed === true;
   const pinnedRow = props.pinned === true;
+  const cliResumeCommand = readThreadCliResumeCommand(
+    thread,
+    thread.worktreePath ?? props.project?.workspaceRoot ?? null,
+  );
   const dormant = useSwipeRowDormant(props.activationKey);
 
   const { providerDrivers, providerIconUrl } = useMemo(() => {
@@ -868,6 +873,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "copy-thread-id") {
         copyTextWithHaptic(thread.id, { target: "thread-id" });
       }
+      if (nativeEvent.event === "copy-cli-resume" && cliResumeCommand !== null) {
+        copyTextWithHaptic(cliResumeCommand, { target: "CLI resume command" });
+      }
       if (nativeEvent.event === "delete") handleDelete();
       if (nativeEvent.event === "snooze:custom") {
         setCustomSnoozeOpen(true);
@@ -887,6 +895,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     [
       onNewThreadOnBranch,
       thread,
+      cliResumeCommand,
       handleArchive,
       handleDelete,
       handleRegenerateTitle,
@@ -1341,6 +1350,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                   ]
                 : []),
               { id: "copy-thread-id", title: "Copy thread ID", image: "doc.on.doc" },
+              ...(cliResumeCommand === null
+                ? []
+                : [{ id: "copy-cli-resume", title: "Copy CLI resume command", image: "terminal" }]),
               ...(snoozedRow
                 ? snoozedMenuActions
                 : !props.settlementSupported

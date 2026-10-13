@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
 import { deriveReportedModelSelection } from "@t3tools/client-runtime/state/thread-execution";
 
 import { appAtomRegistry } from "./atom-registry";
@@ -128,6 +129,18 @@ export function useEnvironmentServerConfig(
 
 export function useServerConfigs(): ReadonlyMap<EnvironmentId, ServerConfig> {
   return useAtomValue(environmentServerConfigsAtom);
+}
+
+/** Command that continues the thread in its provider's CLI on the environment's host, if supported. */
+export function readThreadCliResumeCommand(
+  thread: Pick<EnvironmentThreadShell, "environmentId" | "activeNativeThread">,
+  cwd: string | null,
+): string | null {
+  return resolveThreadCliResumeCommand({
+    nativeThread: thread.activeNativeThread,
+    cwd,
+    serverConfig: appAtomRegistry.get(environmentServerConfigsAtom).get(thread.environmentId),
+  });
 }
 
 const selectReportedModelSelection = (thread: EnvironmentThread | null) =>
