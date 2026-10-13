@@ -1,6 +1,6 @@
-# T3 Code (niranjan94's fork)
+# Kinako
 
-A personal, opinionated fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code), a GUI for driving the coding agents on your machine from web, desktop, and mobile clients.
+Kinako is a personal, opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code), a GUI for driving the coding agents on your machine from web, desktop, and mobile clients.
 
 This fork exists so I can run T3 Code the way I want it. It is kept up to date with upstream on a best-effort basis, with my own changes layered on top. It is built for my own use first; anyone else is welcome to use it, but there are no support or stability promises. For the official app, use upstream.
 
@@ -8,8 +8,9 @@ This fork exists so I can run T3 Code the way I want it. It is kept up to date w
 
 The fork sends no traffic to upstream's infrastructure. Every change so far:
 
+- **Its own identity, so it runs alongside upstream T3 Code.** The app is called Kinako, the CLI is `kinako`, data lives in `~/.kinako`, links use `kinako://`, and the desktop and mobile apps, background service, default ports (3873, Tailscale Serve on 8443), SnapShot helpers and shortcut (Ctrl+Shift+3) are all separate from upstream's. Upgrading from an earlier build of this fork needs a one-time move; see [FORK.md](./FORK.md#moving-from-t3-code-to-kinako).
 - **Telemetry is off by default.** Upstream's PostHog project key is removed. To collect events into a PostHog project you control, set `T3CODE_TELEMETRY_ENABLED=true` and `T3CODE_POSTHOG_KEY` (and `T3CODE_POSTHOG_HOST` for self-hosted PostHog). See [telemetry](./docs/user/telemetry.md).
-- **Updates and installs come from this repository.** CLI self-update, `t3 update`, SSH remote installs, mobile environment updates, and the `install.sh` / `install.ps1` scripts all resolve releases from [niranjan94/t3code](https://github.com/niranjan94/t3code/releases).
+- **Updates and installs come from this repository.** CLI self-update, `kinako update`, SSH remote installs, mobile environment updates, and the `install.sh` / `install.ps1` scripts all resolve releases from [niranjan94/t3code](https://github.com/niranjan94/t3code/releases).
 - **Model manifest is fetched from this repository** instead of upstream.
 - **Pairing links stay on your server's own origin** instead of handing the pairing token to `app.t3.codes`. Hosted pairing links come back only if `VITE_HOSTED_APP_URL` is set at build time. Remote access works over LAN, Tailscale, and SSH; T3 Connect is not built in.
 - **Desktop release-notes links point at this repository.**
@@ -43,17 +44,19 @@ On Windows, in PowerShell:
 irm https://raw.githubusercontent.com/niranjan94/t3code/main/scripts/install.ps1 | iex
 ```
 
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release of this fork, and `t3 --help` has the full reference.
+This fork publishes nightlies only, so add `T3CODE_CHANNEL=nightly` (`$env:T3CODE_CHANNEL = "nightly"` in PowerShell) before the install command.
+
+Then run `kinako` to start the server and open the local web app. `kinako service install` keeps it running in the background, `kinako update` moves to a newer release of this fork, and `kinako --help` has the full reference.
 
 ### Desktop app
 
 Download the installer for your platform from [GitHub Releases](https://github.com/niranjan94/t3code/releases). Builds are unsigned:
 
-- **macOS:** after installing, clear the quarantine flag with `xattr -dr com.apple.quarantine "/Applications/T3 Code (Alpha).app"`. Auto-update does not work for unsigned macOS apps, so download new versions by hand.
+- **macOS:** after installing, clear the quarantine flag with `xattr -dr com.apple.quarantine "/Applications/Kinako (Nightly).app"`. Auto-update does not work for unsigned macOS apps, so download new versions by hand.
 - **Windows:** SmartScreen warns on unsigned installers; choose **More info → Run anyway**.
-- **Linux:** use the `.AppImage` or install the `.deb` with `sudo apt install ./T3-Code-*.deb`.
+- **Linux:** use the `.AppImage` or install the `.deb` with `sudo apt install ./Kinako-*.deb`.
 
-The upstream package registries (Homebrew, winget, Scoop, AUR) and the hosted app at app.t3.codes ship upstream's builds, not this fork. This fork does not publish mobile builds.
+The upstream package registries (Homebrew, winget, Scoop, AUR) and the hosted app at app.t3.codes ship upstream's builds, not this fork. This fork does not publish mobile builds yet.
 
 ## Documentation
 
