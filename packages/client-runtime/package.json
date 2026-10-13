@@ -99,6 +99,10 @@
       "types": "./src/platform/index.ts",
       "default": "./src/platform/index.ts"
     },
+    "./providerCliResume": {
+      "types": "./src/providerCliResume.ts",
+      "default": "./src/providerCliResume.ts"
+    },
     "./providerSkills": {
       "types": "./src/providerSkills.ts",
       "default": "./src/providerSkills.ts"

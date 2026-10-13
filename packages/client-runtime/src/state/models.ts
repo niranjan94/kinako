@@ -10,6 +10,7 @@ import type {
   OrchestrationV2ProviderFailureClass,
   OrchestrationV2ThreadProjection,
   OrchestrationV2ThreadShell,
+  OrchestrationV2ThreadShellNativeThread,
   PlanId,
   ProjectId,
   ProviderInstanceId,
@@ -117,6 +118,8 @@ export interface EnvironmentThreadShell {
   readonly providerInstanceHistory: ReadonlyArray<ProviderInstanceId>;
   /** Native `/goal` on the active provider thread. */
   readonly goal: OrchestrationV2ProviderGoal | null;
+  /** Native conversation behind the active provider thread, when it can be resumed. */
+  readonly activeNativeThread: OrchestrationV2ThreadShellNativeThread | null;
   readonly itemCount: number;
   readonly visibleItemCount: number;
   readonly createdAt: string;
@@ -263,6 +266,7 @@ export function presentThreadShell(
     pendingBackgroundTasks: thread.pendingBackgroundTasks ?? [],
     providerInstanceHistory: thread.providerInstanceHistory ?? [],
     goal: thread.goal ?? null,
+    activeNativeThread: thread.activeNativeThread ?? null,
     itemCount: thread.itemCount,
     visibleItemCount: thread.visibleItemCount,
     createdAt: iso(thread.createdAt),
