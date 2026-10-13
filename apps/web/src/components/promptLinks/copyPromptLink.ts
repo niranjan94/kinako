@@ -26,6 +26,8 @@ export function promptLinkFor(
     readonly model: string | null;
   },
 ): string | null {
+  // Fork: without a hosted app of our own, prompt links would hand the prompt to upstream's app.t3.codes.
+  if (!import.meta.env.VITE_HOSTED_APP_URL?.trim()) return null;
   const trimmed = prompt.trim();
   if (trimmed.length === 0 || trimmed.length > PROMPT_LINK_MAX_PROMPT_LENGTH) return null;
   return buildNewThreadLink({ prompt: trimmed, ...context, origin: configuredHostedAppUrl() });

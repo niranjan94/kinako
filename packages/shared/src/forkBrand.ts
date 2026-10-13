@@ -18,6 +18,12 @@ export const FORK_CLI_NAME = "kinako";
 /** GitHub `owner/name` for releases, triage, and issues. */
 export const FORK_REPOSITORY = "niranjan94/kinako";
 
+/** Checked-in project file the app reads first and is the only one it writes; upstream's `t3.json` is still read when this one is absent. */
+export const FORK_PROJECT_FILE_NAME = "kinako.json";
+
+/** Email for commits the app makes itself; matches no real account. */
+export const FORK_GIT_EMAIL = "kinako@localhost";
+
 export const FORK_DESKTOP_APP_ID = "io.niranjan.kinako";
 export const FORK_DESKTOP_DEV_APP_ID = `${FORK_DESKTOP_APP_ID}.dev`;
 

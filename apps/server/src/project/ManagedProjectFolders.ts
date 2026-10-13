@@ -16,6 +16,7 @@ import {
   type ThreadId,
   VcsProcessSpawnError,
 } from "@t3tools/contracts";
+import { FORK_DISPLAY_NAME, FORK_REPOSITORY } from "@t3tools/shared/forkBrand";
 import { newProjectFolderName } from "@t3tools/shared/path";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -208,7 +209,7 @@ function namedProjectReadme(name: string): string {
     "",
     `# ${name}`,
     "",
-    "Created in [T3 Code](https://t3.codes).",
+    `Created in [${FORK_DISPLAY_NAME}](https://github.com/${FORK_REPOSITORY}).`,
     "",
   ].join("\n");
 }

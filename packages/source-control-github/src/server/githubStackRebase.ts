@@ -6,6 +6,7 @@ import * as Base64 from "effect/encoding/Base64";
 
 import * as GitHubApi from "./GitHubApi.ts";
 import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
+import { FORK_DISPLAY_NAME, FORK_GIT_EMAIL } from "@t3tools/shared/forkBrand";
 
 /** One open layer of a stack, bottom to top, with the head the reader reviewed. */
 export interface CascadeLayer {
@@ -83,9 +84,9 @@ export const cascadeRebaseStack = Effect.fn("cascadeRebaseStack")(function* (inp
     GIT_CONFIG_KEY_0: `http.${remote}.extraheader`,
     GIT_CONFIG_VALUE_0: authorization,
     GIT_CONFIG_KEY_1: "user.name",
-    GIT_CONFIG_VALUE_1: "T3 Code",
+    GIT_CONFIG_VALUE_1: FORK_DISPLAY_NAME,
     GIT_CONFIG_KEY_2: "user.email",
-    GIT_CONFIG_VALUE_2: "noreply@t3.codes",
+    GIT_CONFIG_VALUE_2: FORK_GIT_EMAIL,
   };
   const git = (args: ReadonlyArray<string>, allowNonZeroExit = false) =>
     process.run({
