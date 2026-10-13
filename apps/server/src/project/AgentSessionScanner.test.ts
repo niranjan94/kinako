@@ -225,6 +225,8 @@ const writeSessionListFixture = Effect.fn("AgentSessionScanner.test.writeSession
       contents: claudeTranscript(input.workspace, "claude-old", "cli", [
         { type: "ai-title", sessionId: "claude-old", aiTitle: "Old work" },
         { type: "custom-title", sessionId: "claude-old", customTitle: "Renamed work" },
+        // Continued after an import, so later records carry T3 Code's SDK entrypoint.
+        { type: "system", sessionId: "claude-old", entrypoint: "sdk-ts" },
       ]),
       mtimeMs: input.nowMs - 90 * day,
     });
@@ -295,6 +297,47 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         ).toEqual([
           ["codex", "codex-cli", "Review"],
           ["claudeAgent", "claude-old", "Renamed work"],
+        ]);
+      }),
+    );
+
+    it.effect("lists a Codex session whose first record is longer than one read", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-long-meta-claude-");
+        const codexHomePath = yield* makeTempDir("t3code-long-meta-codex-");
+        const workspace = yield* makeTempDir("t3code-long-meta-workspace-");
+        yield* writeTranscript({
+          filePath: path.join(
+            codexHomePath,
+            "sessions",
+            "2026",
+            "08",
+            "24",
+            "rollout-2026-08-24T10-00-00-codex-long.jsonl",
+          ),
+          contents: [
+            {
+              type: "session_meta",
+              payload: { id: "codex-long", cwd: workspace, base_instructions: "x".repeat(200_000) },
+            },
+            { type: "event_msg", payload: { type: "user_message", message: "Long setup" } },
+          ]
+            .map((record) => encodeTranscriptRecord(record))
+            .join("\n"),
+          mtimeMs: nowMs - 60 * 1000,
+        });
+
+        const sessions = yield* runListSessions({
+          claudeHomePath,
+          codexHomePath,
+          workspaceRoot: workspace,
+        });
+
+        expect(sessions.map((session) => [session.providerSessionId, session.title])).toEqual([
+          ["codex-long", "Long setup"],
         ]);
       }),
     );

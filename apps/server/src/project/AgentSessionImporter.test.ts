@@ -270,5 +270,16 @@ it.effect("imports one listed session and imports it again after its thread is d
       importer.importSession({ ...input, providerSessionId: "missing" }),
     );
     expect(missing._tag).toBe("AgentSessionNotFoundError");
+
+    // A live import in another project is not offered here, and importing explains why.
+    threads.set(reimportedThreadId, {
+      id: reimportedThreadId,
+      projectId: ProjectId.make("other-project"),
+      deletedAt: null,
+    });
+    expect(yield* listedThreadId()).toBeNull();
+    const conflict = yield* Effect.flip(importer.importSession(input));
+    expect(conflict._tag).toBe("AgentSessionImportFailedError");
+    expect(conflict.message).toContain("already imported into another project");
   }).pipe(Effect.provide(layerTest));
 });

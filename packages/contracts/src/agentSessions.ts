@@ -156,7 +156,9 @@ export class AgentSessionImportFailedError extends Schema.TaggedError<AgentSessi
   { providerSessionId: TrimmedNonEmptyString, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `Could not import session '${this.providerSessionId}'.`;
+    const reason =
+      this.cause instanceof Error && this.cause.message.length > 0 ? ` ${this.cause.message}` : "";
+    return `Could not import session '${this.providerSessionId}'.${reason}`;
   }
 }
 

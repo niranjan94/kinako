@@ -591,7 +591,10 @@ function isProgrammaticSession(
   records: ReadonlyArray<DecodedTranscriptRecord>,
 ): boolean {
   if (source === "claudeAgent") {
-    return records.some((record) => record.entrypoint?.startsWith("sdk-") === true);
+    // Only the session's first process decides its origin. Turns T3 Code adds to an imported
+    // session are written with an SDK entrypoint too.
+    const entrypoint = records.find((record) => record.entrypoint !== undefined)?.entrypoint;
+    return entrypoint?.startsWith("sdk-") === true;
   }
   const meta = records.find((record) => record.type === "session_meta")?.payload;
   return (
@@ -1560,35 +1563,54 @@ export const make = Effect.gen(function* () {
   ) {
     const stats = yield* statOption(filePath);
     if (Option.isNone(stats) || stats.value.type !== "File") return [];
-    const size = BigInt(stats.value.size);
-    const readBytes = BigInt(SUMMARY_READ_BYTES);
-    const readFrom = (file: FileSystem.File, offset: bigint) =>
+    const size = Number(stats.value.size);
+    const readFrom = (file: FileSystem.File, offset: number, length: number) =>
       Effect.gen(function* () {
-        yield* file.seek(offset, "start");
+        yield* file.seek(BigInt(offset), "start");
         const chunks: Array<Uint8Array> = [];
-        let remaining = Number(size - offset < readBytes ? size - offset : readBytes);
+        let remaining = length;
         while (remaining > 0) {
           const next = yield* file.readAlloc(remaining);
           if (Option.isNone(next) || next.value.byteLength === 0) break;
           chunks.push(next.value);
           remaining -= next.value.byteLength;
         }
-        return new TextDecoder().decode(Buffer.concat(chunks));
+        return Buffer.concat(chunks);
       });
     return yield* Effect.scoped(
       fileSystem.open(filePath, { flag: "r" }).pipe(
         Effect.flatMap((file) =>
           Effect.gen(function* () {
-            const head = splitTranscriptRecords(yield* readFrom(file, 0n), MAX_IMPORT_RECORDS);
+            const headLimit = Math.min(size, MAX_TRANSCRIPT_SCAN_BYTES);
+            let head = yield* readFrom(file, 0, Math.min(SUMMARY_READ_BYTES, headLimit));
+            // Codex opens a rollout with session metadata, which holds the session id and can
+            // outgrow one read, so the first record is always read whole.
+            while (!head.includes(10) && head.byteLength < headLimit) {
+              const more = yield* readFrom(
+                file,
+                head.byteLength,
+                Math.min(SUMMARY_READ_BYTES, headLimit - head.byteLength),
+              );
+              if (more.byteLength === 0) break;
+              head = Buffer.concat([head, more]);
+            }
+            const decoder = new TextDecoder();
             // A record cut at either boundary is not valid JSON and decodes to nothing.
             const tail =
-              size > readBytes
+              size > head.byteLength
                 ? splitTranscriptRecords(
-                    yield* readFrom(file, size - readBytes),
+                    decoder.decode(
+                      yield* readFrom(
+                        file,
+                        Math.max(0, size - SUMMARY_READ_BYTES),
+                        Math.min(SUMMARY_READ_BYTES, size),
+                      ),
+                    ),
                     MAX_IMPORT_RECORDS,
                   )
                 : [];
-            return [...head, ...tail].flatMap((line) =>
+            const headRecords = splitTranscriptRecords(decoder.decode(head), MAX_IMPORT_RECORDS);
+            return [...headRecords, ...tail].flatMap((line) =>
               Option.toArray(decodeTranscriptRecord(line)),
             );
           }),
@@ -1647,18 +1669,31 @@ export const make = Effect.gen(function* () {
   const readSession: AgentSessionScanner["Service"]["readSession"] = Effect.fn(
     "AgentSessionScanner.readSession",
   )(function* (input) {
-    const { candidates } = yield* collectCandidates();
-    cachedCandidates = candidates;
-    const project = yield* projectTranscripts(input.workspaceRoot, candidates);
-    if (project === null) return Option.none();
-    // Claude names a transcript after its session; Codex ends a rollout's name with it.
-    const matches = project.transcripts.filter(({ candidate, transcript }) => {
-      if (candidate.providerInstanceId !== input.providerInstanceId) return false;
-      const name = path.basename(transcript.filePath, ".jsonl");
-      return candidate.source === "claudeAgent"
-        ? name === input.providerSessionId
-        : name.endsWith(`-${input.providerSessionId}`);
+    const findMatches = Effect.fn("AgentSessionScanner.readSession.findMatches")(function* (
+      candidates: ReadonlyArray<RawCandidate>,
+    ) {
+      const project = yield* projectTranscripts(input.workspaceRoot, candidates);
+      if (project === null) return null;
+      // Claude names a transcript after its session; Codex ends a rollout's name with it.
+      const matches = project.transcripts.filter(({ candidate, transcript }) => {
+        if (candidate.providerInstanceId !== input.providerInstanceId) return false;
+        const name = path.basename(transcript.filePath, ".jsonl");
+        return candidate.source === "claudeAgent"
+          ? name === input.providerSessionId
+          : name.endsWith(`-${input.providerSessionId}`);
+      });
+      return { project, matches };
     });
+    // The listing that offered this session just refreshed the cache, so a full discovery is
+    // only needed when the session is newer than it.
+    let found = cachedCandidates === null ? null : yield* findMatches(cachedCandidates);
+    if (found === null || found.matches.length === 0) {
+      const { candidates } = yield* collectCandidates();
+      cachedCandidates = candidates;
+      found = yield* findMatches(candidates);
+    }
+    if (found === null) return Option.none();
+    const { project, matches } = found;
     for (const { candidate, transcript } of matches) {
       const stats = yield* statOption(transcript.filePath);
       if (Option.isNone(stats) || stats.value.type !== "File") continue;
@@ -1684,7 +1719,7 @@ export const make = Effect.gen(function* () {
           source: candidate.source,
           providerInstanceId: candidate.providerInstanceId,
           fallbackSessionId: path.basename(transcript.filePath, ".jsonl"),
-          lastActiveAtMs: transcript.mtimeMs,
+          lastActiveAtMs: identity.mtimeMs ?? transcript.mtimeMs,
         },
         snapshot.records,
       );

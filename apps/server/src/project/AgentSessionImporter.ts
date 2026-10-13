@@ -77,7 +77,7 @@ class AgentSessionThreadProjectConflictError extends Schema.TaggedError<AgentSes
   },
 ) {
   override get message(): string {
-    return `Imported thread '${this.threadId}' belongs to project '${this.actualProjectId}', not '${this.expectedProjectId}'.`;
+    return `This session was already imported into another project as thread '${this.threadId}'.`;
   }
 }
 
@@ -379,12 +379,19 @@ const make = Effect.gen(function* () {
   /** The generation an import of this session uses, and its live thread if there is one. */
   const resolveImportGeneration = Effect.fn("resolveAgentSessionImportGeneration")(function* (
     session: Parameters<typeof importedThreadId>[0],
+    projectId: ProjectId,
   ) {
     for (let generation = 0; generation < MAX_IMPORT_GENERATIONS; generation++) {
       const threadId = importedThreadId(session, generation);
       const existing = yield* Effect.option(orchestrator.getThreadRecords(threadId, []));
       if (Option.isNone(existing)) return { generation, liveThreadId: null };
-      if (existing.value.thread.deletedAt === null) return { generation, liveThreadId: threadId };
+      if (existing.value.thread.deletedAt === null) {
+        // Another project's thread is not this project's to open; importing reports the conflict.
+        return {
+          generation,
+          liveThreadId: existing.value.thread.projectId === projectId ? threadId : null,
+        };
+      }
     }
     return { generation: MAX_IMPORT_GENERATIONS, liveThreadId: null };
   });
@@ -395,7 +402,7 @@ const make = Effect.gen(function* () {
     const sessions = yield* Effect.forEach(
       summaries,
       (summary) =>
-        resolveImportGeneration(summary).pipe(
+        resolveImportGeneration(summary, input.projectId).pipe(
           Effect.map(({ liveThreadId }): AgentSessionListItem => ({
             provider: summary.source,
             providerInstanceId: summary.providerInstanceId,
@@ -414,6 +421,10 @@ const make = Effect.gen(function* () {
     input: AgentSessionImportSessionInput,
   ) {
     const project = yield* readProject(input.projectId);
+    const { generation, liveThreadId } = yield* resolveImportGeneration(input, input.projectId);
+    if (liveThreadId !== null) {
+      return { threadId: liveThreadId, imported: false } satisfies AgentSessionImportSessionResult;
+    }
     const session = yield* scanner.readSession({
       workspaceRoot: project.workspaceRoot,
       providerInstanceId: input.providerInstanceId,
@@ -424,10 +435,6 @@ const make = Effect.gen(function* () {
         providerInstanceId: input.providerInstanceId,
         providerSessionId: input.providerSessionId,
       });
-    }
-    const { generation, liveThreadId } = yield* resolveImportGeneration(input);
-    if (liveThreadId !== null) {
-      return { threadId: liveThreadId, imported: false } satisfies AgentSessionImportSessionResult;
     }
     return yield* importThread({
       projectId: input.projectId,

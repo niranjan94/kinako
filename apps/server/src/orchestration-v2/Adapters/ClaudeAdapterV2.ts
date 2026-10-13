@@ -3362,13 +3362,15 @@ const claudeSessionTranscriptExists = Effect.fn("ClaudeAdapterV2.sessionTranscri
     const projectDirs = yield* input.fileSystem
       .readDirectory(projectsDir)
       .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
-    for (const projectDir of projectDirs) {
-      const exists = yield* input.fileSystem
-        .exists(input.path.join(projectsDir, projectDir, `${input.nativeThreadId}.jsonl`))
-        .pipe(Effect.orElseSucceed(() => false));
-      if (exists) return true;
-    }
-    return false;
+    const found = yield* Effect.forEach(
+      projectDirs,
+      (projectDir) =>
+        input.fileSystem
+          .exists(input.path.join(projectsDir, projectDir, `${input.nativeThreadId}.jsonl`))
+          .pipe(Effect.orElseSucceed(() => false)),
+      { concurrency: 32 },
+    );
+    return found.includes(true);
   },
 );
 
