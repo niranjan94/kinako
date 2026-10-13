@@ -15,6 +15,9 @@ export const FORK_HOME_DIR_NAME = ".kinako";
 /** CLI command, release archive prefix, and single-executable name. */
 export const FORK_CLI_NAME = "kinako";
 
+/** GitHub `owner/name` for releases, triage, and issues. */
+export const FORK_REPOSITORY = "niranjan94/kinako";
+
 export const FORK_DESKTOP_APP_ID = "io.niranjan.kinako";
 export const FORK_DESKTOP_DEV_APP_ID = `${FORK_DESKTOP_APP_ID}.dev`;
 

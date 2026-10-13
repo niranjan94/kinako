@@ -27,7 +27,7 @@ seam_files="$(
     git grep -l -e '@t3tools/shared/forkBrand' -e '\./forkBrand\.ts' -e 'forkBrand\.ts"' "$fork" -- . \
       | sed "s|^$fork:||"
     printf '%s\n' \
-      scripts/install.sh scripts/install.ps1 \
+      scripts/install.sh scripts/install.ps1 .github/triage/PLAYBOOK.md \
       apps/desktop/scripts/electron-launcher.mjs apps/desktop/src/compileCache.ts \
       apps/desktop/package.json apps/desktop/resources/linux/io.niranjan.kinako.metainfo.xml \
       apps/desktop/gnome-extension/metadata.json apps/desktop/gnome-extension/bundle.json \

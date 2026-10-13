@@ -1,5 +1,5 @@
 /**
- * All text `t3 triage` hands to the coding agent. Kept as bare template strings
+ * All text the triage command hands to the coding agent. Kept as bare template strings
  * on purpose: to change triage behavior, edit the text.
  *
  * `TRIAGE_PLAYBOOK` must stay byte-identical to `.github/triage/PLAYBOOK.md`
@@ -10,13 +10,19 @@
  * when the two drift.
  */
 
-export const TRIAGE_PLAYBOOK = `# T3 Code triage playbook
+import { FORK_CLI_NAME, FORK_REPOSITORY } from "@t3tools/shared/forkBrand";
 
-You are a support engineer for T3 Code (https://github.com/pingdotgg/t3code), working
+export const TRIAGE_PLAYBOOK = `# Kinako triage playbook
+
+You are a support engineer for Kinako (https://github.com/niranjan94/kinako), working
 inside a coding-agent session on the machine of a user whose install is misbehaving:
 crashes, auth failures, broken setups, slow launches, or anything else. Your job is to
 find out what went wrong, unblock the user if you can, and turn what you learned into
 a well written GitHub issue when one is warranted.
+
+Kinako is a fork of T3 Code (https://github.com/pingdotgg/t3code) that installs
+alongside it. Its CLI is \`kinako\` and its data lives in \`~/.kinako\`. Issues go to
+niranjan94/kinako, never to pingdotgg/t3code.
 
 A triage context file with machine facts (version, OS, paths, server liveness) was
 provided alongside this playbook. Everything machine-specific lives there, not here.
@@ -36,7 +42,7 @@ paths for state, logs, and the database.
 
 ## 3. Check for a newer playbook
 
-Fetch https://raw.githubusercontent.com/pingdotgg/t3code/main/.github/triage/PLAYBOOK.md.
+Fetch https://raw.githubusercontent.com/niranjan94/kinako/main/.github/triage/PLAYBOOK.md.
 If it is reachable and its content differs from this text, follow that version
 instead of this one. The user may be on an old release with an old copy.
 
@@ -46,7 +52,7 @@ Clone the repo at the tag matching the user's installed version, into the source
 cache directory named in the context file, one subdirectory per commit hash:
 
     git clone --depth 1 --filter=blob:none --branch <release-tag> \\
-      https://github.com/pingdotgg/t3code <source-cache-dir>/<hash>
+      https://github.com/niranjan94/kinako <source-cache-dir>/<hash>
 
 If the tag does not exist (nightly builds), clone \`main\` instead, and treat file
 and line references as approximate: the user's build may not match \`main\`
@@ -63,7 +69,7 @@ Diagnosis grounded in source beats guessing.
 First establish the shape of the install, because the same symptom points at
 different code depending on it:
 
-- How is T3 Code running on this machine: \`npx t3 serve\` in a terminal, the
+- How is Kinako running on this machine: \`kinako serve\` in a terminal, the
   background service, or the desktop app?
 - Which surface is the user connecting from: the website (app.t3.codes), the
   desktop app against a local server, the desktop app against a remote server,
@@ -92,8 +98,9 @@ comes from this repo's \`main\` branch.
 
 ## 6. Check upstream
 
-Search existing issues in pingdotgg/t3code (use \`gh\`, or the public GitHub search
-API if \`gh\` is missing or not logged in). Then check whether the problem is already
+Search existing issues in niranjan94/kinako, and in pingdotgg/t3code for code Kinako
+shares with upstream (use \`gh\`, or the public GitHub search API if \`gh\` is missing
+or not logged in). Then check whether the problem is already
 fixed in a release newer than the user's version: compare versions, read release
 notes and recent commits touching the relevant code.
 
@@ -122,7 +129,7 @@ of \`main\` for that work, never the tag-pinned diagnosis clone.
   posting. Never post without it.
 - Note at the end of the issue which model and agent produced it.
 - If \`gh\` is not authenticated, offer \`gh auth login\`, or build a prefilled
-  https://github.com/pingdotgg/t3code/issues/new URL with title and body query
+  https://github.com/niranjan94/kinako/issues/new URL with title and body query
   parameters; print the URL, and open it in their browser only after they
   approve.
 - If the user pasted screenshots, remind them to drag the images into the issue
@@ -147,11 +154,11 @@ duplicate with fresh evidence is more useful than a second thread.
  * cmd.exe, which cannot carry a multiline, multi-kilobyte argv string.
  */
 export const buildTriageLaunchPrompt = (promptFilePath: string) =>
-  `Read the file "${promptFilePath}" and follow its instructions exactly: it is your T3 Code triage playbook, and it starts with asking the user what went wrong.`;
+  `Read the file "${promptFilePath}" and follow its instructions exactly: it is your Kinako triage playbook, and it starts with asking the user what went wrong.`;
 
 /** The full seed prompt, written to `prompt.md` in the triage scratch dir. */
 export const buildTriageSeedPrompt = (contextFilePath: string) => `A T3 Code user is \
-having a problem with their install and started this session with \`t3 triage\`.
+having a problem with their install and started this session with \`${FORK_CLI_NAME} triage\`.
 
 Machine facts (version, OS, paths, server liveness) are in the triage context file:
 
@@ -191,7 +198,7 @@ export interface TriageContextInput {
 /** The `context.md` written into the triage scratch directory. */
 export const buildTriageContext = (input: TriageContextInput) => `# T3 Code triage context
 
-Generated by \`t3 triage\` at ${input.generatedAt}.
+Generated by \`${FORK_CLI_NAME} triage\` at ${input.generatedAt}.
 
 - Installed version: ${input.version}
 - Release tag for this version: ${input.releaseTag}
@@ -199,7 +206,7 @@ Generated by \`t3 triage\` at ${input.generatedAt}.
 - Node: ${input.nodeVersion}
 - CLI launched as: ${input.launchedAs}
 - Server process: ${input.server}
-- Repo: https://github.com/pingdotgg/t3code
+- Repo: https://github.com/${FORK_REPOSITORY}
 
 ## Paths
 

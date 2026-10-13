@@ -5,9 +5,9 @@
  * platform key, so a rename here is a release-breaking change.
  */
 
-import { FORK_CLI_NAME } from "./forkBrand.ts";
+import { FORK_CLI_NAME, FORK_REPOSITORY } from "./forkBrand.ts";
 
-const CLI_RELEASE_REPOSITORY = "niranjan94/kinako";
+const CLI_RELEASE_REPOSITORY = FORK_REPOSITORY;
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 /** Overrides the download origin for mirrors and air-gapped installs. */
 export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";
