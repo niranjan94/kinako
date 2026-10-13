@@ -29,6 +29,7 @@ import type {
   OrchestrationV2ThreadShellSnapshot,
   OrchestrationV2ShellThreadStatus,
   OrchestrationV2ThreadShell,
+  OrchestrationV2ThreadShellNativeThread,
   OrchestrationV2ThreadProjection,
   OrchestrationV2TurnItem,
   ProjectId,
@@ -1525,6 +1526,10 @@ export function threadShellFromProjection(
       projection.providerThreads,
       projection.thread.activeProviderThreadId,
     ),
+    activeNativeThread: activeNativeThreadForShell(
+      projection.providerThreads,
+      projection.thread.activeProviderThreadId,
+    ),
     itemCount: activeLocalTurnItems(projection).length,
     visibleItemCount: projection.visibleTurnItems.length,
     createdAt: projection.thread.createdAt,
@@ -1580,6 +1585,28 @@ function activeProviderGoalForShell(
   return providerThreads.find((thread) => thread.id === activeProviderThreadId)?.goal ?? null;
 }
 
+function activeNativeThreadForShell(
+  providerThreads: ReadonlyArray<OrchestrationV2ThreadProjection["providerThreads"][number]>,
+  activeProviderThreadId: OrchestrationV2ThreadProjection["thread"]["activeProviderThreadId"],
+): OrchestrationV2ThreadShellNativeThread | null {
+  const providerThread = providerThreads.find((thread) => thread.id === activeProviderThreadId);
+  const nativeThreadRef = providerThread?.nativeThreadRef;
+  if (
+    providerThread === undefined ||
+    nativeThreadRef == null ||
+    nativeThreadRef.nativeId === null ||
+    nativeThreadRef.strength !== "strong"
+  ) {
+    return null;
+  }
+  return {
+    providerInstanceId: providerThread.providerInstanceId,
+    driver: providerThread.driver,
+    nativeId: nativeThreadRef.nativeId,
+    conversationHeadId: providerThread.nativeConversationHeadRef?.nativeId ?? null,
+  };
+}
+
 function isInterruptibleRunForShell(run: OrchestrationV2ThreadProjection["runs"][number]): boolean {
   return run.status === "preparing" || run.status === "starting" || run.status === "running";
 }
@@ -1614,6 +1641,7 @@ type ShellThreadState = {
   readonly pendingBackgroundTasks: OrchestrationV2ThreadShell["pendingBackgroundTasks"];
   readonly providerInstanceHistory: OrchestrationV2ThreadShell["providerInstanceHistory"];
   readonly goal: OrchestrationV2ThreadShell["goal"];
+  readonly activeNativeThread: OrchestrationV2ThreadShellNativeThread | null;
   readonly itemCount: number;
   readonly runlessItemCount: number;
   readonly updatedAt: OrchestrationV2ThreadProjection["updatedAt"];
@@ -1780,6 +1808,7 @@ function shellFromState(input: {
     pendingBackgroundTasks: input.state.pendingBackgroundTasks,
     providerInstanceHistory: input.state.providerInstanceHistory,
     goal: input.state.goal,
+    activeNativeThread: input.state.activeNativeThread,
     itemCount: input.state.itemCount,
     visibleItemCount: input.visibleItemCount,
     createdAt: input.state.thread.createdAt,
@@ -5741,6 +5770,10 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             providerThreads: providerThreadsByThreadId.get(thread.id) ?? [],
           }),
           goal: activeProviderGoalForShell(
+            providerThreadsByThreadId.get(thread.id) ?? [],
+            thread.activeProviderThreadId,
+          ),
+          activeNativeThread: activeNativeThreadForShell(
             providerThreadsByThreadId.get(thread.id) ?? [],
             thread.activeProviderThreadId,
           ),

@@ -1924,6 +1924,17 @@ export const OrchestrationV2LatestVisibleMessageSummary = Schema.Struct({
 export type OrchestrationV2LatestVisibleMessageSummary =
   typeof OrchestrationV2LatestVisibleMessageSummary.Type;
 
+/** Native conversation behind a thread's active provider thread, enough to resume it in the provider's own CLI. */
+export const OrchestrationV2ThreadShellNativeThread = Schema.Struct({
+  providerInstanceId: ProviderInstanceId,
+  driver: ProviderDriverKind,
+  nativeId: TrimmedNonEmptyString,
+  /** Native message the conversation was rolled back to, until the next turn moves past it. */
+  conversationHeadId: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type OrchestrationV2ThreadShellNativeThread =
+  typeof OrchestrationV2ThreadShellNativeThread.Type;
+
 export const OrchestrationV2ThreadShell = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -1983,6 +1994,8 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   ),
   /** Native goal on the active provider thread; omitted by servers without goals. */
   goal: Schema.optional(Schema.NullOr(OrchestrationV2ProviderGoal)),
+  /** Null until the active provider thread has a resumable native id; omitted by older servers. */
+  activeNativeThread: Schema.optional(Schema.NullOr(OrchestrationV2ThreadShellNativeThread)),
   itemCount: NonNegativeInt,
   visibleItemCount: NonNegativeInt,
   createdAt: Schema.DateTimeUtc,

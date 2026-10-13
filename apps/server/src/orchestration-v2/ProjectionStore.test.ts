@@ -2014,6 +2014,97 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
     }),
   );
 
+  it.effect("shows the resumable native thread of the active provider thread on the shell", () =>
+    Effect.gen(function* () {
+      const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("thread:native-thread");
+      yield* projectionStore.apply({
+        id: EventId.make("event:native-thread:thread"),
+        type: "thread.created",
+        threadId,
+        occurredAt: now,
+        payload: {
+          createdBy: "user",
+          creationSource: "web",
+          id: threadId,
+          projectId: ProjectId.make("project:native-thread"),
+          title: "Native thread",
+          providerInstanceId,
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          activeProviderThreadId: null,
+          lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+          forkedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+          archivedAt: null,
+          settledOverride: null,
+          settledAt: null,
+          lastVisitedAt: null,
+          deletedAt: null,
+        },
+      });
+      const applyProviderThread = (
+        suffix: string,
+        refs: Pick<OrchestrationV2ProviderThread, "nativeThreadRef" | "nativeConversationHeadRef">,
+        seconds: number,
+      ) =>
+        projectionStore.apply({
+          id: EventId.make(`event:native-thread:${suffix}:${seconds}`),
+          type: "provider-thread.updated",
+          threadId,
+          driver,
+          occurredAt: DateTime.add(now, { seconds }),
+          payload: {
+            id: ProviderThreadId.make(`provider-thread:native-thread:${suffix}`),
+            driver,
+            providerInstanceId,
+            providerSessionId: null,
+            appThreadId: threadId,
+            ownerNodeId: null,
+            ...refs,
+            status: "idle",
+            firstRunOrdinal: null,
+            lastRunOrdinal: null,
+            handoffIds: [],
+            forkedFrom: null,
+            createdAt: now,
+            updatedAt: DateTime.add(now, { seconds }),
+          },
+        });
+      const shellNativeThread = Effect.map(
+        projectionStore.getShellSnapshot(),
+        (snapshot) => snapshot.threads.find((thread) => thread.id === threadId)?.activeNativeThread,
+      );
+
+      yield* applyProviderThread(
+        "first",
+        {
+          nativeThreadRef: { driver, nativeId: "native-1", strength: "strong" },
+          nativeConversationHeadRef: { driver, nativeId: "message-1", strength: "weak" },
+        },
+        0,
+      );
+      assert.deepEqual(yield* shellNativeThread, {
+        providerInstanceId,
+        driver,
+        nativeId: "native-1",
+        conversationHeadId: "message-1",
+      });
+      // A handoff target that has not started its native conversation yet is not resumable.
+      yield* applyProviderThread(
+        "second",
+        { nativeThreadRef: null, nativeConversationHeadRef: null },
+        1,
+      );
+      assert.isNull(yield* shellNativeThread);
+    }),
+  );
+
   it.effect("reads the shell snapshot first and decodes it in a separate step", () =>
     Effect.gen(function* () {
       const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
