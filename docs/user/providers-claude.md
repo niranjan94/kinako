@@ -57,6 +57,12 @@ history for that message. The cache lasts about an hour on a Claude
 subscription and 5 minutes with an API key, Bedrock, or Vertex. See [commands and skills](./composer.md#commands-and-skills) for using
 composer commands.
 
+## Continue a thread in Claude Code
+
+To pick up a Claude thread in a terminal, open the thread's menu in the chat header or sidebar and choose **Copy > CLI resume command**, or search the command palette for **Copy CLI resume command**. On mobile, long-press the thread. The command changes into the thread's folder and runs `claude --resume` with the thread's session, using the instance's binary and config directory.
+
+Run it on the machine T3 Code's server runs on, and not while the thread is working in T3 Code. Claude Code's `/resume` picker does not list sessions started from T3 Code, so use the copied command instead of searching for the session there. The option is unavailable after you roll a Claude thread back, until its next turn finishes.
+
 ## Usage limits
 
 If your Claude subscription runs out of usage mid-turn, the thread shows which
