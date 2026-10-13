@@ -4,6 +4,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
+  AuthTerminalOperateScope,
   type AuthEnvironmentScope,
 } from "./auth.ts";
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
@@ -47,6 +48,18 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
+
+  // Saved connections hold credentials, so editing them is a settings change.
+  [WS_METHODS.databaseSaveConnection]: AuthSettingsWriteScope,
+  [WS_METHODS.databaseDeleteConnection]: AuthSettingsWriteScope,
+  [WS_METHODS.databaseTestConnection]: AuthSettingsWriteScope,
+  // Running SQL is no more power than a terminal that can start psql, so it shares that grant.
+  [WS_METHODS.databaseListConnections]: AuthTerminalOperateScope,
+  [WS_METHODS.databaseIntrospect]: AuthTerminalOperateScope,
+  [WS_METHODS.databaseExecute]: AuthTerminalOperateScope,
+  [WS_METHODS.databaseFetchPage]: AuthTerminalOperateScope,
+  [WS_METHODS.databaseCloseQuery]: AuthTerminalOperateScope,
+  [WS_METHODS.databaseCancelQuery]: AuthTerminalOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

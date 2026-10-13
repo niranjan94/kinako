@@ -225,6 +225,7 @@ import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as PullRequestReviewGuideService from "./pullRequest/PullRequestReviewGuideService.ts";
+import * as DatabaseService from "./database/DatabaseService.ts";
 import { listLinkedPullRequestThreads } from "./pullRequest/linkedThreads.ts";
 import { pullRequestSyncKey } from "./pullRequest/pullRequestSyncKey.ts";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -1228,6 +1229,7 @@ const layerWsRpc = (
       const secretRequests = yield* SecretRequests.SecretRequests;
       const pullRequests = yield* PullRequestService.PullRequestService;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
+      const database = yield* DatabaseService.DatabaseService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
       const deviceService = yield* DeviceService.DeviceService;
       const deviceHostContext =
@@ -2700,6 +2702,15 @@ const layerWsRpc = (
           ),
         [WS_METHODS.shellOpenInEditor]: (input) => externalLauncher.launchEditor(input),
         [WS_METHODS.filesystemGetMetadata]: (input) => workspaceFileSystem.getMetadata(input),
+        [WS_METHODS.databaseListConnections]: () => database.listConnections(),
+        [WS_METHODS.databaseSaveConnection]: (input) => database.saveConnection(input),
+        [WS_METHODS.databaseDeleteConnection]: (input) => database.deleteConnection(input),
+        [WS_METHODS.databaseTestConnection]: (input) => database.testConnection(input),
+        [WS_METHODS.databaseIntrospect]: (input) => database.introspect(input),
+        [WS_METHODS.databaseExecute]: (input) => database.execute(input),
+        [WS_METHODS.databaseFetchPage]: (input) => database.fetchPage(input),
+        [WS_METHODS.databaseCloseQuery]: (input) => database.closeQuery(input),
+        [WS_METHODS.databaseCancelQuery]: (input) => database.cancelQuery(input),
         [WS_METHODS.filesystemBrowse]: (input) =>
           workspaceEntries.browse(input).pipe(
             Effect.mapError(
@@ -3153,6 +3164,7 @@ export const layer = Layer.unwrap(
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
+    const database = yield* DatabaseService.DatabaseService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3227,6 +3239,8 @@ export const layer = Layer.unwrap(
                   reviewGuides,
                 ),
               ),
+              // Open result sets outlive one socket: a reconnecting client keeps paging them.
+              Layer.provide(Layer.succeed(DatabaseService.DatabaseService, database)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(
