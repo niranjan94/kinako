@@ -66,6 +66,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  ImportIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -131,6 +132,7 @@ import { useScratchProject } from "../hooks/useScratchProject";
 import { useNewProject } from "../hooks/useNewProject";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
+import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
 import { useThreadSearch } from "../state/queries";
@@ -210,6 +212,7 @@ import { Checkbox } from "./ui/checkbox";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
+import { openImportAgentSessionDialog } from "./agentSessions/ImportAgentSessionDialog";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
@@ -1960,6 +1963,40 @@ function OpenCommandPaletteDialog(props: {
       run: async () => {
         if (!(await writeTextToClipboard(command, "CLI resume command"))) return;
         toastManager.add({ type: "success", title: "Resume command copied", description: command });
+      },
+    });
+  }
+
+  const currentProject =
+    currentProjectEnvironmentId !== null && currentProjectId !== null
+      ? projectByKey.get(`${currentProjectEnvironmentId}:${currentProjectId}`)
+      : undefined;
+  if (
+    currentProject !== undefined &&
+    !isScratchProject(currentProject, scratchWorkspaceRootFor(currentProject.environmentId)) &&
+    supportsAgentSessionImport(
+      environments.find((environment) => environment.environmentId === currentProject.environmentId)
+        ?.serverConfig,
+    )
+  ) {
+    const projectRef = scopeProjectRef(currentProject.environmentId, currentProject.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:import-agent-session",
+      searchTerms: [
+        "import",
+        "cli",
+        "session",
+        "terminal",
+        "claude",
+        "codex",
+        "resume",
+        "continue",
+      ],
+      title: "Import CLI session...",
+      icon: <ImportIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openImportAgentSessionDialog(projectRef);
       },
     });
   }

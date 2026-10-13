@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
 import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
 import type {
   EnvironmentProject,
@@ -234,6 +235,12 @@ export function readEnvironmentSupportsServerBrowser(environmentId: EnvironmentI
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
       .serverBrowser === true
+  );
+}
+
+export function readEnvironmentSupportsAgentSessionImport(environmentId: EnvironmentId): boolean {
+  return supportsAgentSessionImport(
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId),
   );
 }
 

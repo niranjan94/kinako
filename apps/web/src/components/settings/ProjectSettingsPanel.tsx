@@ -10,6 +10,7 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
 import { AsyncResult } from "effect/reactivity";
 import { type EnvironmentId, type ProjectIconOverride } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -28,6 +29,7 @@ import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environmen
 import { useThreadShells } from "../../state/entities";
 import { projectEnvironment } from "../../state/projects";
 import { ProjectFavicon } from "../ProjectFavicon";
+import { openImportAgentSessionDialog } from "../agentSessions/ImportAgentSessionDialog";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -328,6 +330,9 @@ function ProjectDetail({
   );
 
   const hasMultipleCheckouts = group.memberProjects.length > 1;
+  const sessionImportMembers = group.memberProjects.filter((member) =>
+    supportsAgentSessionImport(environmentById.get(member.environmentId)?.serverConfig),
+  );
 
   const removeMembers = useCallback(
     async (members: ReadonlyArray<SidebarProjectGroupMember>) => {
@@ -538,6 +543,34 @@ function ProjectDetail({
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
+        {sessionImportMembers.length > 0 ? (
+          <SettingsSection title="Terminal sessions">
+            <SettingsRow
+              title="Import CLI session"
+              description="Continue a Claude Code or Codex session you started in a terminal in this project's folder."
+              control={
+                <div className="flex flex-wrap items-center gap-2">
+                  {sessionImportMembers.map((member) => (
+                    <Button
+                      key={member.physicalProjectKey}
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        openImportAgentSessionDialog(
+                          scopeProjectRef(member.environmentId, member.id),
+                        )
+                      }
+                    >
+                      {hasMultipleCheckouts
+                        ? (member.environmentLabel ?? member.workspaceRoot)
+                        : "Import"}
+                    </Button>
+                  ))}
+                </div>
+              }
+            />
+          </SettingsSection>
+        ) : null}
         {hasMultipleCheckouts ? checkoutChoices : null}
         <SettingsSection title="Danger">
           <SettingsRow

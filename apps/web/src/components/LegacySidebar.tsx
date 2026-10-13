@@ -24,6 +24,7 @@ import {
 } from "./ThreadStatusIndicators";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
+import { openImportAgentSessionDialog } from "./agentSessions/ImportAgentSessionDialog";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
@@ -89,6 +90,7 @@ import { isMacPlatform } from "../lib/utils";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import {
+  readEnvironmentSupportsAgentSessionImport,
   readThreadShell,
   useProjects,
   useThreadShells,
@@ -259,6 +261,8 @@ function clampSidebarThreadPreviewCount(value: number): SidebarThreadPreviewCoun
     Math.max(MIN_SIDEBAR_THREAD_PREVIEW_COUNT, value),
   ) as SidebarThreadPreviewCount;
 }
+
+type ProjectMenuAction = "rename" | "grouping" | "copy-path" | "import-session" | "delete";
 
 function formatProjectMemberActionLabel(
   member: SidebarProjectGroupMember,
@@ -1722,7 +1726,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
         const actionHandlers = new Map<string, () => Promise<void> | void>();
         const makeLeaf = (
-          action: "rename" | "grouping" | "copy-path" | "delete",
+          action: ProjectMenuAction,
           member: SidebarProjectGroupMember,
           options?: {
             destructive?: boolean;
@@ -1741,6 +1745,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               case "copy-path":
                 copyPathToClipboard(member.workspaceRoot, { path: member.workspaceRoot });
                 return;
+              case "import-session":
+                if (isMobile) setOpenMobile(false);
+                openImportAgentSessionDialog(scopeProjectRef(member.environmentId, member.id));
+                return;
               case "delete":
                 return handleRemoveProject(member);
             }
@@ -1755,7 +1763,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         };
 
         const buildTargetedItem = (
-          action: "rename" | "grouping" | "copy-path" | "delete",
+          action: ProjectMenuAction,
           label: string,
           options?: {
             destructive?: boolean;
@@ -1803,6 +1811,16 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             }),
             buildTargetedItem("grouping", "Group into..."),
             buildTargetedItem("copy-path", "Copy Path"),
+            ...(project.memberProjects.some((member) =>
+              readEnvironmentSupportsAgentSessionImport(member.environmentId),
+            )
+              ? [
+                  buildTargetedItem("import-session", "Import CLI session", {
+                    isDisabled: (member) =>
+                      !readEnvironmentSupportsAgentSessionImport(member.environmentId),
+                  }),
+                ]
+              : []),
             { id: "project-settings", label: "Project settings", icon: "settings" },
             buildTargetedItem("delete", "Remove", {
               destructive: true,
