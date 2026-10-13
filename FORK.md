@@ -20,6 +20,8 @@ Resolving conflicts:
 - `.github/workflows/ci.yml`: take upstream's copy (`git checkout --theirs .github/workflows/ci.yml`), then rerun the runner substitution below.
 - `README.md`: keep this fork's copy (`git checkout --ours README.md`), then port anything from upstream's change that still applies, such as new providers or docs links.
 
+Agents should use the `merge-upstream` skill (`.agents/skills/merge-upstream/`), which scans upstream for changes that touch Kinako's identity before merging and lists the known resolutions.
+
 `git diff upstream/main...main` shows everything this fork changes. Merge before cutting a release so it carries upstream's latest fixes. Check the Actions tab after merging and disable any workflow upstream added.
 
 ## What this fork changes
