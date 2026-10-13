@@ -77,6 +77,7 @@ import { AddProjectNewRoute } from "./features/projects/AddProjectNewRoute";
 import { AddProjectRepositoryRoute } from "./features/projects/AddProjectRepositoryRoute";
 import { AddProjectSourceRoute } from "./features/projects/AddProjectSourceRoute";
 import { NewTaskDraftRouteScreen } from "./features/threads/NewTaskDraftRouteScreen";
+import { ImportCliSessionRouteScreen } from "./features/threads/ImportCliSessionRouteScreen";
 import {
   NewTaskBranchPickerRouteScreen,
   NewTaskEnvironmentPickerRouteScreen,
@@ -511,6 +512,13 @@ const NewTaskSheetStack = createNativeStackNavigator({
       linking: "draft/branch",
       options: {
         title: "Branch",
+      },
+    }),
+    NewTaskImportSession: createNativeStackScreen({
+      screen: ImportCliSessionRouteScreen,
+      linking: "draft/import-session",
+      options: {
+        title: "Import CLI session",
       },
     }),
     // The same file view the thread composer pushes. A draft has no thread, so it names its

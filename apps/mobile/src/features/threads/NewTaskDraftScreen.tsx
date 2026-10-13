@@ -34,6 +34,7 @@ import {
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
+import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
 
 import {
   ComposerEditor,
@@ -1515,6 +1516,19 @@ export function NewTaskDraftScreen(props: {
     void KeyboardController.dismiss({ animated: true });
     navigation.dispatch(StackActions.push("NewTask", { incomingShareId: props.incomingShareId }));
   };
+  const openImportSession = () => {
+    if (isComposerInteractionLocked) {
+      return;
+    }
+    promptInputRef.current?.blur();
+    void KeyboardController.dismiss({ animated: true });
+    navigation.dispatch(
+      StackActions.push("NewTaskImportSession", {
+        environmentId: String(selectedProject.environmentId),
+        projectId: String(selectedProject.id),
+      }),
+    );
+  };
   const openContextPicker = (routeName: "NewTaskBranch" | "NewTaskEnvironment") => {
     if (isComposerInteractionLocked) {
       return;
@@ -1593,7 +1607,19 @@ export function NewTaskDraftScreen(props: {
         </View>
       </View>
 
-      {environmentControl}
+      <View className="items-center">
+        {environmentControl}
+        {supportsAgentSessionImport(selectedEnvironmentServerConfig) ? (
+          <ComposerInlineControl
+            accessibilityHint="Lists Claude Code and Codex sessions started in this folder"
+            chevronDirection="right"
+            disabled={isComposerInteractionLocked}
+            icon="terminal"
+            label="Import CLI session"
+            onPress={openImportSession}
+          />
+        ) : null}
+      </View>
     </View>
   );
   const heroViewport = (

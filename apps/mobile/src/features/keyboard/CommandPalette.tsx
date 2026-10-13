@@ -1,4 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
+import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { THREAD_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -24,7 +25,12 @@ import { SymbolView, type AppSymbolName } from "../../components/AppSymbol";
 import { cn } from "../../lib/cn";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import { T3KeyboardCommands } from "../../native/T3KeyboardCommands";
-import { useProjects, useThreadShell, useThreadShells } from "../../state/entities";
+import {
+  useProjects,
+  useServerConfigs,
+  useThreadShell,
+  useThreadShells,
+} from "../../state/entities";
 import { useThreadSearch } from "../../state/queries";
 import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
@@ -142,6 +148,7 @@ export function CommandPalette(props: {
   const { selectThread } = useAdaptiveWorkspaceLayout();
   const runCommand = props.onCommand;
   const projects = useProjects();
+  const serverConfigs = useServerConfigs();
   const threads = useThreadShells();
   const activeThreadRef = useMemo(() => parseActiveThreadPath(props.pathname), [props.pathname]);
   const activeThread = useThreadShell(activeThreadRef);
@@ -283,6 +290,26 @@ export function CommandPalette(props: {
           }),
       });
     }
+    if (
+      activeProject &&
+      supportsAgentSessionImport(serverConfigs.get(activeProject.environmentId))
+    ) {
+      actions.push({
+        key: "importCliSession",
+        kind: "action",
+        title: "Import CLI session",
+        detail: activeProject.title,
+        searchTerms: ["claude", "codex", "terminal", "resume", "continue"],
+        run: () =>
+          navigation.navigate("NewTaskSheet", {
+            screen: "NewTaskImportSession",
+            params: {
+              environmentId: activeProject.environmentId,
+              projectId: activeProject.id,
+            },
+          }),
+      });
+    }
     if (activeThreadRef) {
       const threadActions = [
         ["files", "Go to file", ["open", "files", "browse", "search"]],
@@ -350,6 +377,7 @@ export function CommandPalette(props: {
     runCommand,
     savedConnectionsById,
     selectThread,
+    serverConfigs,
     threads,
   ]);
   const results = useMemo(
