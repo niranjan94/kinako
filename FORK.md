@@ -109,13 +109,43 @@ CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does n
 
 This fork ships nightlies only: `main` tracks upstream's `main`, not its release tags, so its builds match upstream's nightly train rather than a stable version.
 
-Actions → **Fork release** → Run workflow on `main`, usually after merging upstream and seeing CI pass. The version follows upstream's nightly scheme, `<next patch>-nightly.<UTC date>.<run number>` (for example `0.0.46-nightly.20261012.2`), and the release is published here as a prerelease named with the commit it was built from. The workflow builds unsigned macOS, Windows, and Linux installers plus CLI archives.
+Actions → **Fork release** → Run workflow on `main`, usually after merging upstream and seeing CI pass. The version follows upstream's nightly scheme, `<next patch>-nightly.<UTC date>.<run number>` (for example `0.0.46-nightly.20261013.4`), and the release is published here as a prerelease named `Kinako Nightly <version> (<commit>)`. The workflow builds macOS, Windows, and Linux installers plus CLI archives.
 
 - Install the CLI with `curl -fsSL https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh`. Without it the script installs from the stable channel, which this fork does not publish. An installed nightly CLI updates along the nightly channel on its own.
-- The desktop app installs as **Kinako (Nightly)** and follows the nightly update channel. Auto-update works on Windows and Linux. macOS refuses updates for unsigned apps, so download new versions by hand there. Remove the quarantine flag after installing: `xattr -dr com.apple.quarantine "/Applications/Kinako (Nightly).app"`.
-- Windows SmartScreen warns on unsigned installers; choose **More info → Run anyway**.
+- The desktop app installs as **Kinako (Nightly)** and follows the nightly update channel on every platform.
+- macOS builds are signed and notarized, so they open without warnings. Windows installers are unsigned: SmartScreen warns, choose **More info → Run anyway**.
 
-Adding the signing secrets that `release-desktop.yml` already reads (`CSC_LINK`, `APPLE_API_*`, `AZURE_*`, …) turns on signing without workflow changes.
+## Signing
+
+### macOS
+
+`release-desktop.yml` signs and notarizes whenever the secrets below are present. Signing uses a Developer ID Application certificate created only for CI (`5RKVW6D5F2`, team `6456AUQBLS`, G2 intermediate, expires 2031-09-17), not the maintainer's personal one, so revoking it affects nothing else. Its private key exists only in the `CSC_LINK` secret.
+
+| Name                         | Kind     | Holds                                                                                                                                      |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CSC_LINK`                   | secret   | Base64 `.p12` of the CI certificate and its key                                                                                            |
+| `CSC_KEY_PASSWORD`           | secret   | Password of that `.p12`                                                                                                                    |
+| `MACOS_PROVISIONING_PROFILE` | secret   | Base64 Developer ID profile "Kinako Developer ID" for App ID `io.niranjan.kinako` (Associated Domains enabled), tied to the CI certificate |
+| `APPLE_API_KEY`              | secret   | Contents of the App Store Connect team key "Kinako notarization" (`.p8`, Developer role)                                                   |
+| `APPLE_API_KEY_ID`           | secret   | `38ZR36XBRG`                                                                                                                               |
+| `APPLE_API_ISSUER`           | secret   | Issuer ID shown on App Store Connect → Users and Access → Integrations                                                                     |
+| `APPLE_TEAM_ID`              | variable | `6456AUQBLS`                                                                                                                               |
+| `CLERK_PASSKEY_RP_DOMAINS`   | variable | `kinako.niranjan.io`                                                                                                                       |
+
+A signed build refuses to start without a passkey domain, which upstream derives from its Clerk key. Without Clerk the fork names `kinako.niranjan.io`; hosting an `apple-app-site-association` file there is optional and only activates in-app browser passkeys for that domain.
+
+To replace the certificate (expiry, leak, or loss):
+
+1. Generate a key and CSR locally with `openssl`, leaving the email out of the subject.
+2. In Certificates, Identifiers & Profiles, create a **Developer ID Application** certificate on the **G2 Sub-CA** from the CSR, and revoke the old one.
+3. Edit the "Kinako Developer ID" profile to use the new certificate and download it.
+4. Bundle the key and certificate into a `.p12` with `openssl pkcs12 -export`, then update `CSC_LINK`, `CSC_KEY_PASSWORD`, and `MACOS_PROVISIONING_PROFILE`. Delete the local files.
+
+Apps already notarized keep working after the certificate expires; only new builds need the replacement.
+
+### Windows
+
+Unsigned. Adding the Azure Trusted Signing secrets that `release-desktop.yml` reads (`AZURE_*`) turns it on without workflow changes.
 
 ## Not covered yet
 

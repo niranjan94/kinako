@@ -30,7 +30,7 @@ The fork sends no traffic to upstream's infrastructure. Every change so far:
 - **`kinako triage` works against this repository.** The agent it starts fetches the playbook, clones the source, searches issues, and files new ones here, labelled `via-triage`.
 - **`.env.example` no longer carries upstream's production Clerk and relay values.**
 - **CI runs on GitHub-hosted runners** (Ubuntu 24.04 and macOS) instead of Blacksmith, with job timeouts doubled to match the slower machines.
-- **Own release workflow.** `fork-release.yml` builds unsigned macOS, Windows, and Linux desktop installers plus CLI archives and publishes them to this repository's GitHub Releases.
+- **Own release workflow.** `fork-release.yml` builds macOS (signed and notarized), Windows, and Linux desktop installers plus CLI archives and publishes them to this repository's GitHub Releases.
 
 Upstream links that only open when you click them (marketing and legal pages, npm upgrade hints) are left as-is. [FORK.md](./FORK.md) maps each change to the files it touches and covers merging upstream and cutting releases.
 
@@ -64,10 +64,10 @@ Then run `kinako` to start the server and open the local web app. `kinako servic
 
 ### Desktop app
 
-Download the installer for your platform from [GitHub Releases](https://github.com/niranjan94/kinako/releases). Builds are unsigned:
+Download the installer for your platform from [GitHub Releases](https://github.com/niranjan94/kinako/releases). The app updates itself along the nightly channel.
 
-- **macOS:** after installing, clear the quarantine flag with `xattr -dr com.apple.quarantine "/Applications/Kinako (Nightly).app"`. Auto-update does not work for unsigned macOS apps, so download new versions by hand.
-- **Windows:** SmartScreen warns on unsigned installers; choose **More info → Run anyway**.
+- **macOS:** signed and notarized; open the `.dmg` and drag Kinako into Applications.
+- **Windows:** installers are unsigned, so SmartScreen warns; choose **More info → Run anyway**.
 - **Linux:** use the `.AppImage` or install the `.deb` with `sudo apt install ./Kinako-*.deb`.
 
 The upstream package registries (Homebrew, winget, Scoop, AUR) and the hosted app at app.t3.codes ship upstream's builds, not this fork. This fork does not publish mobile builds yet.
