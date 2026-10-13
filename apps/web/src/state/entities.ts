@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { buildProviderCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
+import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
 import type {
   EnvironmentProject,
   EnvironmentThread,
@@ -204,15 +204,10 @@ export function readThreadCliResumeCommand(
   thread: Pick<EnvironmentThreadShell, "environmentId" | "activeNativeThread">,
   cwd: string | null,
 ): string | null {
-  const serverConfig = appAtomRegistry.get(environmentServerConfigsAtom).get(thread.environmentId);
-  if (thread.activeNativeThread === null || cwd === null || serverConfig === undefined) {
-    return null;
-  }
-  return buildProviderCliResumeCommand({
+  return resolveThreadCliResumeCommand({
     nativeThread: thread.activeNativeThread,
     cwd,
-    platform: serverConfig.environment.platform.os,
-    instance: serverConfig.settings.providerInstances[thread.activeNativeThread.providerInstanceId],
+    serverConfig: appAtomRegistry.get(environmentServerConfigsAtom).get(thread.environmentId),
   });
 }
 

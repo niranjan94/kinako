@@ -4,6 +4,7 @@ import {
   type ExecutionEnvironmentPlatformOs,
   type OrchestrationV2ThreadShellNativeThread,
   type ProviderInstanceConfig,
+  type ServerConfig,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -147,4 +148,20 @@ export function buildProviderCliResumeCommand(input: {
       ? ""
       : `${invocation.home.name}=${quoteShellWord(invocation.home.value, input.platform)} `;
   return `cd ${cwd} && ${home}${command}`;
+}
+
+/** Resume command for a thread shell on its environment's host, once both cwd and server config are known. */
+export function resolveThreadCliResumeCommand(input: {
+  readonly nativeThread: OrchestrationV2ThreadShellNativeThread | null;
+  readonly cwd: string | null;
+  readonly serverConfig: Pick<ServerConfig, "environment" | "settings"> | null | undefined;
+}): string | null {
+  const { nativeThread, cwd, serverConfig } = input;
+  if (nativeThread === null || cwd === null || serverConfig == null) return null;
+  return buildProviderCliResumeCommand({
+    nativeThread,
+    cwd,
+    platform: serverConfig.environment.platform.os,
+    instance: serverConfig.settings.providerInstances[nativeThread.providerInstanceId],
+  });
 }
