@@ -143,6 +143,24 @@ describe("tailscale", () => {
     }),
   );
 
+  it.effect("reports no MagicDNS name when the tailnet has MagicDNS off", () =>
+    Effect.gen(function* () {
+      const self = `"Self":{"DNSName":"desktop.tail.ts.net."}`;
+      assert.equal(
+        yield* parseTailscaleMagicDnsName(`{${self},"CurrentTailnet":{"MagicDNSEnabled":false}}`),
+        null,
+      );
+      assert.equal(
+        yield* parseTailscaleMagicDnsName(`{${self},"CurrentTailnet":{"MagicDNSEnabled":true}}`),
+        "desktop.tail.ts.net",
+      );
+      assert.equal(
+        yield* parseTailscaleMagicDnsName(`{${self},"CurrentTailnet":null}`),
+        "desktop.tail.ts.net",
+      );
+    }),
+  );
+
   it.effect("parses status facts", () =>
     Effect.gen(function* () {
       const status = yield* parseTailscaleStatus(tailscaleStatusJson);

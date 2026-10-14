@@ -16,27 +16,34 @@ const TAILSCALE_STATUS_JSON = JSON.stringify({
   Self: { DNSName: "bb-1.tail1234.ts.net.", TailscaleIPs: ["100.64.1.2"] },
 });
 
-/** Spawner whose `tailscale status --json` exits with the given output. */
-const layerSpawner = (input: { readonly exitCode: number; readonly stdout: string }) =>
+/**
+ * Spawner whose `tailscale status --json` exits with the given output, and whose macOS
+ * `scutil --get LocalHostName` prints `localHostName`.
+ */
+const layerSpawner = (
+  input: { readonly exitCode: number; readonly stdout: string },
+  localHostName = "",
+) =>
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
-    ChildProcessSpawner.make(() =>
-      Effect.succeed(
+    ChildProcessSpawner.make((command) => {
+      const isScutil = command._tag === "StandardCommand" && command.command === "/usr/sbin/scutil";
+      return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
-          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(input.exitCode)),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(isScutil ? 0 : input.exitCode)),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           unref: Effect.succeed(Effect.void),
           stdin: Sink.drain,
-          stdout: Stream.make(encoder.encode(input.stdout)),
+          stdout: Stream.make(encoder.encode(isScutil ? localHostName : input.stdout)),
           stderr: Stream.empty,
           all: Stream.empty,
           getInputFd: () => Sink.drain,
           getOutputFd: () => Stream.empty,
         }),
-      ),
-    ),
+      );
+    }),
   );
 
 const layerNet = (input: { readonly ipv4: boolean; readonly ipv6: boolean }) =>
@@ -52,12 +59,17 @@ const resolveTargets = (input: {
   readonly sshd: { readonly ipv4: boolean; readonly ipv6: boolean };
   readonly tailscale: { readonly exitCode: number; readonly stdout: string };
   readonly hostname: string;
+  readonly platform?: NodeJS.Platform;
+  readonly localHostName?: string;
 }) =>
   Effect.flatMap(RemoteOpenTargets.RemoteOpenTargets, (service) => service.resolveTargets()).pipe(
     Effect.provideService(HostProcess.Hostname, input.hostname),
+    Effect.provideService(HostProcess.Platform, input.platform ?? "linux"),
     Effect.provide(
       RemoteOpenTargets.layer.pipe(
-        Layer.provide(Layer.mergeAll(layerNet(input.sshd), layerSpawner(input.tailscale))),
+        Layer.provide(
+          Layer.mergeAll(layerNet(input.sshd), layerSpawner(input.tailscale, input.localHostName)),
+        ),
       ),
     ),
   );
@@ -110,6 +122,19 @@ describe("RemoteOpenTargets", () => {
         hostname: "bb-1",
       });
       expect(targets).toEqual([{ kind: "mdns", host: "bb-1.local" }]);
+    }),
+  );
+
+  it.effect("uses the Bonjour LocalHostName on macOS for mDNS", () =>
+    Effect.gen(function* () {
+      const targets = yield* resolveTargets({
+        sshd: { ipv4: true, ipv6: true },
+        tailscale: TAILSCALE_DOWN,
+        hostname: "tardis",
+        platform: "darwin",
+        localHostName: "tardis-2\n",
+      });
+      expect(targets).toEqual([{ kind: "mdns", host: "tardis-2.local" }]);
     }),
   );
 

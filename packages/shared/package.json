@@ -327,6 +327,10 @@
       "types": "./src/HostProcess.ts",
       "import": "./src/HostProcess.ts"
     },
+    "./mdnsHostName": {
+      "types": "./src/mdnsHostName.ts",
+      "import": "./src/mdnsHostName.ts"
+    },
     "./testing/longTempDir": {
       "types": "./src/testing/longTempDir.ts",
       "import": "./src/testing/longTempDir.ts"

@@ -27,6 +27,7 @@ import * as DesktopNetworkInterfaces from "./DesktopNetworkInterfaces.ts";
 import { resolveTailscaleAdvertisedEndpoints } from "./tailscaleEndpointProvider.ts";
 
 const TAILSCALE_STATUS_CACHE_TTL = Duration.seconds(60);
+const MDNS_HOST_NAME_CACHE_TTL = Duration.seconds(60);
 
 const DESKTOP_LOOPBACK_HOST = "127.0.0.1";
 const DESKTOP_LAN_BIND_HOST = "0.0.0.0";
@@ -43,6 +44,7 @@ interface ResolvedDesktopServerExposure {
 interface DesktopAdvertisedEndpointInput {
   readonly port: number;
   readonly exposure: ResolvedDesktopServerExposure;
+  readonly mdnsHostName?: string | null;
   readonly customHttpsEndpointUrls?: readonly string[];
 }
 
@@ -180,6 +182,20 @@ const resolveDesktopCoreAdvertisedEndpoints = (
         description: "Reachable from devices on the same network.",
       }),
     );
+
+    if (input.mdnsHostName && input.mdnsHostName !== input.exposure.advertisedHost) {
+      const mdnsUrl = `http://${input.mdnsHostName}:${input.port}`;
+      endpoints.push(
+        createDesktopEndpoint({
+          id: `desktop-mdns:${mdnsUrl}`,
+          label: "Local hostname",
+          httpBaseUrl: mdnsUrl,
+          reachability: "lan",
+          status: "available",
+          description: "Bonjour name, reachable from devices on the same network.",
+        }),
+      );
+    }
   }
 
   for (const customEndpointUrl of input.customHttpsEndpointUrls ?? []) {
@@ -437,6 +453,11 @@ export const make = Effect.gen(function* () {
     TAILSCALE_STATUS_CACHE_TTL,
   );
 
+  const cachedReadMdnsHostName = yield* Effect.cachedWithTTL(
+    networkInterfaces.readMdnsHostName,
+    MDNS_HOST_NAME_CACHE_TTL,
+  );
+
   const readNetworkInterfaces = networkInterfaces.read;
 
   const getState = Ref.get(stateRef).pipe(Effect.map(toContractState));
@@ -538,9 +559,11 @@ export const make = Effect.gen(function* () {
   const getAdvertisedEndpoints = Effect.gen(function* () {
     const state = yield* Ref.get(stateRef);
     const currentNetworkInterfaces = yield* readNetworkInterfaces;
+    const exposure = toResolvedExposure(state);
     const coreEndpoints = resolveDesktopCoreAdvertisedEndpoints({
       port: state.port,
-      exposure: toResolvedExposure(state),
+      exposure,
+      mdnsHostName: exposure.endpointUrl ? yield* cachedReadMdnsHostName : null,
       customHttpsEndpointUrls: config.desktopHttpsEndpointUrls,
     });
 

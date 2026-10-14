@@ -58,6 +58,40 @@ function resolveTailscaleIpAdvertisedEndpoints(input: {
   return endpoints;
 }
 
+// MagicDNS names resolve to the same Tailscale IP, so they are reachable whenever an IP endpoint
+// is. The short machine name relies on the tailnet search domain on the connecting device.
+function resolveTailscaleMagicDnsHttpAdvertisedEndpoints(input: {
+  readonly dnsName: string | null;
+  readonly port: number;
+  readonly hasTailscaleIp: boolean;
+}): readonly AdvertisedEndpoint[] {
+  if (!input.dnsName || !input.hasTailscaleIp) {
+    return [];
+  }
+
+  const shortName = input.dnsName.split(".")[0];
+  const names = [
+    { host: input.dnsName, kind: "dns", label: "Tailscale name" },
+    ...(shortName && shortName !== input.dnsName
+      ? [{ host: shortName, kind: "dns-short", label: "Tailscale short name" }]
+      : []),
+  ];
+
+  return names.map(({ host, kind, label }) => {
+    const httpBaseUrl = `http://${host}:${input.port}`;
+    return createAdvertisedEndpoint({
+      provider: TAILSCALE_ENDPOINT_PROVIDER,
+      source: "desktop-addon",
+      id: `tailscale-${kind}:${httpBaseUrl}`,
+      label,
+      httpBaseUrl,
+      reachability: "private-network",
+      status: "available",
+      description: "MagicDNS hostname, reachable from devices on the same Tailnet.",
+    });
+  });
+}
+
 const resolveTailscaleMagicDnsAdvertisedEndpoint = Effect.fn(
   "resolveTailscaleMagicDnsAdvertisedEndpoint",
 )(function* (input: {
@@ -131,6 +165,11 @@ export const resolveTailscaleAdvertisedEndpoints = Effect.fn("resolveTailscaleAd
               Effect.orElseSucceed(() => null),
             )
           : null;
+    const magicDnsHttpEndpoints = resolveTailscaleMagicDnsHttpAdvertisedEndpoints({
+      dnsName,
+      port: input.port,
+      hasTailscaleIp: ipEndpoints.length > 0,
+    });
     const magicDnsEndpoint = yield* resolveTailscaleMagicDnsAdvertisedEndpoint({
       dnsName,
       serveEnabled: input.serveEnabled === true,
@@ -138,9 +177,6 @@ export const resolveTailscaleAdvertisedEndpoints = Effect.fn("resolveTailscaleAd
       ...(input.probe === undefined ? {} : { probe: input.probe }),
     });
 
-    return Option.match(magicDnsEndpoint, {
-      onNone: () => ipEndpoints,
-      onSome: (endpoint) => [...ipEndpoints, endpoint],
-    });
+    return [...ipEndpoints, ...magicDnsHttpEndpoints, ...Option.toArray(magicDnsEndpoint)];
   },
 );

@@ -91,6 +91,7 @@ function layerEnvironmentFor(baseDir: string, env: Record<string, string | undef
 function layer(input: {
   readonly baseDir: string;
   readonly networkInterfaces?: DesktopNetworkInterfaces.NetworkInterfaces;
+  readonly mdnsHostName?: string | null;
   readonly env?: Record<string, string | undefined>;
   readonly spawnerLayer?: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
   readonly desktopSettingsLayer?: Layer.Layer<DesktopAppSettings.DesktopAppSettings>;
@@ -99,6 +100,7 @@ function layer(input: {
   const layerEnvironment = layerEnvironmentFor(input.baseDir, env);
   const layerNetwork = Layer.succeed(DesktopNetworkInterfaces.DesktopNetworkInterfaces, {
     read: Effect.succeed(input.networkInterfaces ?? emptyNetworkInterfaces),
+    readMdnsHostName: Effect.succeed(input.mdnsHostName ?? null),
   });
 
   return DesktopServerExposure.layer.pipe(
@@ -371,6 +373,45 @@ describe("DesktopServerExposure", () => {
         );
       }),
     ),
+  );
+
+  it.effect("advertises the mDNS hostname next to the LAN address", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-server-exposure-test-",
+      });
+      return yield* Effect.gen(function* () {
+        const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        yield* serverExposure.configureFromSettings({ port: 4173 });
+
+        const localOnly = yield* serverExposure.getAdvertisedEndpoints;
+        assert.isFalse(localOnly.some((endpoint) => endpoint.label === "Local hostname"));
+
+        yield* serverExposure.setMode("network-accessible");
+        const endpoints = yield* serverExposure.getAdvertisedEndpoints;
+        assert.deepEqual(
+          endpoints.map((endpoint) => [
+            endpoint.label,
+            endpoint.reachability,
+            endpoint.httpBaseUrl,
+          ]),
+          [
+            ["This machine", "loopback", "http://127.0.0.1:4173/"],
+            ["Local network", "lan", "http://192.168.1.20:4173/"],
+            ["Local hostname", "lan", "http://tardis-2.local:4173/"],
+          ],
+        );
+      }).pipe(
+        Effect.provide(
+          layer({
+            baseDir,
+            networkInterfaces: lanNetworkInterfaces,
+            mdnsHostName: "tardis-2.local",
+          }),
+        ),
+      );
+    }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
   );
 
   it.effect("keeps Tailscale-only hosts network-accessible", () =>

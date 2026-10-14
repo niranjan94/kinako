@@ -495,8 +495,17 @@ function endpointDefaultPreferenceKey(endpoint: AdvertisedEndpoint): string {
   if (endpoint.id.startsWith("desktop-lan:")) {
     return "desktop-core:lan:http";
   }
+  if (endpoint.id.startsWith("desktop-mdns:")) {
+    return "desktop-core:mdns:http";
+  }
   if (endpoint.id.startsWith("tailscale-ip:")) {
     return "tailscale:ip:http";
+  }
+  if (endpoint.id.startsWith("tailscale-dns:")) {
+    return "tailscale:dns:http";
+  }
+  if (endpoint.id.startsWith("tailscale-dns-short:")) {
+    return "tailscale:dns-short:http";
   }
   if (isTailscaleHttpsEndpoint(endpoint)) {
     return "tailscale:magicdns:https";

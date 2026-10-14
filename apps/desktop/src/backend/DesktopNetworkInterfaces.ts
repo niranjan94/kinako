@@ -1,10 +1,12 @@
 import * as NodeOS from "node:os";
 
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { readMdnsHostName } from "@t3tools/shared/mdnsHostName";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { ChildProcessSpawner } from "effect/process";
 
 export interface DesktopNetworkInterfaceInfo {
   readonly address: string;
@@ -36,17 +38,28 @@ export class DesktopNetworkInterfaces extends Context.Service<
   DesktopNetworkInterfaces,
   {
     readonly read: Effect.Effect<NetworkInterfaces>;
+    /** The `<name>.local` hostname this machine answers to over mDNS, or null when unknown. */
+    readonly readMdnsHostName: Effect.Effect<string | null>;
   }
 >()("@t3tools/desktop/backend/DesktopNetworkInterfaces") {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const hostname = yield* HostProcess.Hostname;
+  const readHostMdnsName = readMdnsHostName.pipe(
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    Effect.provideService(HostProcess.Platform, platform),
+    Effect.provideService(HostProcess.Hostname, hostname),
+  );
+
   return DesktopNetworkInterfaces.of({
     read: Effect.try({
       try: () => NodeOS.networkInterfaces(),
       catch: (cause) => new DesktopNetworkInterfacesReadError({ platform, cause }),
     }).pipe(Effect.orDie),
+    readMdnsHostName: readHostMdnsName,
   });
 });
 

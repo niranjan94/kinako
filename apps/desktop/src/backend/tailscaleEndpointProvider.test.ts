@@ -73,6 +73,46 @@ describe("tailscale endpoint provider", () => {
           description: "Reachable from devices on the same Tailnet.",
         },
         {
+          id: "tailscale-dns:http://desktop.tail.ts.net:3773",
+          label: "Tailscale name",
+          provider: {
+            id: "tailscale",
+            label: "Tailscale",
+            kind: "private-network",
+            isAddon: true,
+          },
+          httpBaseUrl: "http://desktop.tail.ts.net:3773/",
+          wsBaseUrl: "ws://desktop.tail.ts.net:3773/",
+          reachability: "private-network",
+          compatibility: {
+            hostedHttpsApp: "mixed-content-blocked",
+            desktopApp: "compatible",
+          },
+          source: "desktop-addon",
+          status: "available",
+          description: "MagicDNS hostname, reachable from devices on the same Tailnet.",
+        },
+        {
+          id: "tailscale-dns-short:http://desktop:3773",
+          label: "Tailscale short name",
+          provider: {
+            id: "tailscale",
+            label: "Tailscale",
+            kind: "private-network",
+            isAddon: true,
+          },
+          httpBaseUrl: "http://desktop:3773/",
+          wsBaseUrl: "ws://desktop:3773/",
+          reachability: "private-network",
+          compatibility: {
+            hostedHttpsApp: "mixed-content-blocked",
+            desktopApp: "compatible",
+          },
+          source: "desktop-addon",
+          status: "available",
+          description: "MagicDNS hostname, reachable from devices on the same Tailnet.",
+        },
+        {
           id: "tailscale-magicdns:https://desktop.tail.ts.net:8443/",
           label: "Tailscale HTTPS",
           provider: {

@@ -132,8 +132,13 @@ const TailscaleStatusSelf = Schema.Struct({
   TailscaleIPs: Schema.optional(Schema.Unknown),
 });
 
+const TailscaleStatusCurrentTailnet = Schema.Struct({
+  MagicDNSEnabled: Schema.optional(Schema.Unknown),
+});
+
 const TailscaleStatusJson = Schema.Struct({
   Self: Schema.optional(TailscaleStatusSelf),
+  CurrentTailnet: Schema.optional(Schema.NullOr(TailscaleStatusCurrentTailnet)),
 });
 
 export type TailscaleStatusJson = typeof TailscaleStatusJson.Type;
@@ -157,6 +162,10 @@ const collectStderr = collectStdout;
 const decodeTailscaleStatusJson = Schema.decodeEffect(Schema.fromJsonString(TailscaleStatusJson));
 
 function normalizeMagicDnsName(status: TailscaleStatusJson): string | null {
+  // Self.DNSName is reported even when MagicDNS is off, but then no peer can resolve it.
+  if (status.CurrentTailnet?.MagicDNSEnabled === false) {
+    return null;
+  }
   const dnsName = status.Self?.DNSName;
   if (typeof dnsName !== "string") {
     return null;

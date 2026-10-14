@@ -3,6 +3,9 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import { ChildProcessSpawner } from "effect/process";
 import { beforeEach, vi } from "vite-plus/test";
 
 const { networkInterfacesMock } = vi.hoisted(() => ({
@@ -15,14 +18,56 @@ vi.mock("node:os", () => ({
 
 import * as DesktopNetworkInterfaces from "./DesktopNetworkInterfaces.ts";
 
-const layerTest = DesktopNetworkInterfaces.layer.pipe(
-  Layer.provide(Layer.succeed(HostProcess.Platform, "linux")),
-);
+function layerSpawnerWithStdout(stdout: string) {
+  return Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make(() =>
+      Effect.succeed(
+        ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          unref: Effect.succeed(Effect.void),
+          stdin: Sink.drain,
+          stdout: Stream.make(new TextEncoder().encode(stdout)),
+          stderr: Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+        }),
+      ),
+    ),
+  );
+}
+
+const layerFor = (platform: NodeJS.Platform, spawnerStdout = "", hostname = "tardis") =>
+  DesktopNetworkInterfaces.layer.pipe(
+    Layer.provide(Layer.succeed(HostProcess.Platform, platform)),
+    Layer.provide(Layer.succeed(HostProcess.Hostname, hostname)),
+    Layer.provide(layerSpawnerWithStdout(spawnerStdout)),
+  );
+
+const layerTest = layerFor("linux");
 
 describe("DesktopNetworkInterfaces", () => {
   beforeEach(() => {
     networkInterfacesMock.mockReset();
   });
+
+  it.effect("names the mDNS host after the OS hostname off macOS", () =>
+    Effect.gen(function* () {
+      const service = yield* DesktopNetworkInterfaces.DesktopNetworkInterfaces;
+      assert.equal(yield* service.readMdnsHostName, "build-box.local");
+    }).pipe(Effect.provide(layerFor("linux", "", "Build-Box.example.com"))),
+  );
+
+  it.effect("names the mDNS host after LocalHostName on macOS", () =>
+    Effect.gen(function* () {
+      const service = yield* DesktopNetworkInterfaces.DesktopNetworkInterfaces;
+      assert.equal(yield* service.readMdnsHostName, "tardis-2.local");
+    }).pipe(Effect.provide(layerFor("darwin", "tardis-2\n"))),
+  );
 
   it.effect("reads network interfaces through the service", () => {
     const interfaces = {
