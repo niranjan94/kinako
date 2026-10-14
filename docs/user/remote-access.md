@@ -242,7 +242,11 @@ threads on an environment through its MCP server. See
 ## Manage or revoke access
 
 On the host, **Settings → Connections** lets authorized administrators create
-pairing links and revoke client sessions. Revoking an unused link prevents new
+pairing links and revoke client sessions. From another device, open **Clients**
+on a saved environment's row to do the same for that environment; your client
+needs access permissions there. Links for environments reached through T3
+Connect or SSH share a pairing code instead of a scannable address, because
+that route only works from your device. Revoking an unused link prevents new
 pairings; revoke a device's session to remove its existing access. Command-line
 management is available through `t3 auth --help`.
 

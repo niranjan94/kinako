@@ -30,6 +30,19 @@ export function useEnvironmentScope(
   return sessionHasScope(result, scope);
 }
 
+/** Scopes this client's session holds on one environment, or null until it is authenticated. */
+export function useEnvironmentSessionScopes(
+  environmentId: EnvironmentId | null,
+): ReadonlyArray<AuthEnvironmentScope> | null {
+  const result = useAtomValue(
+    environmentId === null
+      ? EMPTY_SESSION_STATE_ATOM
+      : environmentSession.sessionStateAtom(environmentId),
+  );
+  const session = Option.getOrNull(AsyncResult.value(result));
+  return session?.authenticated ? (session.permissions ?? session.scopes ?? null) : null;
+}
+
 function sessionHasScope(
   result: AsyncResult.AsyncResult<AuthSessionState, unknown>,
   scope: AuthEnvironmentScope,
