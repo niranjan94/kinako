@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { AuthAdministrativeScopes } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
@@ -252,19 +253,16 @@ describe("ssh tunnel scripts", () => {
     assert.include(devLaunch, "does not satisfy required range ");
     assert.include(devLaunch, '"$RUNNER_FILE" serve --host 127.0.0.1');
     assert.include(launch, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
-    assert.include(
-      SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE),
-      '"$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json',
+    const pairing = SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE);
+    assert.match(
+      pairing,
+      /^"\$RUNNER_FILE" auth pairing create --base-dir "\$PAIRING_BASE_DIR"( --scope \S+)+ --json$/m,
     );
-    assert.include(
-      SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE),
-      'PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"',
-    );
-    assert.notInclude(SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE), "server-home");
-    assert.include(
-      SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE),
-      "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
-    );
+    assert.include(pairing, 'PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"');
+    assert.notInclude(pairing, "server-home");
+    const pairingScopes = [...pairing.matchAll(/--scope (\S+)/g)].map((match) => match[1]);
+    assert.deepStrictEqual(pairingScopes, [...AuthAdministrativeScopes]);
+    assert.include(pairing, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
   });
 
   it.effect("accepts launch JSON after remote shell startup noise", () => {
