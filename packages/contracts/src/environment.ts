@@ -225,6 +225,9 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
       "server"`) and streams them over `/api/preview-stream`. Clients
       without a local browser runtime open server tabs here. */
   serverBrowser: Schema.optionalKey(Schema.Boolean),
+  /** This machine has a sleep-prevention helper, so the `keepAwakeMode`
+      setting takes effect and `server.subscribeKeepAwakeStatus` reports it. */
+  keepAwake: Schema.optionalKey(Schema.Boolean),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 

@@ -294,6 +294,7 @@ import {
 import {} from "./previewAutomation.ts";
 import {
   ServerConfigStreamEvent,
+  ServerKeepAwakeStatus,
   DesktopUpdateCommitInput,
   OtlpEndpointCheckInput,
   OtlpEndpointCheckResult,
@@ -491,6 +492,7 @@ export const WS_METHODS = {
   serverRemoveKeybinding: "server.removeKeybinding",
   serverRunStorageCleanup: "server.runStorageCleanup",
   serverGetStorageCleanupReport: "server.getStorageCleanupReport",
+  serverSubscribeKeepAwakeStatus: "server.subscribeKeepAwakeStatus",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverDiscoverSourceControl: "server.discoverSourceControl",
@@ -765,6 +767,12 @@ const WsServerRunStorageCleanupRpc = Rpc.make(WS_METHODS.serverRunStorageCleanup
 const WsServerGetStorageCleanupReportRpc = Rpc.make(WS_METHODS.serverGetStorageCleanupReport, {
   payload: Schema.Struct({}),
   success: Schema.NullOr(StorageCleanupReport),
+  stream: true,
+  error: EnvironmentAuthorizationError,
+});
+const WsServerSubscribeKeepAwakeStatusRpc = Rpc.make(WS_METHODS.serverSubscribeKeepAwakeStatus, {
+  payload: Schema.Struct({}),
+  success: ServerKeepAwakeStatus,
   stream: true,
   error: EnvironmentAuthorizationError,
 });
@@ -1932,6 +1940,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRemoveKeybindingRpc,
   WsServerRunStorageCleanupRpc,
   WsServerGetStorageCleanupReportRpc,
+  WsServerSubscribeKeepAwakeStatusRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerDiscoverSourceControlRpc,

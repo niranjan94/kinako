@@ -6,6 +6,8 @@ import { readEnvironmentScope, useEnvironmentsWithScope } from "../../state/sess
 import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
 import { AppText as Text } from "../../components/AppText";
 import {
+  EnvironmentId,
+  type KeepAwakeMode,
   type ResponseStreamingMode,
   type ServerSettings,
   type ServerSettingsPatch,
@@ -14,7 +16,9 @@ import {
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   type ProjectScopedServerSettingKey,
 } from "@t3tools/contracts";
-import { useRef, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { Atom } from "effect/reactivity";
+import { useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -129,6 +133,53 @@ const STREAMING_CHOICES: ReadonlyArray<{
   },
 ];
 
+const KEEP_AWAKE_CHOICES: ReadonlyArray<{
+  readonly mode: KeepAwakeMode;
+  readonly label: string;
+  readonly description: string;
+}> = [
+  { mode: "off", label: "Off", description: "Let the computer sleep as usual." },
+  {
+    mode: "agent",
+    label: "While agents work",
+    description: "Stay awake while a turn runs or waits for you.",
+  },
+  { mode: "always", label: "Always", description: "Stay awake while the server runs." },
+];
+
+function useKeepAwakeFooter(
+  environmentIds: ReadonlyArray<EnvironmentId>,
+  enabled: boolean,
+): string | undefined {
+  const environmentKey = enabled ? environmentIds.join("\n") : "";
+  const statuses = useAtomValue(
+    useMemo(
+      () =>
+        Atom.make((get) =>
+          environmentKey === ""
+            ? []
+            : environmentKey.split("\n").flatMap((environmentId) => {
+                const result = get(
+                  serverEnvironment.keepAwakeStatus({
+                    environmentId: EnvironmentId.make(environmentId),
+                    input: {},
+                  }),
+                );
+                return result._tag === "Success" ? [result.value] : [];
+              }),
+        ),
+      [environmentKey],
+    ),
+  );
+  const error = statuses.find((status) => status.error !== null)?.error;
+  if (error) return error;
+  const activeCount = statuses.filter((status) => status.active).length;
+  if (activeCount === 0) return undefined;
+  return environmentIds.length === 1
+    ? "Keeping this computer awake now."
+    : `Keeping ${activeCount} of ${environmentIds.length} computers awake now.`;
+}
+
 export function SettingsEnvironmentNewThreadsRouteScreen() {
   return <ServerSettingsDetail page="new-threads" />;
 }
@@ -236,6 +287,13 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const supportsContinuation = targets.every(
     (target) =>
       target.environment.serverConfig.environment.capabilities.threadRestartContinuation === true,
+  );
+  const supportsKeepAwake = targets.every(
+    (target) => target.environment.serverConfig.environment.capabilities.keepAwake === true,
+  );
+  const keepAwakeFooter = useKeepAwakeFooter(
+    targets.map((target) => target.environment.environmentId),
+    props.page === "maintenance" && !projectSelected && hasConnectedSelection && supportsKeepAwake,
   );
   const supportsIncludePatterns = targets.every(
     (target) =>
@@ -502,6 +560,29 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       />
                     </View>
                   </SettingsSection>
+                  {!projectSelected && hasConnectedSelection && supportsKeepAwake ? (
+                    <SettingsSection
+                      title="Keep awake"
+                      footer={keepAwakeFooter}
+                      trailing={
+                        pendingWrites === 0 && uniform("keepAwakeMode") === null ? (
+                          <MixedValuesLabel projectSelected={projectSelected} />
+                        ) : null
+                      }
+                    >
+                      {KEEP_AWAKE_CHOICES.map((choice, index) => (
+                        <SettingsChoiceRow
+                          key={choice.mode}
+                          label={choice.label}
+                          description={choice.description}
+                          selected={uniform("keepAwakeMode") === choice.mode}
+                          separated={index > 0}
+                          disabled={disabledFor("keepAwakeMode")}
+                          onPress={() => write({ keepAwakeMode: choice.mode })}
+                        />
+                      ))}
+                    </SettingsSection>
+                  ) : null}
                 </>
               ) : null}
             </>
