@@ -25,6 +25,7 @@ The fork sends no traffic to upstream's infrastructure. Every change so far:
 - **Telemetry is off by default.** Upstream's PostHog project key is removed. To collect events into a PostHog project you control, set `T3CODE_TELEMETRY_ENABLED=true` and `T3CODE_POSTHOG_KEY` (and `T3CODE_POSTHOG_HOST` for self-hosted PostHog). See [telemetry](./docs/user/telemetry.md).
 - **Updates and installs come from this repository.** CLI self-update, `kinako update`, SSH remote installs, mobile environment updates, and the `install.sh` / `install.ps1` scripts all resolve releases from [niranjan94/kinako](https://github.com/niranjan94/kinako/releases).
 - **Model manifest is fetched from this repository** instead of upstream.
+- **SSH environments update from the app.** A server the desktop app starts over SSH runs under the service launcher, so the update button downloads the new release and restarts it, with nothing to run on the host. Every route to the same host shares that server.
 - **Pairing links stay on your server's own origin** instead of handing the pairing token to `app.t3.codes`. Hosted pairing links come back only if `VITE_HOSTED_APP_URL` is set at build time. Remote access works over LAN, Tailscale, and SSH; T3 Connect is not built in.
 - **Desktop release-notes links point at this repository.**
 - **`kinako triage` works against this repository.** The agent it starts fetches the playbook, clones the source, searches issues, and files new ones here, labelled `via-triage`.
