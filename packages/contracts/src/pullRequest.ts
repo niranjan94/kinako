@@ -462,6 +462,8 @@ export const PullRequestCapabilities = Schema.Struct({
    * to change them, which is what every server before this field was.
    */
   labels: Schema.optional(Schema.Boolean),
+  /** The repository's issues can be listed, read, and commented on. Absent means they cannot. */
+  issues: Schema.optional(Schema.Boolean),
 });
 export type PullRequestCapabilities = typeof PullRequestCapabilities.Type;
 
@@ -639,6 +641,8 @@ export const PullRequestProviderSummary = Schema.Struct({
    * Absent from servers older than this field; clients then offer what they always did.
    */
   actions: Schema.optional(Schema.Array(PullRequestAction)),
+  /** The host's issues can be browsed here. Absent from servers older than this field. */
+  issues: Schema.optional(Schema.Boolean),
   projectCount: PositiveInt,
   /** False when the provider's CLI or credentials are missing, with `detail` saying which. */
   configured: Schema.Boolean,
