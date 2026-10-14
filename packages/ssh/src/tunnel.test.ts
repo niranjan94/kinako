@@ -499,6 +499,62 @@ describe("ssh tunnel scripts", () => {
     }),
   );
 
+  it.effect("restores the previous network access when the relaunch fails", () =>
+    Effect.gen(function* () {
+      const saved: Array<boolean> = [];
+      let launches = 0;
+      const spawner = ChildProcessSpawner.make((command) =>
+        Effect.gen(function* () {
+          const args = commandArgs(command);
+          if (args.includes("-N")) return makeRunningProcess(() => {});
+          if (args.includes("--")) {
+            launches += 1;
+            return makeSuccessfulProcess(
+              launches === 2
+                ? ""
+                : '{"remotePort":3773,"serverKind":"managed","networkAccess":false}\n',
+            );
+          }
+          const stdin = command._tag === "StandardCommand" ? command.options.stdin : undefined;
+          if (typeof stdin === "object" && "stream" in stdin && typeof stdin.stream !== "string") {
+            const script = yield* stdin.stream.pipe(Stream.decodeText(), Stream.mkString);
+            const preference = /if \[ "([01])" = "1" \]/.exec(script)?.[1];
+            if (preference !== undefined) saved.push(preference === "1");
+          }
+          return makeSuccessfulProcess("");
+        }),
+      );
+      const layer = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Layer.succeed(HttpClient.HttpClient, testHttpClient),
+        Layer.succeed(NetService.NetService, testNetService),
+        SshAuth.SshPasswordPrompt.disabledLayer,
+        SshTunnel.SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
+      );
+      yield* Effect.gen(function* () {
+        const manager = yield* SshTunnel.SshEnvironmentManager;
+        const target = { alias: "devbox", hostname: "devbox", username: null, port: null };
+        yield* manager.ensureEnvironment(target);
+
+        assert.deepEqual(yield* manager.setNetworkAccess(target, false), {
+          serverKind: "managed",
+          networkAccess: false,
+        });
+        assert.equal(launches, 1);
+
+        const failed = yield* Effect.result(manager.setNetworkAccess(target, true));
+        assert.isTrue(Result.isFailure(failed));
+        assert.deepEqual(saved, [false, true, false]);
+        assert.equal(launches, 3);
+        assert.deepEqual(yield* manager.getNetworkAccess(target), {
+          serverKind: "managed",
+          networkAccess: false,
+        });
+      }).pipe(Effect.provide(layer), Effect.scoped);
+    }),
+  );
+
   it.effect.each(["successful stop", "failed stop"] as const)(
     "closes the tunnel scope and starts fresh after a %s",
     (mode) => {
