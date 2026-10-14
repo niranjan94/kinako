@@ -14,12 +14,18 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
+import * as Result from "effect/Result";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import {
+  type IssueCommentInput,
+  type IssueDetail,
+  type IssueListEntry,
+  type IssueListInput,
+  type IssueListResult,
   PullRequestOperationError,
   PullRequestUnavailableError,
   pullRequestHostOf,
@@ -86,6 +92,7 @@ import * as SourceControlProviderRegistry from "../sourceControl/SourceControlPr
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import {
   type ProviderChangeRequest,
+  type ProviderIssue,
   type ProviderListCursor,
   type ProviderChangeRequestWatchFingerprint,
   type PullRequestProviderApi,
@@ -293,6 +300,12 @@ export class PullRequestService extends Context.Service<
     readonly runAction: (input: PullRequestActionInput) => Effect.Effect<void, PullRequestError>;
     readonly update: (input: PullRequestUpdateInput) => Effect.Effect<void, PullRequestError>;
     readonly comment: (input: PullRequestCommentInput) => Effect.Effect<void, PullRequestError>;
+    /** Issues of every project whose host reads them, newest update first. */
+    readonly listIssues: (
+      input: IssueListInput,
+    ) => Effect.Effect<IssueListResult, PullRequestError>;
+    readonly issueDetail: (input: PullRequestRef) => Effect.Effect<IssueDetail, PullRequestError>;
+    readonly commentOnIssue: (input: IssueCommentInput) => Effect.Effect<void, PullRequestError>;
     readonly updateComment: (
       input: PullRequestCommentUpdateInput,
     ) => Effect.Effect<void, PullRequestError>;
@@ -496,7 +509,7 @@ function listCursorAt(
   previous: ListCursor | undefined,
   boundary: string,
   /** This repository's own rows in the slice, before the ones already sent were dropped. */
-  fetched: ReadonlyArray<ProviderChangeRequest>,
+  fetched: ReadonlyArray<{ readonly updatedAt: string; readonly number: number }>,
   deliveredCount: number,
 ): string {
   const seenAt = [
@@ -693,6 +706,11 @@ function withRateLimitBackoff(
     replyToThread: interactive("replyToThread", api.replyToThread),
     setReaction: interactive("setReaction", api.setReaction),
     setThreadResolution: interactive("setThreadResolution", api.setThreadResolution),
+    ...(api.listIssues === undefined ? {} : { listIssues: wrap("listIssues", api.listIssues) }),
+    ...(api.getIssue === undefined ? {} : { getIssue: wrap("getIssue", api.getIssue) }),
+    ...(api.commentOnIssue === undefined
+      ? {}
+      : { commentOnIssue: interactive("commentOnIssue", api.commentOnIssue) }),
   };
   // Optional provider methods must be forwarded too; returning the interface alone permits omissions.
   return wrapped satisfies PullRequestProviderApi &
@@ -1293,6 +1311,7 @@ export const make = Effect.gen(function* () {
             kind: result.kind,
             searchesOnHost: capabilities?.search ?? false,
             actions: capabilities?.actions ?? [],
+            issues: capabilities?.issues === true,
             projectCount: projectCounts.get(result.host) ?? 1,
             configured: result.viewer !== null,
             detail: result.error === null ? null : providerDetail(result.error),
@@ -1303,6 +1322,7 @@ export const make = Effect.gen(function* () {
           kind,
           searchesOnHost: false,
           actions: [],
+          issues: false,
           projectCount,
           configured: false,
           detail: "This host cannot be browsed here yet.",
@@ -3521,6 +3541,275 @@ export const make = Effect.gen(function* () {
     }
   });
 
+  const readsIssues = (project: SupportedProject) =>
+    project.api.capabilities.issues === true && project.api.listIssues !== undefined;
+
+  const toIssueEntry = (
+    project: SupportedProject,
+    item: ProviderIssue,
+    observedAt: number,
+  ): IssueListEntry => ({
+    provider: project.api.kind,
+    host: project.host,
+    projectId: project.project.id,
+    projectTitle: project.project.title,
+    repository: project.repository,
+    number: item.number,
+    title: item.title,
+    url: item.url,
+    author: item.author,
+    state: item.state,
+    labels: item.labels,
+    assignees: item.assignees,
+    commentCount: item.commentCount,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    closedAt: item.closedAt,
+    observedAt,
+  });
+
+  interface IssueBatch {
+    readonly key: string;
+    readonly entries: ReadonlyArray<IssueListEntry>;
+    readonly truncated: boolean;
+    readonly nextCursor: string | null;
+  }
+
+  /**
+   * Issues reuse the change request listing's cursors: one search per host and boundary, split
+   * back up by repository so each carries on from a cursor of its own.
+   */
+  const listIssuesUncached = (
+    input: IssueListInput,
+  ): Effect.Effect<IssueListResult, PullRequestError> =>
+    Effect.gen(function* () {
+      const continuation = yield* decodeCursors(input.cursors);
+      const { supported } = yield* listWorkspaceProjects(input);
+      const projects = supported.filter(readsIssues);
+      const selected =
+        continuation === null
+          ? projects
+          : projects.filter(({ cursorKey }) => continuation.has(cursorKey));
+      const limit = input.limit ?? DEFAULT_REPOSITORY_LIST_LIMIT;
+      const cursorOf = (project: SupportedProject): ListCursor | undefined =>
+        continuation?.get(project.cursorKey);
+
+      const readChunk = (
+        chunk: ReadonlyArray<SupportedProject>,
+      ): Effect.Effect<ReadonlyArray<IssueBatch>, PullRequestProviderError> => {
+        const first = chunk[0]!;
+        const cursor = cursorOf(first);
+        return first.api.listIssues!({
+          cwd: first.project.workspaceRoot,
+          host: first.host,
+          repositories: chunk.map((project) => project.repository),
+          state: input.state,
+          limit,
+          query: input.query,
+          ...(cursor === undefined
+            ? {}
+            : { cursor: { updatedBefore: cursor.updatedBefore, delivered: cursor.delivered } }),
+        }).pipe(
+          observeRead,
+          Effect.map(({ value: page, observedAt }) => {
+            const rows = new Map<string, Array<ProviderIssue>>();
+            for (const item of page.items) {
+              const key = item.repository.trim().toLowerCase();
+              const held = rows.get(key);
+              if (held === undefined) rows.set(key, [item]);
+              else held.push(item);
+            }
+            const boundary = page.items.reduce<string | null>(
+              (oldest, item) =>
+                oldest === null || item.updatedAt < oldest ? item.updatedAt : oldest,
+              null,
+            );
+            return chunk.map((project): IssueBatch => {
+              const fetched = rows.get(project.repository.trim().toLowerCase()) ?? [];
+              const here = cursorOf(project);
+              const items =
+                here === undefined
+                  ? fetched
+                  : fetched.filter(
+                      (item) =>
+                        item.updatedAt !== here.updatedBefore || !here.seenAt.includes(item.number),
+                    );
+              return {
+                key: project.cursorKey,
+                entries: items.map((item) => toIssueEntry(project, item, observedAt)),
+                truncated: page.truncated,
+                nextCursor:
+                  page.truncated && boundary !== null
+                    ? listCursorAt(here, boundary, fetched, items.length)
+                    : null,
+              };
+            });
+          }),
+        );
+      };
+
+      const groups = new Map<string, Array<SupportedProject>>();
+      for (const project of selected) {
+        const key = `${project.host}\n${cursorOf(project)?.updatedBefore ?? ""}`;
+        const group = groups.get(key);
+        if (group === undefined) groups.set(key, [project]);
+        else group.push(project);
+      }
+      const chunks: Array<ReadonlyArray<SupportedProject>> = [];
+      for (const group of groups.values()) {
+        for (let start = 0; start < group.length; start += REPOSITORY_SEARCH_CHUNK) {
+          chunks.push(group.slice(start, start + REPOSITORY_SEARCH_CHUNK));
+        }
+      }
+      const results = yield* Effect.forEach(chunks, (chunk) => Effect.result(readChunk(chunk)), {
+        concurrency: REPOSITORY_CONCURRENCY,
+      });
+
+      const batches: Array<IssueBatch> = [];
+      const errors: Array<PullRequestListProjectError> = [];
+      const failures: Array<PullRequestProviderError> = [];
+      results.forEach((result, index) => {
+        if (Result.isSuccess(result)) {
+          batches.push(...result.success);
+          return;
+        }
+        failures.push(result.failure);
+        // One unreadable host must not blank the page; its repositories are reported instead.
+        for (const project of chunks[index]!) {
+          errors.push({
+            projectId: project.project.id,
+            projectTitle: project.project.title,
+            message: `${project.repository} could not be read.`,
+          });
+        }
+      });
+      if (batches.length === 0 && failures.length > 0) {
+        return yield* toPullRequestError("listIssues")(
+          failures.find(isProviderUnusable) ?? failures[0]!,
+        );
+      }
+
+      const nextCursors: Record<string, string> = {};
+      for (const batch of batches) {
+        if (batch.nextCursor !== null) nextCursors[batch.key] = batch.nextCursor;
+      }
+      return {
+        entries: batches
+          .flatMap((batch) => batch.entries)
+          .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+        errors,
+        truncated: batches.some((batch) => batch.truncated),
+        nextCursors,
+      };
+    });
+
+  // Keyed by the listing epoch like the change request listing, so a refresh or a turn re-reads.
+  const issueListCache = yield* Cache.makeWith(
+    (key: string) => listIssuesUncached((JSON.parse(key) as [number, IssueListInput])[1]),
+    {
+      capacity: LIST_CACHE_CAPACITY,
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? LIST_CACHE_TTL : Duration.zero),
+    },
+  );
+  const listIssues: PullRequestService["Service"]["listIssues"] = (input) => {
+    const key = JSON.stringify([
+      listingsEpoch,
+      {
+        state: input.state,
+        ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
+        ...(input.projectIds === undefined ? {} : { projectIds: [...input.projectIds].sort() }),
+        ...(input.host === undefined ? {} : { host: input.host }),
+        ...(input.limit === undefined ? {} : { limit: input.limit }),
+        ...(input.query === undefined ? {} : { query: input.query }),
+        ...(input.cursors === undefined
+          ? {}
+          : {
+              cursors: Object.fromEntries(
+                Object.entries(input.cursors).toSorted(([left], [right]) =>
+                  left.localeCompare(right),
+                ),
+              ),
+            }),
+      },
+    ]);
+    return Cache.get(issueListCache, key).pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause) ? Cache.get(issueListCache, key) : Effect.failCause(cause),
+      ),
+    );
+  };
+
+  const requireIssueProject = (input: PullRequestRef, operation: string) =>
+    requireProject(input).pipe(
+      Effect.filterOrFail(
+        readsIssues,
+        () =>
+          new PullRequestOperationError({
+            operation,
+            detail: "This host's issues cannot be read here.",
+          }),
+      ),
+    );
+
+  const issueDetailUncached = (
+    input: PullRequestRef,
+  ): Effect.Effect<IssueDetail, PullRequestError> =>
+    requireIssueProject(input, "issueDetail").pipe(
+      Effect.flatMap((project) =>
+        project.api.getIssue!({
+          cwd: project.project.workspaceRoot,
+          repository: project.repository,
+          host: project.host,
+          number: input.number,
+        }).pipe(
+          Effect.mapError(toPullRequestError("issueDetail")),
+          observeRead,
+          Effect.map(({ value: issue, observedAt }): IssueDetail => ({
+            ...toIssueEntry(project, issue, observedAt),
+            workspaceRoot: project.project.workspaceRoot,
+            body: issue.body,
+            comments: issue.comments,
+            commentsTruncated: issue.commentsTruncated,
+            canComment: project.api.commentOnIssue !== undefined && issue.viewerCanComment,
+          })),
+        ),
+      ),
+    );
+  const issueDetailCache = yield* Cache.makeWith(
+    (key: string) => issueDetailUncached(refOfCacheKey(key)),
+    {
+      capacity: DETAIL_CACHE_CAPACITY,
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? DETAIL_CACHE_TTL : Duration.zero),
+    },
+  );
+  const issueDetail = (input: CredentialRef) => Cache.get(issueDetailCache, refCacheKey(input));
+
+  const commentOnIssue = (input: IssueCommentInput): Effect.Effect<void, PullRequestError> =>
+    Effect.gen(function* () {
+      if (input.body.trim().length === 0) {
+        return yield* new PullRequestOperationError({
+          operation: "issueComment",
+          detail: "A comment cannot be empty.",
+        });
+      }
+      const project = yield* requireIssueProject(input, "issueComment");
+      if (project.api.commentOnIssue === undefined) {
+        return yield* new PullRequestOperationError({
+          operation: "issueComment",
+          detail: "This host cannot post a comment on an issue.",
+        });
+      }
+      yield* project.api
+        .commentOnIssue({
+          cwd: project.project.workspaceRoot,
+          repository: project.repository,
+          host: project.host,
+          number: input.number,
+          body: input.body,
+        })
+        .pipe(Effect.mapError(toPullRequestError("issueComment")));
+    });
+
   const credentialCached =
     <I extends PullRequestRef, Args extends ReadonlyArray<unknown>, A, E>(
       read: (input: I, ...args: Args) => Effect.Effect<A, E>,
@@ -3584,6 +3873,9 @@ export const make = Effect.gen(function* () {
     requestReviewers: invalidatedByMutation(requestReviewers),
     labelCandidates,
     setLabels: invalidatedByMutation(setLabels),
+    listIssues,
+    issueDetail: credentialCached(issueDetail),
+    commentOnIssue: invalidatedByMutation(commentOnIssue),
     invalidate,
   });
 });
