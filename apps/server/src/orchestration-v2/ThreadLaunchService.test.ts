@@ -1128,7 +1128,7 @@ it.effect("names the worktree itself when the client provides no branch", () =>
       yield* waitUntil(() => Effect.sync(() => harness.createWorktree.mock.calls.length === 1));
       assert.match(
         harness.createWorktree.mock.calls[0]?.[0]?.newRefName ?? "",
-        /^t3\/[0-9a-f]{8}$/u,
+        /^kinako\/[0-9a-f]{8}$/u,
       );
       yield* waitUntil(() =>
         threads
@@ -1139,7 +1139,7 @@ it.effect("names the worktree itself when the client provides no branch", () =>
   }),
 );
 
-it.effect("renames a temporary t3/<hash> branch off the provisioning critical path", () =>
+it.effect("renames a temporary kinako/<hash> branch off the provisioning critical path", () =>
   Effect.gen(function* () {
     const branchNameStarted = yield* Deferred.make<void>();
     const allowBranchName = yield* Deferred.make<void>();
@@ -1162,11 +1162,11 @@ it.effect("renames a temporary t3/<hash> branch off the provisioning critical pa
           command: "command:launch:temp-branch",
           thread: "thread:launch:temp-branch",
           message: "Build the feature",
-          workspace: { type: "worktree", baseRef: "main", branch: "t3/abcd1234" },
+          workspace: { type: "worktree", baseRef: "main", branch: "kinako/abcd1234" },
         }),
       );
       yield* Deferred.await(branchNameStarted);
-      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "t3/abcd1234");
+      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "kinako/abcd1234");
       yield* waitUntil(() =>
         threads
           .getThreadProjection(launched.threadId)
@@ -1174,7 +1174,7 @@ it.effect("renames a temporary t3/<hash> branch off the provisioning critical pa
       );
       assert.equal(
         (yield* threads.getThreadProjection(launched.threadId)).thread.branch,
-        "t3/abcd1234",
+        "kinako/abcd1234",
       );
       yield* Deferred.succeed(allowBranchName, undefined);
       yield* waitUntil(() =>
@@ -1184,17 +1184,17 @@ it.effect("renames a temporary t3/<hash> branch off the provisioning critical pa
       );
       assert.deepEqual(harness.renameBranch.mock.calls[0]?.[0], {
         cwd: "/repo-worktrees/temp",
-        oldBranch: "t3/abcd1234",
+        oldBranch: "kinako/abcd1234",
         newBranch: "generated-branch",
       });
     }).pipe(Effect.provide(harness.layer));
   }),
 );
 
-it.effect("provisions under t3-<hash> when a plain t3 branch blocks t3/*", () =>
+it.effect("provisions under kinako-<hash> when a plain kinako branch blocks kinako/*", () =>
   Effect.gen(function* () {
     const harness = makeHarness({
-      hasCommit: (input) => Effect.succeed(input.refName === "refs/heads/t3"),
+      hasCommit: (input) => Effect.succeed(input.refName === "refs/heads/kinako"),
       createWorktree: (input) =>
         Effect.succeed({
           worktree: { path: "/repo-worktrees/temp", refName: input.newRefName, headSha: "abc" },
@@ -1208,7 +1208,7 @@ it.effect("provisions under t3-<hash> when a plain t3 branch blocks t3/*", () =>
           command: "command:launch:blocked-namespace",
           thread: "thread:launch:blocked-namespace",
           message: "Build the feature",
-          workspace: { type: "worktree", baseRef: "main", branch: "t3/abcd1234" },
+          workspace: { type: "worktree", baseRef: "main", branch: "kinako/abcd1234" },
         }),
       );
       yield* waitUntil(() =>
@@ -1216,10 +1216,42 @@ it.effect("provisions under t3-<hash> when a plain t3 branch blocks t3/*", () =>
           .getThreadProjection(launched.threadId)
           .pipe(Effect.map((projection) => projection.thread.branch === "generated-branch")),
       );
-      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "t3-abcd1234");
-      assert.equal(harness.renameBranch.mock.calls[0]?.[0]?.oldBranch, "t3-abcd1234");
+      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "kinako-abcd1234");
+      assert.equal(harness.renameBranch.mock.calls[0]?.[0]?.oldBranch, "kinako-abcd1234");
     }).pipe(Effect.provide(harness.layer));
   }),
+);
+
+it.effect(
+  "provisions a legacy t3/<hash> branch under kinako-<hash> when a plain t3 branch blocks it",
+  () =>
+    Effect.gen(function* () {
+      const harness = makeHarness({
+        hasCommit: (input) => Effect.succeed(input.refName === "refs/heads/t3"),
+        createWorktree: (input) =>
+          Effect.succeed({
+            worktree: { path: "/repo-worktrees/temp", refName: input.newRefName, headSha: "abc" },
+          } as never),
+      });
+      yield* Effect.gen(function* () {
+        const launches = yield* ThreadLaunch.ThreadLaunchService;
+        const threads = yield* ThreadManagement.ThreadManagementService;
+        const launched = yield* launches.launch(
+          launchInput({
+            command: "command:launch:blocked-legacy-namespace",
+            thread: "thread:launch:blocked-legacy-namespace",
+            message: "Build the feature",
+            workspace: { type: "worktree", baseRef: "main", branch: "t3/abcd1234" },
+          }),
+        );
+        yield* waitUntil(() =>
+          threads
+            .getThreadProjection(launched.threadId)
+            .pipe(Effect.map((projection) => projection.thread.branch === "generated-branch")),
+        );
+        assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "kinako-abcd1234");
+      }).pipe(Effect.provide(harness.layer));
+    }),
 );
 
 it.effect("keeps an explicit branch name instead of generating one", () =>
@@ -1259,11 +1291,11 @@ it.effect("keeps the temporary branch when branch generation fails", () =>
           command: "command:launch:branch-fallback",
           thread: "thread:launch:branch-fallback",
           message: "Build the feature",
-          workspace: { type: "worktree", baseRef: "main", branch: "t3/abcd1234" },
+          workspace: { type: "worktree", baseRef: "main", branch: "kinako/abcd1234" },
         }),
       );
       yield* waitUntil(() => Effect.sync(() => harness.generateBranchName.mock.calls.length === 1));
-      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "t3/abcd1234");
+      assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "kinako/abcd1234");
       yield* waitUntil(() =>
         threads
           .getThreadProjection(launched.threadId)
@@ -1272,7 +1304,7 @@ it.effect("keeps the temporary branch when branch generation fails", () =>
       assert.equal(harness.renameBranch.mock.calls.length, 0);
       assert.equal(
         (yield* threads.getThreadProjection(launched.threadId)).thread.branch,
-        "t3/abcd1234",
+        "kinako/abcd1234",
       );
     }).pipe(Effect.provide(harness.layer));
   }),
@@ -1291,8 +1323,8 @@ it.effect("renames a temporary branch on an existing worktree to a generated nam
           message: "Build the feature",
           workspace: {
             type: "existing_worktree",
-            worktreePath: "/repo-worktrees/t3-abcd1234",
-            branch: "t3/abcd1234",
+            worktreePath: "/repo-worktrees/kinako-abcd1234",
+            branch: "kinako/abcd1234",
           },
         }),
       );
@@ -1302,8 +1334,8 @@ it.effect("renames a temporary branch on an existing worktree to a generated nam
           .pipe(Effect.map((projection) => projection.thread.branch === "generated-branch")),
       );
       assert.deepEqual(harness.renameBranch.mock.calls[0]?.[0], {
-        cwd: "/repo-worktrees/t3-abcd1234",
-        oldBranch: "t3/abcd1234",
+        cwd: "/repo-worktrees/kinako-abcd1234",
+        oldBranch: "kinako/abcd1234",
         newBranch: "generated-branch",
       });
     }).pipe(Effect.provide(harness.layer));

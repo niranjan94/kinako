@@ -32,7 +32,6 @@ import {
   buildTemporaryWorktreeBranchName,
   flattenTemporaryWorktreeBranchName,
   isTemporaryWorktreeBranch,
-  WORKTREE_BRANCH_PREFIX,
 } from "@t3tools/shared/git";
 
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
@@ -372,7 +371,7 @@ const make = Effect.gen(function* () {
         });
 
       // The server owns worktree naming: without an explicit branch, provision
-      // under a temporary `t3/<hash>` name so the worktree never waits on
+      // under a temporary `<prefix>/<hash>` name so the worktree never waits on
       // name generation, then rename in the background below.
       const requestedBranch = input.workspaceStrategy.branch;
       let branch: string | null;
@@ -436,13 +435,15 @@ const make = Effect.gen(function* () {
           }
         }
         if (startFromOrigin) yield* setupTracker.stageStatus(threadId, "fetch", "done");
+        // Older clients still send legacy temporary names, so check the namespace
+        // the requested branch actually lives under, not the current prefix.
         if (
           branch !== null &&
           isTemporaryWorktreeBranch(branch) &&
           (yield* git
             .hasCommit({
               cwd: project.workspaceRoot,
-              refName: `refs/heads/${WORKTREE_BRANCH_PREFIX}`,
+              refName: `refs/heads/${branch.split("/")[0]}`,
             })
             .pipe(Effect.mapError(mapError(input, "provision-worktree", threadId))))
         ) {
