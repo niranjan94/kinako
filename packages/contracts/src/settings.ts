@@ -931,6 +931,14 @@ export const ResponseStreamingMode = Schema.Literals(["turn", "paragraph"]);
 export type ResponseStreamingMode = typeof ResponseStreamingMode.Type;
 
 /**
+ * When the server holds a sleep assertion on its own machine.
+ * - `agent`: while any run is preparing, starting, running, or waiting.
+ * - `always`: for as long as the server runs.
+ */
+export const KeepAwakeMode = Schema.Literals(["off", "agent", "always"]);
+export type KeepAwakeMode = typeof KeepAwakeMode.Type;
+
+/**
  * Server settings a project may override. Every other server setting is
  * environment-wide: providers, keybindings, observability, device hosts,
  * background activity, theme. UI, search and the write planner derive
@@ -1143,6 +1151,7 @@ export const ServerSettings = Schema.Struct({
   continueThreadsAfterServerUpdate: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
+  keepAwakeMode: KeepAwakeMode.pipe(Schema.withDecodingDefault(Effect.succeed("off" as const))),
   /**
    * Whether agents may drive the in-app preview browser. Turning this off
    * withholds the MCP credential, so the `t3-code` server (and with it every
@@ -1559,6 +1568,7 @@ export const ServerSettingsPatch = Schema.Struct({
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
+  keepAwakeMode: Schema.optionalKey(KeepAwakeMode),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
   projectAgentBrowserAccessOverrides: Schema.optionalKey(
     Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),

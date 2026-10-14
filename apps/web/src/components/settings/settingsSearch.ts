@@ -489,6 +489,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "environment-defaults",
   },
   {
+    id: "keep-awake",
+    title: "Keep awake",
+    to: "/settings/general",
+    scope: "environment-defaults",
+    searchTerms: ["sleep prevent caffeinate laptop lid battery power idle suspend remote phone"],
+  },
+  {
     id: "continue-threads-after-server-update",
     title: "Continue threads after restarts",
     to: "/settings/general",

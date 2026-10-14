@@ -56,6 +56,17 @@ Windows background services are not supported.
 T3 Connect can offer service installation during setup, but the two are managed
 separately. Signing out of T3 Connect does not stop or uninstall the service.
 
+## Keep the computer awake
+
+A sleeping computer stops running agents and disconnects every remote client. To prevent that, open **Settings → General** and choose **Keep awake**. The setting belongs to each environment and applies to the computer that runs it, even when you change it from another device.
+
+- **While agents work** keeps the computer awake while any turn is running or waiting for your answer, and for 30 seconds after the last one ends. Scheduled tasks count too.
+- **Always** keeps it awake for as long as T3 Code runs.
+
+The screen can still turn off. Closing a laptop lid usually still puts it to sleep, unless the laptop is plugged in and connected to an external display.
+
+Keep awake works on macOS, on Windows, and on Linux with systemd. It is hidden where the computer does not support it. If the computer cannot be kept awake, the setting shows the reason. Choose another option and then your setting again to retry.
+
 ## Troubleshooting
 
 Start with `t3 service status` on the host. It prints the log path and, on Linux,

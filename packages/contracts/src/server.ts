@@ -768,6 +768,13 @@ const ServerUpsertKeybindingReplaceTarget = Schema.Struct({
   when: Schema.optional(KeybindingWhen),
 });
 
+/** Whether the server currently holds its sleep assertion, and why it could not. */
+export const ServerKeepAwakeStatus = Schema.Struct({
+  active: Schema.Boolean,
+  error: Schema.NullOr(Schema.String),
+});
+export type ServerKeepAwakeStatus = typeof ServerKeepAwakeStatus.Type;
+
 export const ServerUpsertKeybindingInput = Schema.Struct({
   key: KeybindingValue,
   command: KeybindingCommand,

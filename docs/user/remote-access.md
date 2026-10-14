@@ -3,6 +3,8 @@
 Connect a phone, browser, or another desktop app to T3 Code running on a different
 machine. That machine must stay running and reachable while you work.
 
+To stop a laptop host from sleeping while agents work, turn on [Keep awake](./background-service.md#keep-the-computer-awake).
+
 ## T3 Connect
 
 T3 Connect makes an environment available to your other devices without setting
