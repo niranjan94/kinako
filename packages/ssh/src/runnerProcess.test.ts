@@ -179,33 +179,35 @@ server.listen(0, "127.0.0.1", () => {
             ),
           );
           assert.equal(started.pid, child.pid);
+          const stateKey = yield* remoteStateKey({
+            alias: "fixture",
+            hostname: "fixture",
+            username: null,
+            port: null,
+          });
+          // A route's record from before launch records were shared per host.
+          const stateDir = path.join(fixture, stateKey);
+          yield* fs.makeDirectory(stateDir);
           const savedState = {
             pid: `${child.pid}\n`,
             port: `${started.port}\n`,
             managed: mode === "external" ? "external\n" : "managed\n",
           };
           for (const [name, contents] of Object.entries(savedState)) {
-            yield* fs.writeFileString(path.join(fixture, name), contents);
+            yield* fs.writeFileString(path.join(stateDir, name), contents);
           }
-          const script = buildRemoteStopScript(
-            yield* remoteStateKey({
-              alias: "fixture",
-              hostname: "fixture",
-              username: null,
-              port: null,
-            }),
-          );
-          // Redirect only the state directory. Never use the developer's SSH state.
+          const script = buildRemoteStopScript(stateKey);
+          // Every state path derives from the launch directory. Never use the developer's SSH state.
           const isolatedScript = script.replace(
-            /^STATE_DIR=.*$/mu,
-            'STATE_DIR="$T3_TEST_STATE_DIR"',
+            /^LAUNCH_DIR=.*$/mu,
+            'LAUNCH_DIR="$T3_TEST_LAUNCH_DIR"',
           );
           assert.notEqual(isolatedScript, script);
           const runStop = Effect.fn("test.remoteStop")(function* () {
             const stop = yield* spawner.spawn(
               ChildProcess.make("/bin/sh", ["-s"], {
                 cwd: fixture,
-                env: { T3_TEST_STATE_DIR: fixture },
+                env: { T3_TEST_LAUNCH_DIR: fixture },
                 stdin: Stream.make(new TextEncoder().encode(isolatedScript)),
               }),
             );
@@ -231,10 +233,10 @@ server.listen(0, "127.0.0.1", () => {
           if (mode === "timeout") {
             assert.equal(result.exitCode, 1);
             assert.equal(result.stdout, "");
-            assert.include(result.stderr, "did not stop within 2 seconds");
+            assert.include(result.stderr, "did not stop in time");
             assert.equal(yield* fs.readFileString(signalPath), "1");
             for (const [name, contents] of Object.entries(savedState)) {
-              assert.equal(yield* fs.readFileString(path.join(fixture, name)), contents);
+              assert.equal(yield* fs.readFileString(path.join(stateDir, name)), contents);
             }
             result = yield* runStop();
           }
@@ -242,7 +244,7 @@ server.listen(0, "127.0.0.1", () => {
           assert.equal(result.stdout, '{"stopped":true}\n');
           assert.equal(result.stderr, "");
           for (const name of Object.keys(savedState)) {
-            assert.isFalse(yield* fs.exists(path.join(fixture, name)));
+            assert.isFalse(yield* fs.exists(path.join(stateDir, name)));
           }
           if (mode === "external") {
             assert.isFalse(yield* fs.exists(signalPath));
