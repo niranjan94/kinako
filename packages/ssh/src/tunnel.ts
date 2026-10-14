@@ -1,6 +1,7 @@
-import type {
-  DesktopSshEnvironmentBootstrap,
-  DesktopSshEnvironmentTarget,
+import {
+  AuthAdministrativeScopes,
+  type DesktopSshEnvironmentBootstrap,
+  type DesktopSshEnvironmentTarget,
 } from "@t3tools/contracts";
 import {
   describeReadinessCause,
@@ -740,6 +741,13 @@ fi
 printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGED:-managed}"
 `;
 
+// SSH access already controls the remote account (it could run `auth session
+// issue` itself), so the paired client gets administrative scopes and can
+// manage that environment's clients.
+const REMOTE_PAIRING_SCOPE_FLAGS = AuthAdministrativeScopes.map((scope) => `--scope ${scope}`).join(
+  " ",
+);
+
 const REMOTE_PAIRING_SCRIPT = `set -eu
 STATE_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch/@@T3_STATE_KEY@@"
 DEFAULT_SERVER_HOME="$HOME/${FORK_HOME_DIR_NAME}"
@@ -750,7 +758,7 @@ cat >"$RUNNER_FILE" <<'SH'
 SH
 chmod 700 "$RUNNER_FILE"
 PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
-"$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json
+"$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" ${REMOTE_PAIRING_SCOPE_FLAGS} --json
 `;
 
 const REMOTE_STOP_SCRIPT = `set -eu

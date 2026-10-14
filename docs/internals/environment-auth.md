@@ -8,7 +8,9 @@ identity and relay credentials belong to a separate trust boundary, described in
 
 Pairing delegates a set of scopes. Exchanging a bootstrap credential can narrow
 that grant but cannot widen it. Ordinary pairing does not grant access-management
-or relay-management authority. Creating another pairing link requires both
+or relay-management authority. SSH provisioning is the exception: SSH access
+already controls the remote account, so its pairing link carries the
+administrative scopes ([tunnel](../../packages/ssh/src/tunnel.ts)). Creating another pairing link requires both
 `access:write` and every scope being delegated. The
 [auth handlers](../../apps/server/src/auth/http.ts) enforce this at issuance;
 client labels and device metadata have no authorization role.
