@@ -182,8 +182,8 @@ Enable both the original environment and the environment answering its requests 
 only enable it for environments you control and trust. Changing a saved endpoint or removing an
 environment clears its permission.
 
-GitHub review details, linked PR status, and permitted review actions can then use another
-connected environment signed in to the same GitHub account. Each needs a project on that host.
+GitHub review details, issue details, linked PR status, and permitted review actions and issue
+comments can then use another connected environment signed in to the same GitHub account. Each needs a project on that host.
 A connected local environment is preferred for actions and can answer slow or failed reads.
 Browsers and mobile clients need a paired environment to use its GitHub credentials.
 Credentials stay on their machines. Previously verified credentials remain usable for routing
@@ -193,6 +193,14 @@ PR creation from Git actions continue to use the project's environment.
 
 For Azure DevOps, use the host website to change comments. Bitbucket does not support reopening a
 declined pull request.
+
+### Issues
+
+For GitHub repositories, switch **Pull requests** to **Issues** to browse the issues of the same projects. Open an issue to read its description and comments, or to add a comment. Other hosts show pull requests only.
+
+Every pull request and issue offers two ways to hand it to an agent. **Ask** opens a new thread that knows which item you mean, in supervised mode, so the agent asks before changing anything; type your question and send it. **Send to agent** opens a new thread with a message asking the agent to work on the item, which you can edit before sending. For a pull request it also prepares a worktree from its branch. Nothing starts until you send the first message. When a repository is open in several projects, you choose which one the thread belongs to. On mobile, **Work on PR** sends a pull request to an agent, and **Ask a question** is in its AI helpers menu.
+
+The agent treats an item's title, description, and comments as information to read, not instructions to follow.
 
 ### Review guides
 
