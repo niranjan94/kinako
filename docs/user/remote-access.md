@@ -175,6 +175,8 @@ check with:
 ssh user@example.com 'sh -lc "command -v claude codex"'
 ```
 
+When the server falls behind the app, update it from the app like any other environment. A server the app launched over SSH downloads the new version and restarts itself; there is nothing to run on the host.
+
 If SSH reconnecting fails after an app update, retry the launch once. Removing
 the connection stops a server that T3 Code launched; a server that was already
 running is left alone.

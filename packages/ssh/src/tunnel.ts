@@ -54,6 +54,12 @@ const SSH_READY_PROBE_TIMEOUT_MS = 1_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
 const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
+// The service launcher gives its server five seconds to exit before killing
+// it, so stopping one waits past that, in 100 ms ticks.
+const REMOTE_STOP_WAIT_TICKS = 100;
+// Every route to a host shares one record of the server SSH started there.
+// Route state directories are named by hex digests, so this cannot collide.
+const REMOTE_SERVER_RECORD_DIR = "server";
 // A cold archive launch also downloads and unpacks a ~70 MB release archive
 // and may wait on another installer's lock. The budgets nest: the checksum
 // file is tiny and the archive download is bounded; a waiter outlasts both
@@ -544,16 +550,20 @@ exec "$T3_RUNTIME_DIR/${FORK_CLI_NAME}" "$@"
 const REMOTE_LAUNCH_SCRIPT = `set -eu
 @@T3_NODE_ENV_SCRIPT@@
 STATE_KEY="$1"
-STATE_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch/$STATE_KEY"
+LAUNCH_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch"
+STATE_DIR="$LAUNCH_DIR/$STATE_KEY"
 DEFAULT_SERVER_HOME="$HOME/${FORK_HOME_DIR_NAME}"
 DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"
-PORT_FILE="$STATE_DIR/port"
-PID_FILE="$STATE_DIR/pid"
-MANAGED_FILE="$STATE_DIR/managed"
-LOG_FILE="$STATE_DIR/server.log"
+SERVER_DIR="$LAUNCH_DIR/${REMOTE_SERVER_RECORD_DIR}"
+PID_FILE="$SERVER_DIR/pid"
+PORT_FILE="$SERVER_DIR/port"
+MODE_FILE="$SERVER_DIR/mode"
+OWNER_FILE="$SERVER_DIR/owner"
+SERVER_RUNNER_FILE="$SERVER_DIR/run-t3.sh"
+LOG_FILE="$SERVER_DIR/server.log"
 RUNNER_FILE="$STATE_DIR/run-t3.sh"
 RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
-mkdir -p "$STATE_DIR"
+mkdir -p "$STATE_DIR" "$SERVER_DIR"
 cleanup_runner_next() {
   rm -f "$RUNNER_NEXT"
 }
@@ -561,13 +571,16 @@ trap cleanup_runner_next EXIT
 cat >"$RUNNER_NEXT" <<'SH'
 @@T3_RUNNER_SCRIPT@@
 SH
-RUNNER_CHANGED=0
-if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
-  RUNNER_CHANGED=1
-fi
 mv "$RUNNER_NEXT" "$RUNNER_FILE"
 chmod 700 "$RUNNER_FILE"
 T3_ARCHIVE_MODE=@@T3_ARCHIVE_MODE@@
+# Release archives run under the service launcher so the server can replace
+# itself when a client asks it to update. A dev checkout has no pinned
+# runtime for the launcher to start.
+SERVER_MODE="serve"
+if [ "$T3_ARCHIVE_MODE" = "1" ]; then
+  SERVER_MODE="launcher"
+fi
 if [ "$T3_ARCHIVE_MODE" = "1" ]; then
   # The archive ships the helpers below inside the executable; the remote
   # needs no Node at all. Resolving the runner once here also downloads the
@@ -598,7 +611,7 @@ NODE
 wait_for_pid_exit() {
   PID_TO_WAIT="$1"
   WAIT_COUNT=0
-  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt 20 ]; do
+  while kill -0 "$PID_TO_WAIT" 2>/dev/null && [ "$WAIT_COUNT" -lt @@T3_STOP_WAIT_TICKS@@ ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
     sleep 0.1
   done
@@ -629,67 +642,65 @@ try {
 }
 NODE
 }
-REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
-REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
-DEFAULT_RUNTIME_INFO="$(resolve_default_runtime_port 2>/dev/null || true)"
-DEFAULT_RUNTIME_PID=""
-DEFAULT_REMOTE_PORT=""
-if [ -n "$DEFAULT_RUNTIME_INFO" ]; then
-  DEFAULT_RUNTIME_PID="\${DEFAULT_RUNTIME_INFO%% *}"
-  DEFAULT_REMOTE_PORT="\${DEFAULT_RUNTIME_INFO#* }"
+stop_owned_server() {
+  kill "$OWNED_PID" 2>/dev/null || true
+  wait_for_pid_exit "$OWNED_PID"
+  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE"
+  OWNED_PID=""
+}
+OWNED_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+if [ -n "$OWNED_PID" ] && ! kill -0 "$OWNED_PID" 2>/dev/null; then
+  OWNED_PID=""
+  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE"
 fi
-if [ -n "$DEFAULT_REMOTE_PORT" ]; then
-  REMOTE_PORT="$DEFAULT_REMOTE_PORT"
-  if wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
-    if [ "$REMOTE_MANAGED" = "managed" ]; then
-      PID_TO_STOP="\${REMOTE_PID:-$DEFAULT_RUNTIME_PID}"
-      if [ -n "$PID_TO_STOP" ] && kill -0 "$PID_TO_STOP" 2>/dev/null; then
-        kill "$PID_TO_STOP" 2>/dev/null || true
-        wait_for_pid_exit "$PID_TO_STOP"
-      fi
-      REMOTE_PID=""
-      REMOTE_PORT="$DEFAULT_REMOTE_PORT"
-      REMOTE_MANAGED="external"
-      rm -f "$PID_FILE"
-      printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
-      printf 'external\\n' >"$MANAGED_FILE"
-    else
-      printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
-      printf 'external\\n' >"$MANAGED_FILE"
-      REMOTE_PID=""
-      REMOTE_MANAGED="external"
-    fi
+# Earlier launchers kept this record per route, so a second route to the same
+# host saw the server as external and never replaced it. Adopt a live one.
+for LEGACY_DIR in "$LAUNCH_DIR"/*; do
+  [ -f "$LEGACY_DIR/managed" ] || continue
+  LEGACY_PID="$(cat "$LEGACY_DIR/pid" 2>/dev/null || true)"
+  if [ -z "$OWNED_PID" ] && [ "$(cat "$LEGACY_DIR/managed" 2>/dev/null || true)" = "managed" ] && [ -n "$LEGACY_PID" ] && kill -0 "$LEGACY_PID" 2>/dev/null; then
+    OWNED_PID="$LEGACY_PID"
+    printf '%s\\n' "$OWNED_PID" >"$PID_FILE"
+    cp "$LEGACY_DIR/port" "$PORT_FILE" 2>/dev/null || true
+    printf 'serve\\n' >"$MODE_FILE"
+    printf '%s\\n' "\${LEGACY_DIR##*/}" >"$OWNER_FILE"
+  fi
+  rm -f "$LEGACY_DIR/pid" "$LEGACY_DIR/port" "$LEGACY_DIR/managed"
+done
+OWNED_MODE="$(cat "$MODE_FILE" 2>/dev/null || true)"
+if [ -n "$OWNED_PID" ]; then
+  if [ "$OWNED_MODE" != "$SERVER_MODE" ]; then
+    stop_owned_server
+  elif [ "$SERVER_MODE" = "serve" ] && ! cmp -s "$RUNNER_FILE" "$SERVER_RUNNER_FILE"; then
+    stop_owned_server
+  fi
+fi
+REMOTE_PORT=""
+REMOTE_MANAGED=""
+if [ -n "$OWNED_PID" ]; then
+  REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
+  # A launcher restarts its server while it applies an update, so it gets the
+  # full startup budget before it counts as hung.
+  READY_BUDGET_MS="@@T3_REUSE_READY_TIMEOUT_MS@@"
+  if [ "$OWNED_MODE" = "launcher" ]; then
+    READY_BUDGET_MS="@@T3_READY_TIMEOUT_MS@@"
+  fi
+  if [ -n "$REMOTE_PORT" ] && wait_ready "$READY_BUDGET_MS"; then
+    REMOTE_MANAGED="managed"
   else
-    REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-    REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
-    REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
-  fi
-fi
-if [ "$REMOTE_MANAGED" = "external" ]; then
-  if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
-    REMOTE_PID=""
+    stop_owned_server
     REMOTE_PORT=""
-    REMOTE_MANAGED=""
-  fi
-elif [ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
-  if [ "$RUNNER_CHANGED" -eq 1 ]; then
-    kill "$REMOTE_PID" 2>/dev/null || true
-    wait_for_pid_exit "$REMOTE_PID"
-    REMOTE_PID=""
-    REMOTE_PORT=""
-    REMOTE_MANAGED=""
-  elif ! wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
-    kill "$REMOTE_PID" 2>/dev/null || true
-    wait_for_pid_exit "$REMOTE_PID"
-    REMOTE_PID=""
-    REMOTE_PORT=""
-    REMOTE_MANAGED=""
   fi
 else
-  REMOTE_PID=""
-  REMOTE_PORT=""
-  REMOTE_MANAGED=""
+  DEFAULT_RUNTIME_INFO="$(resolve_default_runtime_port 2>/dev/null || true)"
+  if [ -n "$DEFAULT_RUNTIME_INFO" ]; then
+    REMOTE_PORT="\${DEFAULT_RUNTIME_INFO#* }"
+    if wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
+      REMOTE_MANAGED="external"
+    else
+      REMOTE_PORT=""
+    fi
+  fi
 fi
 if [ -z "$REMOTE_PORT" ]; then
   REMOTE_PORT="$(pick_port)" || true
@@ -701,11 +712,18 @@ if [ -z "$REMOTE_PORT" ]; then
     fi
     exit 1
   fi
-  nohup env T3CODE_NO_BROWSER=1 "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
-  REMOTE_PID="$!"
-  printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"
+  if [ "$SERVER_MODE" = "launcher" ]; then
+    "$RUNNER_FILE" __ssh-helper seed-service-state "$DEFAULT_SERVER_HOME"
+    nohup env T3CODE_HOME="$DEFAULT_SERVER_HOME" T3CODE_HOST=127.0.0.1 T3CODE_PORT="$REMOTE_PORT" T3CODE_NO_BROWSER=1 "$RUNNER_FILE" __service-launcher >>"$LOG_FILE" 2>&1 < /dev/null &
+  else
+    nohup env T3CODE_NO_BROWSER=1 "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
+  fi
+  OWNED_PID="$!"
+  printf '%s\\n' "$OWNED_PID" >"$PID_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
-  printf 'managed\\n' >"$MANAGED_FILE"
+  printf '%s\\n' "$SERVER_MODE" >"$MODE_FILE"
+  printf '%s\\n' "$STATE_KEY" >"$OWNER_FILE"
+  cp "$RUNNER_FILE" "$SERVER_RUNNER_FILE"
   if ! wait_ready "@@T3_READY_TIMEOUT_MS@@"; then
     printf 'Remote T3 server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     if [ -s "$LOG_FILE" ]; then
@@ -713,11 +731,11 @@ if [ -z "$REMOTE_PORT" ]; then
     else
       printf 'It wrote nothing to %s, so it exited before producing any output.\\n' "$LOG_FILE" >&2
     fi
-    kill "$REMOTE_PID" 2>/dev/null || true
-    wait_for_pid_exit "$REMOTE_PID"
-    rm -f "$PID_FILE" "$PORT_FILE" "$MANAGED_FILE"
+    stop_owned_server
+    rm -f "$PORT_FILE"
     exit 1
   fi
+  REMOTE_MANAGED="managed"
 fi
 printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGED:-managed}"
 `;
@@ -736,31 +754,39 @@ PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
 `;
 
 const REMOTE_STOP_SCRIPT = `set -eu
-STATE_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch/@@T3_STATE_KEY@@"
-PID_FILE="$STATE_DIR/pid"
-PORT_FILE="$STATE_DIR/port"
-MANAGED_FILE="$STATE_DIR/managed"
-REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
-REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-if [ "$REMOTE_MANAGED" != "external" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
+STATE_KEY="@@T3_STATE_KEY@@"
+LAUNCH_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch"
+STATE_DIR="$LAUNCH_DIR/$STATE_KEY"
+SERVER_DIR="$LAUNCH_DIR/${REMOTE_SERVER_RECORD_DIR}"
+# Only the route that started the server stops it: another route to this
+# host may still be using it.
+REMOTE_PID=""
+if [ "$(cat "$SERVER_DIR/owner" 2>/dev/null || true)" = "$STATE_KEY" ]; then
+  REMOTE_PID="$(cat "$SERVER_DIR/pid" 2>/dev/null || true)"
+elif [ "$(cat "$STATE_DIR/managed" 2>/dev/null || true)" = "managed" ]; then
+  REMOTE_PID="$(cat "$STATE_DIR/pid" 2>/dev/null || true)"
+fi
+if [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
   kill "$REMOTE_PID" 2>/dev/null || true
   WAIT_COUNT=0
-  while kill -0 "$REMOTE_PID" 2>/dev/null && [ "$WAIT_COUNT" -lt 20 ]; do
+  while kill -0 "$REMOTE_PID" 2>/dev/null && [ "$WAIT_COUNT" -lt @@T3_STOP_WAIT_TICKS@@ ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
     sleep 0.1
   done
   if kill -0 "$REMOTE_PID" 2>/dev/null; then
-    printf 'Remote T3 server with PID %s did not stop within 2 seconds. Its ownership files were kept.\\n' "$REMOTE_PID" >&2
+    printf 'Remote T3 server with PID %s did not stop in time. Its ownership files were kept.\\n' "$REMOTE_PID" >&2
     exit 1
   fi
 fi
-rm -f "$PID_FILE" "$PORT_FILE" "$MANAGED_FILE"
+if [ "$(cat "$SERVER_DIR/owner" 2>/dev/null || true)" = "$STATE_KEY" ]; then
+  rm -f "$SERVER_DIR/pid" "$SERVER_DIR/mode" "$SERVER_DIR/owner"
+fi
+rm -f "$STATE_DIR/pid" "$STATE_DIR/port" "$STATE_DIR/managed"
 printf '{"stopped":true}\\n'
 `;
 
 const REMOTE_LOG_TAIL_SCRIPT = `set -eu
-STATE_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch/@@T3_STATE_KEY@@"
-LOG_FILE="$STATE_DIR/server.log"
+LOG_FILE="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch/${REMOTE_SERVER_RECORD_DIR}/server.log"
 if [ -f "$LOG_FILE" ]; then
   tail -n 80 "$LOG_FILE" 2>/dev/null || true
 fi
@@ -838,6 +864,7 @@ export function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
     T3_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
     T3_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
     T3_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
+    T3_STOP_WAIT_TICKS: String(REMOTE_STOP_WAIT_TICKS),
   });
 }
 
@@ -851,12 +878,7 @@ export function buildRemotePairingScript(stateKey: string, input?: RemoteT3Runne
 export function buildRemoteStopScript(stateKey: string): string {
   return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
     T3_STATE_KEY: stateKey,
-  });
-}
-
-function buildRemoteLogTailScript(stateKey: string): string {
-  return applyScriptPlaceholders(REMOTE_LOG_TAIL_SCRIPT, {
-    T3_STATE_KEY: stateKey,
+    T3_STOP_WAIT_TICKS: String(REMOTE_STOP_WAIT_TICKS),
   });
 }
 
@@ -1014,7 +1036,7 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
 > {
   const result = yield* runSshCommand(target, {
     remoteCommandArgs: ["sh", "-s"],
-    stdin: buildRemoteLogTailScript(yield* remoteStateKey(target)),
+    stdin: REMOTE_LOG_TAIL_SCRIPT,
     timeoutMs: 10_000,
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
     ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),

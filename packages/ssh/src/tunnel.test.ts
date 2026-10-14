@@ -246,24 +246,11 @@ describe("ssh tunnel scripts", () => {
       nodeEngineRange: TEST_NODE_ENGINE_RANGE,
     });
 
-    assert.include(
-      launch,
-      '[ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && kill -0 "$REMOTE_PID" 2>/dev/null',
-    );
-    assert.include(launch, "RUNNER_CHANGED=1");
     assert.include(launch, "ensure_remote_node_path()");
     assert.include(launch, "if ! ensure_remote_node_path; then");
     assert.include(devLaunch, `T3_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
     assert.include(devLaunch, "does not satisfy required range ");
-    assert.include(launch, 'kill "$REMOTE_PID" 2>/dev/null || true');
-    assert.include(launch, "wait_ready");
-    assert.include(launch, '"$RUNNER_FILE" serve --host 127.0.0.1');
-    assert.include(launch, '--base-dir "$DEFAULT_SERVER_HOME"');
-    assert.notInclude(launch, "server-home");
-    assert.include(launch, "Remote T3 server did not become ready");
-    assert.include(launch, 'wait_ready "60000"');
-    assert.include(launch, 'if [ -s "$LOG_FILE" ]; then');
-    assert.include(launch, "It wrote nothing to %s");
+    assert.include(devLaunch, '"$RUNNER_FILE" serve --host 127.0.0.1');
     assert.include(launch, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
     assert.include(
       SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE),
@@ -277,38 +264,6 @@ describe("ssh tunnel scripts", () => {
     assert.include(
       SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE),
       "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
-    );
-    assert.include(
-      SshTunnel.buildRemoteStopScript(stateKey),
-      'if [ "$REMOTE_MANAGED" != "external" ] && [ -n "$REMOTE_PID" ]',
-    );
-    assert.include(
-      SshTunnel.buildRemoteStopScript(stateKey),
-      'kill "$REMOTE_PID" 2>/dev/null || true',
-    );
-    assert.include(
-      SshTunnel.buildRemoteStopScript(stateKey),
-      'rm -f "$PID_FILE" "$PORT_FILE" "$MANAGED_FILE"',
-    );
-    assert.include(
-      launch,
-      'DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"',
-    );
-    assert.include(launch, "resolve_default_runtime_port()");
-    assert.include(launch, 'DEFAULT_RUNTIME_INFO="$(resolve_default_runtime_port');
-    assert.include(launch, "if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(port))");
-    assert.include(launch, 'PID_TO_STOP="${REMOTE_PID:-$DEFAULT_RUNTIME_PID}"');
-    assert.include(launch, 'REMOTE_PORT="$DEFAULT_REMOTE_PORT"');
-    assert.include(launch, 'rm -f "$PID_FILE"');
-    assert.include(launch, "printf 'external\\n' >\"$MANAGED_FILE\"");
-    assert.include(launch, 'if [ -z "$REMOTE_PORT" ]; then');
-    assert.isBelow(
-      launch.indexOf('if [ "$REMOTE_MANAGED" = "managed" ]'),
-      launch.indexOf("printf 'external\\n' >\"$MANAGED_FILE\""),
-    );
-    assert.isBelow(
-      launch.indexOf('DEFAULT_RUNTIME_INFO="$(resolve_default_runtime_port'),
-      launch.indexOf('elif [ -n "$REMOTE_PID" ]'),
     );
   });
 
@@ -803,5 +758,229 @@ describe("archive runner script", () => {
         assert.isFalse(yield* fs.exists(lock));
       }).pipe(Effect.provide(NodeServices.layer)),
     60_000,
+  );
+});
+
+describe("remote server ownership", () => {
+  const windowsHost = HostProcess.Platform.defaultValue() === "win32";
+  const archiveVersion = "1.2.3-preview.20260911.4";
+  const routeA = "aaaaaaaaaaaaaaaa";
+  const routeB = "bbbbbbbbbbbbbbbb";
+
+  // Stands in for the release executable. It answers the launch script's
+  // helpers without touching the network: a server is "ready" once it has
+  // dropped a marker file for its port, and each server it starts leaves a
+  // `started.<pid>` file naming how it was started.
+  const FAKE_EXECUTABLE = String.raw`#!/bin/sh
+set -eu
+case "$1" in
+  --version) echo "kinako fake" ;;
+  __ssh-helper)
+    case "$2" in
+      pick-port) cat "$3" 2>/dev/null || printf '%s' "$4" ;;
+      wait-ready)
+        ticks=$(($4 / 100))
+        while [ ! -f "$HOME/ready/$3" ]; do
+          ticks=$((ticks - 1))
+          [ "$ticks" -gt 0 ] || exit 1
+          sleep 0.1
+        done ;;
+      runtime-port)
+        pid=$(sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$3" 2>/dev/null)
+        port=$(sed -n 's/.*"port":\([0-9]*\).*/\1/p' "$3" 2>/dev/null)
+        [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || exit 1
+        printf '%s %s' "$pid" "$port" ;;
+      seed-service-state) mkdir -p "$3/runtime" && : > "$3/runtime/seeded" ;;
+    esac ;;
+  serve | __service-launcher)
+    port=$(printenv T3CODE_PORT || true)
+    if [ "$1" = serve ]; then port="$5"; fi
+    mkdir -p "$HOME/.kinako/userdata" "$HOME/ready"
+    printf '{"pid":%s,"port":%s,"origin":"http://127.0.0.1:%s"}' "$$" "$port" "$port" >"$HOME/.kinako/userdata/server-runtime.json"
+    printf '%s %s %s\n' "$1" "$port" "$(printenv T3CODE_HOME || true)" >"$HOME/started.$$"
+    sleep 300 &
+    trap 'rm -f "$HOME/ready/$port"; kill $! 2>/dev/null; exit 0' TERM
+    : >"$HOME/ready/$port"
+    wait ;;
+esac
+`;
+
+  const run = (home: string, args: ReadonlyArray<string>) =>
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const child = yield* spawner.spawn(
+        ChildProcess.make("sh", args, {
+          env: { PATH: process.env.PATH ?? "", HOME: home },
+          extendEnv: false,
+        }),
+      );
+      const text = (stream: typeof child.stdout) =>
+        stream.pipe(
+          Stream.decodeText(),
+          Stream.runFold(
+            () => "",
+            (acc, chunk) => acc + chunk,
+          ),
+        );
+      const [stdout, stderr, exitCode] = yield* Effect.all(
+        [text(child.stdout), text(child.stderr), child.exitCode.pipe(Effect.map(Number))],
+        { concurrency: "unbounded" },
+      );
+      return { stdout, stderr, exitCode };
+    });
+
+  const isAlive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const makeHost = Effect.fn("makeHost")(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ssh-ownership-" });
+    const home = `${root}/home`;
+    const versionDir = `${home}/.kinako/runtime/versions/${archiveVersion}`;
+    yield* fs.makeDirectory(versionDir, { recursive: true });
+    yield* fs.writeFileString(`${versionDir}/kinako`, FAKE_EXECUTABLE);
+    yield* fs.chmod(`${versionDir}/kinako`, 0o755);
+    yield* fs.writeFileString(`${versionDir}/.install-complete`, `${archiveVersion}\n`);
+    yield* fs.writeFileString(`${root}/launch.sh`, SshTunnel.buildRemoteLaunchScript(ARCHIVE));
+
+    const servers = Effect.gen(function* () {
+      const entries = yield* fs.readDirectory(home);
+      return yield* Effect.forEach(
+        entries.filter((entry) => entry.startsWith("started.")),
+        (entry) =>
+          fs.readFileString(`${home}/${entry}`).pipe(
+            Effect.map((contents) => {
+              const [mode, port, t3Home] = contents.trim().split(" ");
+              const pid = Number(entry.slice("started.".length));
+              return { pid, mode, port: Number(port), t3Home, alive: isAlive(pid) };
+            }),
+          ),
+      );
+    });
+    yield* Effect.addFinalizer(() =>
+      servers.pipe(
+        Effect.tap((all) =>
+          Effect.sync(() => {
+            for (const server of all) if (server.alive) process.kill(server.pid, "SIGTERM");
+          }),
+        ),
+        Effect.ignore,
+      ),
+    );
+
+    const launch = (stateKey: string) =>
+      run(home, [`${root}/launch.sh`, stateKey]).pipe(
+        Effect.map((result) => {
+          assert.equal(result.exitCode, 0, result.stderr);
+          return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "") as {
+            remotePort: number;
+            serverKind: string;
+          };
+        }),
+      );
+    const stop = (stateKey: string) =>
+      Effect.gen(function* () {
+        yield* fs.writeFileString(`${root}/stop.sh`, SshTunnel.buildRemoteStopScript(stateKey));
+        const result = yield* run(home, [`${root}/stop.sh`]);
+        assert.equal(result.exitCode, 0, result.stderr);
+      });
+    // The fake server marks itself ready from a background process.
+    const untilReady = (port: number) =>
+      fs
+        .exists(`${home}/ready/${port}`)
+        .pipe(Effect.delay("50 millis"), Effect.repeat({ until: (ready) => ready }));
+    return { fs, home, launch, stop, servers, run, untilReady };
+  });
+
+  it.live.skipIf(windowsHost)(
+    "runs archive servers under the service launcher and shares them across routes",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+
+        const first = yield* host.launch(routeA);
+        assert.equal(first.serverKind, "managed");
+        const [server] = yield* host.servers;
+        assert.equal(server?.mode, "__service-launcher");
+        assert.equal(server?.port, first.remotePort);
+        assert.equal(server?.t3Home, `${host.home}/.kinako`);
+        assert.isTrue(yield* host.fs.exists(`${host.home}/.kinako/runtime/seeded`));
+
+        // Reconnecting, from the same route or another one, reuses the
+        // server instead of restarting it.
+        assert.deepEqual(yield* host.launch(routeA), first);
+        assert.deepEqual(yield* host.launch(routeB), first);
+        const afterReconnects = yield* host.servers;
+        assert.equal(afterReconnects.length, 1);
+        assert.isTrue(afterReconnects[0]?.alive);
+
+        // Only the route that started it stops it.
+        yield* host.stop(routeB);
+        assert.isTrue((yield* host.servers)[0]?.alive);
+        yield* host.stop(routeA);
+        assert.isFalse((yield* host.servers)[0]?.alive);
+      }).pipe(Effect.provide(NodeServices.layer)),
+    30_000,
+  );
+
+  it.live.skipIf(windowsHost)(
+    "moves a server an older launcher started onto the service launcher from any route",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+        const executable = `${host.home}/.kinako/runtime/versions/${archiveVersion}/kinako`;
+        const legacy = yield* host.run(host.home, [
+          "-c",
+          `nohup "${executable}" serve --host 127.0.0.1 --port 4100 --base-dir "$HOME/.kinako" >/dev/null 2>&1 & echo $!`,
+        ]);
+        const legacyPid = Number(legacy.stdout.trim());
+        yield* host.untilReady(4100);
+        // Route A started it; route B found it running and recorded it as external.
+        const launchDir = `${host.home}/.kinako/ssh-launch`;
+        yield* host.fs.makeDirectory(`${launchDir}/${routeA}`, { recursive: true });
+        yield* host.fs.writeFileString(`${launchDir}/${routeA}/pid`, `${legacyPid}\n`);
+        yield* host.fs.writeFileString(`${launchDir}/${routeA}/port`, "4100\n");
+        yield* host.fs.writeFileString(`${launchDir}/${routeA}/managed`, "managed\n");
+        yield* host.fs.makeDirectory(`${launchDir}/${routeB}`, { recursive: true });
+        yield* host.fs.writeFileString(`${launchDir}/${routeB}/port`, "4100\n");
+        yield* host.fs.writeFileString(`${launchDir}/${routeB}/managed`, "external\n");
+
+        const result = yield* host.launch(routeB);
+        assert.deepEqual(result, { remotePort: 4100, serverKind: "managed" });
+        const servers = yield* host.servers;
+        assert.isFalse(servers.find((server) => server.pid === legacyPid)?.alive);
+        const replacement = servers.find((server) => server.pid !== legacyPid);
+        assert.equal(replacement?.mode, "__service-launcher");
+        assert.isTrue(replacement?.alive);
+
+        // Route B restarted it, so route A no longer stops it.
+        yield* host.stop(routeA);
+        assert.isTrue((yield* host.servers).find((server) => server.pid !== legacyPid)?.alive);
+      }).pipe(Effect.provide(NodeServices.layer)),
+    30_000,
+  );
+
+  it.live.skipIf(windowsHost)("reuses a server it did not start and never stops it", () =>
+    Effect.gen(function* () {
+      const host = yield* makeHost();
+      const executable = `${host.home}/.kinako/runtime/versions/${archiveVersion}/kinako`;
+      yield* host.run(host.home, [
+        "-c",
+        `T3CODE_PORT=4200 nohup "${executable}" __service-launcher >/dev/null 2>&1 &`,
+      ]);
+      yield* host.untilReady(4200);
+
+      assert.deepEqual(yield* host.launch(routeA), { remotePort: 4200, serverKind: "external" });
+      yield* host.stop(routeA);
+      const servers = yield* host.servers;
+      assert.equal(servers.length, 1);
+      assert.isTrue(servers[0]?.alive);
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
