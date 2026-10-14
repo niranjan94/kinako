@@ -1,3 +1,4 @@
+import type { PullRequestAutoFixStatus } from "@t3tools/client-runtime/pull-request-auto-fix";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 /**
@@ -92,6 +93,7 @@ export function ThreadDetailsPrRow({
   onOpen,
   onActed,
   onStopWatching,
+  autoFix = null,
 }: {
   environmentId: EnvironmentId;
   pr: ThreadPr;
@@ -107,6 +109,7 @@ export function ThreadDetailsPrRow({
   onActed?: () => void;
   /** Set while the server watches this pull request for the thread; stops the watch. */
   onStopWatching?: (() => void) | undefined;
+  autoFix?: PullRequestAutoFixStatus | null;
 }) {
   const serverConfigs = useServerConfigs();
   const supportsPullRequests =
@@ -379,7 +382,7 @@ export function ThreadDetailsPrRow({
         </TooltipTrigger>
         <TooltipPopup side="top">
           Watching: the agent wakes when checks finish, someone comments, or the branch conflicts.
-          Click to stop.
+          {autoFix ? ` ${autoFix.label}: ${autoFix.description}` : ""} Click to stop.
         </TooltipPopup>
       </Tooltip>
     ) : null;

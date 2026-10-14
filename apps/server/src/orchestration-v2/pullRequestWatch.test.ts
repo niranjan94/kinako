@@ -1,7 +1,9 @@
-import type {
-  PullRequestCheck,
-  PullRequestComment,
-  ThreadPullRequestWatch,
+import {
+  MessageId,
+  PULL_REQUEST_AUTO_FIX_MAX_ATTEMPTS,
+  type PullRequestCheck,
+  type PullRequestComment,
+  type ThreadPullRequestWatch,
 } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
 
@@ -12,6 +14,7 @@ import {
 } from "./pullRequestWatch.ts";
 
 const STARTED = "2026-10-02T12:00:00.000Z";
+const enabledAt = STARTED;
 
 const watch = (overrides: Partial<ThreadPullRequestWatch> = {}): ThreadPullRequestWatch => ({
   startedAt: STARTED,
@@ -66,13 +69,17 @@ describe("evaluatePullRequestWatch", () => {
     const bot = check("CodeRabbit", "pending");
     const first = detail({ checks: [check("lint", "failure"), check("test", "pending"), bot] });
     const lint = evaluatePullRequestWatch(watch(), first, noRemarks);
-    assert.deepEqual(lint.changes, [{ kind: "checks-failed", failed: [check("lint", "failure")] }]);
+    assert.deepEqual(lint.changes, [
+      { kind: "checks-failed", failed: [check("lint", "failure")], fixAttempt: null },
+    ]);
     assert.deepEqual(evaluatePullRequestWatch(lint.next, first, noRemarks).changes, []);
 
     // A different job failing later is news of its own.
     const second = detail({ checks: [check("lint", "failure"), check("test", "failure"), bot] });
     const test = evaluatePullRequestWatch(lint.next, second, noRemarks);
-    assert.deepEqual(test.changes, [{ kind: "checks-failed", failed: [check("test", "failure")] }]);
+    assert.deepEqual(test.changes, [
+      { kind: "checks-failed", failed: [check("test", "failure")], fixAttempt: null },
+    ]);
 
     // A rerun leaves the list while it runs, so failing again is reported again.
     const rerun = evaluatePullRequestWatch(test.next, first, noRemarks);
@@ -265,7 +272,236 @@ describe("evaluatePullRequestWatch", () => {
   });
 });
 
+describe("evaluatePullRequestWatch with auto-fix", () => {
+  const autoFixWatch = (overrides: Partial<ThreadPullRequestWatch> = {}) =>
+    watch({
+      autoFix: { enabledAt, attempts: 0, pausedReason: null, fixMessageId: null },
+      ...overrides,
+    });
+  const wake = (id: string, fixTurnEnded = false) => ({
+    wakeMessageId: MessageId.make(id),
+    fixTurnEnded,
+  });
+  const red = (headSha: string, ...names: Array<string>) =>
+    detail({ headSha, checks: names.map((name) => check(name, "failure")) });
+  const green = (headSha: string) => detail({ headSha, checks: [check("lint", "success")] });
+
+  it("asks for a fix once per failing head commit", () => {
+    const first = evaluatePullRequestWatch(autoFixWatch(), red("a", "lint"), noRemarks, wake("w1"));
+    assert.deepEqual(first.changes, [
+      { kind: "checks-failed", failed: [check("lint", "failure")], fixAttempt: 1 },
+    ]);
+    assert.deepEqual(first.next.autoFix, {
+      enabledAt,
+      attempts: 1,
+      pausedReason: null,
+      fixMessageId: MessageId.make("w1"),
+    });
+
+    // Another check failing on the same head while the agent works on it stays quiet.
+    const more = evaluatePullRequestWatch(
+      first.next,
+      red("a", "lint", "test"),
+      noRemarks,
+      wake("w2"),
+    );
+    assert.deepEqual(more.changes, []);
+    assert.deepEqual(more.next.failedChecks, ["lint", "test"]);
+    assert.equal(more.next.autoFix?.attempts, 1);
+
+    // A push that fails again is a new attempt.
+    const pushed = evaluatePullRequestWatch(more.next, red("b", "lint"), noRemarks, wake("w3"));
+    assert.deepEqual(pushed.changes, [
+      { kind: "checks-failed", failed: [check("lint", "failure")], fixAttempt: 2 },
+    ]);
+    assert.equal(pushed.next.autoFix?.fixMessageId, MessageId.make("w3"));
+  });
+
+  it("pauses at the attempt limit and stays quiet about failures while paused", () => {
+    let current = autoFixWatch();
+    for (let attempt = 1; attempt <= PULL_REQUEST_AUTO_FIX_MAX_ATTEMPTS; attempt += 1) {
+      const report = evaluatePullRequestWatch(
+        current,
+        red(`head-${attempt}`, "lint"),
+        noRemarks,
+        wake(`w${attempt}`),
+      );
+      assert.equal(
+        report.changes[0]?.kind === "checks-failed" && report.changes[0].fixAttempt,
+        attempt,
+      );
+      current = report.next;
+    }
+    const limit = evaluatePullRequestWatch(
+      current,
+      red("head-last", "lint"),
+      noRemarks,
+      wake("w-last"),
+    );
+    assert.deepEqual(limit.changes, [
+      { kind: "checks-failed", failed: [check("lint", "failure")], fixAttempt: null },
+      { kind: "auto-fix-paused", reason: "attempt-limit" },
+    ]);
+    assert.equal(limit.next.autoFix?.pausedReason, "attempt-limit");
+
+    const later = evaluatePullRequestWatch(
+      limit.next,
+      red("head-later", "lint"),
+      noRemarks,
+      wake("w"),
+    );
+    assert.deepEqual(later.changes, []);
+    // Other news still wakes a paused watch.
+    const conflict = evaluatePullRequestWatch(
+      limit.next,
+      { ...red("head-later", "lint"), mergeability: "conflicting" },
+      noRemarks,
+      wake("w"),
+    );
+    assert.deepEqual(conflict.changes, [{ kind: "conflicting" }]);
+  });
+
+  it("resets on green, including a rerun that turns the same commit green", () => {
+    const fixing = evaluatePullRequestWatch(
+      autoFixWatch(),
+      red("a", "lint"),
+      noRemarks,
+      wake("w1"),
+    );
+    const rerunGreen = evaluatePullRequestWatch(fixing.next, green("a"), noRemarks, wake("w2"));
+    assert.deepEqual(rerunGreen.changes, [{ kind: "checks-passed", count: 1, required: false }]);
+    assert.deepEqual(rerunGreen.next.autoFix, {
+      enabledAt,
+      attempts: 0,
+      pausedReason: null,
+      fixMessageId: null,
+    });
+
+    const paused = autoFixWatch({
+      headSha: "a",
+      failedChecks: ["lint"],
+      autoFix: { enabledAt, attempts: 3, pausedReason: "attempt-limit", fixMessageId: null },
+    });
+    assert.deepEqual(evaluatePullRequestWatch(paused, green("b"), noRemarks).next.autoFix, {
+      enabledAt,
+      attempts: 0,
+      pausedReason: null,
+      fixMessageId: null,
+    });
+  });
+
+  it("does not reset while an advisory check fails beside a passing required gate", () => {
+    const fixing = evaluatePullRequestWatch(
+      autoFixWatch(),
+      red("a", "advisory"),
+      noRemarks,
+      wake("w1"),
+    );
+    const gated = detail({
+      headSha: "b",
+      checks: [{ ...check("test", "success"), required: true }, check("advisory", "failure")],
+    });
+    const report = evaluatePullRequestWatch(fixing.next, gated, noRemarks, wake("w2"));
+    assert.equal(report.next.autoFix?.attempts, 2);
+  });
+
+  it("pauses when the fix turn ends without a push and the head is still red", () => {
+    const fixing = evaluatePullRequestWatch(
+      autoFixWatch(),
+      red("a", "lint"),
+      noRemarks,
+      wake("w1"),
+    );
+    // Still working: nothing to say.
+    assert.deepEqual(
+      evaluatePullRequestWatch(fixing.next, red("a", "lint"), noRemarks, wake("w2")).changes,
+      [],
+    );
+    // The agent reran the failed check instead of pushing: wait for it.
+    const rerunning = detail({ headSha: "a", checks: [check("lint", "pending")] });
+    assert.deepEqual(
+      evaluatePullRequestWatch(fixing.next, rerunning, noRemarks, wake("w3", true)).changes,
+      [],
+    );
+    const ended = evaluatePullRequestWatch(
+      fixing.next,
+      red("a", "lint"),
+      noRemarks,
+      wake("w4", true),
+    );
+    assert.deepEqual(ended.changes, [{ kind: "auto-fix-paused", reason: "no-push" }]);
+    assert.deepEqual(ended.next.autoFix, {
+      enabledAt,
+      attempts: 1,
+      pausedReason: "no-push",
+      fixMessageId: null,
+    });
+    assert.deepEqual(
+      evaluatePullRequestWatch(ended.next, red("a", "lint"), noRemarks, wake("w5", true)).changes,
+      [],
+    );
+  });
+
+  it("leaves the plain watch unchanged when auto-fix is off", () => {
+    const report = evaluatePullRequestWatch(watch(), red("a", "lint"), noRemarks, wake("w1", true));
+    assert.deepEqual(report.changes, [
+      { kind: "checks-failed", failed: [check("lint", "failure")], fixAttempt: null },
+    ]);
+    assert.isUndefined(report.next.autoFix);
+  });
+});
+
 describe("pullRequestWatchMessage", () => {
+  it("asks for a verified fix and treats check output as untrusted", () => {
+    const report = evaluatePullRequestWatch(
+      watch({ autoFix: { enabledAt, attempts: 0, pausedReason: null, fixMessageId: null } }),
+      detail({ headSha: "aaaaaaaaaa", checks: [check("lint", "failure")] }),
+      noRemarks,
+      { wakeMessageId: MessageId.make("w1"), fixTurnEnded: false },
+    );
+    const message = pullRequestWatchMessage({
+      number: 12,
+      url: "https://github.com/o/r/pull/12",
+      baseBranch: "main",
+      headBranch: "feature",
+      headSha: report.next.headSha,
+      report,
+    });
+    assert.include(message.text, "attempt 1 of 3");
+    assert.include(message.text, "feature at commit aaaaaaaaaa");
+    assert.include(message.text, "untrusted");
+    assert.notInclude(message.text, "unwatch_pull_request");
+    assert.equal(message.notification.summary, "#12: checks failed, auto-fix 1/3");
+  });
+
+  it("tells the agent to report back when auto-fix pauses", () => {
+    const report = evaluatePullRequestWatch(
+      watch({
+        headSha: "aaaaaaaaaa",
+        failedChecks: ["lint"],
+        autoFix: { enabledAt, attempts: 1, pausedReason: null, fixMessageId: MessageId.make("w1") },
+      }),
+      detail({ headSha: "aaaaaaaaaa", checks: [check("lint", "failure")] }),
+      noRemarks,
+      { wakeMessageId: MessageId.make("w2"), fixTurnEnded: true },
+    );
+    const message = pullRequestWatchMessage({
+      number: 12,
+      url: "https://github.com/o/r/pull/12",
+      baseBranch: "main",
+      headBranch: "feature",
+      headSha: report.next.headSha,
+      report,
+    });
+    assert.include(message.text, "without pushing a new commit");
+    assert.include(message.text, "Tell the user");
+    assert.deepEqual(message.notification, {
+      source: { kind: "monitor" },
+      outcome: "failed",
+      summary: "#12: auto-fix paused",
+    });
+  });
+
   it("tells the agent what changed and marks failures for the timeline", () => {
     const report = evaluatePullRequestWatch(
       watch(),
@@ -276,6 +512,7 @@ describe("pullRequestWatchMessage", () => {
       number: 12,
       url: "https://github.com/o/r/pull/12",
       baseBranch: "main",
+      headBranch: "feature",
       headSha: report.next.headSha,
       report,
     });

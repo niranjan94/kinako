@@ -287,6 +287,8 @@ watch. Subagents cannot watch pull requests; the thread that delegated to them d
 it yourself, use the row menu in the **Linked pull requests** panel. In the thread details card, a
 watched pull request shows an eye; click it to stop watching.
 
+**Auto-fix CI** lets the agent fix its own failing checks. Turn it on from the row menu in the **Linked pull requests** panel, with **Auto-fix CI** in a pull request's AI helpers on mobile, or by asking the agent. It starts watching if the pull request is not watched yet. When a check fails on a new commit, the agent gets a turn to reproduce and fix it, at most once per commit. Fix turns wait for any running turn and for your answers to pending questions. After 3 attempts in a row without the checks passing, or when a fix turn ends without pushing a commit, Auto-fix pauses and the agent tells you why. While paused, failing checks do not wake the agent; comments and conflicts still do. Checks passing resets the count. To resume after a pause, choose **Resume auto-fix CI** in the row menu. Turning Auto-fix off keeps the watch; stopping the watch turns Auto-fix off too.
+
 A watched thread counts as working between wakes, so it stays in the **Working** section and does
 not auto-settle. Agents stop watching when they hand the work back to you, and the thread then
 returns to your inbox.

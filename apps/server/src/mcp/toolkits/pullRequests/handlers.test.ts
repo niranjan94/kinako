@@ -288,6 +288,23 @@ describe("pull request toolkit handlers", () => {
     }),
   );
 
+  it.effect("passes autoFix through only when the agent sets it", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      const url = "https://github.com/t3tools/t3code/pull/9";
+      yield* harness.call("watch_pull_request", { url, autoFix: true });
+      yield* harness.call("watch_pull_request", { url });
+      yield* harness.call("watch_pull_request", { url, autoFix: false });
+      const commands = yield* Ref.get(harness.commands);
+      expect(commands.map((command) => "autoFix" in command && command.autoFix)).toEqual([
+        true,
+        false,
+        false,
+      ]);
+      expect(commands.map((command) => "autoFix" in command)).toEqual([true, false, true]);
+    }),
+  );
+
   it.effect("refuses to watch a merged pull request and stops an existing watch", () =>
     Effect.gen(function* () {
       const watch = {

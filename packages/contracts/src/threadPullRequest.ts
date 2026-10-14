@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 
 import {
   IsoDateTime,
+  MessageId,
   NonNegativeInt,
   PositiveInt,
   ProjectId,
@@ -93,6 +94,28 @@ export const ThreadPullRequestKey = Schema.Struct({
 });
 export type ThreadPullRequestKey = typeof ThreadPullRequestKey.Type;
 
+/** Fix wakes in one failure streak before auto-fix pauses. */
+export const PULL_REQUEST_AUTO_FIX_MAX_ATTEMPTS = 3;
+
+/**
+ * Why auto-fix stopped asking the agent to fix checks: the attempt limit was reached, or a fix
+ * turn ended without pushing a new commit. Passing checks or turning auto-fix on again resumes it.
+ */
+export const ThreadPullRequestAutoFixPause = Schema.Literals(["attempt-limit", "no-push"]);
+export type ThreadPullRequestAutoFixPause = typeof ThreadPullRequestAutoFixPause.Type;
+
+/** Present while the watch hands failing checks to the agent as fix turns. */
+export const ThreadPullRequestAutoFix = Schema.Struct({
+  /** When auto-fix was last turned on or resumed; progress read before then is stale. */
+  enabledAt: IsoDateTime,
+  /** Fix wakes since checks last passed. */
+  attempts: NonNegativeInt,
+  pausedReason: Schema.NullOr(ThreadPullRequestAutoFixPause),
+  /** The wake that asked the agent to fix the head commit; null once the head moves or passes. */
+  fixMessageId: Schema.NullOr(MessageId),
+});
+export type ThreadPullRequestAutoFix = typeof ThreadPullRequestAutoFix.Type;
+
 /**
  * Present while the server watches the pull request for its thread. The server wakes the
  * thread's agent when checks finish on the head commit, someone else comments, or the branch
@@ -121,6 +144,7 @@ export const ThreadPullRequestWatch = Schema.Struct({
   conflicting: Schema.Boolean,
   /** Comment-only wakes in a row. Watching stops at a limit, so bots cannot loop it. */
   wakes: NonNegativeInt,
+  autoFix: Schema.optional(ThreadPullRequestAutoFix),
 });
 export type ThreadPullRequestWatch = typeof ThreadPullRequestWatch.Type;
 

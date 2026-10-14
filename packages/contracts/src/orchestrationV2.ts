@@ -2888,6 +2888,11 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
     ...ThreadPullRequestKey.fields,
     watching: Schema.Boolean,
+    /**
+     * With `watching`, turns auto-fix on (resetting its attempts and any pause) or off. Omitted
+     * keeps the watch's current setting.
+     */
+    autoFix: Schema.optional(Schema.Boolean),
     /** Links the pull request first when starting a watch on one the thread has not linked. */
     link: Schema.optional(
       Schema.Struct({ url: TrimmedNonEmptyString, source: ThreadPullRequestLinkSource }),

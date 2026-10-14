@@ -550,6 +550,30 @@ function withPullRequestWatch(
   return watch === undefined ? rest : { ...rest, watch };
 }
 
+/**
+ * The watch with auto-fix turned on or off. Turning it on forgets the failures already reported,
+ * so a pull request that is red now gets a fix turn on the next pass. Asking again while it runs
+ * keeps its attempts, so re-arming cannot lift the cap; only a paused one starts over.
+ */
+function withAutoFix(
+  watch: ThreadPullRequestWatch,
+  autoFix: boolean | undefined,
+  enabledAt: string,
+): ThreadPullRequestWatch {
+  if (autoFix === undefined) return watch;
+  if (!autoFix) {
+    if (watch.autoFix === undefined) return watch;
+    const { autoFix: _previous, ...rest } = watch;
+    return rest;
+  }
+  if (watch.autoFix !== undefined && watch.autoFix.pausedReason === null) return watch;
+  return {
+    ...watch,
+    failedChecks: [],
+    autoFix: { enabledAt, attempts: 0, pausedReason: null, fixMessageId: null },
+  };
+}
+
 /** A legacy single-PR link as a link entry. Re-linking a pull request keeps its watch. */
 function legacyPullRequestLink(
   thread: OrchestrationV2AppThread,
@@ -2381,7 +2405,15 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         thread.settledOverride === "settled" ||
         thread.settledAt !== null ||
         isProviderNativeSubagentThread(thread);
-      if (link?.watch?.startedAt !== command.startedAt || (command.wake && inactive)) {
+      // Turning auto-fix on, off, or resuming it keeps the watch, so its epoch is checked too.
+      const autoFixChanged =
+        command.watch !== null &&
+        command.watch.autoFix?.enabledAt !== link?.watch?.autoFix?.enabledAt;
+      if (
+        link?.watch?.startedAt !== command.startedAt ||
+        autoFixChanged ||
+        (command.wake && inactive)
+      ) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
@@ -3159,17 +3191,21 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 : existing.watch
               : !command.watching
                 ? undefined
-                : (existing.watch ?? {
+                : withAutoFix(
+                    existing.watch ?? {
+                      startedAt,
+                      headSha: null,
+                      failedChecks: [],
+                      passed: false,
+                      passedChecks: [],
+                      remarksThrough: startedAt,
+                      remarkIds: [],
+                      conflicting: false,
+                      wakes: 0,
+                    },
+                    command.autoFix,
                     startedAt,
-                    headSha: null,
-                    failedChecks: [],
-                    passed: false,
-                    passedChecks: [],
-                    remarksThrough: startedAt,
-                    remarkIds: [],
-                    conflicting: false,
-                    wakes: 0,
-                  });
+                  );
           if (watch === existing.watch && links === linked) return thread;
           return {
             ...thread,
