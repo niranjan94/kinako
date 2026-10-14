@@ -9,6 +9,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import * as ProcessRunner from "../processRunner.ts";
 
@@ -55,10 +56,21 @@ function parseRemoteFetchUrls(stdout: string): Map<string, string> {
   return remotes;
 }
 
+/** The remote `gh repo set-default` marked as the base repository, if exactly one is. */
+function parseGhResolvedBaseRemote(stdout: string): string | undefined {
+  const marked = stdout
+    .split("\n")
+    .map((line) => /^remote\.(.+)\.gh-resolved\s+base$/u.exec(line.trim())?.[1])
+    .filter((name) => name !== undefined);
+  return marked.length === 1 ? marked[0] : undefined;
+}
+
 function pickPrimaryRemote(
   remotes: ReadonlyMap<string, string>,
+  defaultRemoteName: string | undefined,
 ): { readonly remoteName: string; readonly remoteUrl: string } | null {
-  for (const preferredRemoteName of ["upstream", "origin"] as const) {
+  for (const preferredRemoteName of [defaultRemoteName, "upstream", "origin"]) {
+    if (preferredRemoteName === undefined) continue;
     const remoteUrl = remotes.get(preferredRemoteName);
     if (remoteUrl) {
       return { remoteName: preferredRemoteName, remoteUrl };
@@ -155,7 +167,23 @@ const resolveRepositoryIdentityFromCacheKey = Effect.fn(
   }
 
   const remotes = parseRemoteFetchUrls(remoteResult.value.stdout);
-  const remote = pickPrimaryRemote(remotes);
+  // A fork that tracks its own issues sets `gh repo set-default` to override the upstream
+  // preference. Only a checkout with several remotes has a choice to make.
+  const defaultRemoteResult =
+    remotes.size > 1
+      ? yield* processRunner
+          .run({
+            command: "git",
+            args: ["-C", cacheKey, "config", "--get-regexp", "^remote\\..*\\.gh-resolved$"],
+            timeoutBehavior: "timedOutResult",
+          })
+          .pipe(Effect.option)
+      : Option.none();
+  const defaultRemoteName =
+    defaultRemoteResult._tag === "Some" && defaultRemoteResult.value.code === 0
+      ? parseGhResolvedBaseRemote(defaultRemoteResult.value.stdout)
+      : undefined;
+  const remote = pickPrimaryRemote(remotes, defaultRemoteName);
   return remote
     ? buildRepositoryIdentity({ ...remote, originUrl: remotes.get("origin"), rootPath: cacheKey })
     : null;
