@@ -42,6 +42,7 @@ import {
   type AdvertisedEndpoint,
   type DesktopDiscoveredSshHost,
   type DesktopSshEnvironmentTarget,
+  type DesktopSshNetworkAccessState,
   type DesktopServerExposureState,
   type DesktopWslState,
   type EnvironmentId,
@@ -1484,12 +1485,111 @@ function directPairingBaseUrl(connection: {
   }
 }
 
+function sshRouteTarget(
+  entry: EnvironmentPresentation["entry"],
+): DesktopSshEnvironmentTarget | null {
+  for (const route of connectionRoutes(entry)) {
+    if (
+      route.target._tag === "SshConnectionTarget" &&
+      Option.isSome(route.profile) &&
+      route.profile.value._tag === "SshConnectionProfile"
+    ) {
+      return route.profile.value.target;
+    }
+  }
+  return null;
+}
+
+/** Shown while this device holds an SSH tunnel to the server, the only time its binding is known. */
+function SshNetworkAccessSetting({
+  target,
+  label,
+}: {
+  readonly target: DesktopSshEnvironmentTarget;
+  readonly label: string;
+}) {
+  const desktopBridge = window.desktopBridge;
+  const [state, setState] = useState<DesktopSshNetworkAccessState | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    if (!desktopBridge) return;
+    let cancelled = false;
+    desktopBridge.getSshNetworkAccess(target).then(
+      (next) => {
+        if (!cancelled) setState(next);
+      },
+      () => {
+        if (!cancelled) setState(null);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [desktopBridge, target]);
+
+  const handleChange = useCallback(
+    async (enabled: boolean) => {
+      if (!desktopBridge) return;
+      const confirmed = await requestConfirmDialog(
+        enabled
+          ? `Enable network access for ${label}?\nOther devices on its network can connect to it directly once you pair them. Its server will restart.`
+          : `Disable network access for ${label}?\nDevices connected over its network will disconnect. Its server will restart.`,
+      );
+      if (confirmed !== true) return;
+      setIsUpdating(true);
+      try {
+        const next = await desktopBridge.setSshNetworkAccess(target, enabled);
+        if (next !== null) setState(next);
+      } catch (error) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Could not update network access",
+            description: error instanceof Error ? error.message : "The SSH host did not respond.",
+          }),
+        );
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    [desktopBridge, label, target],
+  );
+
+  if (!desktopBridge || state === null) return null;
+  const external = state.serverKind === "external";
+  return (
+    <div className="flex items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-foreground">Network access</p>
+        <p className="text-xs text-muted-foreground">
+          {external
+            ? "This server was started on the host itself, so its network access is set there."
+            : state.networkAccess
+              ? "Other devices on its network can reach it."
+              : "Reachable only through SSH from this device."}
+        </p>
+      </div>
+      <Switch
+        checked={state.networkAccess}
+        disabled={external || isUpdating}
+        onCheckedChange={(checked) => void handleChange(checked)}
+        aria-label={`Network access for ${label}`}
+      />
+    </div>
+  );
+}
+
 function RemoteAuthorizedClients({
   environmentId,
+  sshTarget,
+  label,
   access,
   id,
 }: {
   readonly environmentId: EnvironmentId;
+  readonly sshTarget: DesktopSshEnvironmentTarget | null;
+  readonly label: string;
   readonly access: ReturnType<typeof useEnvironmentAccessManagement>;
   readonly id: string;
 }) {
@@ -1510,6 +1610,7 @@ function RemoteAuthorizedClients({
 
   return (
     <div id={id} className="mt-2 border-t border-border/50">
+      {sshTarget ? <SshNetworkAccessSetting target={sshTarget} label={label} /> : null}
       {access.canWriteAccess ? (
         <div className="flex flex-wrap items-center justify-between gap-3 py-3">
           <p className="text-xs text-muted-foreground">
@@ -1993,6 +2094,8 @@ function SavedBackendListRow({
           {clientsOpen && canManageClients && (
             <RemoteAuthorizedClients
               environmentId={environmentId}
+              sshTarget={sshRouteTarget(environment.entry)}
+              label={environment.label}
               access={clientsAccess}
               id={`remote-clients-${environmentId}`}
             />
