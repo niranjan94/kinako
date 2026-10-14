@@ -37,6 +37,7 @@ import * as ForgejoPullRequestProvider from "@t3tools/source-control-forgejo/ser
 import {
   PullRequestProviderError,
   type ProviderChangeRequest,
+  type ProviderIssue,
   type PullRequestProviderApi,
 } from "@t3tools/source-control-core/server/PullRequestProvider";
 import * as PullRequestProviderRegistry from "./PullRequestProviderRegistry.ts";
@@ -7653,4 +7654,235 @@ it.effect.each([
       });
       assert.deepStrictEqual(calls, [expected]);
     }),
+);
+
+const issueCapabilities = {
+  diff: true,
+  comment: true,
+  actions: [],
+  mergeMethods: [],
+  search: true,
+  review: FULL_REVIEW,
+  reviewers: FULL_REVIEWERS,
+  issues: true,
+} as const;
+
+function providerIssue(repository: string, number: number, updatedAt: string): ProviderIssue {
+  return {
+    repository,
+    number,
+    title: `Issue ${number}`,
+    url: `https://github.com/${repository}/issues/${number}`,
+    author: null,
+    state: "open",
+    labels: [],
+    assignees: [],
+    commentCount: 0,
+    createdAt: "2026-07-01T00:00:00Z",
+    updatedAt,
+    closedAt: null,
+  };
+}
+
+it.effect("lists issues with one search per host and skips hosts that cannot read them", () =>
+  Effect.gen(function* () {
+    const searches: Array<ReadonlyArray<string>> = [];
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" }),
+        project({ id: "p2", title: "api", workspaceRoot: "/b", repository: "acme/api" }),
+        project({
+          id: "p3",
+          title: "lab",
+          workspaceRoot: "/c",
+          repository: "group/lab",
+          provider: "gitlab",
+        }),
+      ],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          capabilities: issueCapabilities,
+          listIssues: (input) =>
+            Effect.sync(() => {
+              searches.push(input.repositories);
+              return {
+                items: [
+                  providerIssue("acme/web", 4, "2026-07-03T00:00:00Z"),
+                  providerIssue("ACME/api", 2, "2026-07-04T00:00:00Z"),
+                ],
+                truncated: false,
+              };
+            }),
+        }),
+        fakeProvider(SourceControlProviderKind.make("gitlab"), {
+          listIssues: () => Effect.die("a host without the capability is never asked"),
+        }),
+      ],
+    });
+
+    const result = yield* service.listIssues({ state: "open" });
+
+    assert.deepStrictEqual(searches, [["acme/web", "acme/api"]]);
+    assert.deepStrictEqual(
+      result.entries.map((entry) => [entry.projectTitle, entry.number]),
+      [
+        ["api", 2],
+        ["web", 4],
+      ],
+    );
+    assert.deepStrictEqual(result.errors, []);
+    const providers = (yield* service.list({ state: "open" })).providers;
+    assert.deepStrictEqual(
+      providers.map((provider) => [provider.host, provider.issues]),
+      [
+        ["github.com", true],
+        ["gitlab.com", false],
+      ],
+    );
+  }),
+);
+
+it.effect("carries an issue listing on from its cursor without repeating rows", () =>
+  Effect.gen(function* () {
+    const cursors: Array<string | undefined> = [];
+    const service = yield* makeService({
+      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          capabilities: issueCapabilities,
+          listIssues: (input) =>
+            Effect.sync(() => {
+              cursors.push(input.cursor?.updatedBefore);
+              return input.cursor === undefined
+                ? {
+                    items: [
+                      providerIssue("acme/web", 3, "2026-07-03T00:00:00Z"),
+                      providerIssue("acme/web", 2, "2026-07-02T00:00:00Z"),
+                    ],
+                    truncated: true,
+                  }
+                : {
+                    items: [
+                      providerIssue("acme/web", 2, "2026-07-02T00:00:00Z"),
+                      providerIssue("acme/web", 1, "2026-07-02T00:00:00Z"),
+                    ],
+                    truncated: false,
+                  };
+            }),
+        }),
+      ],
+    });
+
+    const first = yield* service.listIssues({ state: "open", limit: 2 });
+    const next = yield* service.listIssues({
+      state: "open",
+      limit: 2,
+      cursors: first.nextCursors,
+    });
+
+    assert.deepStrictEqual(cursors, [undefined, "2026-07-02T00:00:00Z"]);
+    assert.deepStrictEqual(
+      next.entries.map((entry) => entry.number),
+      [1],
+    );
+    assert.deepStrictEqual(next.nextCursors, {});
+  }),
+);
+
+it.effect("reports a host whose issue search failed per repository", () =>
+  Effect.gen(function* () {
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" }),
+        project({
+          id: "p2",
+          title: "enterprise",
+          workspaceRoot: "/b",
+          repository: "corp/app",
+          host: "github.corp.example",
+        }),
+      ],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          capabilities: issueCapabilities,
+          listIssues: (input) =>
+            input.host === "github.com"
+              ? Effect.succeed({
+                  items: [providerIssue("acme/web", 1, "2026-07-03T00:00:00Z")],
+                  truncated: false,
+                })
+              : Effect.fail(requestFailed),
+        }),
+      ],
+    });
+
+    const result = yield* service.listIssues({ state: "all" });
+
+    assert.deepStrictEqual(
+      result.entries.map((entry) => entry.number),
+      [1],
+    );
+    assert.deepStrictEqual(
+      result.errors.map((error) => error.projectTitle),
+      ["enterprise"],
+    );
+  }),
+);
+
+it.effect("reads an issue, and a comment on it re-reads the detail", () =>
+  Effect.gen(function* () {
+    let reads = 0;
+    const posted: Array<string> = [];
+    const service = yield* makeService({
+      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          capabilities: issueCapabilities,
+          listIssues: () => Effect.succeed({ items: [], truncated: false }),
+          getIssue: ({ number }) =>
+            Effect.sync(() => {
+              reads++;
+              return {
+                ...providerIssue("acme/web", number, "2026-07-03T00:00:00Z"),
+                body: "Steps",
+                comments: [],
+                commentsTruncated: false,
+                viewerCanComment: true,
+              };
+            }),
+          commentOnIssue: ({ body }) => Effect.sync(() => void posted.push(body)),
+        }),
+      ],
+    });
+    const ref = { projectId: "p1" as ProjectId, repository: "acme/web", number: 7 };
+
+    const detail = yield* service.issueDetail(ref);
+    yield* service.issueDetail(ref);
+    assert.strictEqual(detail.workspaceRoot, "/a");
+    assert.isTrue(detail.canComment);
+    assert.strictEqual(reads, 1);
+
+    const empty = yield* Effect.flip(service.commentOnIssue({ ...ref, body: "  " }));
+    assert.strictEqual(empty._tag, "PullRequestOperationError");
+    yield* service.commentOnIssue({ ...ref, body: "On it." });
+    yield* service.issueDetail(ref);
+
+    assert.deepStrictEqual(posted, ["On it."]);
+    assert.strictEqual(reads, 2);
+  }),
+);
+
+it.effect("refuses issue reads on a host that does not offer them", () =>
+  Effect.gen(function* () {
+    const service = yield* makeService({
+      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
+      providers: [fakeProvider(SourceControlProviderKind.make("github"))],
+    });
+
+    const error = yield* Effect.flip(
+      service.issueDetail({ projectId: "p1" as ProjectId, repository: "acme/web", number: 1 }),
+    );
+
+    assert.strictEqual(error._tag, "PullRequestOperationError");
+  }),
 );

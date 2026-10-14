@@ -2545,6 +2545,11 @@ const layerWsRpc = (
           withPullRequestViewer(input, pullRequests.update(input)),
         [WS_METHODS.pullRequestsComment]: (input) =>
           withPullRequestViewer(input, pullRequests.comment(input)),
+        [WS_METHODS.issuesList]: (input) => pullRequests.listIssues(input),
+        [WS_METHODS.issuesDetail]: (input) =>
+          withPullRequestViewer(input, pullRequests.issueDetail(input)),
+        [WS_METHODS.issuesComment]: (input) =>
+          withPullRequestViewer(input, pullRequests.commentOnIssue(input)),
         [WS_METHODS.pullRequestsUpdateComment]: (input) =>
           withPullRequestViewer(input, pullRequests.updateComment(input)),
         [WS_METHODS.pullRequestsSubmitReview]: (input) =>
