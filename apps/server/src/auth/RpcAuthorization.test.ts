@@ -133,6 +133,16 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("reads issues like pull requests and writes their comments under source control", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.issuesList)).toBe(
+      requiredScopeForRpcMethod(WS_METHODS.pullRequestsList),
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.issuesDetail)).toBe(
+      requiredScopeForRpcMethod(WS_METHODS.pullRequestsDetail),
+    );
+    expect(requiredScopeForRpcMethod(WS_METHODS.issuesComment)).toBe(AuthSourceControlWriteScope);
+  });
+
   it("requires source control writes to start, retry, or cancel project clones", () => {
     for (const method of [
       WS_METHODS.projectCloneStart,
