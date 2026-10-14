@@ -1933,15 +1933,22 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     return yield* withTargetLock(
       key,
       Effect.gen(function* () {
-        yield* runWithSshAuth({
-          key,
-          target: resolvedTarget,
-          operation: (authOptions) =>
-            writeRemoteNetworkAccess(resolvedTarget, enabled, authOptions),
-        });
+        const savePreference = (value: boolean) =>
+          runWithSshAuth({
+            key,
+            target: resolvedTarget,
+            operation: (authOptions) =>
+              writeRemoteNetworkAccess(resolvedTarget, value, authOptions),
+          });
+        yield* savePreference(enabled);
         const entry = tunnels.get(key);
         if (entry === undefined) {
           return null;
+        }
+        // A server started on the host keeps its own binding, and one already
+        // bound this way has nothing to apply, so neither is restarted.
+        if (entry.remoteServerKind === "external" || entry.networkAccess === enabled) {
+          return networkAccessState(entry);
         }
         // Dropping the entry first keeps its finalizer from stopping the
         // server; the launch script replaces it once the bind host differs.
@@ -1952,17 +1959,11 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         // The setting is only reachable through a live tunnel, so a server that
         // cannot start with it must come back as it was rather than stay down.
         const relaunched = yield* ensureTunnelEntry(key, resolvedTarget, runner).pipe(
-          Effect.catch((error) =>
-            Effect.gen(function* () {
-              yield* runWithSshAuth({
-                key,
-                target: resolvedTarget,
-                operation: (authOptions) =>
-                  writeRemoteNetworkAccess(resolvedTarget, !enabled, authOptions),
-              });
-              yield* ensureTunnelEntry(key, resolvedTarget, runner).pipe(Effect.ignore);
-              return yield* error;
-            }),
+          Effect.tapError(() =>
+            savePreference(entry.networkAccess).pipe(
+              Effect.andThen(ensureTunnelEntry(key, resolvedTarget, runner)),
+              Effect.ignore,
+            ),
           ),
         );
         return networkAccessState(relaunched);
