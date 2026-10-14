@@ -3479,8 +3479,7 @@ const ISSUE_ROW_SELECTION = `number
         repository { nameWithOwner }
         author { __typename login avatarUrl ... on User { name } }
         labels(first: 20) { nodes { name color } }
-        assignees(first: 10) { nodes { login avatarUrl name } }
-        comments { totalCount }`;
+        assignees(first: 10) { nodes { login avatarUrl name } }`;
 
 /** A slice of issues as one search, across one repository or several. */
 export function issueSearchGraphQlQuery(rows: number): string {
@@ -3490,6 +3489,7 @@ export function issueSearchGraphQlQuery(rows: number): string {
     nodes {
       ... on Issue {
         ${ISSUE_ROW_SELECTION}
+        comments { totalCount }
       }
     }
   }
@@ -3505,6 +3505,7 @@ export const ISSUE_DETAIL_GRAPHQL_QUERY = `query($owner: String!, $name: String!
       body
       locked
       comments(first: 100, after: $after) {
+        totalCount
         pageInfo { hasNextPage endCursor }
         nodes { id body createdAt lastEditedAt url author { __typename login avatarUrl ... on User { name } } }
       }

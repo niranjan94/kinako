@@ -1,8 +1,4 @@
-import {
-  repositoryGroupingKeyOf,
-  type IssueState,
-  type RepositoryIdentity,
-} from "@t3tools/contracts";
+import type { IssueState, RepositoryIdentity } from "@t3tools/contracts";
 
 /**
  * How web and mobile hand an issue to an agent. Both seed the same words, so an issue sent from
@@ -55,7 +51,8 @@ export function sendIssueToAgentPrompt(issue: HandoffIssue): string {
 
 /**
  * The projects a hosted repository is checked out as, in the order given. Callers pass projects
- * most recently active first, so a picker offers the likeliest one first.
+ * most recently active first, so a picker offers the likeliest one first. Matched on the canonical
+ * identity, which is the repository the server lists a fork checkout's issues under.
  */
 export function projectsForRepository<
   P extends { readonly repositoryIdentity?: RepositoryIdentity | null | undefined },
@@ -67,6 +64,6 @@ export function projectsForRepository<
   return projects.filter(
     (project) =>
       project.repositoryIdentity != null &&
-      repositoryGroupingKeyOf(project.repositoryIdentity).toLowerCase() === key,
+      project.repositoryIdentity.canonicalKey.toLowerCase() === key,
   );
 }

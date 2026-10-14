@@ -13,6 +13,10 @@ import { readProjects, readThreadShells } from "../../state/entities";
 import { sortScopedProjectsForSidebar } from "../Sidebar.logic";
 import { toastManager } from "../ui/toast";
 import { askAboutIssueContext } from "./issue.logic";
+import { handoffPrompt } from "./pullRequestDetail.logic";
+
+/** What the last issue hand-off wrote into each draft, so a reader's own edits are never replaced. */
+const lastHandoffPromptByDraft = new Map<DraftId, string>();
 
 /**
  * A question should not change anything without the reader agreeing first. ChatView reads a
@@ -67,9 +71,23 @@ export function useIssueHandoff() {
       });
       return;
     }
+    // The draft a new thread lands in can be one the reader already started, so only what an
+    // earlier hand-off wrote is replaced, the same way the pull request hand-offs treat it.
     const store = useComposerDraftStore.getState();
+    const draft = store.getComposerDraft(opened.draftId);
+    const incomingPrompt = kind === "send" ? sendIssueToAgentPrompt(issue) : "";
+    store.setPrompt(
+      opened.draftId,
+      handoffPrompt(
+        {
+          prompt: draft?.prompt ?? "",
+          lastHandoffPrompt: lastHandoffPromptByDraft.get(opened.draftId),
+        },
+        incomingPrompt,
+      ),
+    );
+    lastHandoffPromptByDraft.set(opened.draftId, incomingPrompt);
     if (kind === "send") {
-      store.setPrompt(opened.draftId, sendIssueToAgentPrompt(issue));
       toastManager.add({
         type: "success",
         title: "Issue ready in a new thread",
@@ -77,8 +95,11 @@ export function useIssueHandoff() {
       });
       return;
     }
-    store.setPrompt(opened.draftId, "");
-    store.setReviewComments(opened.draftId, [askAboutIssueContext(issue)]);
+    const context = askAboutIssueContext(issue);
+    store.setReviewComments(opened.draftId, [
+      ...(draft?.reviewComments ?? []).filter((comment) => comment.id !== context.id),
+      context,
+    ]);
     requireApprovalForDraft(opened.draftId);
     toastManager.add({
       type: "success",

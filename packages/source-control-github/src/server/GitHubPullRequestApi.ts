@@ -984,18 +984,6 @@ function matchesUnsortedListing(
 const SEARCH_REPOSITORY = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 /**
- * A listing as one GitHub search, across one repository or several: the only way to read a
- * whole host in one request, and the only order (`updated`) a continuation can carry on from.
- *
- * `--state closed` in GitHub's own list includes merged pull requests, so the Closed tab is
- * `is:closed is:unmerged` here.
- *
- * Null where a repository is not `owner/name`. A name is written into the query as itself, and a
- * name holding a space could otherwise end the `repo:` qualifier and start a qualifier of its
- * own — so an unaddressable one refuses the whole read rather than being escaped into something
- * GitHub might still read.
- */
-/**
  * A slice of issues as one GitHub search, for the same reasons `searchQuery` gives. Null where a
  * repository is not `owner/name`.
  */
@@ -1020,6 +1008,18 @@ function issueSearchQuery(input: {
   ].join(" ");
 }
 
+/**
+ * A listing as one GitHub search, across one repository or several: the only way to read a
+ * whole host in one request, and the only order (`updated`) a continuation can carry on from.
+ *
+ * `--state closed` in GitHub's own list includes merged pull requests, so the Closed tab is
+ * `is:closed is:unmerged` here.
+ *
+ * Null where a repository is not `owner/name`. A name is written into the query as itself, and a
+ * name holding a space could otherwise end the `repo:` qualifier and start a qualifier of its
+ * own — so an unaddressable one refuses the whole read rather than being escaped into something
+ * GitHub might still read.
+ */
 function searchQuery(input: {
   readonly repositories: ReadonlyArray<string>;
   readonly state: PullRequestListState;

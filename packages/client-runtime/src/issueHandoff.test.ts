@@ -22,13 +22,20 @@ describe("projectsForRepository", () => {
       { id: "recent", repositoryIdentity: identity("github.com/Acme/Web") },
       { id: "enterprise", repositoryIdentity: identity("github.corp.example/acme/web") },
       { id: "none", repositoryIdentity: null },
+      {
+        id: "fork",
+        repositoryIdentity: {
+          ...identity("github.com/acme/web"),
+          origin: { canonicalKey: "github.com/me/web" },
+        },
+      },
       { id: "older", repositoryIdentity: identity("github.com/acme/web") },
     ];
     expect(
       projectsForRepository(projects, { host: "github.com", repository: "acme/web" }).map(
         (project) => project.id,
       ),
-    ).toEqual(["recent", "older"]);
+    ).toEqual(["recent", "fork", "older"]);
   });
 });
 
