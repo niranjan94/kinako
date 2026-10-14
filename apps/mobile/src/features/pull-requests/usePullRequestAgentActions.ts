@@ -16,7 +16,7 @@ export function usePullRequestAgentActions(
 ) {
   const links = usePullRequestThreads(params, pr, filePath);
   const connected = usePullRequestConnected(params.environmentId);
-  const actions = pr ? pullRequestAgentActions(pr, links.canWatch) : [];
+  const actions = pr ? pullRequestAgentActions(pr, links.canWatch, links.canAutoFix) : [];
   const disabled = links.busy || !pr || (connected && links.isPending && !links.threads.length);
   const start = (task: PullRequestAgentTask, threadId?: string) => {
     if (disabled) return;

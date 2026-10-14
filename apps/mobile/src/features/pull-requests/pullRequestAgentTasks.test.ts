@@ -56,15 +56,20 @@ describe("PR agent tasks", () => {
       expect(pullRequestAgentPrompt(task)).toContain("prepare the PR in its own worktree");
   });
   it("offers conflicts only for a conflicting open PR and watch only on supported environments", () => {
-    expect(pullRequestAgentActions(pr, true).every((action) => !action.disabled)).toBe(true);
-    const actions = pullRequestAgentActions({ ...pr, mergeability: "mergeable" }, false);
+    expect(pullRequestAgentActions(pr, true, true).every((action) => !action.disabled)).toBe(true);
+    const actions = pullRequestAgentActions({ ...pr, mergeability: "mergeable" }, false, false);
     expect(actions.find((action) => action.task === "conflicts")?.disabled).toBe(true);
     expect(actions.find((action) => action.task === "watch")?.disabled).toBe(true);
-    const closed = pullRequestAgentActions({ ...pr, state: "merged" }, true);
+    expect(actions.find((action) => action.task === "auto-fix")?.disabled).toBe(true);
+    const closed = pullRequestAgentActions({ ...pr, state: "merged" }, true, true);
     expect(closed.filter((action) => action.disabled).map((action) => action.task)).toEqual([
       "feedback",
       "conflicts",
       "watch",
+      "auto-fix",
     ]);
+  });
+  it("asks the agent to turn on auto-fix through the watch tool", () => {
+    expect(pullRequestAgentPrompt("auto-fix")).toContain("watch_pull_request with autoFix");
   });
 });

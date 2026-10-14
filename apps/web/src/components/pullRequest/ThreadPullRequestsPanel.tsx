@@ -1,5 +1,9 @@
 import type { ProjectId, ScopedThreadRef, ThreadPullRequestLink } from "@t3tools/contracts";
 import {
+  pullRequestAutoFixStatus,
+  pullRequestAutoFixToggle,
+} from "@t3tools/client-runtime/pull-request-auto-fix";
+import {
   sourceControlClients,
   UNKNOWN_SOURCE_CONTROL_CLIENT,
 } from "@t3tools/client-runtime/source-control-clients";
@@ -14,6 +18,7 @@ import {
   LinkIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -85,6 +90,7 @@ function LinkRow({
   speedMode,
   onUnlink,
   onSetWatching,
+  onSetAutoFix,
 }: {
   line: PullRequestListLine;
   threadRef: ScopedThreadRef;
@@ -93,6 +99,8 @@ function LinkRow({
   onUnlink: (link: ThreadPullRequestLink) => void;
   /** Null when the environment cannot watch pull requests. */
   onSetWatching: ((link: ThreadPullRequestLink, watching: boolean) => void) | null;
+  /** Null when the environment cannot auto-fix checks. */
+  onSetAutoFix: ((link: ThreadPullRequestLink, autoFix: boolean) => void) | null;
 }) {
   const openPrLink = useOpenPrLink(threadRef);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -108,6 +116,8 @@ function LinkRow({
   const snapshot = link.snapshot;
   const open = snapshot === null || snapshot.state === "open";
   const watching = link.watch !== undefined;
+  const autoFix = pullRequestAutoFixStatus(link.watch);
+  const autoFixToggle = pullRequestAutoFixToggle(link.watch);
   // A link carries no host summary, so the host's own definition says what it can do.
   const linkHostActions = (
     sourceControlClients.findByChangeRequestUrl(link.url) ?? UNKNOWN_SOURCE_CONTROL_CLIENT
@@ -184,6 +194,20 @@ function LinkRow({
                     <TooltipPopup>
                       Watching: the agent wakes when checks finish, someone comments, or the branch
                       conflicts
+                    </TooltipPopup>
+                  </Tooltip>
+                ) : null}
+                {autoFix ? (
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="inline-flex shrink-0" />}>
+                      <WrenchIcon
+                        role="img"
+                        aria-label={autoFix.label}
+                        className={cn("size-3.5", autoFix.paused && "text-warning")}
+                      />
+                    </TooltipTrigger>
+                    <TooltipPopup>
+                      {autoFix.label}: {autoFix.description}
                     </TooltipPopup>
                   </Tooltip>
                 ) : null}
@@ -315,6 +339,12 @@ function LinkRow({
                 {watching ? "Stop watching" : "Watch for changes"}
               </MenuItem>
             ) : null}
+            {onSetAutoFix !== null && open ? (
+              <MenuItem onClick={() => onSetAutoFix(link, autoFixToggle.autoFix)}>
+                <WrenchIcon className="size-3.5" />
+                {autoFixToggle.label}
+              </MenuItem>
+            ) : null}
             <MenuItem onClick={() => onUnlink(link)}>
               <PullRequestGlyph.unlink className="size-3.5" />
               {link.source === "stack" ? "Dismiss from thread" : "Unlink from thread"}
@@ -359,6 +389,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
   const watch = useAtomCommand(threadEnvironment.watchPullRequest, { reportFailure: true });
   const capabilities = useServerConfigs().get(threadRef.environmentId)?.environment.capabilities;
   const supportsWatch = capabilities?.threadPullRequestWatch === true;
+  const supportsAutoFix = supportsWatch && capabilities?.threadPullRequestAutoFix === true;
   const links = useMemo(() => visibleThreadPullRequests(thread?.pullRequests ?? []), [thread]);
   const lines = useMemo(() => pullRequestListLines(resolveThreadPullRequestChains(links)), [links]);
   const handleUnlink = useCallback(
@@ -376,7 +407,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
     [threadRef, unlink],
   );
   const handleSetWatching = useCallback(
-    (link: ThreadPullRequestLink, watching: boolean) => {
+    (link: ThreadPullRequestLink, watching: boolean, autoFix?: boolean) => {
       void watch({
         environmentId: threadRef.environmentId,
         input: {
@@ -385,10 +416,15 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
           repository: link.repository,
           number: link.number,
           watching,
+          ...(autoFix === undefined ? {} : { autoFix }),
         },
       });
     },
     [threadRef, watch],
+  );
+  const handleSetAutoFix = useCallback(
+    (link: ThreadPullRequestLink, autoFix: boolean) => handleSetWatching(link, true, autoFix),
+    [handleSetWatching],
   );
   const openCount = useMemo(
     () => links.filter((link) => link.snapshot === null || link.snapshot.state === "open").length,
@@ -439,6 +475,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
               speedMode={speedMode}
               onUnlink={handleUnlink}
               onSetWatching={supportsWatch ? handleSetWatching : null}
+              onSetAutoFix={supportsAutoFix ? handleSetAutoFix : null}
             />
           ))}
         </div>

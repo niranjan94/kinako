@@ -161,6 +161,7 @@ export function usePullRequestThreads(
     threads,
     canAsk,
     canWatch: config?.environment.capabilities.threadPullRequestWatch === true,
+    canAutoFix: config?.environment.capabilities.threadPullRequestAutoFix === true,
     busy,
     ask,
     openThread,

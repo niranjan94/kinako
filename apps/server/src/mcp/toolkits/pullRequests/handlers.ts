@@ -40,6 +40,7 @@ import {
   PullRequestListFailedError,
   PullRequestNotOpenError,
   type PullRequestTargetInput,
+  type WatchPullRequestInput,
   PullRequestWatchFailedError,
   PullRequestWatchFromSubagentError,
   PullRequestThreadNotFoundError,
@@ -267,7 +268,7 @@ const make = Effect.gen(function* () {
    * result reports the state the thread holds afterwards.
    */
   const setWatching = Effect.fn("PullRequestsToolkit.setWatching")(function* (
-    input: PullRequestTargetInput,
+    input: WatchPullRequestInput,
     watching: boolean,
   ) {
     const thread = yield* requireThread(PullRequestWatchFailedError, input.threadId);
@@ -295,6 +296,7 @@ const make = Effect.gen(function* () {
         repository: target.repository,
         number: target.number,
         watching,
+        ...(watching && input.autoFix !== undefined ? { autoFix: input.autoFix } : {}),
         ...(watching ? { link: { url: target.url, source: "agent" as const } } : {}),
       })
       .pipe(Effect.catchCause(dispatchFailure(PullRequestWatchFailedError)));
@@ -306,6 +308,7 @@ const make = Effect.gen(function* () {
       url: target.url,
       watching: watchedLink(after)?.watch !== undefined,
       wasWatching: before?.watch !== undefined,
+      autoFix: watchedLink(after)?.watch?.autoFix?.pausedReason === null,
     };
   });
 

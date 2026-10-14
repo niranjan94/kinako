@@ -5,6 +5,7 @@ import {
   threadPullRequestKeyOf,
   visibleThreadPullRequests,
 } from "@t3tools/shared/threadPullRequests";
+import { pullRequestAutoFixStatus } from "@t3tools/client-runtime/pull-request-auto-fix";
 import { Minus, Plus } from "lucide";
 import { useState, type ComponentProps, type MouseEvent as ReactMouseEvent } from "react";
 
@@ -56,6 +57,7 @@ function ThreadDetailsPrLinkRow({
       openAriaLabel={link.url}
       onOpen={onOpen}
       onStopWatching={onStopWatching}
+      autoFix={pullRequestAutoFixStatus(link.watch)}
       {...(onActed ? { onActed } : {})}
     />
   );
@@ -90,7 +92,13 @@ export function ThreadDetailsPrRows({
               watching: false,
             },
           });
-  const currentRow = <ThreadDetailsPrRow {...row} onStopWatching={stopWatching(currentLink)} />;
+  const currentRow = (
+    <ThreadDetailsPrRow
+      {...row}
+      onStopWatching={stopWatching(currentLink)}
+      autoFix={pullRequestAutoFixStatus(currentLink?.watch)}
+    />
+  );
   const rest =
     currentLink === null
       ? []

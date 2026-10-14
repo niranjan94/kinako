@@ -1,7 +1,9 @@
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import {
   CommandId,
   MessageId,
   type OrchestrationV2Notification,
+  type OrchestrationV2RunStatus,
   type PullRequestActivity,
   type PullRequestComment,
   type PullRequestRef,
@@ -111,7 +113,17 @@ interface ReadPlan {
   readonly activity: boolean;
 }
 
-const watchKey = ({ thread, watch }: WatchTarget) => `${thread.id} ${watch.startedAt}`;
+/** Turning auto-fix on or resuming it takes a first look, so a red pull request is read at once. */
+const watchKey = ({ thread, watch }: WatchTarget) =>
+  `${thread.id} ${watch.startedAt} ${watch.autoFix?.enabledAt ?? ""}`;
+
+const ACTIVE_RUN_STATUSES: ReadonlySet<OrchestrationV2RunStatus> = new Set([
+  "preparing",
+  "queued",
+  "starting",
+  "running",
+  "waiting",
+]);
 
 /**
  * Why a watch ended. `stopped` is anything outside this reactor: the agent unwatched, the user
@@ -206,7 +218,10 @@ function watchesEqual(left: ThreadPullRequestWatch, right: ThreadPullRequestWatc
     left.remarksThrough === right.remarksThrough &&
     left.remarkIds.join("\n") === right.remarkIds.join("\n") &&
     left.conflicting === right.conflicting &&
-    left.wakes === right.wakes
+    left.wakes === right.wakes &&
+    left.autoFix?.attempts === right.autoFix?.attempts &&
+    left.autoFix?.pausedReason === right.autoFix?.pausedReason &&
+    left.autoFix?.fixMessageId === right.autoFix?.fixMessageId
   );
 }
 
@@ -306,7 +321,11 @@ export const make = Effect.gen(function* () {
   const record = (
     target: WatchTarget,
     next: ThreadPullRequestWatch | null,
-    wake?: { readonly text: string; readonly notification: OrchestrationV2Notification },
+    wake?: {
+      readonly text: string;
+      readonly notification: OrchestrationV2Notification;
+      readonly messageId?: MessageId;
+    },
   ) =>
     Effect.gen(function* () {
       const uuid = yield* crypto.randomUUIDv4;
@@ -319,7 +338,13 @@ export const make = Effect.gen(function* () {
         watch: next,
         ...(wake === undefined
           ? {}
-          : { wake: { ...wake, messageId: MessageId.make(`message:pr-watch:${uuid}`) } }),
+          : {
+              wake: {
+                text: wake.text,
+                notification: wake.notification,
+                messageId: wake.messageId ?? MessageId.make(`message:pr-watch:${uuid}`),
+              },
+            }),
       });
     });
 
@@ -327,7 +352,7 @@ export const make = Effect.gen(function* () {
   // "Watching" while it learns nothing.
   const giveUp = (target: WatchTarget) =>
     record(target, null, {
-      text: `T3 Code stopped watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Check it yourself, and call watch_pull_request to watch it again.`,
+      text: `${FORK_DISPLAY_NAME} stopped watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Check it yourself, and call watch_pull_request to watch it again.`,
       notification: {
         source: { kind: "monitor" },
         outcome: "failed",
@@ -395,7 +420,7 @@ export const make = Effect.gen(function* () {
   // A closed pull request can reopen, but the watch has nothing to report until then.
   const closed = (target: WatchTarget) =>
     record(target, null, {
-      text: `Pull request #${target.link.number} (${target.link.url}) was closed, so T3 Code stopped watching it. Call watch_pull_request if it reopens.`,
+      text: `Pull request #${target.link.number} (${target.link.url}) was closed, so ${FORK_DISPLAY_NAME} stopped watching it. Call watch_pull_request if it reopens.`,
       notification: {
         source: { kind: "monitor" },
         outcome: "updated",
@@ -468,13 +493,39 @@ export const make = Effect.gen(function* () {
       ),
     );
 
+  /**
+   * Whether the turn an auto-fix wake started is over with nothing else running, so a head that
+   * has not moved means the agent did not push. The wake creates its run in the same transaction,
+   * so a thread with no active run has finished or cancelled it.
+   */
+  const fixTurnEnded = (target: WatchTarget) =>
+    (target.watch.autoFix?.fixMessageId ?? null) === null
+      ? Effect.succeed(false)
+      : projections.getThreadRecords(target.thread.id, ["runs"]).pipe(
+          Effect.map(({ runs }) => runs.every((run) => !ACTIVE_RUN_STATUSES.has(run.status))),
+          Effect.catchCause((cause): Effect.Effect<boolean> =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.interrupt
+              : Effect.logWarning("pull request auto-fix run read failed", {
+                  threadId: target.thread.id,
+                  cause,
+                }).pipe(Effect.as(false)),
+          ),
+        );
+
   const readGroup = Effect.fn("PullRequestWatchReactor.readGroup")(function* (
     group: WatchGroup,
     fingerprint: ProviderChangeRequestWatchFingerprint | null,
   ) {
     const now = yield* Clock.currentTimeMillis;
     const last = lastReads.get(group.key);
-    const plan = planRead(group, last, fingerprint, now);
+    const fixesEnded = new Map<string, boolean>();
+    for (const target of group.targets) {
+      fixesEnded.set(watchKey(target), yield* fixTurnEnded(target));
+    }
+    const planned = planRead(group, last, fingerprint, now);
+    // An ended fix turn needs the head's checks now; nothing on the host moved to prompt a read.
+    const plan = [...fixesEnded.values()].some(Boolean) ? { ...planned, detail: true } : planned;
     if (!plan.detail) return;
     const reference = referenceOf(group);
     // The reads are recorded against this fingerprint, so a cached answer older than it must not
@@ -547,26 +598,34 @@ export const make = Effect.gen(function* () {
       status: fingerprint?.status ?? null,
       remarks: fingerprint?.remarks ?? null,
     });
-    yield* eachTarget(group, (target) => {
-      const report = evaluatePullRequestWatch(target.watch, detail, remarks);
-      if (report.changes.length > 0) {
-        return record(
-          target,
-          report.exhausted ? null : report.next,
-          pullRequestWatchMessage({
+    yield* eachTarget(group, (target) =>
+      Effect.gen(function* () {
+        const wakeMessageId = MessageId.make(`message:pr-watch:${yield* crypto.randomUUIDv4}`);
+        const report = evaluatePullRequestWatch(target.watch, detail, remarks, {
+          wakeMessageId,
+          fixTurnEnded: fixesEnded.get(watchKey(target)) ?? false,
+        });
+        if (report.changes.length === 0) {
+          return watchesEqual(report.next, target.watch)
+            ? undefined
+            : yield* record(target, report.next);
+        }
+        return yield* record(target, report.exhausted ? null : report.next, {
+          ...pullRequestWatchMessage({
             number: target.link.number,
             url: target.link.url,
             baseBranch: detail.baseBranch,
+            headBranch: detail.headBranch,
             headSha: report.next.headSha,
             report,
           }),
-        ).pipe(
+          messageId: wakeMessageId,
+        }).pipe(
           Effect.tap(() => woke(target)),
           Effect.tap(() => (report.exhausted ? ended(target, "comment-limit") : Effect.void)),
         );
-      }
-      return watchesEqual(report.next, target.watch) ? Effect.void : record(target, report.next);
-    });
+      }),
+    );
   });
 
   const sweep = Effect.gen(function* () {

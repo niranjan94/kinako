@@ -1,7 +1,13 @@
 import type { PullRequestDetail, PullRequestLinkedThreadsResult } from "@t3tools/contracts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
-export type PullRequestAgentTask = "ask" | "explain" | "feedback" | "conflicts" | "watch";
+export type PullRequestAgentTask =
+  | "ask"
+  | "explain"
+  | "feedback"
+  | "conflicts"
+  | "watch"
+  | "auto-fix";
 
 /** An explicit new-thread choice must never fall back to the single linked thread. */
 export function pullRequestAgentThread(
@@ -25,10 +31,16 @@ export function pullRequestAgentPrompt(task: PullRequestAgentTask): string {
       return "Resolve this pull request's conflicts with its base branch. First confirm this thread is on the PR's branch; if it isn't, prepare the PR in its own worktree. Bring it up to date using this repository's convention, preserve the intent of both sides, and run the relevant checks before pushing.";
     case "watch":
       return `Watch this pull request for check results, new feedback, and conflicts using ${FORK_DISPLAY_NAME}'s pull request watch. End the turn once the watch is armed. When it wakes you, assess what changed and report what needs attention.`;
+    case "auto-fix":
+      return `Turn on Auto-fix CI for this pull request: call watch_pull_request with autoFix set to true, then end the turn. When ${FORK_DISPLAY_NAME} wakes you with failing checks, fix them as the wake describes.`;
   }
 }
 
-export function pullRequestAgentActions(pr: PullRequestDetail, canWatch: boolean) {
+export function pullRequestAgentActions(
+  pr: PullRequestDetail,
+  canWatch: boolean,
+  canAutoFix: boolean,
+) {
   return [
     {
       task: "ask",
@@ -50,6 +62,12 @@ export function pullRequestAgentActions(pr: PullRequestDetail, canWatch: boolean
       disabled: pr.state !== "open" || pr.mergeability !== "conflicting",
     },
     { task: "watch", title: "Watch PR", icon: "eye", disabled: pr.state !== "open" || !canWatch },
+    {
+      task: "auto-fix",
+      title: "Auto-fix CI",
+      icon: "hammer",
+      disabled: pr.state !== "open" || !canAutoFix,
+    },
   ] as const;
 }
 

@@ -1,3 +1,4 @@
+import { pullRequestAutoFixStatus } from "@t3tools/client-runtime/pull-request-auto-fix";
 import { useOpenPullRequest } from "../../../native/useOpenPullRequest";
 import {
   type GitActionRequestInput,
@@ -385,7 +386,7 @@ function GitOverviewSheetContent(props: GitOverviewSheetProps) {
                   <SheetListRow
                     icon="arrow.triangle.pull"
                     title={`#${link.number} ${link.snapshot?.title ?? "Pull request"}`}
-                    subtitle={`${link.repository} · ${link.snapshot === null ? "Status pending" : link.snapshot.isDraft && link.snapshot.state === "open" ? "Draft" : link.snapshot.state}${link.watch === undefined ? "" : " · Watching"}`}
+                    subtitle={`${link.repository} · ${link.snapshot === null ? "Status pending" : link.snapshot.isDraft && link.snapshot.state === "open" ? "Draft" : link.snapshot.state}${link.watch === undefined ? "" : ` · ${pullRequestAutoFixStatus(link.watch)?.label ?? "Watching"}`}`}
                     onPress={() => {
                       void openPullRequest(link.url).then((opened) => {
                         if (!opened)

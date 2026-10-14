@@ -2525,6 +2525,261 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
+  it.effect("auto-fix queues its fix behind the active turn and pauses when no push follows", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const threadId = ThreadId.make("runtime-pull-request-auto-fix");
+      const projectId = ProjectId.make("pr-auto-fix-project");
+      yield* seedProject({
+        projectId,
+        title: "Auto-fix",
+        workspaceRoot: "/workspace/auto-fix",
+        defaultModelSelection: null,
+        createdAt: "2026-10-01T00:00:00.000Z",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("pr-auto-fix-create"),
+        threadId,
+        projectId,
+        title: "Auto-fix",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("pr-auto-fix-active"),
+        threadId,
+        messageId: MessageId.make("pr-auto-fix-active"),
+        text: "Keep working",
+        attachments: [],
+        modelSelection,
+        dispatchMode: { type: "start_immediately" },
+      });
+      const key = { host: "github.com", repository: "pingdotgg/t3code", number: 10 };
+      const setAutoFix = (name: string, autoFix: boolean) =>
+        orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make(`pr-auto-fix-${name}`),
+          threadId,
+          ...key,
+          watching: true,
+          autoFix,
+          link: { url: "https://github.com/pingdotgg/t3code/pull/10", source: "manual" },
+        });
+      const watchOf = Effect.map(
+        orchestrator.getThreadShell(threadId),
+        (thread) => thread?.pullRequests?.[0]?.watch,
+      );
+      yield* setAutoFix("on", true);
+      const armed = yield* watchOf;
+      assert.deepEqual(armed?.autoFix, {
+        enabledAt: armed!.startedAt,
+        attempts: 0,
+        pausedReason: null,
+        fixMessageId: null,
+      });
+
+      const reactor = yield* PullRequestWatchReactor.make.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            NodeServices.layer,
+            Layer.mock(PullRequestService.PullRequestService)({
+              detail: () =>
+                Effect.succeed(
+                  watchedPullRequestDetail({ projectId, number: 10, at: "2026-10-02T12:00:00Z" }),
+                ),
+              activity: () =>
+                Effect.succeed({
+                  comments: [],
+                  commentCount: 0,
+                  commentsTruncated: false,
+                  reviewThreads: [],
+                  commits: [],
+                }),
+            }),
+          ),
+        ),
+      );
+      const summaries = Effect.map(
+        orchestrator.getThreadRecords(threadId, ["messages"]),
+        ({ messages }) => messages.flatMap((message) => message.notification?.summary ?? []),
+      );
+
+      yield* reactor.sweep;
+      assert.deepEqual(yield* summaries, ["#10: checks failed, auto-fix 1/3"]);
+      const fixMessageId = (yield* watchOf)?.autoFix?.fixMessageId;
+      assert.isString(fixMessageId);
+      const { runs } = yield* orchestrator.getThreadRecords(threadId, ["runs"]);
+      assert.deepEqual(
+        runs.map((run) => [run.userMessageId === fixMessageId, run.status]),
+        [
+          [false, "starting"],
+          [true, "queued"],
+        ],
+      );
+
+      // Both turns end and the head never moved, so auto-fix pauses and says so once.
+      yield* TestClock.adjust("2 minutes");
+      yield* reactor.sweep;
+      assert.deepEqual(yield* summaries, ["#10: checks failed, auto-fix 1/3"]);
+      const now = yield* DateTime.now;
+      yield* eventSink.write({
+        commandId: CommandId.make("pr-auto-fix-runs-ended"),
+        events: runs.map((run) => ({
+          id: EventId.make(`pr-auto-fix-ended:${run.id}`),
+          type: "run.updated" as const,
+          threadId,
+          runId: run.id,
+          occurredAt: now,
+          payload: { ...run, status: "completed" as const, startedAt: now, completedAt: now },
+        })),
+      });
+      yield* reactor.sweep;
+      yield* TestClock.adjust("2 minutes");
+      yield* reactor.sweep;
+      assert.deepEqual(yield* summaries, [
+        "#10: checks failed, auto-fix 1/3",
+        "#10: auto-fix paused",
+      ]);
+      assert.equal((yield* watchOf)?.autoFix?.pausedReason, "no-push");
+
+      // Turning it off keeps the plain watch; turning it on again resumes from scratch.
+      const pausedWatch = yield* watchOf;
+      yield* setAutoFix("off", false);
+      const plain = yield* watchOf;
+      assert.isDefined(plain);
+      assert.isUndefined(plain?.autoFix);
+      // Progress read while auto-fix was on must not bring it back.
+      const stale = yield* orchestrator
+        .dispatch({
+          type: "thread.pull-request-watch.sync",
+          commandId: CommandId.make("pr-auto-fix-stale-record"),
+          threadId,
+          ...key,
+          startedAt: plain!.startedAt,
+          watch: pausedWatch!,
+        })
+        .pipe(Effect.flip);
+      assert.equal(stale._tag, "OrchestratorDispatchError");
+      assert.deepEqual(yield* watchOf, plain);
+      yield* setAutoFix("resume", true);
+      const resumed = yield* watchOf;
+      assert.deepEqual(resumed, {
+        ...plain!,
+        failedChecks: [],
+        autoFix: {
+          enabledAt: resumed!.autoFix!.enabledAt,
+          attempts: 0,
+          pausedReason: null,
+          fixMessageId: null,
+        },
+      });
+      assert.notEqual(resumed?.autoFix?.enabledAt, pausedWatch?.autoFix?.enabledAt);
+      // Later tests sweep every watch in this database.
+      yield* orchestrator.dispatch({
+        type: "thread.pull-request.watch",
+        commandId: CommandId.make("pr-auto-fix-stop"),
+        threadId,
+        ...key,
+        watching: false,
+      });
+    }),
+  );
+
+  it.effect("turning auto-fix on for a watched red pull request reads it on the next pass", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const threadId = ThreadId.make("runtime-pull-request-auto-fix-arm");
+      const projectId = ProjectId.make("pr-auto-fix-arm-project");
+      yield* seedProject({
+        projectId,
+        title: "Auto-fix arm",
+        workspaceRoot: "/workspace/auto-fix-arm",
+        defaultModelSelection: null,
+        createdAt: "2026-10-01T00:00:00.000Z",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("pr-auto-fix-arm-create"),
+        threadId,
+        projectId,
+        title: "Auto-fix arm",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      const key = { host: "github.com", repository: "pingdotgg/t3code", number: 11 };
+      const watchCommand = (name: string, autoFix?: boolean) =>
+        orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make(`pr-auto-fix-arm-${name}`),
+          threadId,
+          ...key,
+          watching: true,
+          ...(autoFix === undefined ? {} : { autoFix }),
+          link: { url: "https://github.com/pingdotgg/t3code/pull/11", source: "manual" },
+        });
+      const reactor = yield* PullRequestWatchReactor.make.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            NodeServices.layer,
+            Layer.mock(PullRequestService.PullRequestService)({
+              detail: () =>
+                Effect.succeed(
+                  watchedPullRequestDetail({ projectId, number: 11, at: "2026-10-02T12:00:00Z" }),
+                ),
+              activity: () =>
+                Effect.succeed({
+                  comments: [],
+                  commentCount: 0,
+                  commentsTruncated: false,
+                  reviewThreads: [],
+                  commits: [],
+                }),
+            }),
+          ),
+        ),
+      );
+      const summaries = Effect.map(
+        orchestrator.getThreadRecords(threadId, ["messages"]),
+        ({ messages }) => messages.flatMap((message) => message.notification?.summary ?? []),
+      );
+
+      yield* watchCommand("watch");
+      yield* reactor.sweep;
+      assert.deepEqual(yield* summaries, ["#11: checks failed"]);
+      // Nothing moved on the host, so only the new auto-fix setting prompts this read.
+      yield* watchCommand("on", true);
+      yield* reactor.sweep;
+      // Both wakes land at the same test-clock instant, so their order is not meaningful.
+      assert.sameMembers(yield* summaries, [
+        "#11: checks failed",
+        "#11: checks failed, auto-fix 1/3",
+      ]);
+      // Later tests sweep every watch in this database.
+      yield* orchestrator.dispatch({
+        type: "thread.pull-request.watch",
+        commandId: CommandId.make("pr-auto-fix-arm-stop"),
+        threadId,
+        ...key,
+        watching: false,
+      });
+    }),
+  );
+
   it.effect(
     "reads a watched pull request once a pass, waits out rate limits, and skips quiet passes",
     () =>
