@@ -20,7 +20,8 @@ permissions:
 jobs:
   build:
     name: Build and submit
-    runs-on: macos-26
+    # macos-26 tops out at Xcode 26.x; Xcode 27 ships on its own preview image.
+    runs-on: xcode-27
     timeout-minutes: 120
     env:
       APP_VARIANT: production
