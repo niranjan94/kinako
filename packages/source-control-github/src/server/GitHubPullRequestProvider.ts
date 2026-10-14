@@ -42,6 +42,7 @@ const CAPABILITIES: PullRequestCapabilities = {
   stacks: true,
   stackActions: true,
   labels: true,
+  issues: true,
 };
 
 /**
@@ -609,6 +610,13 @@ export const make = Effect.gen(function* () {
         .pipe(Effect.mapError(fail("updateChangeRequest"))),
 
     comment: (input) => cli.commentOnPullRequest(input).pipe(Effect.mapError(fail("comment"))),
+
+    listIssues: (input) => cli.listIssues(input).pipe(Effect.mapError(fail("listIssues"))),
+
+    getIssue: (input) => cli.getIssue(input).pipe(Effect.mapError(fail("getIssue"))),
+
+    commentOnIssue: (input) =>
+      cli.commentOnIssue(input).pipe(Effect.mapError(fail("commentOnIssue"))),
 
     updateComment: (input) =>
       cli

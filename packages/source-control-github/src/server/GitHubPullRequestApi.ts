@@ -17,6 +17,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import {
   resolvePullRequestAuthorFilter,
+  type IssueListState,
   PositiveInt,
   TrimmedNonEmptyString,
   type PullRequestAction,
@@ -70,6 +71,15 @@ import {
   type GitHubPullRequestWatchFingerprint,
   decodePullRequestPreviewJson,
   PULL_REQUEST_PREVIEW_GRAPHQL_QUERY,
+  decodeIssueDetailJson,
+  decodeIssueNodeIdJson,
+  decodeIssueSearchJson,
+  issueSearchGraphQlQuery,
+  ISSUE_DETAIL_GRAPHQL_QUERY,
+  ISSUE_NODE_ID_GRAPHQL_QUERY,
+  type GitHubIssue,
+  type GitHubIssueDetailPage,
+  type GitHubIssueSearchBatch,
   decodePullRequestFilesJson,
   decodePullRequestFilesViewedJson,
   decodePullRequestHeadsJson,
@@ -375,6 +385,16 @@ export const NODE_ID_CACHE_CAPACITY = 128;
  * a person is reading has, and short of walking a repository-sized conversation forever.
  */
 const REVIEW_THREAD_PAGES = 10;
+
+/** Pages of a hundred comments an issue's conversation is read to. */
+const ISSUE_COMMENT_PAGES = 5;
+
+export interface GitHubIssueDetail extends GitHubIssue {
+  readonly body: string;
+  readonly comments: ReadonlyArray<PullRequestComment>;
+  readonly commentsTruncated: boolean;
+  readonly viewerCanComment: boolean;
+}
 
 /** Pages of a hundred check contexts to walk for one head before the rollup says it was cut. */
 const CHECK_CONTEXT_PAGES = 10;
@@ -726,6 +746,35 @@ export class GitHubPullRequestApi extends Context.Service<
       readonly body: string;
     }) => Effect.Effect<void, GitHubPullRequestApiError>;
 
+    /** One slice of issues across repositories on one host, newest update first. */
+    readonly listIssues: (input: {
+      readonly cwd: string;
+      readonly host: string;
+      readonly repositories: ReadonlyArray<string>;
+      readonly state: IssueListState;
+      readonly limit: number;
+      readonly query?: string | undefined;
+      readonly cursor?: ProviderListCursor | undefined;
+    }) => Effect.Effect<
+      { readonly items: ReadonlyArray<GitHubIssue>; readonly truncated: boolean },
+      GitHubPullRequestApiError
+    >;
+
+    readonly getIssue: (input: {
+      readonly cwd: string;
+      readonly repository: string;
+      readonly host: string;
+      readonly number: number;
+    }) => Effect.Effect<GitHubIssueDetail, GitHubPullRequestApiError>;
+
+    readonly commentOnIssue: (input: {
+      readonly cwd: string;
+      readonly repository: string;
+      readonly host: string;
+      readonly number: number;
+      readonly body: string;
+    }) => Effect.Effect<void, GitHubPullRequestApiError>;
+
     readonly submitReview: (input: {
       readonly cwd: string;
       readonly repository: string;
@@ -946,6 +995,31 @@ const SEARCH_REPOSITORY = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
  * own — so an unaddressable one refuses the whole read rather than being escaped into something
  * GitHub might still read.
  */
+/**
+ * A slice of issues as one GitHub search, for the same reasons `searchQuery` gives. Null where a
+ * repository is not `owner/name`.
+ */
+function issueSearchQuery(input: {
+  readonly repositories: ReadonlyArray<string>;
+  readonly state: IssueListState;
+  readonly query?: string | undefined;
+  readonly cursor?: ProviderListCursor | undefined;
+}): string | null {
+  if (input.repositories.length === 0) return null;
+  const repositories = input.repositories.map((repository) => repository.trim());
+  if (!repositories.every((repository) => SEARCH_REPOSITORY.test(repository))) return null;
+  const query = input.query?.trim() ?? "";
+  return [
+    "is:issue",
+    ...(input.state === "open" ? ["is:open"] : []),
+    ...(input.state === "closed" ? ["is:closed"] : []),
+    ...(query.length === 0 ? [] : [searchPhrase(query)]),
+    ...(input.cursor === undefined ? [] : [`updated:<=${input.cursor.updatedBefore}`]),
+    "sort:updated-desc",
+    ...repositories.map((repository) => `repo:${repository}`),
+  ].join(" ");
+}
+
 function searchQuery(input: {
   readonly repositories: ReadonlyArray<string>;
   readonly state: PullRequestListState;
@@ -2698,6 +2772,93 @@ export const make = Effect.gen(function* () {
           }),
         ),
       ),
+
+    listIssues: (input) => {
+      const query = issueSearchQuery(input);
+      if (query === null) {
+        return Effect.fail(
+          new GitHubRepositorySelectorError({ cwd: input.cwd, operation: "listIssues" }),
+        );
+      }
+      // One row over the page is the probe for a next page.
+      const rows = input.limit + 1;
+      const countRows = (pages: ReadonlyArray<GitHubIssueSearchBatch>) =>
+        pages.reduce((total, page) => total + page.rawCount, 0);
+      return readGraphQlPages(
+        (after, pages: ReadonlyArray<GitHubIssueSearchBatch>) =>
+          graphqlRead({
+            cwd: input.cwd,
+            host: input.host,
+            operation: "listIssues",
+            variables: { q: query, after },
+            query: issueSearchGraphQlQuery(rows - countRows(pages)),
+            decode: decodeIssueSearchJson,
+          }),
+        { nextCursor: (page) => page.endCursor, until: (pages) => countRows(pages) >= rows },
+      ).pipe(
+        Effect.map(({ pages, truncated }) => ({
+          items: pages.flatMap((page) => page.items).slice(0, input.limit),
+          truncated: truncated || countRows(pages) > input.limit,
+        })),
+      );
+    },
+
+    getIssue: (input) =>
+      Effect.gen(function* () {
+        const { owner, name } = parseRepositorySelector(input.repository);
+        const comments: PullRequestComment[] = [];
+        let first: GitHubIssueDetail | null = null;
+        let after: string | null = null;
+        for (let page = 0; page < ISSUE_COMMENT_PAGES; page++) {
+          const read: GitHubIssueDetailPage | null = yield* graphqlRead({
+            cwd: input.cwd,
+            host: input.host,
+            operation: "getIssue",
+            variables: { owner, name, number: input.number, after },
+            query: ISSUE_DETAIL_GRAPHQL_QUERY,
+            decode: (raw) => decodeIssueDetailJson(raw, input.repository),
+          });
+          if (read === null) {
+            return yield* new GitHubApi.GitHubApiNotFoundError({
+              host: input.host,
+              operation: "getIssue",
+            });
+          }
+          comments.push(...read.comments);
+          after = read.nextCommentsCursor;
+          first ??= {
+            ...read.issue,
+            commentCount: read.commentCount,
+            comments: [],
+            commentsTruncated: false,
+            viewerCanComment: read.viewerCanComment,
+          };
+          if (after === null) break;
+        }
+        return { ...first!, comments, commentsTruncated: after !== null };
+      }),
+
+    commentOnIssue: (input) => {
+      const { owner, name } = parseRepositorySelector(input.repository);
+      return graphqlRead({
+        cwd: input.cwd,
+        host: input.host,
+        operation: "commentOnIssue",
+        allowReserve: true,
+        variables: { owner, name, number: input.number },
+        query: ISSUE_NODE_ID_GRAPHQL_QUERY,
+        decode: decodeIssueNodeIdJson,
+      }).pipe(
+        Effect.flatMap((subjectId) =>
+          graphql({
+            host: input.host,
+            operation: "commentOnIssue",
+            query: ADD_COMMENT_GRAPHQL_MUTATION,
+            variables: { subjectId, body: input.body },
+          }),
+        ),
+      );
+    },
 
     submitReview: (input) => {
       const { owner, name } = parseRepositorySelector(input.repository);

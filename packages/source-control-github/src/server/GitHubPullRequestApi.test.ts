@@ -2806,6 +2806,140 @@ layer("GitHubPullRequestApi.layer", (it) => {
     }),
   );
 
+  it.effect("lists issues across repositories as one search, skipping pull request rows", () =>
+    Effect.gen(function* () {
+      const issue = (number: number, repository: string) => ({
+        number,
+        title: `Issue ${number}`,
+        url: `https://github.com/${repository}/issues/${number}`,
+        state: "CLOSED",
+        createdAt: "2026-07-01T00:00:00Z",
+        updatedAt: "2026-07-03T00:00:00Z",
+        closedAt: "2026-07-03T00:00:00Z",
+        repository: { nameWithOwner: repository },
+        author: { __typename: "User", login: "octocat", avatarUrl: null, name: "Octo" },
+        labels: { nodes: [{ name: "bug", color: "d73a4a" }] },
+        assignees: { nodes: [{ login: "hubot", avatarUrl: null, name: null }] },
+        comments: { totalCount: 4 },
+      });
+      mockedExecute.mockImplementation(() =>
+        Effect.succeed(searchPage([issue(3, "acme/web"), {}, issue(2, "acme/api")], true)),
+      );
+      const cli = yield* GitHubPullRequestApi.GitHubPullRequestApi;
+
+      const page = yield* cli.listIssues({
+        cwd: "/w",
+        host: "github.com",
+        repositories: ["acme/web", "acme/api"],
+        state: "closed",
+        limit: 2,
+        query: "crash",
+        cursor: { updatedBefore: "2026-07-04T00:00:00Z", delivered: 2 },
+      });
+
+      expect(searchOfCall(0)).toBe(
+        'is:issue is:closed "crash" updated:<=2026-07-04T00:00:00Z sort:updated-desc repo:acme/web repo:acme/api',
+      );
+      expect(page.truncated).toBe(true);
+      expect(page.items.map((item) => [item.repository, item.number])).toEqual([
+        ["acme/web", 3],
+        ["acme/api", 2],
+      ]);
+      expect(page.items[0]).toMatchObject({
+        state: "closed",
+        commentCount: 4,
+        labels: [{ name: "bug", color: "d73a4a" }],
+        assignees: [{ login: "hubot", name: null, avatarUrl: null }],
+      });
+    }),
+  );
+
+  it.effect("reads an issue's whole conversation and refuses comments on a locked one", () =>
+    Effect.gen(function* () {
+      const answer = (after: string | null) => ({
+        data: {
+          repository: {
+            viewerPermission: "READ",
+            issue: {
+              number: 9,
+              title: "Crash on launch",
+              url: "https://github.com/acme/web/issues/9",
+              state: "OPEN",
+              createdAt: "2026-07-01T00:00:00Z",
+              updatedAt: "2026-07-02T00:00:00Z",
+              closedAt: null,
+              body: "Steps to reproduce",
+              locked: true,
+              comments: {
+                totalCount: 2,
+                pageInfo: { hasNextPage: after === null, endCursor: "c1" },
+                nodes: [
+                  {
+                    id: after === null ? "IC_1" : "IC_2",
+                    body: after === null ? "First" : "Second",
+                    createdAt: after === null ? "2026-07-01T01:00:00Z" : "2026-07-01T02:00:00Z",
+                    url: null,
+                    author: { login: "octocat" },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      });
+      mockedExecute.mockImplementation((call) =>
+        Effect.succeed(
+          output(
+            encodeJson(
+              answer(
+                call.kind === "graphql" && typeof call.variables?.["after"] === "string"
+                  ? (call.variables["after"] as string)
+                  : null,
+              ),
+            ),
+          ),
+        ),
+      );
+      const cli = yield* GitHubPullRequestApi.GitHubPullRequestApi;
+
+      const detail = yield* cli.getIssue({
+        cwd: "/w",
+        repository: "acme/web",
+        host: "github.com",
+        number: 9,
+      });
+
+      expect(detail).toMatchObject({
+        repository: "acme/web",
+        body: "Steps to reproduce",
+        commentCount: 2,
+        commentsTruncated: false,
+        viewerCanComment: false,
+      });
+      expect(detail.comments.map((comment) => [comment.id, comment.kind])).toEqual([
+        ["IC_1", "issue-comment"],
+        ["IC_2", "issue-comment"],
+      ]);
+    }),
+  );
+
+  it.effect("comments on an issue through its own node id", () =>
+    Effect.gen(function* () {
+      route(["issue(number: $number) { id }", { data: { repository: { issue: { id: "I_9" } } } }]);
+      const cli = yield* GitHubPullRequestApi.GitHubPullRequestApi;
+
+      yield* cli.commentOnIssue({
+        cwd: "/w",
+        repository: "acme/web",
+        host: "github.com",
+        number: 9,
+        body: "On it.",
+      });
+
+      expect(variablesOf("addComment(")).toEqual([{ subjectId: "I_9", body: "On it." }]);
+    }),
+  );
+
   it.effect("names the host on every repository it addresses", () =>
     Effect.gen(function* () {
       mockedExecute.mockImplementation((call) =>

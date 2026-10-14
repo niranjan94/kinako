@@ -3468,3 +3468,229 @@ export function decodePullRequestStacksJson(
     })),
   });
 }
+
+const ISSUE_ROW_SELECTION = `number
+        title
+        url
+        state
+        createdAt
+        updatedAt
+        closedAt
+        repository { nameWithOwner }
+        author { __typename login avatarUrl ... on User { name } }
+        labels(first: 20) { nodes { name color } }
+        assignees(first: 10) { nodes { login avatarUrl name } }
+        comments { totalCount }`;
+
+/** A slice of issues as one search, across one repository or several. */
+export function issueSearchGraphQlQuery(rows: number): string {
+  return `query($q: String!, $after: String) {
+  search(query: $q, type: ISSUE, first: ${pageRows(rows)}, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      ... on Issue {
+        ${ISSUE_ROW_SELECTION}
+      }
+    }
+  }
+}`;
+}
+
+/** An issue with its words and a page of its conversation. */
+export const ISSUE_DETAIL_GRAPHQL_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    viewerPermission
+    issue(number: $number) {
+      ${ISSUE_ROW_SELECTION}
+      body
+      locked
+      comments(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id body createdAt lastEditedAt url author { __typename login avatarUrl ... on User { name } } }
+      }
+    }
+  }
+}`;
+
+export const ISSUE_NODE_ID_GRAPHQL_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { issue(number: $number) { id } }
+}`;
+
+const RawIssueRowSchema = Schema.Struct({
+  number: Schema.Int,
+  title: Schema.String,
+  url: Schema.String,
+  state: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  closedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  repository: Schema.optional(Schema.NullOr(Schema.Struct({ nameWithOwner: Schema.String }))),
+  author: Schema.optional(Schema.NullOr(RawActorSchema)),
+  labels: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        nodes: Schema.optional(Schema.NullOr(Schema.Array(Schema.NullOr(RawLabelSchema)))),
+      }),
+    ),
+  ),
+  assignees: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        nodes: Schema.optional(Schema.NullOr(Schema.Array(Schema.NullOr(RawActorSchema)))),
+      }),
+    ),
+  ),
+  comments: Schema.optional(Schema.NullOr(Schema.Struct({ totalCount: Schema.Int }))),
+});
+
+const RawIssueSearchSchema = Schema.Struct({
+  data: Schema.Struct({
+    search: Schema.Struct({
+      pageInfo: Schema.optional(RawPageInfoSchema),
+      nodes: Schema.optional(Schema.NullOr(Schema.Array(Schema.Unknown))),
+    }),
+  }),
+});
+
+const RawIssueDetailSchema = Schema.Struct({
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      viewerPermission: Schema.optional(Schema.NullOr(Schema.String)),
+      issue: Schema.NullOr(
+        Schema.Struct({
+          ...RawIssueRowSchema.fields,
+          body: Schema.optional(Schema.NullOr(Schema.String)),
+          locked: Schema.optional(Schema.Boolean),
+          comments: Schema.Struct({
+            totalCount: Schema.optional(Schema.Int),
+            pageInfo: Schema.optional(RawPageInfoSchema),
+            nodes: Schema.optional(Schema.NullOr(Schema.Array(RawCommentSchema))),
+          }),
+        }),
+      ),
+    }),
+  }),
+});
+
+const RawIssueNodeIdSchema = Schema.Struct({
+  data: Schema.Struct({
+    repository: Schema.Struct({ issue: Schema.Struct({ id: Schema.String }) }),
+  }),
+});
+
+const decodeIssueSearch = decodeJsonResult(RawIssueSearchSchema);
+const decodeIssueRow = Schema.decodeUnknownExit(RawIssueRowSchema);
+const decodeIssueDetail = decodeJsonResult(RawIssueDetailSchema);
+const decodeIssueNodeId = decodeJsonResult(RawIssueNodeIdSchema);
+
+export interface GitHubIssue {
+  readonly repository: string;
+  readonly number: number;
+  readonly title: string;
+  readonly url: string;
+  readonly author: PullRequestActor | null;
+  readonly state: "open" | "closed";
+  readonly labels: ReadonlyArray<PullRequestLabel>;
+  readonly assignees: ReadonlyArray<PullRequestActor>;
+  readonly commentCount: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly closedAt: string | null;
+}
+
+export interface GitHubIssueSearchBatch {
+  readonly items: ReadonlyArray<GitHubIssue>;
+  /** Rows the search returned, counted before decoding, so a skipped row cannot hide a next page. */
+  readonly rawCount: number;
+  readonly endCursor: string | null;
+}
+
+export interface GitHubIssueDetailPage {
+  readonly issue: GitHubIssue & { readonly body: string };
+  readonly comments: ReadonlyArray<PullRequestComment>;
+  readonly commentCount: number;
+  readonly nextCommentsCursor: string | null;
+  readonly viewerCanComment: boolean;
+}
+
+function toIssue(
+  raw: Schema.Schema.Type<typeof RawIssueRowSchema>,
+  fallbackRepository?: string,
+): GitHubIssue | null {
+  const repository = trimmed(raw.repository?.nameWithOwner) ?? trimmed(fallbackRepository);
+  const title = trimmed(raw.title);
+  const url = trimmed(raw.url);
+  if (repository === null || title === null || url === null || raw.number <= 0) return null;
+  return {
+    repository,
+    number: raw.number,
+    title,
+    url,
+    author: toActor(raw.author),
+    state: raw.state?.toUpperCase() === "CLOSED" ? "closed" : "open",
+    labels: toLabels(raw.labels?.nodes?.flatMap((label) => (label === null ? [] : [label]))),
+    assignees: (raw.assignees?.nodes ?? []).flatMap((assignee) => {
+      const actor = toActor(assignee);
+      return actor === null ? [] : [actor];
+    }),
+    commentCount: raw.comments?.totalCount ?? 0,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    closedAt: trimmed(raw.closedAt),
+  };
+}
+
+/**
+ * A search answers with issues and pull requests alike; `is:issue` excludes the second, and a row
+ * that still does not decode is skipped rather than failing the slice.
+ */
+export function decodeIssueSearchJson(
+  raw: string,
+): Result.Result<GitHubIssueSearchBatch, DecodeFailure> {
+  const decoded = decodeIssueSearch(raw);
+  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
+  const search = decoded.success.data.search;
+  const nodes = search.nodes ?? [];
+  const items: GitHubIssue[] = [];
+  for (const node of nodes) {
+    const row = decodeIssueRow(node);
+    if (Exit.isFailure(row)) continue;
+    const issue = toIssue(row.value);
+    if (issue !== null) items.push(issue);
+  }
+  return Result.succeed({
+    items,
+    rawCount: nodes.length,
+    endCursor: nextCursorOf(search.pageInfo),
+  });
+}
+
+/** Locked conversations take comments only from collaborators with write access. */
+const WRITE_PERMISSIONS = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+
+export function decodeIssueDetailJson(
+  raw: string,
+  repository: string,
+): Result.Result<GitHubIssueDetailPage | null, DecodeFailure> {
+  const decoded = decodeIssueDetail(raw);
+  if (!Result.isSuccess(decoded)) return Result.fail(decoded.failure);
+  const { viewerPermission, issue: rawIssue } = decoded.success.data.repository;
+  if (rawIssue === null) return Result.succeed(null);
+  const issue = toIssue({ ...rawIssue, comments: null }, repository);
+  if (issue === null) return Result.succeed(null);
+  return Result.succeed({
+    issue: { ...issue, body: rawIssue.body ?? "" },
+    comments: toComments({ comments: rawIssue.comments.nodes ?? [] }),
+    commentCount: rawIssue.comments.totalCount ?? 0,
+    nextCommentsCursor: nextCursorOf(rawIssue.comments.pageInfo),
+    viewerCanComment:
+      rawIssue.locked !== true || WRITE_PERMISSIONS.has(viewerPermission?.toUpperCase() ?? ""),
+  });
+}
+
+export function decodeIssueNodeIdJson(raw: string): Result.Result<string, DecodeFailure> {
+  const decoded = decodeIssueNodeId(raw);
+  return Result.isSuccess(decoded)
+    ? Result.succeed(decoded.success.data.repository.issue.id)
+    : Result.fail(decoded.failure);
+}
