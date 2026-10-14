@@ -183,6 +183,8 @@ If SSH reconnecting fails after an app update, retry the launch once. Removing
 the connection stops a server that T3 Code launched; a server that was already
 running is left alone.
 
+The server only listens on the host's loopback address, so other devices cannot reach it until you allow it. To pair a phone or another computer with it directly, open **Clients** on the environment's row and turn on **Network access**. The server restarts on the host's network, and new pairing links offer a QR code for each of its LAN and Tailscale addresses. The setting belongs to the host, so every device connecting to it over SSH sees the same server. A server you started on the host yourself keeps its own binding.
+
 For Antigravity's Google callback on a remote host, see
 [remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device).
 
