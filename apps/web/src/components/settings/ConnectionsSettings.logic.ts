@@ -5,7 +5,9 @@ import {
   AuthTerminalReadScope,
   type DesktopBridge,
   type DesktopWslState,
+  type ServerDirectEndpoint,
 } from "@t3tools/contracts";
+import { createAdvertisedEndpoint } from "@t3tools/shared/advertisedEndpoint";
 
 /**
  * Operating terminals without being able to list them leaves a client
@@ -46,6 +48,43 @@ type WslEnableBridge = Pick<DesktopBridge, "setWslBackendEnabled" | "setWslDistr
  */
 export function isQrShareableEndpoint(endpoint: AdvertisedEndpoint): boolean {
   return endpoint.status !== "unavailable" && endpoint.reachability !== "loopback";
+}
+
+/** The addresses a remote server reports for itself, in the shape the pairing picker offers. */
+export function advertisedEndpointsFromDirect(
+  directEndpoints: ReadonlyArray<ServerDirectEndpoint>,
+): ReadonlyArray<AdvertisedEndpoint> {
+  return directEndpoints.flatMap((endpoint) => {
+    const secure = endpoint.httpBaseUrl.startsWith("https:");
+    try {
+      return [
+        endpoint.kind === "lan"
+          ? createAdvertisedEndpoint({
+              id: `server-lan:${endpoint.httpBaseUrl}`,
+              label: "Local network",
+              provider: { id: "lan", label: "Local network", kind: "core", isAddon: false },
+              httpBaseUrl: endpoint.httpBaseUrl,
+              reachability: "lan",
+              source: "server",
+            })
+          : createAdvertisedEndpoint({
+              id: `server-tailnet:${endpoint.httpBaseUrl}`,
+              label: secure ? "Tailscale HTTPS" : "Tailscale IP",
+              provider: {
+                id: "tailscale",
+                label: "Tailscale",
+                kind: "private-network",
+                isAddon: true,
+              },
+              httpBaseUrl: endpoint.httpBaseUrl,
+              reachability: "private-network",
+              source: "server",
+            }),
+      ];
+    } catch {
+      return [];
+    }
+  });
 }
 
 export function isWslSettingsRowVisible(input: {
