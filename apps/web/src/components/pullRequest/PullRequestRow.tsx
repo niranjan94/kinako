@@ -40,7 +40,11 @@ const LABEL_SLOTS = [
   { overflow: "" },
 ] as const;
 
-function PullRequestRowLabels({ labels }: { labels: EnvironmentPullRequestEntry["labels"] }) {
+export function PullRequestRowLabels({
+  labels,
+}: {
+  labels: EnvironmentPullRequestEntry["labels"];
+}) {
   if (labels.length === 0) return null;
   return (
     <span className="flex min-w-0 items-center gap-1">
@@ -74,7 +78,7 @@ function PullRequestRowLabels({ labels }: { labels: EnvironmentPullRequestEntry[
  * The page row keeps a little more room around the shared lines than the panel, which sits in
  * a narrow column. Its outer wrapper reserves the full row height when offscreen.
  */
-const PAGE_ROW_CLASS = "px-3 py-2.5";
+export const PAGE_ROW_CLASS = "px-3 py-2.5";
 
 export type PullRequestRowTarget = Pick<
   EnvironmentPullRequestEntry,

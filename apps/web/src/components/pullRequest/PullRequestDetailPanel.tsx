@@ -26,6 +26,7 @@ import {
   ArrowLeftIcon,
   ArrowUpRightIcon,
   BookOpenIcon,
+  BotIcon,
   CheckIcon,
   CircleDotIcon,
   CopyIcon,
@@ -131,6 +132,7 @@ import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import type { PullRequestAgentSelectionInput } from "./PullRequestCodeTab";
 import { openOnHostLabel, showPullRequestLinkContextMenu } from "./pullRequestLinkContextMenu";
 import { PullRequestMarkdownContext } from "./PullRequestMarkdown";
+import { requireApprovalForDraft } from "./itemHandoff";
 import { PullRequestComposer } from "./PullRequestComposer";
 import { PullRequestSummaryTab } from "./PullRequestSummaryTab";
 import { PullRequestTimelineTab } from "./PullRequestTimelineTab";
@@ -1193,7 +1195,7 @@ export function PullRequestDetailPanel({
   const startAsk = async (
     kind: string,
     task: ThreadTask,
-    options?: { readonly keepGuide?: boolean },
+    options?: { readonly keepGuide?: boolean; readonly question?: boolean },
   ) => {
     if (!detail || handoff !== null) return;
     if (attachTarget !== null) {
@@ -1212,6 +1214,7 @@ export function PullRequestDetailPanel({
     const projectRef = scopeProjectRef(actingEnvironmentId, acting?.projectId ?? detail.projectId);
     const opened = await openThreadWithTask(projectRef, task);
     setHandoff(null);
+    if (opened !== null && options?.question === true) requireApprovalForDraft(opened.draftId);
     if (opened !== null && options?.keepGuide === true) {
       const draft = useComposerDraftStore.getState().getDraftSession(opened.draftId);
       if (draft !== null) {
@@ -1398,32 +1401,40 @@ export function PullRequestDetailPanel({
 
   const askAboutPullRequest = () => {
     if (!detail) return;
-    void startAsk("ask", {
-      ...buildAskAboutPullRequestHandoff({
-        number: detail.number,
-        title: detail.title,
-        url: detail.url,
-        headBranch: detail.headBranch,
-        baseBranch: detail.baseBranch,
-        state: detail.state,
-        isDraft: detail.isDraft,
-      }),
-    });
+    void startAsk(
+      "ask",
+      {
+        ...buildAskAboutPullRequestHandoff({
+          number: detail.number,
+          title: detail.title,
+          url: detail.url,
+          headBranch: detail.headBranch,
+          baseBranch: detail.baseBranch,
+          state: detail.state,
+          isDraft: detail.isDraft,
+        }),
+      },
+      { question: true },
+    );
   };
 
   const explainPullRequest = () => {
     if (!detail) return;
-    void startAsk("explain", {
-      ...buildExplainPullRequestHandoff({
-        number: detail.number,
-        title: detail.title,
-        url: detail.url,
-        headBranch: detail.headBranch,
-        baseBranch: detail.baseBranch,
-        state: detail.state,
-        isDraft: detail.isDraft,
-      }),
-    });
+    void startAsk(
+      "explain",
+      {
+        ...buildExplainPullRequestHandoff({
+          number: detail.number,
+          title: detail.title,
+          url: detail.url,
+          headBranch: detail.headBranch,
+          baseBranch: detail.baseBranch,
+          state: detail.state,
+          isDraft: detail.isDraft,
+        }),
+      },
+      { question: true },
+    );
   };
 
   const askAboutGuideStop = (stop: PullRequestReviewGuideStop, index: number, question: string) => {
@@ -1447,7 +1458,7 @@ export function PullRequestDetailPanel({
         },
         question,
       }),
-      { keepGuide: true },
+      { keepGuide: true, question: true },
     );
   };
 
@@ -2227,6 +2238,22 @@ export function PullRequestDetailPanel({
                       </span>
                     </span>
                   </MenuItem>
+                  {context === "page" ? (
+                    <MenuItem
+                      disabled={handoff !== null || checkoutRoot === null || !canPrepareWorktree}
+                      onClick={() => startCheckout("worktree")}
+                    >
+                      <BotIcon className="mt-1 size-3.5 shrink-0 self-start" />
+                      <span className="flex min-w-0 flex-col">
+                        <span>
+                          {handoff === "checkout:worktree" ? "Preparing..." : "Send to agent"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Checks it out in its own worktree with a new thread on it.
+                        </span>
+                      </span>
+                    </MenuItem>
+                  ) : null}
                   <MenuItem
                     disabled={handoff !== null || !canFixFindings}
                     onClick={startFixFindings}

@@ -61,6 +61,7 @@ import {
   ChartNoAxesColumnIcon,
   CheckIcon,
   ChevronRightIcon,
+  CircleDotIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderGit2Icon,
@@ -2283,7 +2284,23 @@ function OpenCommandPaletteDialog(props: {
       title: "Open pull requests",
       icon: <PullRequestGlyph.pullRequest className={ITEM_ICON_CLASS} />,
       run: async () => {
-        await navigate({ to: "/pull-requests", search: readPullRequestListPreferences() });
+        const { kind: _kind, ...preferences } = readPullRequestListPreferences();
+        await navigate({ to: "/pull-requests", search: preferences });
+      },
+    });
+    // Whether any host lists issues is only known once the page has read it, so this follows the
+    // same capability as pull requests and the page says when a host has none.
+    actionItems.push({
+      kind: "action",
+      value: "action:issues",
+      searchTerms: ["issues", "issue", "bugs", "github", "tickets"],
+      title: "Open issues",
+      icon: <CircleDotIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/pull-requests",
+          search: { ...readPullRequestListPreferences(), kind: "issues" },
+        });
       },
     });
   }

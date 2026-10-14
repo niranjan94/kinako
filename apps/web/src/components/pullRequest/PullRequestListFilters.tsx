@@ -98,11 +98,13 @@ export function PullRequestSearchInput({
   value,
   busy,
   onChange,
+  issues = false,
 }: {
   value: string;
   /** A search is on its way to the hosts, said where the typing is rather than over the list. */
   busy?: boolean;
   onChange: (value: string) => void;
+  issues?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -119,8 +121,8 @@ export function PullRequestSearchInput({
           setDraft(event.currentTarget.value);
           onChange(event.currentTarget.value);
         }}
-        placeholder="Search pull requests, or label:bug"
-        aria-label="Search pull requests"
+        placeholder={issues ? "Search issues" : "Search pull requests, or label:bug"}
+        aria-label={issues ? "Search issues" : "Search pull requests"}
       />
     </InputGroup>
   );
@@ -414,6 +416,7 @@ export function PullRequestFiltersMenu({
   projectEnvironmentId,
   unavailable,
   onProject,
+  issues = false,
 }: {
   onOpenChange?: (open: boolean) => void;
   state: PullRequestListState;
@@ -457,11 +460,13 @@ export function PullRequestFiltersMenu({
   unavailable: ReadonlyMap<string, string>;
   /** The environment comes with the project id, since picking a row picks a specific server's copy of it. */
   onProject: (projectId: ProjectId | undefined, environmentId: EnvironmentId | undefined) => void;
+  /** Issues carry no involvement, draft, review or check state, so those groups stay out. */
+  issues?: boolean;
 }) {
   const selectedLabels = (filters.labels ?? []).flatMap((group) => group);
   const filterCount = [
     state !== "open",
-    involvement !== "all",
+    !issues && involvement !== "all",
     host,
     server,
     projectId,
@@ -521,12 +526,14 @@ export function PullRequestFiltersMenu({
           options={stateOptions}
           onChange={onState}
         />
-        <PullRequestFilterRadioSubmenu
-          label="Involvement"
-          value={involvement}
-          options={involvementOptions}
-          onChange={onInvolvement}
-        />
+        {issues ? null : (
+          <PullRequestFilterRadioSubmenu
+            label="Involvement"
+            value={involvement}
+            options={involvementOptions}
+            onChange={onInvolvement}
+          />
+        )}
         <MenuSeparator />
         <PullRequestAuthorFilter
           value={filters.author}
@@ -542,24 +549,28 @@ export function PullRequestFiltersMenu({
             })
           }
         />
-        <PullRequestFilterRadioSubmenu
-          label="Draft"
-          value={filters.draft ?? UNFILTERED_VALUE}
-          options={DRAFT_OPTIONS}
-          onChange={(draft) => updateFilter("draft", draft)}
-        />
-        <PullRequestFilterRadioSubmenu
-          label="Review"
-          value={filters.review ?? UNFILTERED_VALUE}
-          options={REVIEW_OPTIONS}
-          onChange={(review) => updateFilter("review", review)}
-        />
-        <PullRequestFilterRadioSubmenu
-          label="Checks"
-          value={filters.checks ?? UNFILTERED_VALUE}
-          options={CHECKS_OPTIONS}
-          onChange={(checks) => updateFilter("checks", checks)}
-        />
+        {issues ? null : (
+          <>
+            <PullRequestFilterRadioSubmenu
+              label="Draft"
+              value={filters.draft ?? UNFILTERED_VALUE}
+              options={DRAFT_OPTIONS}
+              onChange={(draft) => updateFilter("draft", draft)}
+            />
+            <PullRequestFilterRadioSubmenu
+              label="Review"
+              value={filters.review ?? UNFILTERED_VALUE}
+              options={REVIEW_OPTIONS}
+              onChange={(review) => updateFilter("review", review)}
+            />
+            <PullRequestFilterRadioSubmenu
+              label="Checks"
+              value={filters.checks ?? UNFILTERED_VALUE}
+              options={CHECKS_OPTIONS}
+              onChange={(checks) => updateFilter("checks", checks)}
+            />
+          </>
+        )}
         {hostOptions.length > 2 ? (
           <>
             <MenuSeparator />

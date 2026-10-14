@@ -37,4 +37,13 @@ describe("pull requests route search", () => {
     expect(matchedSearch("/pull-requests?q=fix")?.q).toBe("fix");
     expect(matchedSearch("/pull-requests?q=%224089%22")?.q).toBe("4089");
   });
+
+  it("keeps the issues kind and an issue selection, and drops anything else", () => {
+    const search = matchedSearch("/pull-requests?kind=issues&selectedKind=issue");
+    expect(search?.kind).toBe("issues");
+    expect(search?.selectedKind).toBe("issue");
+    const junk = matchedSearch("/pull-requests?kind=bogus&selectedKind=pr");
+    expect(junk?.kind).toBeUndefined();
+    expect(junk?.selectedKind).toBeUndefined();
+  });
 });

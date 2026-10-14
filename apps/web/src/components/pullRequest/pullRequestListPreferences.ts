@@ -19,7 +19,12 @@ export const PullRequestListSort = Schema.Literals([
 ]);
 export type PullRequestListSort = typeof PullRequestListSort.Type;
 
+export const PullRequestListKind = Schema.Literals(["issues"]);
+/** Absent means pull requests, so every link written before issues still opens the same list. */
+export type PullRequestListKind = typeof PullRequestListKind.Type;
+
 export interface PullRequestListPreferences {
+  readonly kind?: PullRequestListKind | undefined;
   readonly involvement: PullRequestInvolvement;
   readonly state: PullRequestListState;
   readonly environmentId?: EnvironmentId;
@@ -45,6 +50,7 @@ const DEFAULT_PULL_REQUEST_LIST_PREFERENCES = {
 
 const BoundedPreference = Schema.String.check(Schema.isMaxLength(200));
 const PullRequestListPreferencesSchema = Schema.Struct({
+  kind: Schema.optional(PullRequestListKind),
   involvement: PullRequestInvolvement,
   state: PullRequestListState,
   environmentId: Schema.optional(EnvironmentId),
@@ -76,6 +82,7 @@ export function pullRequestListPreferences(
   search: PullRequestListPreferences | Schema.Schema.Type<typeof PullRequestListPreferencesSchema>,
 ): PullRequestListPreferences {
   return {
+    ...(search.kind ? { kind: search.kind } : {}),
     involvement: search.involvement,
     state: search.state,
     ...(search.environmentId ? { environmentId: search.environmentId } : {}),

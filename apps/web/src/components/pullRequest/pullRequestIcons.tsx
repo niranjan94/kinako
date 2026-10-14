@@ -1,4 +1,6 @@
 import {
+  CircleCheckIcon,
+  CircleDotIcon,
   GitMergeIcon,
   GitPullRequestArrowIcon,
   GitPullRequestClosedIcon,
@@ -8,7 +10,7 @@ import {
   Unlink2Icon,
   TriangleAlertIcon,
 } from "lucide-react";
-import type { PullRequestState } from "@t3tools/contracts";
+import type { IssueState, PullRequestState } from "@t3tools/contracts";
 
 export const PullRequestGlyph = {
   pullRequest: GitPullRequestArrowIcon,
@@ -52,3 +54,16 @@ export const PULL_REQUEST_STATE_PRESENTATION = {
     Icon: PullRequestGlyph.merged,
   },
 } as const satisfies Record<PullRequestState | "draft", PullRequestStatePresentation>;
+
+export const ISSUE_STATE_PRESENTATION = {
+  open: {
+    label: "Open",
+    toneClassName: PULL_REQUEST_STATE_PRESENTATION.open.toneClassName,
+    Icon: CircleDotIcon,
+  },
+  closed: {
+    label: "Closed",
+    toneClassName: PULL_REQUEST_STATE_PRESENTATION.merged.toneClassName,
+    Icon: CircleCheckIcon,
+  },
+} as const satisfies Record<IssueState, { label: string; toneClassName: string; Icon: unknown }>;

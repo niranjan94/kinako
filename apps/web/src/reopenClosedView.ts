@@ -63,6 +63,7 @@ type PullRequestsSearchLike = Partial<PullRequestListPreferences> & {
   selectedProjectId?: ProjectId;
   selectedHost?: string;
   selectedEnvironmentId?: EnvironmentId;
+  selectedKind?: "issue" | undefined;
 };
 
 /** Selects the restored pull request on the Pull Requests page, keeping the list filters. */
@@ -76,6 +77,7 @@ export function pullRequestsSearchForRestore<S extends PullRequestsSearchLike>(
     selectedProjectId: _projectId,
     selectedHost: _host,
     selectedEnvironmentId: _environmentId,
+    selectedKind: _selectedKind,
     ...filters
   } = previous;
   return {
@@ -91,6 +93,7 @@ export function pullRequestsSearchForRestore<S extends PullRequestsSearchLike>(
           ...(selected.environmentId === undefined
             ? {}
             : { selectedEnvironmentId: selected.environmentId as EnvironmentId }),
+          ...(selected.item === "issue" ? { selectedKind: "issue" as const } : {}),
         }
       : {}),
   } as S & PullRequestListPreferences;

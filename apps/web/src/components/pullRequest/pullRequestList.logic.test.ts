@@ -1221,6 +1221,13 @@ describe("remembered pull request list controls", () => {
     expect(readPullRequestListPreferences(storage)).toEqual(preferences);
   });
 
+  it("remembers that the list was showing issues", () => {
+    const storage = makeStorage();
+    const preferences = { kind: "issues", involvement: "all", state: "closed" } as const;
+    writePullRequestListPreferences(preferences, storage);
+    expect(readPullRequestListPreferences(storage)).toEqual(preferences);
+  });
+
   it("omits the default sort from storage", () => {
     expect(
       pullRequestListPreferences({
