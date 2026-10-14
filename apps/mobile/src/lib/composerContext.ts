@@ -1,3 +1,8 @@
+import {
+  ASK_ABOUT_ISSUE_INSTRUCTIONS,
+  issueContextText,
+  type HandoffIssue,
+} from "@t3tools/client-runtime/issue-handoff";
 import { serializeLegacyContextMessage } from "@t3tools/shared/composerContextLegacySend";
 import { filePreviewKind } from "@t3tools/shared/filePreview";
 import { videoMimeType } from "@t3tools/shared/video";
@@ -150,6 +155,27 @@ export function pullRequestComposerContext(
     ),
     diff: "",
     pullRequest: metadata,
+  };
+}
+
+/** An issue travels as review context without pull request metadata, which it has none of. */
+export function issueComposerContext(issue: HandoffIssue, id: string): ReviewCommentContextRecord {
+  return {
+    version: 1,
+    kind: "review-comment",
+    contextId: ComposerContextId.make(id),
+    label: `#${issue.number}`,
+    sectionId: `issue:${issue.number}`,
+    sectionTitle: `Issue #${issue.number}`,
+    filePath: `Issue #${issue.number}`,
+    startIndex: 0,
+    endIndex: 0,
+    rangeLabel: issue.title.slice(0, 2048),
+    text: issueContextText(issue, ASK_ABOUT_ISSUE_INSTRUCTIONS).slice(
+      0,
+      COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
+    ),
+    diff: "",
   };
 }
 

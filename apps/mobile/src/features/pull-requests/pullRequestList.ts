@@ -1,7 +1,7 @@
 import type {
   EnvironmentId,
+  PullRequestListCursors,
   PullRequestListEntry,
-  PullRequestListInput,
   PullRequestListResult,
 } from "@t3tools/contracts";
 import type { PullRequestListControls } from "../../persistence/mobile-preferences";
@@ -87,9 +87,25 @@ export function mergeEnvironmentPullRequestPages(
   };
 }
 
-export function mergePullRequestListEntries(
-  previous: readonly PullRequestListEntry[],
-  incoming: readonly PullRequestListEntry[],
+type ListEntry = Pick<
+  PullRequestListEntry,
+  "host" | "repository" | "number" | "updatedAt" | "observedAt"
+>;
+/** A page of either listing: pull requests and issues share cursors and paging. */
+interface ListHead {
+  readonly entries: readonly ListEntry[];
+  readonly nextCursors: PullRequestListCursors;
+  readonly truncated: boolean;
+}
+type ListInput = {
+  readonly state: string;
+  readonly limit?: number;
+  readonly cursors?: PullRequestListCursors;
+};
+
+export function mergePullRequestListEntries<Entry extends ListEntry>(
+  previous: readonly Entry[],
+  incoming: readonly Entry[],
 ) {
   const entries = new Map(previous.map((entry) => [pullRequestListKey(entry), entry]));
   for (const entry of incoming) {
@@ -100,19 +116,20 @@ export function mergePullRequestListEntries(
   return [...entries.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export interface PullRequestListPages {
-  readonly head: PullRequestListResult;
-  readonly entries: readonly PullRequestListEntry[];
-  readonly nextCursors: PullRequestListResult["nextCursors"];
+export interface ListPages<Head extends ListHead> {
+  readonly head: Head;
+  readonly entries: ReadonlyArray<Head["entries"][number]>;
+  readonly nextCursors: PullRequestListCursors;
   readonly truncated: boolean;
   readonly limit: number;
   readonly continued: boolean;
 }
+export type PullRequestListPages = ListPages<PullRequestListResult>;
 
-export function pullRequestListHead(
-  previous: PullRequestListPages | null,
-  head: PullRequestListResult,
-): PullRequestListPages {
+export function pullRequestListHead<Head extends ListHead>(
+  previous: ListPages<Head> | null,
+  head: Head,
+): ListPages<Head> {
   if (previous?.head === head) return previous;
   return previous?.continued
     ? { ...previous, head, entries: mergePullRequestListEntries(previous.entries, head.entries) }
@@ -126,10 +143,10 @@ export function pullRequestListHead(
       };
 }
 
-export function nextPullRequestListInput(
-  pages: PullRequestListPages,
-  input: PullRequestListInput,
-): PullRequestListInput | null {
+export function nextPullRequestListInput<Input extends ListInput>(
+  pages: ListPages<ListHead>,
+  input: Input,
+): (Input & Omit<ListInput, "state">) | null {
   if (Object.keys(pages.nextCursors).length)
     return { ...input, limit: PR_LIST_PAGE_SIZE, cursors: pages.nextCursors };
   return pages.truncated && pages.limit < 500
@@ -137,11 +154,11 @@ export function nextPullRequestListInput(
     : null;
 }
 
-export function appendPullRequestListPage(
-  previous: PullRequestListPages,
-  page: PullRequestListResult,
-  input: PullRequestListInput,
-): PullRequestListPages {
+export function appendPullRequestListPage<Head extends ListHead, Input extends ListInput>(
+  previous: ListPages<Head>,
+  page: Head,
+  input: Input,
+): ListPages<Head> {
   return {
     ...previous,
     entries: mergePullRequestListEntries(previous.entries, page.entries),
@@ -152,7 +169,9 @@ export function appendPullRequestListPage(
   };
 }
 
-export function pullRequestListFacets(entries: readonly PullRequestListEntry[]) {
+export function pullRequestListFacets(
+  entries: readonly Pick<PullRequestListEntry, "author" | "labels">[],
+) {
   return {
     authors: [
       ...new Set(entries.flatMap((entry) => (entry.author ? [entry.author.login] : []))),
@@ -161,6 +180,52 @@ export function pullRequestListFacets(entries: readonly PullRequestListEntry[]) 
       (a, b) => a.localeCompare(b),
     ),
   };
+}
+
+/** The filters both listings apply to rows they already hold. */
+export function matchesListAuthorAndLabels(
+  entry: Pick<PullRequestListEntry, "author" | "labels">,
+  filters: PullRequestListControls["filters"],
+  viewer: string | undefined,
+) {
+  const normalize = (value: string) => value.toLowerCase();
+  if (filters.author) {
+    const author = filters.author === "me" ? viewer : filters.author;
+    if (!author || normalize(entry.author?.login ?? "") !== normalize(author)) return false;
+  }
+  const labels = new Set(entry.labels.map((label) => normalize(label.name)));
+  if (filters.labels?.some((group) => !group.some((label) => labels.has(normalize(label)))))
+    return false;
+  return !filters.excludedLabels?.some((label) => labels.has(normalize(label)));
+}
+
+/**
+ * The same repository can be available on multiple machines. Keep its first matching source,
+ * unless that machine is unreachable and another one can answer: its rows may only be cached.
+ */
+export function uniqueSortedListEntries<
+  Entry extends ListEntry & { readonly createdAt: string; readonly environmentId?: string },
+>(
+  entries: readonly Entry[],
+  sort: PullRequestListControls["sort"],
+  connectedEnvironmentIds?: ReadonlySet<string>,
+) {
+  const reachable = (entry: Entry) =>
+    !connectedEnvironmentIds ||
+    (entry.environmentId !== undefined && connectedEnvironmentIds.has(entry.environmentId));
+  const unique = new Map<string, Entry>();
+  for (const entry of entries) {
+    const key = pullRequestListKey(entry);
+    const held = unique.get(key);
+    if (!held || (!reachable(held) && reachable(entry))) unique.set(key, entry);
+  }
+  return [...unique.values()].sort((a, b) =>
+    sort === "created"
+      ? b.createdAt.localeCompare(a.createdAt)
+      : sort === "oldest"
+        ? a.updatedAt.localeCompare(b.updatedAt)
+        : b.updatedAt.localeCompare(a.updatedAt),
+  );
 }
 
 export function filterPullRequestList<
@@ -191,19 +256,12 @@ export function filterPullRequestList<
       return false;
     if ((filters.draft === "only" && !entry.isDraft) || (filters.draft === "hide" && entry.isDraft))
       return false;
-    if (filters.author) {
-      const author = filters.author === "me" ? viewer : filters.author;
-      if (!author || normalize(entry.author?.login ?? "") !== normalize(author)) return false;
-    }
+    if (!matchesListAuthorAndLabels(entry, filters, viewer)) return false;
     // Hosts without a review rollup still perform their own review filtering.
     if (filters.review && entry.reviewDecision && entry.reviewDecision !== filters.review)
       return false;
     if (filters.review === "none" && entry.reviewDecision) return false;
     if (filters.checks && entry.checksState && entry.checksState !== filters.checks) return false;
-    const labels = new Set(entry.labels.map((label) => normalize(label.name)));
-    if (filters.labels?.some((group) => !group.some((label) => labels.has(normalize(label)))))
-      return false;
-    if (filters.excludedLabels?.some((label) => labels.has(normalize(label)))) return false;
     if (words.length && localSearchHosts.has(viewerKey)) {
       const text =
         `${entry.repository} #${entry.number} ${entry.title} ${entry.author?.login ?? ""} ${entry.headBranch} ${entry.baseBranch} ${entry.labels.map((label) => label.name).join(" ")}`.toLowerCase();
@@ -211,24 +269,7 @@ export function filterPullRequestList<
     }
     return true;
   });
-  // The same repository can be available on multiple machines. Pick its first matching source,
-  // unless that machine is unreachable and another one can answer: its rows may only be cached.
-  const reachable = (entry: Entry) =>
-    !connectedEnvironmentIds ||
-    (entry.environmentId !== undefined && connectedEnvironmentIds.has(entry.environmentId));
-  const unique = new Map<string, Entry>();
-  for (const entry of filtered) {
-    const key = pullRequestListKey(entry);
-    const held = unique.get(key);
-    if (!held || (!reachable(held) && reachable(entry))) unique.set(key, entry);
-  }
-  return [...unique.values()].sort((a, b) =>
-    controls.sort === "created"
-      ? b.createdAt.localeCompare(a.createdAt)
-      : controls.sort === "oldest"
-        ? a.updatedAt.localeCompare(b.updatedAt)
-        : b.updatedAt.localeCompare(a.updatedAt),
-  );
+  return uniqueSortedListEntries(filtered, controls.sort, connectedEnvironmentIds);
 }
 
 export function pullRequestListReviewStatus(

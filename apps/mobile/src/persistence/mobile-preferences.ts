@@ -36,6 +36,9 @@ export const PullRequestListControls = Schema.Struct({
 });
 export type PullRequestListControls = typeof PullRequestListControls.Type;
 
+/** Which items the pull request browser lists. */
+export type PullRequestListKind = "pullRequests" | "issues";
+
 const ThreadListFilters = Schema.Struct({
   environmentId: Schema.NullOr(EnvironmentId),
   projectKey: Schema.NullOr(Schema.String),
@@ -95,6 +98,7 @@ export interface Preferences {
   /** Home list filters, restored on the next launch. */
   readonly threadListFilters?: ThreadListFilters;
   readonly pullRequestListFilters?: PullRequestListPreferences;
+  readonly pullRequestListKind?: PullRequestListKind;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedError<MobilePreferencesLoadError>()(
@@ -163,6 +167,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     threadListWorkingShelfExpanded?: boolean;
     threadListFilters?: ThreadListFilters;
     pullRequestListFilters?: PullRequestListPreferences;
+    pullRequestListKind?: PullRequestListKind;
   } = {};
 
   if (typeof parsed.pullRequestHideTestFiles === "boolean") {
@@ -282,6 +287,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (isPullRequestListPreferences(parsed.pullRequestListFilters)) {
     preferences.pullRequestListFilters = parsed.pullRequestListFilters;
+  }
+  if (parsed.pullRequestListKind === "pullRequests" || parsed.pullRequestListKind === "issues") {
+    preferences.pullRequestListKind = parsed.pullRequestListKind;
   }
   return preferences;
 }

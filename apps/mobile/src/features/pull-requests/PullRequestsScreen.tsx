@@ -1,4 +1,4 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { useNavigation } from "@react-navigation/native";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProjectId } from "@t3tools/contracts";
@@ -18,15 +18,27 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "../../components/AppText";
 import { EmptyState } from "../../components/EmptyState";
+import { SegmentedControl } from "../../components/SegmentedControl";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import { useWorkspaceState } from "../../state/workspace";
 import { useProjects } from "../../state/entities";
 import { environmentServerConfigsAtom } from "../../state/server";
+import { IssueListRow } from "./IssueListRow";
+import {
+  filterIssueList,
+  issueBrowsingEnvironments,
+  issueListRowsAreEqual,
+  issueListState,
+  scopedIssueListKey,
+  type EnvironmentIssueListEntry,
+} from "./issueList";
 import { PullRequestListRow } from "./PullRequestListRow";
 import { PullRequestListFilters } from "./PullRequestListFilters";
 import { usePullRequestList } from "./usePullRequestList";
 import { usePullRequestListControls } from "./usePullRequestListControls";
 import { usePullRequestListActions } from "./usePullRequestListActions";
+import { useIssueList, usePullRequestListHeads } from "./useIssueList";
+import { useIssueListActions, useOpenIssue } from "./useIssueListActions";
 import {
   filterPullRequestList,
   pullRequestListFacets,
@@ -103,7 +115,7 @@ export function PullRequestsScreen(
     [navigation, selectAndroidWorkspace],
   );
   const controls = listControls.controlsFor(environmentId);
-  const targets = useMemo(
+  const baseTargets = useMemo(
     () =>
       environments
         .filter(
@@ -123,13 +135,64 @@ export function PullRequestsScreen(
             filters: controls.filters,
             limit: PR_LIST_PAGE_SIZE,
             ...(controls.projectId ? { projectId: ProjectId.make(controls.projectId) } : {}),
-            ...(query ? { query } : {}),
           },
         })),
-    [environments, environmentId, configs, controls, query],
+    [environments, environmentId, configs, controls],
+  );
+  // Hosts report whether their issues can be browsed only in the pull request listing.
+  const heads = usePullRequestListHeads(baseTargets);
+  const issueSupport = useMemo(() => issueBrowsingEnvironments(heads), [heads]);
+  const showKindToggle =
+    issueSupport.available || (listControls.kind === "issues" && issueSupport.pending);
+  const kind =
+    listControls.kind === "issues" && (issueSupport.available || issueSupport.pending)
+      ? "issues"
+      : "pullRequests";
+  const viewers = useMemo(() => {
+    const merged: Record<string, string> = {};
+    for (const { environmentId: id, head } of heads)
+      for (const [host, viewer] of Object.entries(head?.viewers ?? {}))
+        merged[`${id} ${host}`] = viewer;
+    return merged;
+  }, [heads]);
+  const targets = useMemo(
+    () =>
+      kind !== "pullRequests"
+        ? []
+        : baseTargets.map((target) =>
+            query ? { ...target, input: { ...target.input, query } } : target,
+          ),
+    [kind, baseTargets, query],
+  );
+  const issueTargets = useMemo(
+    () =>
+      kind !== "issues"
+        ? []
+        : baseTargets
+            .filter((target) => issueSupport.environments.has(target.environmentId))
+            .map((target) => ({
+              environmentId: target.environmentId,
+              input: {
+                state: issueListState(controls.state),
+                limit: PR_LIST_PAGE_SIZE,
+                ...(target.input.projectId ? { projectId: target.input.projectId } : {}),
+                ...(query ? { query } : {}),
+              },
+            })),
+    [kind, baseTargets, issueSupport, controls.state, query],
   );
   const result = usePullRequestList(targets);
+  const issueResult = useIssueList(issueTargets);
+  const activeTargets: readonly { readonly environmentId: string }[] =
+    kind === "issues" ? issueTargets : targets;
   const connectedTargets = targets.filter((target) =>
+    environments.some(
+      (environment) =>
+        environment.environmentId === target.environmentId &&
+        environment.connectionState === "connected",
+    ),
+  );
+  const connectedActiveTargets = activeTargets.filter((target) =>
     environments.some(
       (environment) =>
         environment.environmentId === target.environmentId &&
@@ -142,7 +205,7 @@ export function PullRequestsScreen(
   );
   const sidebar = props.sidebar === true || primaryColumn !== null;
   const selectedKey = props.selectedPullRequestKey ?? primaryColumn?.selectedPullRequestKey;
-  const connectedKey = connectedTargets.map((target) => target.environmentId).join("\n");
+  const connectedKey = connectedActiveTargets.map((target) => target.environmentId).join("\n");
   const entries = useMemo(
     () =>
       filterPullRequestList(
@@ -155,43 +218,89 @@ export function PullRequestsScreen(
       ),
     [result.entries, controls, query, result.data, connectedKey],
   );
-  const facets = useMemo(() => pullRequestListFacets(result.entries), [result.entries]);
-  const [knownFacets, setKnownFacets] = useState({ environmentId, source: facets, ...facets });
-  if (knownFacets.environmentId !== environmentId || knownFacets.source !== facets) {
+  const issueEntries = useMemo(
+    () =>
+      filterIssueList(issueResult.entries, controls, viewers, new Set(connectedKey.split("\n"))),
+    [issueResult.entries, controls, viewers, connectedKey],
+  );
+  const facets = useMemo(
+    () => pullRequestListFacets(kind === "issues" ? issueResult.entries : result.entries),
+    [kind, issueResult.entries, result.entries],
+  );
+  const facetScope = `${kind}:${environmentId}`;
+  const [knownFacets, setKnownFacets] = useState({ scope: facetScope, source: facets, ...facets });
+  if (knownFacets.scope !== facetScope || knownFacets.source !== facets) {
     setKnownFacets((previous) => ({
       source: facets,
-      environmentId,
+      scope: facetScope,
       authors: [
-        ...new Set([
-          ...(previous.environmentId === environmentId ? previous.authors : []),
-          ...facets.authors,
-        ]),
+        ...new Set([...(previous.scope === facetScope ? previous.authors : []), ...facets.authors]),
       ].sort(),
       labels: [
-        ...new Set([
-          ...(previous.environmentId === environmentId ? previous.labels : []),
-          ...facets.labels,
-        ]),
+        ...new Set([...(previous.scope === facetScope ? previous.labels : []), ...facets.labels]),
       ].sort(),
     }));
   }
   const projects = useProjects().filter(
     (project) => environmentId === null || project.environmentId === environmentId,
   );
-  const renderPullRequest = useCallback(
-    ({ item }: { readonly item: EnvironmentPullRequestListEntry }) => (
-      <PullRequestListRow
-        item={item}
-        onSelect={selectPullRequest}
-        getActions={actions}
-        onAction={select}
-        busy={busyKey === pullRequestKey(item)}
-        selected={selectedKey === pullRequestKey(item)}
-        sidebar={sidebar}
-      />
-    ),
-    [selectPullRequest, selectedKey, actions, select, busyKey, sidebar],
+  const openIssue = useOpenIssue();
+  const issueActions = useIssueListActions();
+  const rows: readonly ListRow[] = kind === "issues" ? issueEntries : entries;
+  const renderRow = useCallback(
+    ({ item }: { readonly item: ListRow }) =>
+      isIssueRow(item) ? (
+        <IssueListRow
+          item={item}
+          onSelect={openIssue}
+          getActions={issueActions.actions}
+          onAction={issueActions.select}
+          busy={false}
+          selected={selectedKey === scopedIssueListKey(item)}
+          sidebar={sidebar}
+        />
+      ) : (
+        <PullRequestListRow
+          item={item}
+          onSelect={selectPullRequest}
+          getActions={actions}
+          onAction={select}
+          busy={busyKey === pullRequestKey(item)}
+          selected={selectedKey === pullRequestKey(item)}
+          sidebar={sidebar}
+        />
+      ),
+    [
+      selectPullRequest,
+      openIssue,
+      issueActions.actions,
+      issueActions.select,
+      selectedKey,
+      actions,
+      select,
+      busyKey,
+      sidebar,
+    ],
   );
+  const { onViewableItemsChanged: onViewablePullRequestsChanged } = result;
+  const onViewablePullRequests = useCallback(
+    ({ viewableItems }: { viewableItems: readonly ViewToken<ListRow>[] }) =>
+      onViewablePullRequestsChanged({
+        viewableItems: viewableItems.flatMap((token) =>
+          isIssueRow(token.item) ? [] : [{ item: token.item, isViewable: token.isViewable }],
+        ),
+      }),
+    [onViewablePullRequestsChanged],
+  );
+  const active =
+    kind === "issues"
+      ? { ...issueResult, onViewableItemsChanged: undefined, noun: "issues" }
+      : {
+          ...result,
+          errors: result.data.errors,
+          onViewableItemsChanged: onViewablePullRequests,
+          noun: "pull requests",
+        };
   const previousSearchMode = useRef(tab.searchMode);
   useEffect(() => {
     const restoringSearch =
@@ -204,29 +313,30 @@ export function PullRequestsScreen(
       });
   }, [tab.searchMode, tab.scrollOffset, insets.top]);
   const initialIndex = initialAnchor
-    ? entries.findIndex((entry) => pullRequestKey(entry) === initialAnchor.key)
+    ? rows.findIndex((row) => rowKey(row) === initialAnchor.key)
     : -1;
 
   return (
     <View className={sidebar ? "flex-1 bg-drawer" : "flex-1 bg-screen"}>
       <LegendList
         ref={listRef}
-        data={entries}
-        extraData={`${selectedKey}:${busyKey}`}
-        keyExtractor={pullRequestKey}
-        itemsAreEqual={pullRequestListRowsAreEqual}
+        data={rows}
+        extraData={`${kind}:${selectedKey}:${busyKey}`}
+        keyExtractor={rowKey}
+        itemsAreEqual={rowsAreEqual}
+        getItemType={(row) => (isIssueRow(row) ? "issue" : "pullRequest")}
         // Default-size rows measure about 78pt with one title line and 98pt with two.
         estimatedItemSize={88}
         // Build roughly a screen ahead so a fling reaches already-mounted rows.
         drawDistance={1_000}
-        maintainVisibleContentPosition={result.continued ? maintainVisiblePosition : false}
-        onEndReached={() => void result.loadMore()}
+        maintainVisibleContentPosition={active.continued ? maintainVisiblePosition : false}
+        onEndReached={() => void active.loadMore()}
         onEndReachedThreshold={0.5}
-        onViewableItemsChanged={result.onViewableItemsChanged}
+        onViewableItemsChanged={active.onViewableItemsChanged}
         refreshControl={
           <RefreshControl
-            refreshing={result.refreshing}
-            onRefresh={() => void result.onRefresh()}
+            refreshing={active.refreshing}
+            onRefresh={() => void active.onRefresh()}
             // Place the 60pt native refresh control in the revealed pull-down space.
             // The list already accounts for the navigation header in its content inset.
             progressViewOffset={Platform.OS === "ios" ? 60 : undefined}
@@ -260,19 +370,40 @@ export function PullRequestsScreen(
             ),
           );
           const list = listRef.current?.getState();
-          const item = list ? entries[list.start] : undefined;
+          const item = list ? rows[list.start] : undefined;
           if (list && item)
             workspace.recordScrollAnchor("pullRequests", {
-              key: pullRequestKey(item),
+              key: rowKey(item),
               viewOffset: list.positionAtIndex(list.start) - event.nativeEvent.contentOffset.y,
             });
         }}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        renderItem={renderPullRequest}
+        renderItem={renderRow}
         ListHeaderComponent={
           <>
+            {showKindToggle ? (
+              <View className="px-4 pt-1 pb-2.5">
+                <SegmentedControl
+                  options={[
+                    { value: "pullRequests" as const, label: "Pull requests" },
+                    { value: "issues" as const, label: "Issues" },
+                  ]}
+                  selected={kind}
+                  onSelect={(next) => {
+                    listControls.setKind(next);
+                    void listRef.current?.scrollToOffset({
+                      offset: Platform.OS === "ios" ? -insets.top : 0,
+                      animated: false,
+                    });
+                  }}
+                  role="tab"
+                  size="compact"
+                />
+              </View>
+            ) : null}
             <PullRequestListFilters
+              kind={kind}
               environments={environments.map((item) => ({
                 id: String(item.environmentId),
                 label: item.environmentLabel,
@@ -287,17 +418,13 @@ export function PullRequestsScreen(
                   animated: false,
                 });
               }}
-              authors={
-                knownFacets.environmentId === environmentId ? knownFacets.authors : facets.authors
-              }
-              labels={
-                knownFacets.environmentId === environmentId ? knownFacets.labels : facets.labels
-              }
+              authors={knownFacets.scope === facetScope ? knownFacets.authors : facets.authors}
+              labels={knownFacets.scope === facetScope ? knownFacets.labels : facets.labels}
               projects={projects}
             />
-            {result.data?.errors.length ? (
+            {active.errors.length ? (
               <Text className="px-4 py-3 text-sm text-foreground-muted">
-                {result.data.errors
+                {active.errors
                   .map(
                     (error) =>
                       `${error.projectTitle || environments.find((environment) => environment.environmentId === error.environmentId)?.environmentLabel || "Environment"}: ${error.message}`,
@@ -308,27 +435,27 @@ export function PullRequestsScreen(
           </>
         }
         ListFooterComponent={
-          result.loadingMore ? (
+          active.loadingMore ? (
             <View className="items-center py-5">
               <ActivityIndicator
                 colorClassName="accent-icon"
-                accessibilityLabel="Loading more pull requests"
+                accessibilityLabel={`Loading more ${active.noun}`}
               />
             </View>
-          ) : result.loadMoreError ? (
+          ) : active.loadMoreError ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Retry loading more pull requests"
-              onPress={() => void result.loadMore(true)}
+              accessibilityLabel={`Retry loading more ${active.noun}`}
+              onPress={() => void active.loadMore(true)}
               className="items-center gap-2 px-8 py-4"
             >
-              <Text className="text-xs text-foreground-muted">{result.loadMoreError}</Text>
+              <Text className="text-xs text-foreground-muted">{active.loadMoreError}</Text>
               <Text className="text-sm font-t3-medium text-link">Try again</Text>
             </Pressable>
           ) : undefined
         }
         ListEmptyComponent={
-          result.isPending && connectedTargets.length > 0 ? (
+          active.isPending && connectedActiveTargets.length > 0 ? (
             <View className="items-center py-12">
               <ActivityIndicator colorClassName="accent-icon" />
             </View>
@@ -336,23 +463,23 @@ export function PullRequestsScreen(
             <View className="px-8 py-12">
               <EmptyState
                 title={
-                  result.error
-                    ? "Couldn't load pull requests"
-                    : targets.length && connectedTargets.length === 0
+                  active.error
+                    ? `Couldn't load ${active.noun}`
+                    : activeTargets.length && connectedActiveTargets.length === 0
                       ? "Environment offline"
-                      : targets.length
+                      : activeTargets.length
                         ? query
                           ? "No results"
-                          : "No matching pull requests"
+                          : `No matching ${active.noun}`
                         : "Connect an environment"
                 }
                 detail={
-                  result.error ??
-                  (targets.length && connectedTargets.length === 0
-                    ? "Reconnect to load pull requests that aren't saved on this device."
-                    : targets.length
-                      ? "Pull requests from the selected environments' projects appear here."
-                      : "Add an environment in Settings to browse its pull requests.")
+                  active.error ??
+                  (activeTargets.length && connectedActiveTargets.length === 0
+                    ? `Reconnect to load ${active.noun} that aren't saved on this device.`
+                    : activeTargets.length
+                      ? `${kind === "issues" ? "Issues" : "Pull requests"} from the selected environments' projects appear here.`
+                      : `Add an environment in Settings to browse its ${active.noun}.`)
                 }
                 variant="plain"
               />
@@ -363,3 +490,14 @@ export function PullRequestsScreen(
     </View>
   );
 }
+
+type ListRow = EnvironmentPullRequestListEntry | EnvironmentIssueListEntry;
+
+const isIssueRow = (row: ListRow): row is EnvironmentIssueListEntry => "commentCount" in row;
+
+const rowKey = (row: ListRow) => (isIssueRow(row) ? scopedIssueListKey(row) : pullRequestKey(row));
+
+const rowsAreEqual = (previous: ListRow, next: ListRow) =>
+  isIssueRow(previous) && isIssueRow(next)
+    ? issueListRowsAreEqual(previous, next)
+    : !isIssueRow(previous) && !isIssueRow(next) && pullRequestListRowsAreEqual(previous, next);

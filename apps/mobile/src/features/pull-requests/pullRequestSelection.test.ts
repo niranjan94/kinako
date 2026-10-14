@@ -77,4 +77,28 @@ describe("displayed pull request selection", () => {
       ]),
     ).toBeNull();
   });
+
+  it("highlights an issue, including behind its comment sheet", () => {
+    const issue = { key: "issue", name: "Issue", params: { ...params, number: 43 } };
+    expect(selection([home, issue])).toBe("environment-one:github.com:org/repo:43");
+    expect(
+      selection([home, issue, { key: "comment", name: "IssueComment", params: issue.params }]),
+    ).toBe("environment-one:github.com:org/repo:43");
+  });
+
+  it("follows the most recent of a pull request and an issue", () => {
+    const issue = { key: "issue", name: "Issue", params: { ...params, number: 43 } };
+    expect(selection([home, pullRequest, issue])).toBe("environment-one:github.com:org/repo:43");
+    expect(selection([home, issue, pullRequest])).toBe("environment-one:github.com:org/repo:42");
+  });
+
+  it("does not highlight an older PR when the current issue lacks its hosting identity", () => {
+    expect(
+      selection([
+        home,
+        pullRequest,
+        { key: "unresolved", name: "Issue", params: { environmentId: "environment-one" } },
+      ]),
+    ).toBeNull();
+  });
 });

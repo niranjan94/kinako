@@ -1,7 +1,7 @@
 import type { PullRequestReviewCommentDraft } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { PullRequestReviewCommentDraft as CommentSchema } from "@t3tools/contracts";
-import type { PullRequestParams } from "./usePullRequestDiff";
+import type { PullRequestReferenceParams } from "./usePullRequestDiff";
 
 export type PendingReviewComment = PullRequestReviewCommentDraft & {
   readonly id: string;
@@ -14,7 +14,7 @@ export type ReviewDraft = {
   readonly comments: readonly PendingReviewComment[];
 };
 export const EMPTY_REVIEW_DRAFT: ReviewDraft = { summary: "", comment: "", comments: [] };
-export function pullRequestReviewKey(params: PullRequestParams) {
+export function pullRequestReviewKey(params: PullRequestReferenceParams) {
   return JSON.stringify([
     params.environmentId,
     params.projectId,

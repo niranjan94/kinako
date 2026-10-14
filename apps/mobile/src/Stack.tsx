@@ -39,6 +39,8 @@ import {
 } from "./features/pull-requests/PullRequestRouteScreen";
 import { PullRequestReviewSheet } from "./features/pull-requests/PullRequestReviewSheet";
 import { PullRequestReviewersScreen } from "./features/pull-requests/PullRequestReviewersScreen";
+import { IssueCommentSheet } from "./features/pull-requests/IssueCommentSheet";
+import { IssueRouteScreen } from "./features/pull-requests/IssueRouteScreen";
 import {
   RenderErrorBoundary,
   RenderFailureView,
@@ -581,6 +583,7 @@ const NewTaskSheetStack = createNativeStackNavigator({
 const WORKSPACE_OVERLAY_ROUTES = new Set([
   "PullRequestReview",
   "PullRequestInlineComment",
+  "IssueComment",
   "ConnectOnboarding",
   "Connections",
   "ConnectionsNew",
@@ -787,6 +790,23 @@ const RootStackConfig = createWorkspaceStackNavigator({
     }),
     PullRequestReview: createNativeStackScreen({
       screen: PullRequestReviewSheet,
+      options: {
+        ...FORM_SHEET_PRESENTATION_OPTIONS,
+        sheetAllowedDetents: [0.75, 0.92],
+        sheetGrabberVisible: true,
+        headerShown: false,
+      },
+    }),
+    Issue: createNativeStackScreen({
+      screen: IssueRouteScreen,
+      linking: {
+        path: "issues/:environmentId/:projectId/:repository/:number",
+        parse: { number: Number },
+      },
+      options: PULL_REQUEST_HEADER_OPTIONS,
+    }),
+    IssueComment: createNativeStackScreen({
+      screen: IssueCommentSheet,
       options: {
         ...FORM_SHEET_PRESENTATION_OPTIONS,
         sheetAllowedDetents: [0.75, 0.92],

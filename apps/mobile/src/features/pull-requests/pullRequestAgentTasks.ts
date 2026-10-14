@@ -3,6 +3,7 @@ import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 export type PullRequestAgentTask =
   | "ask"
+  | "question"
   | "explain"
   | "feedback"
   | "conflicts"
@@ -18,10 +19,14 @@ export function pullRequestAgentThread(
   return threads.length === 1 ? threads[0] : undefined;
 }
 
-/** The PR itself travels as composer context; the field holds the reader's request. */
+/**
+ * The PR itself travels as composer context; the field holds the reader's request. "ask" is the
+ * primary Work on PR action, "question" the helper that starts a new thread supervised.
+ */
 export function pullRequestAgentPrompt(task: PullRequestAgentTask): string {
   switch (task) {
     case "ask":
+    case "question":
       return "";
     case "explain":
       return "Explain this pull request. Read the diff and walk through its purpose, the changes, the risks, and what I should read closely before approving. Do not change any code.";
@@ -42,8 +47,9 @@ export function pullRequestAgentActions(
   canAutoFix: boolean,
 ) {
   return [
+    { task: "ask", title: "Work on PR", icon: "bubble.left.and.bubble.right", disabled: false },
     {
-      task: "ask",
+      task: "question",
       title: "Ask a question",
       icon: "bubble.left.and.text.bubble.right",
       disabled: false,
