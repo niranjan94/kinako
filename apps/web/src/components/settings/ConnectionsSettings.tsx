@@ -68,6 +68,7 @@ import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
 import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
 import {
+  advertisedEndpointsFromDirect,
   applyWslEnableSelection,
   canRevokeOtherClients,
   isQrShareableEndpoint,
@@ -1496,13 +1497,23 @@ function RemoteAuthorizedClients({
   const endpointUrl = Option.isSome(preparedConnection)
     ? directPairingBaseUrl(preparedConnection.value)
     : null;
+  const directEndpoints = useAtomValue(
+    serverEnvironment.configValueAtom(environmentId),
+  )?.directEndpoints;
+  const endpoints = useMemo(
+    () =>
+      directEndpoints === undefined
+        ? EMPTY_ADVERTISED_ENDPOINTS
+        : advertisedEndpointsFromDirect(directEndpoints),
+    [directEndpoints],
+  );
 
   return (
     <div id={id} className="mt-2 border-t border-border/50">
       {access.canWriteAccess ? (
         <div className="flex flex-wrap items-center justify-between gap-3 py-3">
           <p className="text-xs text-muted-foreground">
-            {endpointUrl
+            {endpointUrl || endpoints.length > 0
               ? "Pair another device with this environment."
               : "Links share a pairing code. Use it from a client that can reach this environment directly."}
           </p>
@@ -1519,7 +1530,7 @@ function RemoteAuthorizedClients({
       {access.canReadAccess ? (
         <PairingClientsList
           endpointUrl={endpointUrl}
-          endpoints={EMPTY_ADVERTISED_ENDPOINTS}
+          endpoints={endpoints}
           defaultEndpointKey={null}
           shareFromCurrentOrigin={false}
           isLoading={access.isLoading}

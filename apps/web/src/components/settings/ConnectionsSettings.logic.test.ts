@@ -1,6 +1,7 @@
 import type { AdvertisedEndpoint, DesktopWslState } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
+  advertisedEndpointsFromDirect,
   applyWslEnableSelection,
   canRevokeOtherClients,
   isQrShareableEndpoint,
@@ -218,6 +219,27 @@ describe("selectQrEndpointOption", () => {
     const loopbackOnly = options.slice(0, 1);
     expect(selectQrEndpointOption(loopbackOnly, null, null)?.id).toBe("desktop-loopback:4780");
     expect(selectQrEndpointOption([], "anything", "anything")).toBeNull();
+  });
+});
+
+describe("advertisedEndpointsFromDirect", () => {
+  it("offers a remote server's LAN and tailnet addresses as QR targets", () => {
+    const endpoints = advertisedEndpointsFromDirect([
+      { kind: "lan", httpBaseUrl: "http://192.168.1.20:3773/" },
+      { kind: "tailnet", httpBaseUrl: "http://100.64.0.7:3773/" },
+      { kind: "tailnet", httpBaseUrl: "https://box.tail1234.ts.net/" },
+    ]);
+    expect(endpoints.map(({ label, reachability }) => ({ label, reachability }))).toEqual([
+      { label: "Local network", reachability: "lan" },
+      { label: "Tailscale IP", reachability: "private-network" },
+      { label: "Tailscale HTTPS", reachability: "private-network" },
+    ]);
+    expect(endpoints.every(isQrShareableEndpoint)).toBe(true);
+    expect(endpoints[0]?.wsBaseUrl).toBe("ws://192.168.1.20:3773/");
+  });
+
+  it("skips addresses that are not valid URLs", () => {
+    expect(advertisedEndpointsFromDirect([{ kind: "lan", httpBaseUrl: "not a url" }])).toEqual([]);
   });
 });
 
