@@ -259,6 +259,10 @@ const config: ExpoConfig = {
     // does not fall back to a personal team (which cannot sign app groups,
     // Sign in with Apple, or push notification entitlements).
     appleTeamId: "6456AUQBLS",
+    // The production bundle ID is also the desktop App ID, whose Developer ID
+    // profile needs Associated Domains. EAS disables remote capabilities that
+    // are missing from these entitlements, so declare the desktop passkey domain.
+    associatedDomains: ["webcredentials:kinako.niranjan.io"],
     entitlements: {
       "keychain-access-groups": [`$(AppIdentifierPrefix)${variant.iosBundleIdentifier}`],
     },

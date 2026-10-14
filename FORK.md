@@ -36,7 +36,7 @@ Agents should use the `merge-upstream` skill (`.agents/skills/merge-upstream/`),
 | Desktop release-notes links point at this repo                                                                                                                                                                                                                          | `apps/web/src/components/desktopUpdate.logic.ts`                                                                                                                                                                                                                                                                                                                                              |
 | `.env.example` no longer carries upstream's production Clerk and relay values                                                                                                                                                                                           | `.env.example`                                                                                                                                                                                                                                                                                                                                                                                |
 | Upstream CI runs on GitHub-hosted runners instead of Blacksmith, with doubled job timeouts                                                                                                                                                                              | `.github/workflows/ci.yml`                                                                                                                                                                                                                                                                                                                                                                    |
-| Fork nightly release workflow                                                                                                                                                                                                                                           | `.github/workflows/fork-release.yml`                                                                                                                                                                                                                                                                                                                                                          |
+| Fork nightly release workflow, ending in an iOS TestFlight build                                                                                                                                                                                                        | `.github/workflows/fork-release.yml`, `.github/workflows/fork-ios.yml`                                                                                                                                                                                                                                                                                                                        |
 | Settings → About shows the repository and commit a CI build came from                                                                                                                                                                                                   | `apps/web/vite.config.ts`, `apps/web/src/components/settings/SettingsPanels.tsx`                                                                                                                                                                                                                                                                                                              |
 | Kinako identity: display name, `~/.kinako`, `kinako` CLI and release archives, desktop app ID, URL schemes, service names, default ports                                                                                                                                | `packages/shared/src/forkBrand.ts`, imported by each call site; see [Rebrand seams](#rebrand-seams)                                                                                                                                                                                                                                                                                           |
 | Mobile identity: bundle IDs, Apple team, EAS project `@niranjan94/kinako`, no Clerk associated domains                                                                                                                                                                  | `apps/mobile/app.config.ts`, `apps/mobile/eas.json`                                                                                                                                                                                                                                                                                                                                           |
@@ -103,11 +103,11 @@ CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does n
 
 ## One-time setup
 
-1. **Actions:** enable Actions for the fork, then disable every upstream workflow except `ci.yml` and `release-desktop.yml`. The others expect upstream's runners, secrets, and accounts, and would otherwise queue or fail on every push. `fork-release.yml` calls `release-desktop.yml`.
+1. **Actions:** enable Actions for the fork, then disable every upstream workflow except `ci.yml` and `release-desktop.yml`. The others expect upstream's runners, secrets, and accounts, and would otherwise queue or fail on every push. `fork-release.yml` calls `release-desktop.yml` and `fork-ios.yml`.
 
    ```bash
    gh workflow list --repo niranjan94/kinako --all --json path --jq '.[].path' \
-     | grep -v -e '/ci.yml$' -e fork-release.yml -e release-desktop.yml \
+     | grep -v -e '/ci.yml$' -e fork-release.yml -e fork-ios.yml -e release-desktop.yml \
      | xargs -n1 basename | xargs -I{} gh workflow disable {} --repo niranjan94/kinako
    ```
 
@@ -120,6 +120,19 @@ Actions → **Fork release** → Run workflow on `main`, usually after merging u
 - Install the CLI with `curl -fsSL https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh`. Without it the script installs from the stable channel, which this fork does not publish. An installed nightly CLI updates along the nightly channel on its own.
 - The desktop app installs as **Kinako (Nightly)** and follows the nightly update channel on every platform.
 - macOS builds are signed and notarized, so they open without warnings. Windows installers are unsigned: SmartScreen warns, choose **More info → Run anyway**.
+
+## Mobile releases
+
+iOS ships to TestFlight only as part of a nightly: once `fork-release.yml` publishes the GitHub release, it calls `fork-ios.yml`, which builds the production variant with `eas build --local` on a GitHub macOS runner and uploads it with `eas submit` to the App Store Connect app `6822450068`. Building on GitHub's runner spends no EAS build credits; EAS only stores the signing credentials and the App Store Connect API key and assigns the build number. Every build lands in the internal TestFlight group "Kinako Nightly", which has automatic distribution on. The marketing version is `version` in `apps/mobile/app.config.ts`. CI on each commit uses nothing from EAS, and upstream's `mobile-eas-*` workflows stay disabled. No over-the-air updates are published.
+
+The job skips itself without the `EXPO_TOKEN` secret, an access token named "kinako-ci" on the `niranjan94` Expo account. Signing is set up by hand rather than through `eas credentials`:
+
+- Apple Developer portal: App IDs `io.niranjan.kinako` (App Groups, Associated Domains, Push Notifications, Sign in with Apple), `io.niranjan.kinako.widgets` and `io.niranjan.kinako.sharing` (App Groups), all in app group `group.io.niranjan.kinako`. Each has an App Store profile ("Kinako iOS App Store", "Kinako iOS Widgets App Store", "Kinako iOS Share Extension App Store") on the iOS Distribution certificate `11F00A1A…`, all expiring 2027-06-02.
+- expo.dev → kinako → Credentials: one iOS entry per bundle ID with that certificate (already stored on the account), its uploaded profile, and the account's "EAS" App Store Connect API key (`87C7QBTG4T`) for submission.
+
+When the profiles expire, or after changing a capability on any of these App IDs, regenerate the affected profiles in the portal and upload them to the matching expo.dev entries. Changing a capability on `io.niranjan.kinako` also invalidates the desktop "Kinako Developer ID" profile: regenerate it and update `MACOS_PROVISIONING_PROFILE` with `base64 -i Kinako_Developer_ID.provisionprofile | tr -d '\n' | gh secret set MACOS_PROVISIONING_PROFILE`.
+
+The production bundle ID is also the desktop App ID. EAS turns off any App ID capability missing from the iOS entitlements, so the app declares `webcredentials:kinako.niranjan.io` to keep Associated Domains on for the desktop Developer ID profile.
 
 ## Signing
 
@@ -138,7 +151,7 @@ Actions → **Fork release** → Run workflow on `main`, usually after merging u
 | `APPLE_TEAM_ID`              | variable | `6456AUQBLS`                                                                                                                               |
 | `CLERK_PASSKEY_RP_DOMAINS`   | variable | `kinako.niranjan.io`                                                                                                                       |
 
-A signed build refuses to start without a passkey domain, which upstream derives from its Clerk key. Without Clerk the fork names `kinako.niranjan.io`; hosting an `apple-app-site-association` file there is optional and only activates in-app browser passkeys for that domain.
+A signed build refuses to start without a passkey domain, which upstream derives from its Clerk key. Without Clerk the fork names `kinako.niranjan.io`. GitHub Pages serves it from the `gh-pages` branch, which holds only the `apple-app-site-association` file (`webcredentials` for the desktop app and the three iOS bundle IDs) and the `CNAME`. Edit that branch when the bundle IDs change.
 
 To replace the certificate (expiry, leak, or loss):
 
@@ -155,6 +168,6 @@ Unsigned. Adding the Azure Trusted Signing secrets that `release-desktop.yml` re
 
 ## Not covered yet
 
-- Mobile releases. The app has its own bundle IDs, Apple team (`6456AUQBLS`), and EAS project, but no App Store Connect app or Play listing yet, so `eas.json` has no submit target for iOS. The Clerk config plugin is still loaded even though the fork does not use Clerk.
+- Android releases. There is no Play listing. The Clerk config plugin is still loaded in the mobile app even though the fork does not use Clerk.
 - Upstream links left as-is because they are user-initiated: marketing and legal pages (mobile Settings → Legal), the triage playbook, and the `app.t3.codes` entry in `packages/shared/src/providerAuthReturnUrl.ts`.
 - "T3" left on purpose: prompts, MCP tool descriptions and thread notices written for agents; T3 Connect strings (Connect is not built in); protocol and storage identifiers (`t3_*` MCP tools, `t3code:*` keys, `T3CODE_*` variables, the `owner: "t3"` credential binding); and `npx t3@…` suggestions, which only appear when the process itself was launched from upstream's npm package.

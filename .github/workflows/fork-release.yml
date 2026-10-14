@@ -1,12 +1,12 @@
 name: Fork release
 
-# Unsigned nightly desktop installers and CLI archives for this fork, built
-# from main and published as a GitHub prerelease on this repository. Versions
-# follow upstream's nightly scheme, so the apps and CLI follow the nightly
-# update channel. Runs on GitHub-hosted runners, needs no secrets, and builds
-# with T3 Connect disabled. Packaging is delegated to upstream's
-# release-desktop.yml; signing kicks in there automatically if the signing
-# secrets are ever added. See FORK.md.
+# Nightly desktop installers and CLI archives for this fork, built from main
+# and published as a GitHub prerelease on this repository, followed by an iOS
+# TestFlight build (fork-ios.yml). Versions follow upstream's nightly scheme,
+# so the apps and CLI follow the nightly update channel. Runs on GitHub-hosted
+# runners and builds with T3 Connect disabled. Packaging is delegated to
+# upstream's release-desktop.yml, which signs when the signing secrets are
+# present. See FORK.md.
 
 on:
   workflow_dispatch:
@@ -292,3 +292,11 @@ jobs:
             release-assets/SHA256SUMS
           fail_on_unmatched_files: true
           token: ${{ github.token }}
+
+  ios:
+    name: iOS TestFlight
+    needs: [preflight, release]
+    uses: ./.github/workflows/fork-ios.yml
+    secrets: inherit
+    with:
+      ref: ${{ needs.preflight.outputs.ref }}
