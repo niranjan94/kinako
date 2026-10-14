@@ -1949,7 +1949,22 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
           tunnels.delete(key);
           yield* closeTunnelEntry(entry);
         }).pipe(Effect.uninterruptible);
-        const relaunched = yield* ensureTunnelEntry(key, resolvedTarget, runner);
+        // The setting is only reachable through a live tunnel, so a server that
+        // cannot start with it must come back as it was rather than stay down.
+        const relaunched = yield* ensureTunnelEntry(key, resolvedTarget, runner).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              yield* runWithSshAuth({
+                key,
+                target: resolvedTarget,
+                operation: (authOptions) =>
+                  writeRemoteNetworkAccess(resolvedTarget, !enabled, authOptions),
+              });
+              yield* ensureTunnelEntry(key, resolvedTarget, runner).pipe(Effect.ignore);
+              return yield* error;
+            }),
+          ),
+        );
         return networkAccessState(relaunched);
       }),
     );
