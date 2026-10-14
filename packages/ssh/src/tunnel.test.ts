@@ -254,7 +254,7 @@ describe("ssh tunnel scripts", () => {
     assert.include(launch, "if ! ensure_remote_node_path; then");
     assert.include(devLaunch, `T3_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
     assert.include(devLaunch, "does not satisfy required range ");
-    assert.include(devLaunch, '"$RUNNER_FILE" serve --host 127.0.0.1');
+    assert.include(devLaunch, '"$RUNNER_FILE" serve --host "$BIND_HOST"');
     assert.include(launch, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
     const pairing = SshTunnel.buildRemotePairingScript(stateKey, ARCHIVE);
     assert.match(
@@ -923,10 +923,11 @@ case "$1" in
     esac ;;
   serve | __service-launcher)
     port=$(printenv T3CODE_PORT || true)
-    if [ "$1" = serve ]; then port="$5"; fi
+    host=$(printenv T3CODE_HOST || true)
+    if [ "$1" = serve ]; then host="$3"; port="$5"; fi
     mkdir -p "$HOME/.kinako/userdata" "$HOME/ready"
     printf '{"pid":%s,"port":%s,"origin":"http://127.0.0.1:%s"}' "$$" "$port" "$port" >"$HOME/.kinako/userdata/server-runtime.json"
-    printf '%s %s %s\n' "$1" "$port" "$(printenv T3CODE_HOME || true)" >"$HOME/started.$$"
+    printf '%s %s %s %s\n' "$1" "$port" "$(printenv T3CODE_HOME || true)" "$host" >"$HOME/started.$$"
     sleep 300 &
     trap 'rm -f "$HOME/ready/$port"; kill $! 2>/dev/null; exit 0' TERM
     : >"$HOME/ready/$port"
@@ -985,9 +986,9 @@ esac
         (entry) =>
           fs.readFileString(`${home}/${entry}`).pipe(
             Effect.map((contents) => {
-              const [mode, port, t3Home] = contents.trim().split(" ");
+              const [mode, port, t3Home, bindHost] = contents.trim().split(" ");
               const pid = Number(entry.slice("started.".length));
-              return { pid, mode, port: Number(port), t3Home, alive: isAlive(pid) };
+              return { pid, mode, port: Number(port), t3Home, bindHost, alive: isAlive(pid) };
             }),
           ),
       );
@@ -1010,6 +1011,7 @@ esac
           return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "") as {
             remotePort: number;
             serverKind: string;
+            networkAccess: boolean;
           };
         }),
       );
@@ -1024,7 +1026,26 @@ esac
       fs
         .exists(`${home}/ready/${port}`)
         .pipe(Effect.delay("50 millis"), Effect.repeat({ until: (ready) => ready }));
-    return { fs, home, launchScript: `${root}/launch.sh`, launch, stop, servers, run, untilReady };
+    const setNetworkAccess = (enabled: boolean) =>
+      Effect.gen(function* () {
+        yield* fs.writeFileString(
+          `${root}/network-access.sh`,
+          SshTunnel.buildRemoteNetworkAccessScript(enabled),
+        );
+        const result = yield* run(home, [`${root}/network-access.sh`]);
+        assert.equal(result.exitCode, 0, result.stderr);
+      });
+    return {
+      fs,
+      home,
+      launchScript: `${root}/launch.sh`,
+      launch,
+      stop,
+      servers,
+      run,
+      untilReady,
+      setNetworkAccess,
+    };
   });
 
   it.live.skipIf(windowsHost)(
@@ -1081,7 +1102,7 @@ esac
         yield* host.fs.writeFileString(`${launchDir}/${routeB}/managed`, "external\n");
 
         const result = yield* host.launch(routeB);
-        assert.deepEqual(result, { remotePort: 4100, serverKind: "managed" });
+        assert.deepEqual(result, { remotePort: 4100, serverKind: "managed", networkAccess: false });
         const servers = yield* host.servers;
         assert.isFalse(servers.find((server) => server.pid === legacyPid)?.alive);
         const replacement = servers.find((server) => server.pid !== legacyPid);
@@ -1095,6 +1116,59 @@ esac
     30_000,
   );
 
+  it.live.skipIf(windowsHost)(
+    "relaunches its server on the network when the host enables network access",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+        const local = yield* host.launch(routeA);
+        assert.isFalse(local.networkAccess);
+        const [localServer] = yield* host.servers;
+        assert.equal(localServer?.bindHost, "127.0.0.1");
+
+        yield* host.setNetworkAccess(true);
+        const exposed = yield* host.launch(routeA);
+        assert.deepEqual(exposed, { ...local, networkAccess: true });
+        const afterEnable = yield* host.servers;
+        assert.isFalse(afterEnable.find((server) => server.pid === localServer?.pid)?.alive);
+        const exposedServer = afterEnable.find((server) => server.alive);
+        assert.equal(exposedServer?.bindHost, "0.0.0.0");
+
+        // Another route follows the host's preference instead of undoing it.
+        assert.deepEqual(yield* host.launch(routeB), exposed);
+        assert.equal((yield* host.servers).filter((server) => server.alive).length, 1);
+
+        yield* host.setNetworkAccess(false);
+        assert.deepEqual(yield* host.launch(routeB), local);
+        const live = (yield* host.servers).filter((server) => server.alive);
+        assert.equal(live.length, 1);
+        assert.equal(live[0]?.bindHost, "127.0.0.1");
+      }).pipe(Effect.provide(NodeServices.layer)),
+    30_000,
+  );
+
+  it.live.skipIf(windowsHost)(
+    "leaves a server it did not start on loopback when network access is enabled",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+        const executable = `${host.home}/.kinako/runtime/versions/${archiveVersion}/kinako`;
+        yield* host.run(host.home, [
+          "-c",
+          `T3CODE_PORT=4300 nohup "${executable}" __service-launcher >/dev/null 2>&1 &`,
+        ]);
+        yield* host.untilReady(4300);
+        yield* host.setNetworkAccess(true);
+
+        assert.deepEqual(yield* host.launch(routeA), {
+          remotePort: 4300,
+          serverKind: "external",
+          networkAccess: false,
+        });
+        assert.equal((yield* host.servers).length, 1);
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
   it.live.skipIf(windowsHost)("reuses a server it did not start and never stops it", () =>
     Effect.gen(function* () {
       const host = yield* makeHost();
@@ -1105,7 +1179,11 @@ esac
       ]);
       yield* host.untilReady(4200);
 
-      assert.deepEqual(yield* host.launch(routeA), { remotePort: 4200, serverKind: "external" });
+      assert.deepEqual(yield* host.launch(routeA), {
+        remotePort: 4200,
+        serverKind: "external",
+        networkAccess: false,
+      });
       yield* host.stop(routeA);
       const servers = yield* host.servers;
       assert.equal(servers.length, 1);

@@ -448,6 +448,17 @@ export const DesktopSshPasswordPromptCancelledResultSchema = Schema.Struct({
   message: Schema.String,
 });
 
+export const DesktopSshNetworkAccessStateSchema = Schema.Struct({
+  serverKind: Schema.NullOr(Schema.Literals(["external", "managed"])),
+  networkAccess: Schema.Boolean,
+});
+export type DesktopSshNetworkAccessState = typeof DesktopSshNetworkAccessStateSchema.Type;
+
+export const DesktopSshNetworkAccessInputSchema = Schema.Struct({
+  target: DesktopSshEnvironmentTargetSchema,
+  enabled: Schema.Boolean,
+});
+
 export const DesktopSshEnvironmentEnsureOptionsSchema = Schema.Struct({
   issuePairingToken: Schema.optionalKey(Schema.Boolean),
 });
@@ -1176,6 +1187,13 @@ export interface DesktopBridge {
     options?: { issuePairingToken?: boolean },
   ) => Promise<DesktopSshEnvironmentBootstrap>;
   disconnectSshEnvironment: (target: DesktopSshEnvironmentTarget) => Promise<void>;
+  getSshNetworkAccess: (
+    target: DesktopSshEnvironmentTarget,
+  ) => Promise<DesktopSshNetworkAccessState | null>;
+  setSshNetworkAccess: (
+    target: DesktopSshEnvironmentTarget,
+    enabled: boolean,
+  ) => Promise<DesktopSshNetworkAccessState | null>;
   fetchSshEnvironmentDescriptor: (httpBaseUrl: string) => Promise<ExecutionEnvironmentDescriptor>;
   bootstrapSshBearerSession: (
     httpBaseUrl: string,

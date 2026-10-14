@@ -2,6 +2,7 @@ import {
   AuthAdministrativeScopes,
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
+  type DesktopSshNetworkAccessState,
 } from "@t3tools/contracts";
 import {
   describeReadinessCause,
@@ -61,6 +62,9 @@ const REMOTE_STOP_WAIT_TICKS = 100;
 // Every route to a host shares one record of the server SSH started there.
 // Route state directories are named by hex digests, so this cannot collide.
 const REMOTE_SERVER_RECORD_DIR = "server";
+// Lives with the shared server record, so every route to the host agrees on
+// how the server binds instead of restarting it back and forth.
+const REMOTE_NETWORK_ACCESS_FILE = "network-access";
 // A cold archive launch also downloads and unpacks a ~70 MB release archive
 // and may wait on another installer's lock. The budgets nest: the checksum
 // file is tiny and the archive download is bounded; a waiter outlasts both
@@ -98,6 +102,7 @@ interface SshTunnelEntry {
   readonly target: DesktopSshEnvironmentTarget;
   readonly remotePort: number;
   readonly remoteServerKind: "external" | "managed" | null;
+  readonly networkAccess: boolean;
   readonly localPort: number;
   readonly httpBaseUrl: string;
   readonly wsBaseUrl: string;
@@ -171,11 +176,29 @@ export interface SshEnvironmentManagerShape {
   readonly disconnectEnvironment: (
     target: DesktopSshEnvironmentTarget,
   ) => Effect.Effect<void, SshEnvironmentEffectError, SshEnvironmentEffectContext>;
+  /** How the connected server is bound, or null when there is no tunnel to it. */
+  readonly getNetworkAccess: (
+    target: DesktopSshEnvironmentTarget,
+  ) => Effect.Effect<
+    DesktopSshNetworkAccessState | null,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  >;
+  /** Saves the host's preference and, when connected, relaunches the server to apply it. */
+  readonly setNetworkAccess: (
+    target: DesktopSshEnvironmentTarget,
+    enabled: boolean,
+  ) => Effect.Effect<
+    DesktopSshNetworkAccessState | null,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  >;
 }
 
 const RemoteLaunchResult = Schema.Struct({
   remotePort: Schema.Number,
   serverKind: Schema.optional(Schema.Literals(["external", "managed"])),
+  networkAccess: Schema.optional(Schema.Boolean),
 });
 
 const RemotePairingResult = Schema.Struct({
@@ -578,6 +601,7 @@ PID_FILE="$SERVER_DIR/pid"
 PORT_FILE="$SERVER_DIR/port"
 MODE_FILE="$SERVER_DIR/mode"
 OWNER_FILE="$SERVER_DIR/owner"
+HOST_FILE="$SERVER_DIR/host"
 SERVER_RUNNER_FILE="$SERVER_DIR/run-t3.sh"
 LOG_FILE="$SERVER_DIR/server.log"
 RUNNER_FILE="$STATE_DIR/run-t3.sh"
@@ -599,6 +623,10 @@ T3_ARCHIVE_MODE=@@T3_ARCHIVE_MODE@@
 SERVER_MODE="serve"
 if [ "$T3_ARCHIVE_MODE" = "1" ]; then
   SERVER_MODE="launcher"
+fi
+BIND_HOST="127.0.0.1"
+if [ -f "$SERVER_DIR/${REMOTE_NETWORK_ACCESS_FILE}" ]; then
+  BIND_HOST="0.0.0.0"
 fi
 if [ "$T3_ARCHIVE_MODE" = "1" ]; then
   # The archive ships the helpers below inside the executable; the remote
@@ -672,13 +700,13 @@ NODE
 stop_owned_server() {
   kill "$OWNED_PID" 2>/dev/null || true
   wait_for_pid_exit "$OWNED_PID"
-  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE"
+  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE" "$HOST_FILE"
   OWNED_PID=""
 }
 OWNED_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
 if [ -n "$OWNED_PID" ] && ! server_running "$OWNED_PID"; then
   OWNED_PID=""
-  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE"
+  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE" "$HOST_FILE"
 fi
 # Earlier launchers kept this record per route, so a second route to the same
 # host saw the server as external and never replaced it. Adopt a live one.
@@ -700,6 +728,8 @@ if [ -n "$OWNED_PID" ]; then
     stop_owned_server
   elif [ "$SERVER_MODE" = "serve" ] && ! cmp -s "$RUNNER_FILE" "$SERVER_RUNNER_FILE"; then
     stop_owned_server
+  elif [ "$(cat "$HOST_FILE" 2>/dev/null || printf '127.0.0.1')" != "$BIND_HOST" ]; then
+    stop_owned_server
   fi
 fi
 REMOTE_PORT=""
@@ -718,7 +748,7 @@ if [ -n "$OWNED_PID" ]; then
     exit 1
   else
     OWNED_PID=""
-    rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE"
+    rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE" "$HOST_FILE"
     REMOTE_PORT=""
   fi
 else
@@ -744,15 +774,16 @@ if [ -z "$REMOTE_PORT" ]; then
   fi
   if [ "$SERVER_MODE" = "launcher" ]; then
     "$RUNNER_FILE" __ssh-helper seed-service-state "$DEFAULT_SERVER_HOME"
-    nohup env T3CODE_HOME="$DEFAULT_SERVER_HOME" T3CODE_HOST=127.0.0.1 T3CODE_PORT="$REMOTE_PORT" T3CODE_NO_BROWSER=1 "$RUNNER_FILE" __service-launcher >>"$LOG_FILE" 2>&1 < /dev/null &
+    nohup env T3CODE_HOME="$DEFAULT_SERVER_HOME" T3CODE_HOST="$BIND_HOST" T3CODE_PORT="$REMOTE_PORT" T3CODE_NO_BROWSER=1 "$RUNNER_FILE" __service-launcher >>"$LOG_FILE" 2>&1 < /dev/null &
   else
-    nohup env T3CODE_NO_BROWSER=1 "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
+    nohup env T3CODE_NO_BROWSER=1 "$RUNNER_FILE" serve --host "$BIND_HOST" --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
   fi
   OWNED_PID="$!"
   printf '%s\\n' "$OWNED_PID" >"$PID_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf '%s\\n' "$SERVER_MODE" >"$MODE_FILE"
   printf '%s\\n' "$STATE_KEY" >"$OWNER_FILE"
+  printf '%s\\n' "$BIND_HOST" >"$HOST_FILE"
   cp "$RUNNER_FILE" "$SERVER_RUNNER_FILE"
   if ! wait_ready "@@T3_READY_TIMEOUT_MS@@"; then
     printf 'Remote T3 server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
@@ -767,7 +798,11 @@ if [ -z "$REMOTE_PORT" ]; then
   fi
   REMOTE_MANAGED="managed"
 fi
-printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGED:-managed}"
+NETWORK_ACCESS=false
+if [ "\${REMOTE_MANAGED:-managed}" = "managed" ] && [ "$BIND_HOST" != "127.0.0.1" ]; then
+  NETWORK_ACCESS=true
+fi
+printf '{"remotePort":%s,"serverKind":"%s","networkAccess":%s}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGED:-managed}" "$NETWORK_ACCESS"
 `;
 
 // SSH access already controls the remote account (it could run `auth session
@@ -816,10 +851,20 @@ if [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
   fi
 fi
 if [ "$(cat "$SERVER_DIR/owner" 2>/dev/null || true)" = "$STATE_KEY" ]; then
-  rm -f "$SERVER_DIR/pid" "$SERVER_DIR/mode" "$SERVER_DIR/owner"
+  rm -f "$SERVER_DIR/pid" "$SERVER_DIR/mode" "$SERVER_DIR/owner" "$SERVER_DIR/host"
 fi
 rm -f "$STATE_DIR/pid" "$STATE_DIR/port" "$STATE_DIR/managed"
 printf '{"stopped":true}\\n'
+`;
+
+const REMOTE_NETWORK_ACCESS_SCRIPT = `set -eu
+SERVER_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch/${REMOTE_SERVER_RECORD_DIR}"
+mkdir -p "$SERVER_DIR"
+if [ "@@T3_NETWORK_ACCESS@@" = "1" ]; then
+  : >"$SERVER_DIR/${REMOTE_NETWORK_ACCESS_FILE}"
+else
+  rm -f "$SERVER_DIR/${REMOTE_NETWORK_ACCESS_FILE}"
+fi
 `;
 
 const REMOTE_LOG_TAIL_SCRIPT = `set -eu
@@ -912,6 +957,12 @@ export function buildRemotePairingScript(stateKey: string, input?: RemoteT3Runne
   });
 }
 
+export function buildRemoteNetworkAccessScript(enabled: boolean): string {
+  return applyScriptPlaceholders(REMOTE_NETWORK_ACCESS_SCRIPT, {
+    T3_NETWORK_ACCESS: enabled ? "1" : "0",
+  });
+}
+
 export function buildRemoteStopScript(stateKey: string): string {
   return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
     T3_STATE_KEY: stateKey,
@@ -925,7 +976,11 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
     input?: SshAuth.SshAuthOptions,
     runner?: RemoteT3RunnerOptions,
   ): Effect.fn.Return<
-    { readonly remotePort: number; readonly remoteServerKind: "external" | "managed" | null },
+    {
+      readonly remotePort: number;
+      readonly remoteServerKind: "external" | "managed" | null;
+      readonly networkAccess: boolean;
+    },
     SshCommandError | SshInvalidTargetError | SshLaunchError,
     ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | FileSystem.FileSystem | Path.Path
   > {
@@ -976,6 +1031,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
     return {
       remotePort: parsed.remotePort,
       remoteServerKind: parsed.serverKind ?? null,
+      networkAccess: parsed.networkAccess ?? false,
     };
   },
 );
@@ -1035,6 +1091,28 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
   return {
     credential: parsed.credential,
   };
+});
+
+const writeRemoteNetworkAccess = Effect.fn("ssh/tunnel.writeRemoteNetworkAccess")(function* (
+  target: DesktopSshEnvironmentTarget,
+  enabled: boolean,
+  input?: SshAuth.SshAuthOptions,
+): Effect.fn.Return<
+  void,
+  SshCommandError | SshInvalidTargetError,
+  ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | FileSystem.FileSystem | Path.Path
+> {
+  yield* runSshCommand(target, {
+    remoteCommandArgs: ["sh", "-s"],
+    stdin: buildRemoteNetworkAccessScript(enabled),
+    ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
+    ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
+    ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+  });
+  yield* Effect.logInfo("ssh.remoteServer.networkAccess.saved", {
+    ...sshTargetLogFields(target),
+    enabled,
+  });
 });
 
 const stopRemoteServer = Effect.fn("ssh/tunnel.stopRemoteServer")(function* (
@@ -1167,6 +1245,7 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
   readonly wsBaseUrl: string;
   readonly authOptions: SshAuth.SshAuthOptions;
   readonly remoteServerKind: "external" | "managed" | null;
+  readonly networkAccess: boolean;
   readonly scope: Scope.Closeable;
 }): Effect.fn.Return<
   SshTunnelEntry,
@@ -1272,6 +1351,7 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     target: input.resolvedTarget,
     remotePort: input.remotePort,
     remoteServerKind: input.remoteServerKind,
+    networkAccess: input.networkAccess,
     localPort: input.localPort,
     httpBaseUrl: input.httpBaseUrl,
     wsBaseUrl: input.wsBaseUrl,
@@ -1593,6 +1673,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
           wsBaseUrl,
           authOptions,
           remoteServerKind: remoteLaunch.remoteServerKind,
+          networkAccess: remoteLaunch.networkAccess,
           scope: entryScope,
         }),
     }).pipe(
@@ -1716,6 +1797,23 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
+  const resolveManagedTarget = Effect.fn("ssh/tunnel.resolveManagedTarget")(function* (
+    target: DesktopSshEnvironmentTarget,
+  ) {
+    const baseResolved = yield* resolveSshTarget(target.alias || target.hostname);
+    const resolvedTarget: DesktopSshEnvironmentTarget = {
+      ...baseResolved,
+      ...(target.username !== null ? { username: target.username } : {}),
+      ...(target.port !== null ? { port: target.port } : {}),
+    };
+    return { resolvedTarget, key: targetConnectionKey(resolvedTarget) };
+  });
+
+  const networkAccessState = (entry: SshTunnelEntry): DesktopSshNetworkAccessState => ({
+    serverKind: entry.remoteServerKind,
+    networkAccess: entry.networkAccess,
+  });
+
   const ensureEnvironment = Effect.fn("ssh/tunnel.ensureEnvironment")(function* (
     target: DesktopSshEnvironmentTarget,
     requestOptions?: { readonly issuePairingToken?: boolean },
@@ -1728,13 +1826,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ...sshTargetLogFields(target),
       issuePairingToken: requestOptions?.issuePairingToken === true,
     });
-    const baseResolved = yield* resolveSshTarget(target.alias || target.hostname);
-    const resolvedTarget: DesktopSshEnvironmentTarget = {
-      ...baseResolved,
-      ...(target.username !== null ? { username: target.username } : {}),
-      ...(target.port !== null ? { port: target.port } : {}),
-    };
-    const key = targetConnectionKey(resolvedTarget);
+    const { resolvedTarget, key } = yield* resolveManagedTarget(target);
     yield* Effect.logDebug("ssh.environment.target.resolved", {
       ...sshTargetLogFields(resolvedTarget),
       key,
@@ -1785,13 +1877,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     target: DesktopSshEnvironmentTarget,
   ): Effect.fn.Return<void, SshEnvironmentEffectError, SshEnvironmentEffectContext> {
     yield* Effect.logInfo("ssh.environment.disconnect.start", sshTargetLogFields(target));
-    const baseResolved = yield* resolveSshTarget(target.alias || target.hostname);
-    const resolvedTarget: DesktopSshEnvironmentTarget = {
-      ...baseResolved,
-      ...(target.username !== null ? { username: target.username } : {}),
-      ...(target.port !== null ? { port: target.port } : {}),
-    };
-    const key = targetConnectionKey(resolvedTarget);
+    const { resolvedTarget, key } = yield* resolveManagedTarget(target);
     yield* withTargetLock(
       key,
       Effect.gen(function* () {
@@ -1821,7 +1907,60 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
-  return SshEnvironmentManager.of({ ensureEnvironment, disconnectEnvironment });
+  const getNetworkAccess = Effect.fn("ssh/tunnel.getNetworkAccess")(function* (
+    target: DesktopSshEnvironmentTarget,
+  ): Effect.fn.Return<
+    DesktopSshNetworkAccessState | null,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  > {
+    const { key } = yield* resolveManagedTarget(target);
+    const entry = tunnels.get(key);
+    return entry === undefined ? null : networkAccessState(entry);
+  });
+
+  const setNetworkAccess = Effect.fn("ssh/tunnel.setNetworkAccess")(function* (
+    target: DesktopSshEnvironmentTarget,
+    enabled: boolean,
+  ): Effect.fn.Return<
+    DesktopSshNetworkAccessState | null,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  > {
+    const { resolvedTarget, key } = yield* resolveManagedTarget(target);
+    const runner =
+      options.resolveCliRunner === undefined ? undefined : yield* options.resolveCliRunner;
+    return yield* withTargetLock(
+      key,
+      Effect.gen(function* () {
+        yield* runWithSshAuth({
+          key,
+          target: resolvedTarget,
+          operation: (authOptions) =>
+            writeRemoteNetworkAccess(resolvedTarget, enabled, authOptions),
+        });
+        const entry = tunnels.get(key);
+        if (entry === undefined) {
+          return null;
+        }
+        // Dropping the entry first keeps its finalizer from stopping the
+        // server; the launch script replaces it once the bind host differs.
+        yield* Effect.gen(function* () {
+          tunnels.delete(key);
+          yield* closeTunnelEntry(entry);
+        }).pipe(Effect.uninterruptible);
+        const relaunched = yield* ensureTunnelEntry(key, resolvedTarget, runner);
+        return networkAccessState(relaunched);
+      }),
+    );
+  });
+
+  return SshEnvironmentManager.of({
+    ensureEnvironment,
+    disconnectEnvironment,
+    getNetworkAccess,
+    setNetworkAccess,
+  });
 });
 
 /**
