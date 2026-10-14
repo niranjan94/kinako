@@ -43,6 +43,10 @@
       "types": "./src/promptLinks.ts",
       "default": "./src/promptLinks.ts"
     },
+    "./issue-handoff": {
+      "types": "./src/issueHandoff.ts",
+      "default": "./src/issueHandoff.ts"
+    },
     "./secret-request": {
       "types": "./src/secretRequest.ts",
       "default": "./src/secretRequest.ts"

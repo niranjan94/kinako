@@ -43,6 +43,7 @@ const reads = new Set<string>([
   WS_METHODS.pullRequestsFilesViewed,
   WS_METHODS.pullRequestsReviewerCandidates,
   WS_METHODS.pullRequestsLabelCandidates,
+  WS_METHODS.issuesDetail,
 ]);
 // Review guides are not routed: each server keeps its own, so another server answering would
 // report none, or start a run nobody on the pull request's own server can see.
@@ -58,7 +59,10 @@ const writes = new Set<string>([
   WS_METHODS.pullRequestsSetThreadResolution,
   WS_METHODS.pullRequestsRequestReviewers,
   WS_METHODS.pullRequestsSetLabels,
+  WS_METHODS.issuesComment,
 ]);
+// An issue shares a pull request's reference and number sequence, but its state is not one.
+const issueMethods = new Set<string>([WS_METHODS.issuesDetail, WS_METHODS.issuesComment]);
 const isRef = Schema.is(PullRequestRef);
 const hasState = Schema.is(Schema.Struct({ state: PullRequestState }));
 const isInvalidation = Schema.is(PullRequestInvalidateInput);
@@ -376,7 +380,7 @@ export function createPullRequestRouter() {
         : registry.run(id, request(tag, routedInput))
       ).pipe(
         Effect.tap((result) =>
-          id !== origin.target.environmentId && hasState(result)
+          id !== origin.target.environmentId && !issueMethods.has(tag) && hasState(result)
             ? reportState(ref, result.state)
             : Effect.void,
         ),
@@ -456,7 +460,7 @@ export function createPullRequestRouter() {
               ? {
                   ...result,
                   projectId: ref.projectId,
-                  ...(tag === WS_METHODS.pullRequestsDetail
+                  ...(tag === WS_METHODS.pullRequestsDetail || tag === WS_METHODS.issuesDetail
                     ? { projectTitle: identity.projectTitle, workspaceRoot: identity.workspaceRoot }
                     : {}),
                 }
@@ -501,7 +505,9 @@ export function createPullRequestRouter() {
     ).pipe(
       Effect.catch((error) =>
         input.allowStale !== false &&
-        (tag === WS_METHODS.pullRequestsSummary || tag === WS_METHODS.pullRequestsDetail)
+        (tag === WS_METHODS.pullRequestsSummary ||
+          tag === WS_METHODS.pullRequestsDetail ||
+          tag === WS_METHODS.issuesDetail)
           ? request(tag, input)
           : Effect.fail(error),
       ),

@@ -1,5 +1,7 @@
 import {
   WS_METHODS,
+  IssueDetail,
+  IssueListResult,
   PullRequestActivity,
   PullRequestDetail as PullRequestDetailSchema,
   PullRequestPreview,
@@ -197,6 +199,16 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       persistence: persistQuery(PullRequestDetailSchema),
       tag: WS_METHODS.pullRequestsDetail,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsDetail, input),
+      staleTimeMs: 60_000,
+      refreshTrigger: ({ environmentId }) => refreshes({ environmentId, input: {} }),
+    }),
+  );
+  const issueDetail = writableQueryFamily(
+    createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:issues:detail",
+      persistence: persistQuery(IssueDetail),
+      tag: WS_METHODS.issuesDetail,
+      execute: (input) => routedRequest(WS_METHODS.issuesDetail, input),
       staleTimeMs: 60_000,
       refreshTrigger: ({ environmentId }) => refreshes({ environmentId, input: {} }),
     }),
@@ -411,6 +423,23 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       tag: WS_METHODS.pullRequestsUpdate,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsUpdate, input),
       onSuccess: (target, registry) => Effect.sync(() => registry.refresh(preview(target))),
+      scheduler: commandScheduler,
+      concurrency: serialPerEnvironment,
+    }),
+    issueList: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:issues:list",
+      persistence: persistQuery(IssueListResult),
+      tag: WS_METHODS.issuesList,
+      staleTimeMs: 30_000,
+      refreshTrigger: ({ environmentId, input }) =>
+        input.cursors === undefined ? refreshes({ environmentId, input: {} }) : undefined,
+    }),
+    issueDetail,
+    issueComment: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:issues:comment",
+      tag: WS_METHODS.issuesComment,
+      execute: (input) => routedRequest(WS_METHODS.issuesComment, input),
+      onSuccess: (target, registry) => Effect.sync(() => registry.refresh(issueDetail(target))),
       scheduler: commandScheduler,
       concurrency: serialPerEnvironment,
     }),

@@ -1052,6 +1052,56 @@ it.live("keeps source workspace metadata when an alternate answers a detail read
   ),
 );
 
+it.live("keeps source workspace metadata when an alternate answers an issue read", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const clientFor = (local: boolean) =>
+        ({
+          [local ? WS_METHODS.pullRequestsRoutingIdentity : WS_METHODS.pullRequestsRouting]: () =>
+            Effect.succeed({
+              host: "github.com",
+              provider: "github",
+              viewer: "maria-rcks",
+              accountId: "123",
+              projectTitle: local ? "local project" : "source project",
+              workspaceRoot: local ? "/Users/local/repo" : "/srv/source/repo",
+            }),
+          [WS_METHODS.issuesDetail]: () =>
+            local
+              ? Effect.succeed({
+                  projectId: "local-project",
+                  projectTitle: "local project",
+                  workspaceRoot: "/Users/local/repo",
+                  title: "Crash on launch",
+                  state: "open",
+                })
+              : Effect.never,
+        }) as unknown as WsRpcProtocolClient;
+      const { environmentRegistry, supervisor } = yield* makeTestRuntime(
+        clientFor(false),
+        clientFor(true),
+      );
+      const result = yield* createPullRequestRouter()(WS_METHODS.issuesDetail, {
+        projectId: ProjectId.make("project-1"),
+        repository: "acme/web",
+        number: 9,
+      }).pipe(
+        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+        Effect.provideService(GitHubRoutingPermissions, trustedRouting),
+        Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+      );
+      expect(result).toEqual({
+        projectId: "project-1",
+        projectTitle: "source project",
+        workspaceRoot: "/srv/source/repo",
+        title: "Crash on launch",
+        state: "open",
+      });
+    }),
+  ),
+);
+
 it.live(
   "refreshes identity before writes and invalidates prior readers across router instances",
   () =>
