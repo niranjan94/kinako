@@ -4,7 +4,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { Launcher, readServiceState, writeServiceState } from "./serviceLauncher.ts";
+import {
+  Launcher,
+  readServiceState,
+  seedServiceState,
+  writeServiceState,
+} from "./serviceLauncher.ts";
 import {
   compareExactServiceVersions,
   decodeServiceState,
@@ -111,6 +116,69 @@ it.layer(NodeServices.layer)("service state persistence", (it) => {
 
       yield* Effect.promise(() => writeServiceState(statePath, state));
       assert.deepEqual(yield* Effect.promise(() => readServiceState(statePath)), state);
+    }),
+  );
+
+  it.effect("seeds a launcher without downgrading a server that updated itself", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-launcher-seed-" });
+      const statePath = path.join(root, "runtime", "service-state.json");
+      const seed = (version: string) => Effect.promise(() => seedServiceState(root, version));
+      const activeVersion = Effect.promise(() => readServiceState(statePath)).pipe(
+        Effect.map((state) => state.activeVersion),
+      );
+
+      yield* seed("1.0.0");
+      assert.equal(yield* activeVersion, "1.0.0");
+
+      // The server updated itself to 1.1.0; a client still on 1.0.0 keeps it.
+      yield* writeFakeRuntime(fs, path, path.join(root, "runtime", "versions", "1.1.0"), "");
+      yield* Effect.promise(() =>
+        writeServiceState(statePath, {
+          protocol: SERVICE_LAUNCHER_PROTOCOL,
+          activeVersion: "1.1.0",
+          update: {
+            id: "update-1",
+            fromVersion: "1.0.0",
+            targetVersion: "1.1.0",
+            status: "committed",
+          },
+        }),
+      );
+      yield* seed("1.0.0");
+      assert.equal(yield* activeVersion, "1.1.0");
+
+      // A newer client moves it forward.
+      yield* seed("1.2.0");
+      assert.equal(yield* activeVersion, "1.2.0");
+
+      // A newer selection whose runtime is gone cannot start, so it is replaced.
+      yield* Effect.promise(() =>
+        writeServiceState(statePath, {
+          protocol: SERVICE_LAUNCHER_PROTOCOL,
+          activeVersion: "2.0.0",
+        }),
+      );
+      yield* seed("1.2.0");
+      assert.equal(yield* activeVersion, "1.2.0");
+
+      // An update in flight is left for launcher recovery to finish.
+      const pending = {
+        protocol: SERVICE_LAUNCHER_PROTOCOL,
+        activeVersion: "1.2.0",
+        update: {
+          id: "update-2",
+          fromVersion: "1.2.0",
+          targetVersion: "1.3.0",
+          dbPath: path.join(root, "state.sqlite"),
+          status: "pending",
+        },
+      } as const;
+      yield* Effect.promise(() => writeServiceState(statePath, pending));
+      yield* seed("1.4.0");
+      assert.deepEqual(yield* Effect.promise(() => readServiceState(statePath)), pending);
     }),
   );
 

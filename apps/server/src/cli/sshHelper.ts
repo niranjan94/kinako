@@ -10,6 +10,9 @@ import * as NodeNet from "node:net";
 import * as Effect from "effect/Effect";
 import { Argument, Command } from "effect/cli";
 
+import packageJson from "../../package.json" with { type: "json" };
+import { seedServiceState } from "../serviceLauncher.ts";
+
 /**
  * Small helpers the SSH launch script needs on the remote host. The script
  * used to run these as inline `node -` snippets; archive-distributed runtimes
@@ -120,7 +123,20 @@ const runtimePort = Command.make("runtime-port", {
   ),
 );
 
+/**
+ * Selects this executable's version for the service launcher the script starts
+ * next. Only archive runtimes run under the launcher, so this one has no Node
+ * snippet counterpart.
+ */
+const seedServiceStateCommand = Command.make("seed-service-state", {
+  baseDir: Argument.String("base-dir"),
+}).pipe(
+  Command.withHandler(({ baseDir }) =>
+    Effect.promise(() => seedServiceState(baseDir, packageJson.version)),
+  ),
+);
+
 export const sshHelperCommand = Command.make("__ssh-helper").pipe(
   Command.unlisted,
-  Command.withSubcommands([pickPort, waitReady, runtimePort]),
+  Command.withSubcommands([pickPort, waitReady, runtimePort, seedServiceStateCommand]),
 );

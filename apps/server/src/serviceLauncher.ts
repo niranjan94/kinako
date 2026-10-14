@@ -227,6 +227,29 @@ async function runtimeExists(baseDir: string, version: string): Promise<boolean>
   }
 }
 
+/**
+ * Selects `version` for a launcher started outside the boot service, such as
+ * one an SSH client starts. A newer runtime the server already updated itself
+ * to stays selected, and a pending update stays for recovery to finish, so a
+ * client on an older release never downgrades the database it reconnects to.
+ */
+export async function seedServiceState(baseDir: string, version: string): Promise<void> {
+  const statePath = NodePath.join(baseDir, "runtime", SERVICE_STATE_FILE);
+  const current = await readServiceState(statePath).catch(() => undefined);
+  if (current?.update?.status === "pending") return;
+  if (
+    current !== undefined &&
+    compareExactServiceVersions(current.activeVersion, version) >= 0 &&
+    (await runtimeExists(baseDir, current.activeVersion))
+  ) {
+    return;
+  }
+  await writeServiceState(statePath, {
+    protocol: SERVICE_LAUNCHER_PROTOCOL,
+    activeVersion: version,
+  });
+}
+
 function terminalUpdate<S extends TerminalStatus>(input: {
   readonly pending: PendingServiceUpdate;
   readonly status: S;
