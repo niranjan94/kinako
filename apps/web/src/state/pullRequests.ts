@@ -6,6 +6,7 @@ import {
 } from "@t3tools/client-runtime/state/pull-requests";
 import type {
   EnvironmentId,
+  IssueListInput,
   PullRequestListInput,
   PullRequestListStatsInput,
   PullRequestListEntry,
@@ -23,6 +24,7 @@ import {
   type EnvironmentPullRequestStat,
   type MergedPullRequestList,
 } from "../components/pullRequest/pullRequestList.logic";
+import { mergeIssueLists, type MergedIssueList } from "../components/pullRequest/issue.logic";
 import { formatEnvironmentQueryError } from "./query";
 
 export const pullRequestEnvironment = createPullRequestEnvironmentAtoms(connectionAtomRuntime);
@@ -256,6 +258,11 @@ const usePullRequestListsQuery = createMergedEnvironmentQuery(
   pullRequestEnvironment.list,
 );
 
+const useIssueListsQuery = createMergedEnvironmentQuery(
+  "web-issues:list",
+  pullRequestEnvironment.issueList,
+);
+
 const usePullRequestStatsQuery = createMergedEnvironmentQuery(
   "web-pull-requests:list-stats",
   pullRequestEnvironment.listStats,
@@ -310,6 +317,22 @@ export function usePullRequestList(
     }
   }, [query.observations]);
   const data = useMemo(() => mergePullRequestLists(query.values), [query.values]);
+  return { data, error: query.error, isPending: query.isPending, refresh: query.refresh };
+}
+
+export interface MergedIssueListView {
+  readonly data: MergedIssueList | null;
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly refresh: (targets?: ReadonlyArray<EnvironmentQueryTarget<IssueListInput>>) => void;
+}
+
+/** One issue listing per environment, merged the way the pull request listings are. */
+export function useIssueList(
+  targets: ReadonlyArray<EnvironmentQueryTarget<IssueListInput>>,
+): MergedIssueListView {
+  const query = useIssueListsQuery(targets);
+  const data = useMemo(() => mergeIssueLists(query.values), [query.values]);
   return { data, error: query.error, isPending: query.isPending, refresh: query.refresh };
 }
 

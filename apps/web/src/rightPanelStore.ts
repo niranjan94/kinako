@@ -83,6 +83,11 @@ export type RightPanelSurface =
       repository: string;
       number: number;
       url?: string;
+      /**
+       * An issue rather than a change request. A host numbers both from one sequence per
+       * repository, so the reference alone never names two things.
+       */
+      item?: "issue";
     }
   /** The thread's linked pull requests, one singleton tab beside any number of `pull-request` tabs. */
   | { id: "pull-requests"; kind: "pull-requests" };
@@ -162,6 +167,7 @@ interface RightPanelStoreState {
       repository: string;
       number: number;
       url?: string;
+      item?: "issue";
     },
   ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
@@ -286,6 +292,7 @@ export function pullRequestSurface(target: {
   repository: string;
   number: number;
   url?: string;
+  item?: "issue";
 }): PullRequestSurface {
   return {
     id: pullRequestSurfaceId(target),
@@ -296,6 +303,7 @@ export function pullRequestSurface(target: {
     repository: target.repository,
     number: target.number,
     ...(typeof target.url === "string" ? { url: target.url } : {}),
+    ...(target.item === "issue" ? { item: "issue" as const } : {}),
   };
 }
 

@@ -91,7 +91,8 @@ const isClosedViewEntry = (entry: unknown): entry is ClosedViewEntry => {
         surface.number > 0 &&
         (surface.environmentId === undefined || typeof surface.environmentId === "string") &&
         (surface.host === undefined || typeof surface.host === "string") &&
-        (surface.url === undefined || typeof surface.url === "string")
+        (surface.url === undefined || typeof surface.url === "string") &&
+        (surface.item === undefined || surface.item === "issue")
       );
     default:
       return false;

@@ -92,7 +92,11 @@ import { FaviconImage } from "./preview/PreviewFaviconIcon";
 import { previewBridge } from "./preview/previewBridge";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
-import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { issueReference } from "~/components/pullRequest/issue.logic";
+import {
+  ISSUE_STATE_PRESENTATION,
+  PullRequestGlyph,
+} from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
 import { APP_BASE_NAME } from "~/branding";
 
@@ -693,7 +697,9 @@ function SurfaceIcon({
     case "terminal":
       return <TerminalSquare className="size-3 shrink-0" />;
     case "pull-request":
-      return (
+      return surface.item === "issue" ? (
+        <IssueSurfaceIcon surface={surface} environmentId={environmentId} />
+      ) : (
         <PullRequestSurfaceIcon
           surface={surface}
           environmentId={environmentId}
@@ -740,6 +746,35 @@ export function resolvePullRequestTabLink(
     }
   }
   return newest;
+}
+
+/** Reads the same detail the open issue panel does, so the tab costs no request of its own. */
+function IssueSurfaceIcon({
+  surface,
+  environmentId,
+}: {
+  surface: Extract<RightPanelSurface, { kind: "pull-request" }>;
+  environmentId: EnvironmentId | null;
+}) {
+  const resolvedEnvironmentId =
+    (surface.environmentId as EnvironmentId | undefined) ?? environmentId;
+  const detail = useEnvironmentQuery(
+    resolvedEnvironmentId === null
+      ? null
+      : pullRequestEnvironment.issueDetail({
+          environmentId: resolvedEnvironmentId,
+          input: issueReference(surface),
+        }),
+  ).data;
+  const presentation = ISSUE_STATE_PRESENTATION[detail?.state ?? "open"];
+  return (
+    <presentation.Icon
+      className={cn(
+        "size-3 shrink-0",
+        detail === null ? "text-muted-foreground" : presentation.toneClassName,
+      )}
+    />
+  );
 }
 
 function PullRequestSurfaceIcon({

@@ -7,6 +7,7 @@ import {
   resolveDisplayedPullRequestDetail,
   resolvePullRequestReferenceHost,
 } from "../components/pullRequest/pullRequestDetail.logic";
+import { issueReference } from "../components/pullRequest/issue.logic";
 import { gitHubPullRequestBrowserUrl } from "../lib/openPullRequestLink";
 import { selectActiveRightPanelSurface, useRightPanelStore } from "../rightPanelStore";
 import { useProject } from "../state/entities";
@@ -18,10 +19,17 @@ export function useOpenPanelPullRequestUrl(threadRef: ScopedThreadRef | null) {
   const surface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, threadRef),
   );
-  const requestedReference = surface?.kind === "pull-request" ? surface : null;
-  const environmentId = requestedReference?.environmentId
-    ? EnvironmentId.make(requestedReference.environmentId)
+  const panelSurface = surface?.kind === "pull-request" ? surface : null;
+  const issueSurface = panelSurface?.item === "issue" ? panelSurface : null;
+  const requestedReference = issueSurface === null ? panelSurface : null;
+  const environmentId = panelSurface?.environmentId
+    ? EnvironmentId.make(panelSurface.environmentId)
     : threadRef?.environmentId;
+  const issueDetail = useEnvironmentQuery(
+    issueSurface && environmentId
+      ? pullRequestEnvironment.issueDetail({ environmentId, input: issueReference(issueSurface) })
+      : null,
+  ).data;
   const supportsMultiplePullRequests = useSupportsMultiplePullRequests(environmentId ?? null);
   const project = useProject(
     requestedReference && environmentId
@@ -64,6 +72,7 @@ export function useOpenPanelPullRequestUrl(threadRef: ScopedThreadRef | null) {
         : null,
     [environmentId, reference],
   );
+  if (issueSurface !== null) return issueDetail?.url ?? issueSurface.url;
   return reference
     ? (resolveDisplayedPullRequestDetail({ live: detail, cached: cachedDetail, reference })?.url ??
         requestedReference?.url ??
