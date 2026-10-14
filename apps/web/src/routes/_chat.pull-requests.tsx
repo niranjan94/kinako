@@ -1329,7 +1329,9 @@ function PullRequestsRouteView() {
   );
 
   const viewers = baselineQuery.data?.viewers ?? listData?.viewers ?? EMPTY_VIEWERS;
-  const listErrors = baselineQuery.data?.errors ?? listData?.errors ?? [];
+  const listErrors = issuesMode
+    ? issueView.errors
+    : (baselineQuery.data?.errors ?? listData?.errors ?? []);
   const facets = useMemo(
     () =>
       collectPullRequestListFacets(
