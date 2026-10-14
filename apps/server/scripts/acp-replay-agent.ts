@@ -56,9 +56,12 @@ let nextAgentRequestId = 1;
 const pendingClientRequestIds = new Map<string, string | number>();
 const pendingAgentRequestMethods = new Map<string, string>();
 
+// Written through a rename so a test reading the status mid-replay never sees
+// the truncated file writeFileSync leaves before its write lands.
 function writeStatus(failure?: unknown): void {
+  const pendingPath = `${replayStatusPath}.${process.pid}.tmp`;
   NodeFS.writeFileSync(
-    replayStatusPath,
+    pendingPath,
     JSON.stringify({
       scenario: transcript.scenario,
       cursor,
@@ -67,6 +70,7 @@ function writeStatus(failure?: unknown): void {
     }),
     "utf8",
   );
+  NodeFS.renameSync(pendingPath, replayStatusPath);
 }
 
 function stableStringify(value: unknown): string {
