@@ -15,6 +15,8 @@ import {
   DesktopSshEnvironmentEnsureResultSchema,
   DesktopSshEnvironmentTargetSchema,
   DesktopSshHttpBaseUrlInputSchema,
+  DesktopSshNetworkAccessInputSchema,
+  DesktopSshNetworkAccessStateSchema,
   DesktopSshPasswordPromptCancelledType,
   DesktopSshPasswordPromptResolutionInputSchema,
   ExecutionEnvironmentDescriptor,
@@ -154,6 +156,29 @@ export const disconnectSshEnvironment = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.sshEnvironment.disconnectEnvironment")(function* (target) {
     const sshEnvironment = yield* DesktopSshEnvironment.DesktopSshEnvironment;
     yield* sshEnvironment.disconnectEnvironment(target);
+  }),
+});
+
+export const getSshNetworkAccess = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.GET_SSH_NETWORK_ACCESS_CHANNEL,
+  payload: DesktopSshEnvironmentTargetSchema,
+  result: Schema.NullOr(DesktopSshNetworkAccessStateSchema),
+  handler: Effect.fn("desktop.ipc.sshEnvironment.getNetworkAccess")(function* (target) {
+    const sshEnvironment = yield* DesktopSshEnvironment.DesktopSshEnvironment;
+    return yield* sshEnvironment.getNetworkAccess(target);
+  }),
+});
+
+export const setSshNetworkAccess = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.SET_SSH_NETWORK_ACCESS_CHANNEL,
+  payload: DesktopSshNetworkAccessInputSchema,
+  result: Schema.NullOr(DesktopSshNetworkAccessStateSchema),
+  handler: Effect.fn("desktop.ipc.sshEnvironment.setNetworkAccess")(function* ({
+    target,
+    enabled,
+  }) {
+    const sshEnvironment = yield* DesktopSshEnvironment.DesktopSshEnvironment;
+    return yield* sshEnvironment.setNetworkAccess(target, enabled);
   }),
 });
 

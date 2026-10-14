@@ -2,6 +2,7 @@ import type {
   DesktopDiscoveredSshHost,
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
+  DesktopSshNetworkAccessState,
 } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as SshAuth from "@t3tools/ssh/auth";
@@ -64,6 +65,13 @@ export class DesktopSshEnvironment extends Context.Service<
     readonly disconnectEnvironment: (
       target: DesktopSshEnvironmentTarget,
     ) => Effect.Effect<void, DesktopSshEnvironmentOperationError>;
+    readonly getNetworkAccess: (
+      target: DesktopSshEnvironmentTarget,
+    ) => Effect.Effect<DesktopSshNetworkAccessState | null, DesktopSshEnvironmentOperationError>;
+    readonly setNetworkAccess: (
+      target: DesktopSshEnvironmentTarget,
+      enabled: boolean,
+    ) => Effect.Effect<DesktopSshNetworkAccessState | null, DesktopSshEnvironmentOperationError>;
   }
 >()("@t3tools/desktop/ssh/DesktopSshEnvironment") {}
 
@@ -159,6 +167,22 @@ export const make = Effect.gen(function* () {
           Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
           Effect.provide(runtimeContext),
           Effect.withSpan("desktop.ssh.disconnectEnvironment"),
+        ),
+    getNetworkAccess: (target) =>
+      manager
+        .getNetworkAccess(target)
+        .pipe(
+          Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
+          Effect.provide(runtimeContext),
+          Effect.withSpan("desktop.ssh.getNetworkAccess"),
+        ),
+    setNetworkAccess: (target, enabled) =>
+      manager
+        .setNetworkAccess(target, enabled)
+        .pipe(
+          Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
+          Effect.provide(runtimeContext),
+          Effect.withSpan("desktop.ssh.setNetworkAccess"),
         ),
   });
 });
