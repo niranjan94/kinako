@@ -28,7 +28,10 @@ export type PullRequestParams = {
 
 export type PullRequestDiffParams = PullRequestParams & { readonly commit?: string };
 
-export function pullRequestTarget(params: PullRequestParams) {
+/** What addresses a pull request or an issue on its host, without the list row it came from. */
+export type PullRequestReferenceParams = Omit<PullRequestParams, "initialSummary">;
+
+export function pullRequestTarget(params: PullRequestReferenceParams) {
   return {
     environmentId: EnvironmentId.make(params.environmentId),
     input: {

@@ -1,13 +1,18 @@
 import type { NavigationState } from "@react-navigation/native";
 import { pullRequestListKey } from "./pullRequestList";
 
-/** Follow the displayed PR through its detail routes and sheets, not an older stack entry. */
+const isItemRoute = (name: string) => name.startsWith("PullRequest") || name.startsWith("Issue");
+
+/**
+ * Follow the displayed PR or issue through its detail routes and sheets, not an older stack
+ * entry. Both share one key format: a host numbers them from one sequence per repository.
+ */
 export function selectedPullRequestKey(state: Pick<NavigationState, "routes" | "index">) {
   for (let index = state.index; index >= 0; index--) {
     const route = state.routes[index];
     if (!route) continue;
     if (route.name === "Home" || route.name.startsWith("Thread")) return null;
-    if (!route.name.startsWith("PullRequest")) continue;
+    if (!isItemRoute(route.name)) continue;
     const params = route.params;
     if (
       params &&
@@ -26,7 +31,7 @@ export function selectedPullRequestKey(state: Pick<NavigationState, "routes" | "
         number: params.number,
       })}`;
     }
-    if (route.name === "PullRequest") return null;
+    if (route.name === "PullRequest" || route.name === "Issue") return null;
   }
   return null;
 }

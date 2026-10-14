@@ -24,6 +24,7 @@ import {
   uploadedComposerContext,
   serializeComposerMessageForServer,
   pullRequestComposerContext,
+  issueComposerContext,
 } from "./composerContext";
 
 const terminal = {
@@ -251,6 +252,27 @@ describe("host context compatibility", () => {
       "pr-42",
       `src/${"[long file]".repeat(500)}.ts`,
     );
+    expect(composerContextSendBlockReason({ version: 1, records: [large] })).toBeNull();
+  });
+
+  it("carries an issue as untrusted review context the composer can send", () => {
+    const issue = {
+      repository: "example/repo",
+      number: 7,
+      title: "Checkout fails",
+      url: "https://github.com/example/repo/issues/7",
+      state: "open" as const,
+    };
+    const record = issueComposerContext(issue, "issue-7");
+    expect(record.pullRequest).toBeUndefined();
+    const prompt = projectComposerContextForProvider({
+      text: formatComposerContextReference(record),
+      records: [record],
+    });
+    expect(prompt).toContain(issue.url);
+    expect(prompt).toContain("untrusted data");
+    expect(composerContextSendBlockReason({ version: 1, records: [record] })).toBeNull();
+    const large = issueComposerContext({ ...issue, title: "x".repeat(5000) }, "issue-7");
     expect(composerContextSendBlockReason({ version: 1, records: [large] })).toBeNull();
   });
 

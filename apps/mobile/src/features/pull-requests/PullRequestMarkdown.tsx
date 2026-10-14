@@ -2,7 +2,7 @@ import { splitPullRequestBody } from "@t3tools/client-runtime/pull-request-markd
 import type { ReactNode } from "react";
 import { View } from "react-native";
 import { useProject } from "../../state/entities";
-import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
+import { pullRequestTarget, type PullRequestReferenceParams } from "./usePullRequestDiff";
 import {
   PullRequestMedia,
   PullRequestMediaContext,
@@ -30,7 +30,7 @@ const RepositoryContext = createContext<string | null>(null);
 
 export function PullRequestMarkdownRepository(props: {
   readonly value: string | null;
-  readonly params: PullRequestParams;
+  readonly params: PullRequestReferenceParams;
   readonly children: ReactNode;
 }) {
   const target = pullRequestTarget(props.params);

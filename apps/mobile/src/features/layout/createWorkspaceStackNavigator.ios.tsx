@@ -24,6 +24,7 @@ import { Platform, View } from "react-native";
 import { Split, type SplitHostCommands } from "react-native-screens";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { pullRequestListKey } from "../pull-requests/pullRequestList";
 import { WorkspaceTabsProvider } from "../workspace/WorkspaceTabsContext";
 import { WorkspaceNativeTabs } from "../workspace/WorkspaceNativeTabs.ios";
 import { useNativeLayoutMetrics } from "../../native/native-layout-metrics";
@@ -134,7 +135,8 @@ function WorkspaceColumns(
     (route) =>
       route.name === "PullRequest" ||
       route.name === "PullRequestFile" ||
-      route.name === "PullRequestFiles",
+      route.name === "PullRequestFiles" ||
+      route.name === "Issue",
   )?.params;
   const selectedPullRequestKey =
     pullRequestParams &&
@@ -146,7 +148,11 @@ function WorkspaceColumns(
     typeof pullRequestParams.host === "string" &&
     typeof pullRequestParams.repository === "string" &&
     typeof pullRequestParams.number === "number"
-      ? `${pullRequestParams.environmentId}:${pullRequestParams.host}:${pullRequestParams.repository}:${pullRequestParams.number}`
+      ? `${pullRequestParams.environmentId}:${pullRequestListKey({
+          host: pullRequestParams.host,
+          repository: pullRequestParams.repository,
+          number: pullRequestParams.number,
+        })}`
       : null;
   const selectedThreadKey =
     threadParams &&

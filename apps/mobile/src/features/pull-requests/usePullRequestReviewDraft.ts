@@ -12,7 +12,7 @@ import {
   pullRequestReviewKey,
   type ReviewDraft,
 } from "./pullRequestReviewDrafts";
-import type { PullRequestParams } from "./usePullRequestDiff";
+import type { PullRequestReferenceParams } from "./usePullRequestDiff";
 
 const state = Atom.make<{
   drafts: Record<string, ReviewDraft>;
@@ -72,7 +72,7 @@ async function persist() {
     }
   });
 }
-export function usePullRequestReviewDraft(params: PullRequestParams) {
+export function usePullRequestReviewDraft(params: PullRequestReferenceParams) {
   const snapshot = useAtomValue(state);
   const key = pullRequestReviewKey(params);
   useEffect(() => {

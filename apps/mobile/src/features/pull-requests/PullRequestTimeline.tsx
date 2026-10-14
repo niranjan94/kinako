@@ -57,7 +57,7 @@ function TimelineEvent(props: {
   );
 }
 
-function TimelineComment({ comment }: { comment: PullRequestComment }) {
+export function TimelineComment({ comment }: { comment: PullRequestComment }) {
   const [expanded, setExpanded] = useState(false);
   const { themeVariables: colors } = useAppearancePreferences();
   const long = comment.body.length > 450 || comment.body.split("\n").length > 8;

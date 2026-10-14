@@ -103,6 +103,8 @@ export function usePullRequestThreads(
             startFromOrigin: false,
             pullRequestReference: pr.url,
           },
+          // A question reads untrusted PR text, so a thread started for one asks before acting.
+          ...(task === "question" ? { runtimeMode: "approval-required" as const } : {}),
         });
       const context = pullRequestComposerContext(
         {

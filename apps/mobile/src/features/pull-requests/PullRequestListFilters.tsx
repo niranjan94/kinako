@@ -1,9 +1,12 @@
 import { ScrollView } from "react-native";
 import type { ControlPillMenuProps } from "../../components/ControlPillMenu.types";
+import type { PullRequestListKind } from "../../persistence/mobile-preferences";
 import { ListFilterMenu } from "../workspace/ListFilterMenu";
+import { issueListState } from "./issueList";
 import { DEFAULT_PR_LIST_CONTROLS, type PullRequestListControls } from "./pullRequestList";
 
 const STATES = { open: "Open", closed: "Closed", merged: "Merged", all: "All states" } as const;
+const ISSUE_STATES = { open: "Open", closed: "Closed", all: "All states" } as const;
 const INVOLVEMENT = { all: "All PRs", reviewing: "Your review", authored: "By you" } as const;
 const DRAFTS = { all: "All drafts", only: "Drafts only", hide: "Hide drafts" } as const;
 const REVIEWS = {
@@ -29,6 +32,7 @@ function choices(field: string, options: Readonly<Record<string, string>>, selec
 }
 
 export function PullRequestListFilters(props: {
+  readonly kind: PullRequestListKind;
   readonly environments: readonly { id: string; label: string }[];
   readonly environmentId: string | null;
   readonly onEnvironmentChange: (id: string | null) => void;
@@ -39,6 +43,8 @@ export function PullRequestListFilters(props: {
   readonly projects: readonly { id: string; title: string; environmentId: string }[];
 }) {
   const { value } = props;
+  const issues = props.kind === "issues";
+  const state = issues ? issueListState(value.state) : value.state;
   const selectedLabels = value.filters.labels?.flat() ?? [];
   const selectedLabelSet = new Set(selectedLabels);
   const author = value.filters.author;
@@ -138,15 +144,17 @@ export function PullRequestListFilters(props: {
     }
   };
   const count =
-    Number(value.state !== "open") +
-    Number(value.involvement !== "all") +
+    Number(state !== "open") +
     Number(Boolean(author)) +
     selectedLabels.length +
-    Number(Boolean(value.filters.draft)) +
-    Number(Boolean(value.filters.review)) +
-    Number(Boolean(value.filters.checks)) +
-    Number(Boolean(value.projectId));
-  const more: ControlPillMenuProps["actions"] = [
+    Number(Boolean(value.projectId)) +
+    (issues
+      ? 0
+      : Number(value.involvement !== "all") +
+        Number(Boolean(value.filters.draft)) +
+        Number(Boolean(value.filters.review)) +
+        Number(Boolean(value.filters.checks)));
+  const pullRequestOnly: ControlPillMenuProps["actions"] = [
     {
       id: "drafts",
       title: value.filters.draft ? DRAFTS[value.filters.draft] : "Drafts",
@@ -162,6 +170,9 @@ export function PullRequestListFilters(props: {
       title: value.filters.checks ? `${CHECKS[value.filters.checks]} checks` : "Checks",
       subactions: choices("checks", CHECKS, value.filters.checks ?? "all"),
     },
+  ];
+  const more: ControlPillMenuProps["actions"] = [
+    ...(issues ? [] : pullRequestOnly),
     {
       id: "projects",
       title:
@@ -225,19 +236,25 @@ export function PullRequestListFilters(props: {
         />
       ) : null}
       <ListFilterMenu
-        label={STATES[value.state]}
-        active={value.state !== "open"}
+        label={issues ? ISSUE_STATES[issueListState(value.state)] : STATES[value.state]}
+        active={state !== "open"}
         accessibilityLabel="Filter by state"
-        actions={choices("state", STATES, value.state)}
+        actions={
+          issues
+            ? choices("state", ISSUE_STATES, issueListState(value.state))
+            : choices("state", STATES, value.state)
+        }
         onSelect={select}
       />
-      <ListFilterMenu
-        label={INVOLVEMENT[value.involvement]}
-        active={value.involvement !== "all"}
-        accessibilityLabel="Filter by involvement"
-        actions={choices("involvement", INVOLVEMENT, value.involvement)}
-        onSelect={select}
-      />
+      {issues ? null : (
+        <ListFilterMenu
+          label={INVOLVEMENT[value.involvement]}
+          active={value.involvement !== "all"}
+          accessibilityLabel="Filter by involvement"
+          actions={choices("involvement", INVOLVEMENT, value.involvement)}
+          onSelect={select}
+        />
+      )}
       <ListFilterMenu
         label={selectedLabels.length ? `Labels ${selectedLabels.length}` : "Labels"}
         active={selectedLabels.length > 0}

@@ -3,9 +3,10 @@ import { AsyncResult } from "effect/reactivity";
 import { useCallback } from "react";
 
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import type { PullRequestListKind } from "../../persistence/mobile-preferences";
 import { DEFAULT_PR_LIST_CONTROLS, type PullRequestListControls } from "./pullRequestList";
 
-/** The pull request list's environment and its filters, restored on the next launch. */
+/** The pull request list's environment, kind and filters, restored on the next launch. */
 export function usePullRequestListControls() {
   const preferences = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
@@ -13,6 +14,13 @@ export function usePullRequestListControls() {
     ? preferences.value.pullRequestListFilters
     : undefined;
   const environmentId = saved?.environmentId ?? null;
+  const kind: PullRequestListKind = AsyncResult.isSuccess(preferences)
+    ? (preferences.value.pullRequestListKind ?? "pullRequests")
+    : "pullRequests";
+  const setKind = useCallback(
+    (next: PullRequestListKind) => savePreferences({ pullRequestListKind: next }),
+    [savePreferences],
+  );
   const controlsFor = useCallback(
     (environment: string | null) => saved?.controls[environment ?? ""] ?? DEFAULT_PR_LIST_CONTROLS,
     [saved],
@@ -44,5 +52,5 @@ export function usePullRequestListControls() {
       }),
     [savePreferences],
   );
-  return { environmentId, controlsFor, setEnvironmentId, setControls } as const;
+  return { environmentId, kind, setKind, controlsFor, setEnvironmentId, setControls } as const;
 }
