@@ -1,7 +1,6 @@
 import {
   EnvironmentAuthInvalidError,
   type AuthBrowserSessionResult,
-  type AuthCreatePairingCredentialInput,
   type AuthSessionState,
   type DesktopBridge,
 } from "@t3tools/contracts";
@@ -112,20 +111,11 @@ async function installAuthApi(input: {
   readonly browserSession?: (
     credential: string,
   ) => Effect.Effect<AuthBrowserSessionResult, EnvironmentAuthInvalidError>;
-  readonly pairingCredential?: (payload: AuthCreatePairingCredentialInput) => Effect.Effect<{
-    readonly id: string;
-    readonly credential: string;
-    readonly label?: string;
-    readonly expiresAt: DateTime.Utc;
-  }>;
 }) {
   const testApi = await installEnvironmentHttpTest({
     ...(input.session ? { session: () => Effect.succeed(input.session!()) } : {}),
     ...(input.browserSession
       ? { browserSession: (payload) => input.browserSession!(payload.credential) }
-      : {}),
-    ...(input.pairingCredential
-      ? { pairingCredential: (payload) => input.pairingCredential!(payload) }
       : {}),
   });
   disposeHttpTest = testApi.dispose;
@@ -790,32 +780,5 @@ describe("resolveInitialServerAuthGateState", () => {
       auth: LOOPBACK_AUTH,
     });
     expect(testApi.calls.browserSession).toEqual([{ credential: "rejected-token" }]);
-  });
-
-  it("creates a pairing credential from the authenticated auth endpoint", async () => {
-    const testApi = await installAuthApi({
-      pairingCredential: (payload) =>
-        Effect.succeed({
-          id: "pairing-link-1",
-          credential: "pairing-token",
-          ...(payload.label === undefined ? {} : { label: payload.label }),
-          expiresAt: SESSION_EXPIRES_AT,
-        }),
-    });
-    const { createServerPairingCredential } = await import("./environments/primary");
-
-    const credential = await createServerPairingCredential({
-      label: "Julius iPhone",
-      scopes: ["orchestration:read"],
-    });
-    expect(credential).toMatchObject({
-      id: "pairing-link-1",
-      credential: "pairing-token",
-      label: "Julius iPhone",
-    });
-    expect(DateTime.formatIso(credential.expiresAt)).toBe("2026-04-05T00:00:00.000Z");
-    expect(testApi.calls.pairingCredential).toEqual([
-      { label: "Julius iPhone", scopes: ["orchestration:read"] },
-    ]);
   });
 });
