@@ -1,3 +1,5 @@
+import * as NodeNet from "node:net";
+
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AuthAdministrativeScopes } from "@t3tools/contracts";
@@ -9,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -443,6 +446,59 @@ describe("ssh tunnel scripts", () => {
     }).pipe(Effect.provide(layerProcess));
   });
 
+  it.effect("replaces a stale SSH forward without stopping the remote server", () =>
+    Effect.gen(function* () {
+      const probeStarted = yield* Deferred.make<void>();
+      let stale = false;
+      let forwards = 0;
+      let stops = 0;
+      let kills = 0;
+      const spawner = ChildProcessSpawner.make((command) =>
+        Effect.sync(() => {
+          const args = commandArgs(command);
+          if (args.includes("-N")) {
+            forwards += 1;
+            stale = false;
+            return makeRunningProcess(() => {
+              kills += 1;
+            });
+          }
+          if (args.includes("--")) return makeSuccessfulProcess('{"remotePort":3773}\n');
+          if (args.includes("sh")) stops += 1;
+          return makeSuccessfulProcess("");
+        }),
+      );
+      const httpClient = HttpClient.make((request) =>
+        stale
+          ? Deferred.succeed(probeStarted, undefined).pipe(Effect.andThen(Effect.never))
+          : Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 200 }))),
+      );
+      const layer = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Layer.succeed(HttpClient.HttpClient, httpClient),
+        Layer.succeed(NetService.NetService, testNetService),
+        SshAuth.SshPasswordPrompt.disabledLayer,
+        SshTunnel.SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
+      );
+      yield* Effect.gen(function* () {
+        const manager = yield* SshTunnel.SshEnvironmentManager;
+        const target = { alias: "devbox", hostname: "devbox", username: null, port: null };
+        yield* manager.ensureEnvironment(target);
+        stale = true;
+        const reconnect = yield* Effect.forkChild(manager.ensureEnvironment(target));
+        yield* Deferred.await(probeStarted);
+        yield* TestClock.adjust("2 seconds");
+        yield* Fiber.join(reconnect);
+        assert.equal(forwards, 2);
+        assert.equal(kills, 1);
+        assert.equal(stops, 0);
+        yield* manager.disconnectEnvironment(target);
+        assert.equal(stops, 1);
+      }).pipe(Effect.provide(layer), Effect.scoped);
+    }),
+  );
+
   it.effect.each(["successful stop", "failed stop"] as const)(
     "closes the tunnel scope and starts fresh after a %s",
     (mode) => {
@@ -646,34 +702,59 @@ describe("ssh tunnel scripts", () => {
   );
 });
 
-// The archive runner is generated shell; string assertions cannot prove the
-// lock excludes concurrent installers. Run the real script against a tiny
-// fake archive served from a file:// mirror.
-describe("archive runner script", () => {
-  const hostPlatform = HostProcess.Platform.defaultValue();
-  const hostArch = HostProcess.Architecture.defaultValue();
-  const windowsHost = hostPlatform === "win32";
-  const archiveVersion = "1.2.3-preview.20260911.4";
+// On macOS, Node can bind 127.0.0.1:<port> while another process (such as the
+// desktop app with network access on) listens on *:<port>. Linux refuses that
+// bind unless both sockets set SO_REUSEPORT, so on Linux the preload adds it to
+// the picker's probe and the holder sets it too. macOS needs neither.
+const MACOS_BIND_PRELOAD = `const net = require("node:net");
+const listen = net.Server.prototype.listen;
+net.Server.prototype.listen = function (port, host, callback) {
+  if (typeof port !== "number" || typeof host !== "string") return listen.apply(this, arguments);
+  return listen.call(this, { port, host, reusePort: true }, callback);
+};
+`;
 
-  const runRunner = (home: string, runner: string) =>
-    Effect.gen(function* () {
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const child = yield* spawner.spawn(
-        ChildProcess.make("sh", [runner, "--version"], {
-          env: { PATH: process.env.PATH ?? "", HOME: home },
-          extendEnv: false,
-        }),
+describe("remote port picker", () => {
+  const hostPlatform = HostProcess.Platform.defaultValue();
+  const linuxHost = hostPlatform === "linux";
+  const windowsHost = hostPlatform === "win32";
+
+  const holdWildcardPort = Effect.acquireRelease(
+    Effect.callback<NodeNet.Server>((resume) => {
+      const server = NodeNet.createServer((socket) => socket.destroy());
+      server.once("error", (error) => resume(Effect.die(error)));
+      server.listen({ port: 0, host: "0.0.0.0", reusePort: linuxHost }, () =>
+        resume(Effect.succeed(server)),
       );
-      const [stdout, stderr, exitCode] = yield* Effect.all(
+    }),
+    (server) =>
+      Effect.callback<void>((resume) => {
+        server.close(() => resume(Effect.void));
+      }),
+  );
+
+  it.effect.skipIf(windowsHost)("skips a port another server answers on loopback", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-pick-port-" });
+      yield* fs.writeFileString(`${root}/preload.cjs`, MACOS_BIND_PRELOAD);
+      yield* fs.writeFileString(`${root}/pick-port.cjs`, SshTunnel.REMOTE_PICK_PORT_SCRIPT);
+      const holder = yield* holdWildcardPort;
+      const heldPort = (holder.address() as NodeNet.AddressInfo).port;
+
+      const child = yield* spawner.spawn(
+        ChildProcess.make(process.execPath, [
+          ...(linuxHost ? ["--require", `${root}/preload.cjs`] : []),
+          `${root}/pick-port.cjs`,
+          "",
+          String(heldPort),
+          "20",
+        ]),
+      );
+      const [stdout, exitCode] = yield* Effect.all(
         [
           child.stdout.pipe(
-            Stream.decodeText(),
-            Stream.runFold(
-              () => "",
-              (acc, chunk) => acc + chunk,
-            ),
-          ),
-          child.stderr.pipe(
             Stream.decodeText(),
             Stream.runFold(
               () => "",
@@ -684,8 +765,58 @@ describe("archive runner script", () => {
         ],
         { concurrency: "unbounded" },
       );
-      return { stdout, stderr, exitCode };
-    });
+
+      assert.equal(exitCode, 0);
+      const picked = Number(stdout);
+      assert.isAbove(picked, heldPort);
+      assert.isBelow(picked, heldPort + 20);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+// Runs a generated script with an isolated HOME, as an SSH remote would.
+const runScript = (home: string, args: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const child = yield* spawner.spawn(
+      ChildProcess.make("sh", args, {
+        env: { PATH: process.env.PATH ?? "", HOME: home },
+        extendEnv: false,
+      }),
+    );
+    const [stdout, stderr, exitCode] = yield* Effect.all(
+      [
+        child.stdout.pipe(
+          Stream.decodeText(),
+          Stream.runFold(
+            () => "",
+            (acc, chunk) => acc + chunk,
+          ),
+        ),
+        child.stderr.pipe(
+          Stream.decodeText(),
+          Stream.runFold(
+            () => "",
+            (acc, chunk) => acc + chunk,
+          ),
+        ),
+        child.exitCode.pipe(Effect.map(Number)),
+      ],
+      { concurrency: "unbounded" },
+    );
+    return { stdout, stderr, exitCode };
+  });
+
+// The archive runner is generated shell; string assertions cannot prove the
+// lock excludes concurrent installers. Run the real script against a tiny
+// fake archive served from a file:// mirror.
+describe("archive runner script", () => {
+  const hostPlatform = HostProcess.Platform.defaultValue();
+  const hostArch = HostProcess.Architecture.defaultValue();
+  const windowsHost = hostPlatform === "win32";
+  const archiveVersion = "1.2.3-preview.20260911.4";
+
+  const runRunner = (home: string, runner: string) => runScript(home, [runner, "--version"]);
 
   // A fake "executable" that answers --version, packed the way the release
   // workflow packs the real archive: one top-level directory named after the
@@ -893,7 +1024,7 @@ esac
       fs
         .exists(`${home}/ready/${port}`)
         .pipe(Effect.delay("50 millis"), Effect.repeat({ until: (ready) => ready }));
-    return { fs, home, launch, stop, servers, run, untilReady };
+    return { fs, home, launchScript: `${root}/launch.sh`, launch, stop, servers, run, untilReady };
   });
 
   it.live.skipIf(windowsHost)(
@@ -980,5 +1111,95 @@ esac
       assert.equal(servers.length, 1);
       assert.isTrue(servers[0]?.alive);
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.live.skipIf(windowsHost)(
+    "waits for its busy server instead of replacing it",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+        const first = yield* host.launch(routeA);
+        const [server] = yield* host.servers;
+
+        // The server stops answering for longer than a quick reuse probe allows.
+        yield* host.fs.remove(`${host.home}/ready/${first.remotePort}`);
+        yield* host.run(host.home, [
+          "-c",
+          `(sleep 3; : >"$HOME/ready/${first.remotePort}") >/dev/null 2>&1 &`,
+        ]);
+        assert.deepEqual(yield* host.launch(routeA), first);
+        const servers = yield* host.servers;
+        assert.equal(servers.length, 1);
+        assert.equal(servers[0]?.pid, server?.pid);
+        assert.isTrue(servers[0]?.alive);
+      }).pipe(Effect.provide(NodeServices.layer)),
+    30_000,
+  );
+
+  it.live.skipIf(windowsHost)(
+    "fails without stopping a server that never becomes ready",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+        const first = yield* host.launch(routeA);
+        const [server] = yield* host.servers;
+        yield* host.fs.remove(`${host.home}/ready/${first.remotePort}`);
+
+        // Shorten the one-minute readiness budget so the test stays fast.
+        const script = yield* host.fs.readFileString(host.launchScript);
+        assert.include(script, 'wait_ready "60000"');
+        yield* host.fs.writeFileString(
+          host.launchScript,
+          script.replaceAll('wait_ready "60000"', 'wait_ready "500"'),
+        );
+        const result = yield* host.run(host.home, [host.launchScript, routeA]);
+        assert.equal(result.exitCode, 1, result.stdout);
+        assert.include(result.stderr, "the server was left running");
+        const servers = yield* host.servers;
+        assert.equal(servers.length, 1);
+        assert.isTrue(servers[0]?.alive);
+        assert.equal(
+          (yield* host.fs.readFileString(`${host.home}/.kinako/ssh-launch/server/pid`)).trim(),
+          `${server?.pid}`,
+        );
+      }).pipe(Effect.provide(NodeServices.layer)),
+    30_000,
+  );
+
+  it.live.skipIf(windowsHost)(
+    "replaces a recorded server that exited but was not reaped",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+        // A crashed server whose parent never reaps it stays a zombie, which
+        // kill -0 still reports.
+        const parent = yield* spawner.spawn(
+          ChildProcess.make("sh", ["-c", "sleep 600 & echo $!; exec sleep 600"]),
+        );
+        const zombie = Number(
+          Option.getOrThrow(
+            yield* parent.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runHead),
+          ),
+        );
+        process.kill(zombie, "SIGKILL");
+        assert.include(
+          (yield* host.run(host.home, ["-c", `ps -o stat= -p ${zombie}`])).stdout,
+          "Z",
+        );
+        const serverDir = `${host.home}/.kinako/ssh-launch/server`;
+        yield* host.fs.makeDirectory(serverDir, { recursive: true });
+        yield* host.fs.writeFileString(`${serverDir}/pid`, `${zombie}\n`);
+        yield* host.fs.writeFileString(`${serverDir}/port`, "4300\n");
+        yield* host.fs.writeFileString(`${serverDir}/mode`, "launcher\n");
+        yield* host.fs.writeFileString(`${serverDir}/owner`, `${routeA}\n`);
+
+        assert.equal((yield* host.launch(routeA)).serverKind, "managed");
+        const servers = yield* host.servers;
+        assert.equal(servers.length, 1);
+        assert.isTrue(servers[0]?.alive);
+      }).pipe(Effect.provide(NodeServices.layer)),
+    30_000,
   );
 });

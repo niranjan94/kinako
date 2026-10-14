@@ -2829,6 +2829,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
       extendInfo: {
+        // macOS 26 offers Messages/Mail codes in every text field unless opted out.
+        NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSLocalNetworkUsageDescription: `${FORK_DISPLAY_NAME} connects to devices on your local network for remote environments and commands run by terminals and coding agents.`,
         NSScreenCaptureUsageDescription: `${FORK_DISPLAY_NAME} captures the active window when you use the window capture shortcut.`,
         // macOS lists an app under Default web browser only when it opens web

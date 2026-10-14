@@ -328,7 +328,7 @@ export const make = Effect.gen(function* () {
     },
   ) =>
     Effect.gen(function* () {
-      const uuid = yield* crypto.randomUUIDv4;
+      const uuid = yield* crypto.randomUUIDv4();
       yield* engine.dispatch({
         type: "thread.pull-request-watch.sync",
         commandId: CommandId.make(`server:pr-watch:${target.thread.id}:${uuid}`),
@@ -600,7 +600,9 @@ export const make = Effect.gen(function* () {
     });
     yield* eachTarget(group, (target) =>
       Effect.gen(function* () {
-        const wakeMessageId = MessageId.make(`message:pr-watch:${yield* crypto.randomUUIDv4}`);
+        const wakeMessageId = MessageId.make(
+          `message:pr-watch:${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`,
+        );
         const report = evaluatePullRequestWatch(target.watch, detail, remarks, {
           wakeMessageId,
           fixTurnEnded: fixesEnded.get(watchKey(target)) ?? false,

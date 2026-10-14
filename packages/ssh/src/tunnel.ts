@@ -268,20 +268,38 @@ const preferred = Number.parseInt(raw, 10);
 const start = Number.isInteger(preferred) ? preferred : defaultPort;
 const end = start + scanWindow;
 
-function tryPort(port) {
+function canBind(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.unref();
     server.once("error", () => resolve(false));
     server.listen(port, "127.0.0.1", () => {
-      server.close((error) => resolve(error ? false : port));
+      server.close((error) => resolve(!error));
     });
+  });
+}
+
+// macOS lets the bind above succeed while another process listens on
+// *:<port>, so also skip any port that already answers on loopback.
+function answersOnLoopback(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host: "127.0.0.1" });
+    socket.setTimeout(1000);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", () => resolve(false));
   });
 }
 
 (async () => {
   for (let port = start; port < end; port += 1) {
-    const available = await tryPort(port);
+    const available = (await canBind(port)) && !(await answersOnLoopback(port));
     if (available) {
       process.stdout.write(String(port));
       return;
@@ -617,6 +635,14 @@ wait_for_pid_exit() {
     sleep 0.1
   done
 }
+# kill -0 also succeeds for a server that exited but was not reaped yet, so
+# a zombie does not count as running. Without ps to tell, trust kill -0.
+server_running() {
+  [ -n "$1" ] && kill -0 "$1" 2>/dev/null || return 1
+  case "$(ps -o stat= -p "$1" 2>/dev/null || true)" in
+    *Z*) return 1 ;;
+  esac
+}
 resolve_default_runtime_port() {
   if [ "$T3_ARCHIVE_MODE" = "1" ]; then
     "$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"
@@ -650,7 +676,7 @@ stop_owned_server() {
   OWNED_PID=""
 }
 OWNED_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-if [ -n "$OWNED_PID" ] && ! kill -0 "$OWNED_PID" 2>/dev/null; then
+if [ -n "$OWNED_PID" ] && ! server_running "$OWNED_PID"; then
   OWNED_PID=""
   rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE"
 fi
@@ -659,7 +685,7 @@ fi
 for LEGACY_DIR in "$LAUNCH_DIR"/*; do
   [ -f "$LEGACY_DIR/managed" ] || continue
   LEGACY_PID="$(cat "$LEGACY_DIR/pid" 2>/dev/null || true)"
-  if [ -z "$OWNED_PID" ] && [ "$(cat "$LEGACY_DIR/managed" 2>/dev/null || true)" = "managed" ] && [ -n "$LEGACY_PID" ] && kill -0 "$LEGACY_PID" 2>/dev/null; then
+  if [ -z "$OWNED_PID" ] && [ "$(cat "$LEGACY_DIR/managed" 2>/dev/null || true)" = "managed" ] && server_running "$LEGACY_PID"; then
     OWNED_PID="$LEGACY_PID"
     printf '%s\\n' "$OWNED_PID" >"$PID_FILE"
     cp "$LEGACY_DIR/port" "$PORT_FILE" 2>/dev/null || true
@@ -680,16 +706,19 @@ REMOTE_PORT=""
 REMOTE_MANAGED=""
 if [ -n "$OWNED_PID" ]; then
   REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
-  # A launcher restarts its server while it applies an update, so it gets the
-  # full startup budget before it counts as hung.
-  READY_BUDGET_MS="@@T3_REUSE_READY_TIMEOUT_MS@@"
-  if [ "$OWNED_MODE" = "launcher" ]; then
-    READY_BUDGET_MS="@@T3_READY_TIMEOUT_MS@@"
-  fi
-  if [ -n "$REMOTE_PORT" ] && wait_ready "$READY_BUDGET_MS"; then
-    REMOTE_MANAGED="managed"
-  else
+  # Reconnect owns the local tunnel, not the lifetime of a running server:
+  # a busy server, or a launcher applying an update, gets the full startup
+  # budget, and one that still does not answer is left running.
+  if [ -z "$REMOTE_PORT" ]; then
     stop_owned_server
+  elif wait_ready "@@T3_READY_TIMEOUT_MS@@"; then
+    REMOTE_MANAGED="managed"
+  elif server_running "$OWNED_PID"; then
+    printf 'Remote T3 server is still running but did not become ready. Retry the connection; the server was left running.\\n' >&2
+    exit 1
+  else
+    OWNED_PID=""
+    rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE"
     REMOTE_PORT=""
   fi
 else
@@ -1667,6 +1696,8 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         remotePort: entry.remotePort,
         cause: readinessExit.cause,
       });
+      // Closing a stale forward must not run the manager-owned remote stop.
+      tunnels.delete(key);
       yield* closeTunnelEntry(entry);
     }
 
