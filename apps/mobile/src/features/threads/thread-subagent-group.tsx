@@ -25,7 +25,7 @@ import { WorkLogBlock } from "./work-log-layout";
 type SubagentItem = Extract<OrchestrationV2TurnItem, { type: "subagent" }>;
 type AgentTiming = Pick<OrchestrationV2Subagent, "status" | "startedAt" | "completedAt">;
 
-function SubagentElapsed({ agents }: { readonly agents: ReadonlyArray<AgentTiming> }) {
+export function SubagentElapsed({ agents }: { readonly agents: ReadonlyArray<AgentTiming> }) {
   const focused = useIsFocused();
   const live = agents.some((agent) => isActiveSubagentStatus(agent.status));
   const [nowMs, setNowMs] = useState(() => Date.now());

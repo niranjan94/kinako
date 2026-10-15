@@ -318,3 +318,45 @@ export function deriveWorkflowGroups(
     return { workflow, phases, unphasedMembers };
   });
 }
+
+/** The workflow coordinator whose own thread is `threadId`, if any. */
+export function findWorkflowCoordinator<
+  S extends { readonly childThreadId: string | null; readonly workflow?: unknown },
+>(subagents: ReadonlyArray<S> | undefined, threadId: string): S | null {
+  return (
+    subagents?.find(
+      (subagent) => subagent.childThreadId === threadId && subagent.workflow !== undefined,
+    ) ?? null
+  );
+}
+
+export interface WorkflowRun extends SubagentWorkflowGroup {
+  readonly name: string;
+  /** The coordinator's description, when it says more than the name. */
+  readonly description: string | null;
+  readonly script: string;
+  readonly memberCount: number;
+}
+
+/**
+ * The run report a workflow coordinator's own thread shows: the phases that
+ * have members, every member, and the script it ran. Null when the subagent
+ * is not a workflow coordinator.
+ */
+export function deriveWorkflowRun(
+  coordinator: Parameters<typeof projectedSubagentsToRuntime>[0][number],
+): WorkflowRun | null {
+  if (coordinator.workflow === undefined) return null;
+  const group = deriveWorkflowGroups(projectedSubagentsToRuntime([coordinator]))[0];
+  if (group === undefined) return null;
+  const name = group.workflow.workflowName ?? group.workflow.title;
+  return {
+    ...group,
+    phases: group.phases.filter((phase) => phase.members.length > 0),
+    name,
+    description:
+      coordinator.title !== null && coordinator.title !== name ? coordinator.title : null,
+    script: coordinator.prompt.trim(),
+    memberCount: coordinator.workflow.agents.length,
+  };
+}

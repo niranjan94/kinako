@@ -5,6 +5,7 @@ import { enrichedContextLinkPresentation } from "../../lib/enrichedLinkPresentat
 import { ThreadContextDivider } from "./thread-context-divider";
 import { ThreadHandoffDivider, ThreadHandoffRow } from "./thread-handoff-row";
 import { SecretRequestCard } from "./SecretRequestCard";
+import { WorkflowRunCard } from "./WorkflowRunCard";
 import { AppActivityIndicator } from "../../components/AppActivityIndicator";
 import {
   WorktreeWorkingHeader,
@@ -27,6 +28,7 @@ import {
   type EnvironmentId,
   type MessageId,
   type OrchestrationV2ProjectedTurnItem,
+  type OrchestrationV2Subagent,
   type RunId,
 } from "@t3tools/contracts";
 import { renderAssistantCitationsAsText } from "@t3tools/shared/assistantCitations";
@@ -295,6 +297,8 @@ export interface ThreadFeedProps {
   readonly workspaceRoot?: string | null;
   readonly feed: ReadonlyArray<ThreadFeedEntry>;
   readonly pendingHandoff?: HandoffEndpoints | null;
+  /** Set when this thread is a workflow's own thread; its run report leads the feed. */
+  readonly workflowCoordinator?: OrchestrationV2Subagent | null;
   readonly contentPresentation: ThreadContentPresentation;
   readonly agentLabel: string;
   readonly latestRun: ThreadFeedLatestRun | null;
@@ -2757,6 +2761,13 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
                 {props.historyControls ? (
                   <ThreadFeedLoadEarlierControl {...props.historyControls} />
                 ) : null}
+                {props.workflowCoordinator ? (
+                  <WorkflowRunCard
+                    environmentId={props.environmentId}
+                    coordinator={props.workflowCoordinator}
+                    iconColor={iconSubtleColor}
+                  />
+                ) : null}
               </>
             }
             ListFooterComponent={
@@ -2778,6 +2789,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         </View>
         {presentedFeed.length === 0 &&
         !props.worktreeSetup &&
+        !props.workflowCoordinator &&
         props.activeWorkStartedAt === null &&
         props.contentPresentation.kind === "ready" ? (
           <View

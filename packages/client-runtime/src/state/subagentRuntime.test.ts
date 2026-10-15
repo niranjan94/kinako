@@ -2,7 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 import type { OrchestrationV2Subagent, OrchestrationV2SubagentWorkflow } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-import { deriveWorkflowGroups, projectedSubagentsToRuntime } from "./subagentRuntime.ts";
+import {
+  deriveWorkflowGroups,
+  deriveWorkflowRun,
+  projectedSubagentsToRuntime,
+} from "./subagentRuntime.ts";
 
 const at = (iso: string) => DateTime.makeUnsafe(iso);
 
@@ -216,5 +220,32 @@ describe("deriveWorkflowGroups over a dynamic workflow", () => {
     expect(groups[0]?.unphasedMembers.map((agent) => agent.title)).toEqual(["alpha:one"]);
     expect(groups[1]?.phases).toEqual([]);
     expect(groups[1]?.unphasedMembers).toEqual([]);
+  });
+});
+
+describe("deriveWorkflowRun", () => {
+  it("is null for an ordinary subagent", () => {
+    expect(deriveWorkflowRun(subagent())).toBeNull();
+  });
+
+  it("counts phased and unphased members of the run", () => {
+    const run = deriveWorkflowRun(
+      subagent({
+        workflow: {
+          name: "probe-wf",
+          phases: [{ index: 1, title: "Alpha" }],
+          agents: [
+            member(),
+            member({ index: 2, label: "alpha:two" }),
+            member({ index: 3, label: "loose", phaseIndex: undefined, phaseTitle: undefined }),
+          ],
+        },
+      }),
+    );
+    expect(run?.name).toBe("probe-wf");
+    expect(run?.description).toBe("probe");
+    expect(run?.phases.map((phase) => phase.members.length)).toEqual([2]);
+    expect(run?.unphasedMembers.map((agent) => agent.title)).toEqual(["loose"]);
+    expect(run?.memberCount).toBe(3);
   });
 });

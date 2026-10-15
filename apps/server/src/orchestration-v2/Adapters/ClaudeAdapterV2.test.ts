@@ -12034,6 +12034,40 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ),
   );
 
+  it.effect("keeps a workflow's script on the coordinator, out of its thread's messages", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeWorkflowHarness;
+        const script = "export const meta = { name: 'probe-wf', description: 'Probe' }";
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make("attempt-claude-workflow-script"),
+            text: "Run the alpha workflow.",
+            attachments: [],
+          }),
+        );
+        yield* harness.offerAndWait(workflowToolUse);
+        yield* harness.offerAndWait(claudeSdkFrame({ ...workflowTaskStarted, prompt: script }));
+        yield* awaitUntil(
+          () => workflowCoordinatorEvents(harness.events).length > 0,
+          "workflow coordinator projected",
+        );
+
+        const coordinator = workflowCoordinatorEvents(harness.events).at(-1)?.subagent;
+        assert.equal(coordinator?.prompt, script);
+        assert.isDefined(coordinator?.workflow);
+        assert.deepEqual(threadMessages(harness.events, coordinator?.childThreadId), []);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    ),
+  );
+
   it.effect("projects each workflow member as its own subagent thread", () =>
     Effect.scoped(
       Effect.gen(function* () {

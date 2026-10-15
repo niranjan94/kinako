@@ -5353,13 +5353,17 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             });
           }
           // Each run opens with its own prompt in the child thread: the launch
-          // task, then every message that resumes the subagent.
+          // task, then every message that resumes the subagent. A workflow's
+          // prompt is its script, which the client renders with the run's
+          // phases rather than as a chat message.
           const promptNativeItemId =
-            existingSubagent === undefined
-              ? `${nativeItemId}:prompt`
-              : resumeToolUseId === null
-                ? null
-                : `${nativeItemId}:prompt:${resumeToolUseId}`;
+            workflowWithThreads !== undefined
+              ? null
+              : existingSubagent === undefined
+                ? `${nativeItemId}:prompt`
+                : resumeToolUseId === null
+                  ? null
+                  : `${nativeItemId}:prompt:${resumeToolUseId}`;
           if (promptNativeItemId !== null) {
             yield* emitSubagentConversationMessage({
               nativeItemId: promptNativeItemId,
