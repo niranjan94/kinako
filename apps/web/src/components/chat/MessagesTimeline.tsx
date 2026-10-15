@@ -116,6 +116,7 @@ import {
 } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
+import { WorkflowRunPanel } from "./WorkflowRunPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, RootContent } from "mdast";
@@ -1476,6 +1477,18 @@ const ConversationTimeline = memo(function ConversationTimeline({
               actionLabel="Open parent thread"
               onAction={() => onOpenThread(parentThreadLink.threadId)}
             />
+            {citationThreadRef === null ? null : (
+              <WorkflowRunPanel
+                parentRef={scopeThreadRef(
+                  citationThreadRef.environmentId,
+                  parentThreadLink.threadId,
+                )}
+                threadId={citationThreadRef.threadId}
+                providerStatuses={providerStatuses}
+                markdownCwd={markdownCwd}
+                onOpenThread={onOpenThread}
+              />
+            )}
           </div>
         </div>
       );
@@ -1486,7 +1499,15 @@ const ConversationTimeline = memo(function ConversationTimeline({
         {parentThreadLink !== null ? leadingContent : null}
       </>
     );
-  }, [historyControls, onOpenThread, parentThreadLink, topFadeEnabled]);
+  }, [
+    citationThreadRef,
+    historyControls,
+    markdownCwd,
+    onOpenThread,
+    parentThreadLink,
+    providerStatuses,
+    topFadeEnabled,
+  ]);
 
   const canvas = useChatCanvas();
   const registerTimeline = canvas?.registerTimeline;
