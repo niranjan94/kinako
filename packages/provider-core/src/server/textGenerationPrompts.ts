@@ -493,3 +493,34 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
 
   return { prompt, outputSchema };
 }
+
+export interface ConversationSummaryPromptInput {
+  transcript: string;
+  direction: "from_here" | "up_to_here";
+  instructions?: string | undefined;
+}
+
+const CONVERSATION_SUMMARY_PROMPT = `Summarize part of a coding agent conversation. The summary replaces that part in the agent's context, so the agent must be able to continue the work from it alone.
+Return JSON with key summary, holding Markdown text.
+
+Keep:
+- The user's goals, decisions, constraints, and stated preferences, in their own terms.
+- What the agent changed: files, commands, and their outcomes.
+- Open questions, unfinished steps, and known problems.
+- Exact identifiers the work depends on: paths, symbols, commands, URLs, error messages.
+
+Drop greetings, restated plans, exploratory dead ends that left no decision behind, and tool output that no later step relies on.
+Write in the third person and the past tense. Do not address the user or continue the conversation.`;
+
+export function buildConversationSummaryPrompt(input: ConversationSummaryPromptInput) {
+  const position =
+    input.direction === "up_to_here"
+      ? "The transcript is the opening of the conversation. The conversation continues after it, so record where it left off."
+      : "The transcript is the end of the conversation. Record where it stopped, including the last request and whether it was finished.";
+  const focus =
+    input.instructions === undefined
+      ? ""
+      : `\n\nThe user asked the summary to focus on:\n${input.instructions}`;
+  const prompt = `${CONVERSATION_SUMMARY_PROMPT}\n\n${position}${focus}\n\nTranscript:\n${input.transcript}`;
+  return { prompt, outputSchema: Schema.Struct({ summary: Schema.String }) };
+}

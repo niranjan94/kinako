@@ -75,6 +75,22 @@ export interface ThreadTitleGenerationResult {
   needsRefinement?: boolean | undefined;
 }
 
+export interface ConversationSummaryGenerationInput {
+  cwd: string;
+  /** The part of the conversation to summarize, rendered as a transcript. */
+  transcript: string;
+  /** `up_to_here` summarizes the opening of a conversation; `from_here` its end. */
+  direction: "from_here" | "up_to_here";
+  /** What the user wants the summary to focus on. */
+  instructions?: string | undefined;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
+}
+
+export interface ConversationSummaryGenerationResult {
+  summary: string;
+}
+
 export interface ReviewGuideStackLayer {
   readonly number: number;
   readonly title: string | null;
@@ -142,6 +158,11 @@ export interface ProviderTextGeneration {
   readonly generateThreadTitle: (
     input: ThreadTitleGenerationInput,
   ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+  /** Summarize part of a thread so it can replace that part in provider context. */
+  readonly generateConversationSummary: (
+    input: ConversationSummaryGenerationInput,
+  ) => Effect.Effect<ConversationSummaryGenerationResult, TextGenerationError>;
 
   /** Explain a change request to the maintainer deciding whether it lands. */
   readonly generateReviewGuide: (
