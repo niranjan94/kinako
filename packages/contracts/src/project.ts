@@ -45,7 +45,7 @@ export const ProjectScript = Schema.Struct({
 });
 export type ProjectScript = typeof ProjectScript.Type;
 
-export const PROJECT_ADDITIONAL_DIRECTORIES_MAX = 16;
+const PROJECT_ADDITIONAL_DIRECTORIES_MAX = 16;
 
 /**
  * A folder threads can use besides the project root. The path is local to the
