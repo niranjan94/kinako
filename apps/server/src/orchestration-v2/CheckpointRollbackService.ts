@@ -72,6 +72,8 @@ export interface CheckpointRollbackServiceV2Shape {
     readonly checkpointId: CheckpointId;
     readonly scopeId: CheckpointScopeId;
     readonly restoreFiles?: boolean;
+    /** Leave later checkpoints ready, for rollbacks that keep the files they describe. */
+    readonly keepCheckpoints?: boolean;
   }) => Effect.Effect<void, CheckpointRollbackExecutionError>;
 }
 
@@ -113,6 +115,7 @@ export const layer: Layer.Layer<
       readonly checkpointId: CheckpointId;
       readonly scopeId: CheckpointScopeId;
       readonly restoreFiles?: boolean;
+      readonly keepCheckpoints?: boolean;
     }) {
       const projection = yield* projections.getThreadRecords(input.threadId, [
         "providerThreads",
@@ -268,6 +271,7 @@ export const layer: Layer.Layer<
       if (input.restoreFiles !== false) yield* checkpoints.restore({ scope, checkpoint });
       const staleCheckpoints = projection.checkpoints.filter(
         (candidate) =>
+          input.keepCheckpoints !== true &&
           candidate.scopeId === scope.id &&
           candidate.appRunOrdinal !== null &&
           candidate.appRunOrdinal > targetOrdinal &&
