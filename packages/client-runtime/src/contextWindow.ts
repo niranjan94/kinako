@@ -1,4 +1,5 @@
 import type {
+  OrchestrationV2ContextUsageCategory,
   OrchestrationV2ProviderTurn,
   OrchestrationV2ProviderTurnTokenUsage,
   OrchestrationV2ProviderThread,
@@ -18,6 +19,7 @@ type NullableContextWindowUsage = {
 };
 
 export type ContextWindowSnapshot = NullableContextWindowUsage & {
+  readonly categories: ReadonlyArray<OrchestrationV2ContextUsageCategory> | null;
   readonly remainingTokens: number | null;
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
@@ -77,6 +79,7 @@ export function deriveLatestContextWindowSnapshot(
       compactsAutomatically: true,
       autoCompactThreshold: null,
       cost: null,
+      categories: liveUsage.categories ?? null,
       updatedAt: liveUsage.updatedAt,
     };
   }
@@ -112,6 +115,7 @@ export function deriveLatestContextWindowSnapshot(
       compactsAutomatically: providerUsage.compactsAutomatically ?? null,
       cost: providerUsage.cost ?? null,
       autoCompactThreshold: providerUsage.autoCompactThreshold ?? null,
+      categories: null,
       updatedAt: DateTime.formatIso(providerUsageUpdatedAt),
     };
   }
@@ -154,11 +158,75 @@ export function deriveLatestContextWindowSnapshot(
       compactsAutomatically: true,
       autoCompactThreshold: null,
       cost: null,
+      categories: null,
       updatedAt: DateTime.formatIso(payload.startedAt ?? payload.updatedAt),
     };
   }
 
   return null;
+}
+
+export type ContextWindowSegmentKind = "used" | "free" | "buffer";
+
+export interface ContextWindowSegment {
+  readonly label: string;
+  readonly tokens: number;
+  readonly kind: ContextWindowSegmentKind;
+}
+
+export interface ContextWindowBreakdown {
+  /** In window order; their tokens add up to the bar's full width. */
+  readonly segments: ReadonlyArray<ContextWindowSegment>;
+  /** Listed by the provider but held outside the window, such as deferred tool schemas. */
+  readonly deferred: ReadonlyArray<{ readonly label: string; readonly tokens: number }>;
+  /** `provider` when the provider itemized its context, `tokens` when only the token split is known. */
+  readonly source: "provider" | "tokens";
+}
+
+/**
+ * What fills the context window. Uses the provider's own categories when it
+ * reports them, and otherwise splits the last request into cached input, new
+ * input, and output, which every usage-reporting provider gives.
+ */
+export function deriveContextWindowBreakdown(
+  snapshot: ContextWindowSnapshot,
+): ContextWindowBreakdown | null {
+  if (snapshot.categories !== null && snapshot.categories.length > 0) {
+    const segments = snapshot.categories.flatMap((category) =>
+      category.kind === "deferred" || category.tokens === 0
+        ? []
+        : [{ label: category.name, tokens: category.tokens, kind: category.kind }],
+    );
+    if (segments.length > 0) {
+      return {
+        segments,
+        deferred: snapshot.categories
+          .filter((category) => category.kind === "deferred" && category.tokens > 0)
+          .map((category) => ({ label: category.name, tokens: category.tokens })),
+        source: "provider",
+      };
+    }
+  }
+
+  const inputTokens = snapshot.inputTokens;
+  if (inputTokens == null) return null;
+  const cachedTokens = Math.min(snapshot.cachedInputTokens ?? 0, inputTokens);
+  const outputTokens = snapshot.outputTokens ?? 0;
+  // Some providers count more in their total than the split they report.
+  const otherTokens = Math.max(0, snapshot.usedTokens - inputTokens - outputTokens);
+  const freeTokens =
+    snapshot.maxTokens == null ? 0 : Math.max(0, snapshot.maxTokens - snapshot.usedTokens);
+  const segments: Array<ContextWindowSegment> = [
+    { label: "Cached input", tokens: cachedTokens, kind: "used" },
+    { label: "New input", tokens: inputTokens - cachedTokens, kind: "used" },
+    { label: "Output", tokens: outputTokens, kind: "used" },
+    { label: "Other", tokens: otherTokens, kind: "used" },
+    { label: "Free space", tokens: freeTokens, kind: "free" },
+  ];
+  const visible = segments.filter((segment) => segment.tokens > 0);
+  return visible.some((segment) => segment.kind === "used")
+    ? { segments: visible, deferred: [], source: "tokens" }
+    : null;
 }
 
 export function formatContextWindowTokens(value: number | null): string {

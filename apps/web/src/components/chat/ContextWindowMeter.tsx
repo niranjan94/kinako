@@ -1,7 +1,13 @@
 import { Button } from "../ui/button";
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import {
+  type ContextWindowBreakdown,
+  type ContextWindowSnapshot,
+  deriveContextWindowBreakdown,
+  formatContextWindowTokens,
+} from "@t3tools/client-runtime/context-window";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import {
+  contextWindowSegmentColor,
   formatContextWindowCompactionMessage,
   formatContextWindowCost,
 } from "./ContextWindowMeter.logic";
@@ -16,6 +22,63 @@ function formatPercentage(value: number | null): string | null {
     return `${value.toFixed(1).replace(/\.0$/, "")}%`;
   }
   return `${Math.round(value)}%`;
+}
+
+function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }) {
+  const { segments, deferred } = props.breakdown;
+  const windowTokens = segments.reduce((sum, segment) => sum + segment.tokens, 0);
+  const share = (tokens: number) => (windowTokens > 0 ? (tokens / windowTokens) * 100 : 0);
+  let usedIndex = 0;
+  const rows = segments.map((segment) => ({
+    ...segment,
+    color: contextWindowSegmentColor(segment.kind, segment.kind === "used" ? usedIndex++ : 0),
+  }));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-muted/60"
+        role="img"
+        aria-label="Context window usage by category"
+      >
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="h-full"
+            style={{ width: `${share(row.tokens)}%`, backgroundColor: row.color }}
+          />
+        ))}
+      </div>
+      <dl className="flex flex-col gap-0.5 text-2xs leading-4">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="size-2 shrink-0 rounded-xs"
+              style={{ backgroundColor: row.color }}
+            />
+            <dt className="min-w-0 flex-1 truncate text-secondary-label">{row.label}</dt>
+            <dd className="tabular-nums text-secondary-label">
+              {formatContextWindowTokens(row.tokens)}
+            </dd>
+            <dd className="w-10 text-right font-medium tabular-nums text-secondary-label">
+              {formatPercentage(share(row.tokens))}
+            </dd>
+          </div>
+        ))}
+        {deferred.map((row) => (
+          <div key={row.label} className="flex items-center gap-2 opacity-70">
+            <span aria-hidden="true" className="size-2 shrink-0" />
+            <dt className="min-w-0 flex-1 truncate text-secondary-label">{row.label}</dt>
+            <dd className="tabular-nums text-secondary-label">
+              {formatContextWindowTokens(row.tokens)}
+            </dd>
+            <dd className="w-10" />
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 }
 
 export function ContextWindowMeter(props: {
@@ -33,6 +96,7 @@ export function ContextWindowMeter(props: {
   const dashOffset = circumference * (1 - normalizedPercentage / 100);
   const totalProcessedTokens = usage.totalProcessedTokens ?? null;
   const showTotalProcessed = totalProcessedTokens !== null && totalProcessedTokens > 0;
+  const breakdown = deriveContextWindowBreakdown(usage);
   const isOverloaded = normalizedPercentage > 90;
   const usageColor = isOverloaded
     ? "var(--color-error)"
@@ -92,7 +156,7 @@ export function ContextWindowMeter(props: {
         side="top"
         align="end"
         padding="none"
-        width="sm"
+        width={breakdown ? "md" : "sm"}
         className="text-left whitespace-normal"
       >
         <div className="flex flex-col gap-2 p-(--floating-content-inset)">
@@ -113,7 +177,9 @@ export function ContextWindowMeter(props: {
               </div>
             )}
           </div>
-          {usage.maxTokens !== null ? (
+          {breakdown ? (
+            <ContextWindowBreakdownView breakdown={breakdown} />
+          ) : usage.maxTokens !== null ? (
             <div
               className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
               role="progressbar"
