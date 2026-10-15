@@ -55,6 +55,13 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
       staleTimeMs: 60_000,
       idleTtlMs: 60_000,
     }),
+    // Runs are immutable once rolled back, so their history caches well.
+    runHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:orchestration:run-history",
+      tag: ORCHESTRATION_V2_WS_METHODS.getRunHistory,
+      staleTimeMs: 300_000,
+      idleTtlMs: 300_000,
+    }),
     fullThreadDiff: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:full-thread-diff",
       tag: ORCHESTRATION_V2_WS_METHODS.getFullThreadDiff,

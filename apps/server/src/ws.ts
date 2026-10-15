@@ -1899,6 +1899,17 @@ const layerWsRpc = (
                 }),
             ),
           ),
+        [ORCHESTRATION_V2_WS_METHODS.getRunHistory]: (input) =>
+          threadManagement.getRunHistory(input).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationV2GetThreadProjectionError({
+                  threadId: input.threadId,
+                  message: "Failed to load run history",
+                  cause,
+                }),
+            ),
+          ),
         [ORCHESTRATION_V2_WS_METHODS.getTurnDiff]: (input) =>
           checkpointDiffQuery.getTurnDiff(input).pipe(
             Effect.mapError(

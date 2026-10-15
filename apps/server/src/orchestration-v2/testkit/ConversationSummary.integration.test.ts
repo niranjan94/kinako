@@ -418,6 +418,13 @@ describe("orchestration v2 conversation summary", () => {
           current.runs.filter((run) => run.ordinal >= 2).map((run) => run.id),
         );
         assert.equal(summaryItem?.runId, current.runs[0]?.id);
+        // Summarized turns stay readable for the collapsed view under the marker.
+        const history = yield* Orchestrator.OrchestratorV2.use((orchestrator) =>
+          orchestrator.getRunHistory({ threadId, runIds: summaryItem?.range?.coveredRunIds ?? [] }),
+        );
+        assert.isTrue(
+          history.some((item) => item.type === "user_message" && item.text === PROMPTS[2]),
+        );
 
         yield* send(4);
         const turns = yield* Ref.get(harness.turns);
