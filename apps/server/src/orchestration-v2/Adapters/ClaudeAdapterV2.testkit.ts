@@ -843,6 +843,7 @@ function makeReplayQueryRunner(
           replayEffect(() => {
             assertNextOutboundFrame({ type: "query.stop_task", taskId });
           }),
+        getContextUsage: unrecordedClaudeContextUsage,
         interrupt: replayEffect(() => {
           assertNextOutboundFrame({ type: "query.interrupt" });
         }),
@@ -901,6 +902,14 @@ function nativeSessionIdFor(transcript: ClaudeAgentSdkReplayTranscript): string 
     ? metadataSessionId
     : "00000000-0000-4000-8000-000000000000";
 }
+
+/** Transcripts do not record /context estimates, so turns end without a breakdown. */
+export const unrecordedClaudeContextUsage = Effect.fail(
+  new ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError({
+    method: "getContextUsage",
+    cause: "Context usage is not recorded in replay transcripts.",
+  }),
+);
 
 const isClaudeAgentSdkQueryRunnerError = Schema.is(ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError);
 const isClaudeAgentSdkReplayError = Schema.is(ClaudeAgentSdkReplayError);
