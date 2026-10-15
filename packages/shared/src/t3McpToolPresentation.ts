@@ -26,6 +26,8 @@ export type T3McpToolSummaryAction =
   | "thread-configure"
   | "thread-fork"
   | "thread-merge"
+  | "thread-summarize"
+  | "thread-summary-restore"
   | "thread-search"
   | "thread-transfers"
   | "thread-organize"
@@ -295,6 +297,14 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   ),
   t3_thread_configure: tool(["Set", "Setting", "Set", "thread model"], "thread-configure"),
   t3_thread_fork: tool(["Fork", "Forking", "Requested a fork of", "this thread"], "thread-fork"),
+  t3_thread_summarize: tool(
+    ["Summarize", "Summarizing", "Requested a summary of", "thread context"],
+    "thread-summarize",
+  ),
+  t3_thread_summary_restore: tool(
+    ["Restore", "Restoring", "Restored", "full thread context"],
+    "thread-summary-restore",
+  ),
   t3_thread_merge_back: tool(
     ["Merge", "Merging", "Requested a merge of", "thread context"],
     "thread-merge",

@@ -225,6 +225,12 @@ export function summarizeT3ToolCalls(
     case "thread-merge":
       label = phrase("Requested", "request", quantity(selected.length, "context merge"));
       break;
+    case "thread-summarize":
+      label = phrase("Requested", "request", quantity(selected.length, "context summary"));
+      break;
+    case "thread-summary-restore":
+      label = phrase("Restored", "restore", `full thread context ${times}`);
+      break;
     case "thread-search":
       label = phrase("Searched", "search", `threads ${times}`);
       break;

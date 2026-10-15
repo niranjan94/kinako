@@ -4,6 +4,9 @@ import {
   OrchestrationSearchThreadsInput,
   OrchestrationSearchThreadsResult,
   OrchestrationV2ThreadForkSourcePoint,
+  OrchestrationV2ConversationSummaryDirection,
+  MessageId,
+  TurnItemId,
   OrchestrationV2ContextTransfer,
   TrimmedNonEmptyString,
   ModelSelection,
@@ -211,6 +214,26 @@ const ThreadForkTool = Tool.make("t3_thread_fork", {
   }),
   success: transferResult,
 }).annotate(Tool.Destructive, true);
+const ThreadSummarizeTool = Tool.make("t3_thread_summarize", {
+  ...commandTool,
+  description:
+    "Replace part of a thread's provider context with a summary to free context window space. Files and checkpoints are not changed. direction=from_here summarizes messageId and every turn after it, rewinding the provider to before that message; up_to_here summarizes every turn before messageId on a fresh provider conversation and keeps the rest verbatim. Take messageId from a user message in t3_thread_read. instructions steer what the summary keeps. The thread must be idle, so a thread cannot summarize itself during its own turn. Acceptance means the summary is being written; a compaction item titled Summarized conversation appears when it is applied.",
+  parameters: Schema.Struct({
+    threadId: Schema.optional(ThreadId),
+    messageId: MessageId,
+    direction: OrchestrationV2ConversationSummaryDirection,
+    instructions: Schema.optional(TrimmedNonEmptyString),
+  }),
+}).annotate(Tool.Destructive, true);
+const ThreadSummaryRestoreTool = Tool.make("t3_thread_summary_restore", {
+  ...commandTool,
+  description:
+    "Undo an up_to_here summary by switching back to the provider conversation that holds the full context. turnItemId is its Summarized conversation item from t3_thread_read. Turns taken since the summary are handed over. Omit threadId for this thread.",
+  parameters: Schema.Struct({
+    threadId: Schema.optional(ThreadId),
+    turnItemId: TurnItemId,
+  }),
+}).annotate(Tool.Destructive, true);
 const ThreadMergeBackTool = Tool.make("t3_thread_merge_back", {
   ...commandTool,
   description:
@@ -275,6 +298,8 @@ export const ThreadToolkit = Toolkit.make(
   ScheduledTaskRunTool,
   ThreadSearchTool,
   ThreadForkTool,
+  ThreadSummarizeTool,
+  ThreadSummaryRestoreTool,
   ThreadMergeBackTool,
   ThreadTransfersTool,
   ThreadConfigurationTool,
