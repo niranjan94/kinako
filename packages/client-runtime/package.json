@@ -39,6 +39,10 @@
       "types": "./src/projectFaviconCache.ts",
       "default": "./src/projectFaviconCache.ts"
     },
+    "./context-window": {
+      "types": "./src/contextWindow.ts",
+      "default": "./src/contextWindow.ts"
+    },
     "./user-message": {
       "types": "./src/userMessage.ts",
       "default": "./src/userMessage.ts"

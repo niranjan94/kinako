@@ -1131,7 +1131,7 @@ import {
   resolveComposerDispatchMode,
   type ComposerDispatchMode,
 } from "@t3tools/client-runtime/state/composer-dispatch";
-import type { ContextWindowSnapshot } from "../../lib/contextWindow";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/context-window";
 import {
   getProviderSlashCommandsForSlashMenu,
   getProviderSkillsForSlashMenu,
