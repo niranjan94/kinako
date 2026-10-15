@@ -6,12 +6,14 @@ import {
   CheckpointScopeId,
   ORCHESTRATION_V2_WS_METHODS,
   OrchestrationV2CheckpointUnavailableError,
+  TrimmedNonEmptyString,
   WS_METHODS,
   type ChatAttachment,
   type MessageId,
   type ModelSelection,
   type NodeId,
   type OrchestrationV2Command,
+  type OrchestrationV2ConversationSummaryDirection,
   type OrchestrationV2CreationSource,
   type PlanId,
   type ProjectId,
@@ -26,6 +28,7 @@ import {
   type RuntimeRequestId,
   type ThreadId,
   type ThreadEnvMode,
+  type TurnItemId,
   type UploadChatAttachment,
 } from "@t3tools/contracts";
 import { modelSelectionCommandType } from "@t3tools/shared/model";
@@ -215,6 +218,16 @@ export interface RevertThreadCheckpointInput extends ThreadCommandInput {
   readonly checkpointId?: string;
   readonly scopeId?: string;
   readonly turnCount?: number;
+}
+
+export interface SummarizeThreadInput extends ThreadCommandInput {
+  readonly messageId: MessageId;
+  readonly direction: OrchestrationV2ConversationSummaryDirection;
+  readonly instructions?: string;
+}
+
+export interface RestoreThreadSummaryInput extends ThreadCommandInput {
+  readonly turnItemId: TurnItemId;
 }
 
 export type StopThreadSessionInput = ThreadCommandInput;
@@ -892,6 +905,31 @@ export const dismissThreadUserInput = Effect.fn("EnvironmentCommands.dismissThre
       commandId: yield* allocateCommandId(input),
       threadId: input.threadId,
       requestId: input.requestId,
+    });
+  },
+);
+
+export const summarizeThread = Effect.fn("EnvironmentCommands.summarizeThread")(function* (
+  input: SummarizeThreadInput,
+) {
+  const instructions = input.instructions?.trim();
+  return yield* dispatch({
+    type: "thread.summarize",
+    commandId: yield* allocateCommandId(input),
+    threadId: input.threadId,
+    messageId: input.messageId,
+    direction: input.direction,
+    ...(instructions ? { instructions: TrimmedNonEmptyString.make(instructions) } : {}),
+  });
+});
+
+export const restoreThreadSummary = Effect.fn("EnvironmentCommands.restoreThreadSummary")(
+  function* (input: RestoreThreadSummaryInput) {
+    return yield* dispatch({
+      type: "thread.summary.restore",
+      commandId: yield* allocateCommandId(input),
+      threadId: input.threadId,
+      turnItemId: input.turnItemId,
     });
   },
 );
