@@ -1058,10 +1058,26 @@ export const OrchestrationV2ContextHandoff = Schema.Struct({
 });
 export type OrchestrationV2ContextHandoff = typeof OrchestrationV2ContextHandoff.Type;
 
+/**
+ * One row of a provider's own context breakdown. `used` rows occupy the
+ * window, `free` is what remains, `buffer` is the compaction reserve, and
+ * `deferred` rows are listed for awareness but sit outside the window.
+ */
+export const OrchestrationV2ContextUsageCategory = Schema.Struct({
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(64)),
+  tokens: NonNegativeInt,
+  kind: Schema.Literals(["used", "free", "buffer", "deferred"]),
+});
+export type OrchestrationV2ContextUsageCategory = typeof OrchestrationV2ContextUsageCategory.Type;
+
 /** Live context usage reported by the provider mid-turn (#8144). */
 export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
   usedTokens: NonNegativeInt,
   maxTokens: Schema.optional(Schema.NullOr(NonNegativeInt)),
+  /** Only providers that itemize their context window report this. */
+  categories: Schema.optional(
+    Schema.Array(OrchestrationV2ContextUsageCategory).check(Schema.isMaxLength(32)),
+  ),
   inputTokens: Schema.optional(NonNegativeInt),
   cachedInputTokens: Schema.optional(NonNegativeInt),
   outputTokens: Schema.optional(NonNegativeInt),
