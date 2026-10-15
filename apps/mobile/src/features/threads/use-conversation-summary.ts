@@ -1,5 +1,8 @@
 import {
+  type ConversationSummaryRequest,
   conversationSummaryFromHereMessageIds,
+  conversationSummaryMarkerIds,
+  conversationSummaryOutcome,
   conversationSummaryUpToHereMessageIds,
 } from "@t3tools/client-runtime/state/conversationSummary";
 import {
@@ -36,13 +39,6 @@ export interface ConversationSummaryFeedControls {
   readonly busy: boolean;
 }
 
-interface PendingSummary {
-  readonly requestId: CommandId;
-  readonly messageId: MessageId;
-  readonly direction: OrchestrationV2ConversationSummaryDirection;
-  readonly existingMarkerIds: ReadonlySet<string>;
-}
-
 const TITLES: Record<OrchestrationV2ConversationSummaryDirection, string> = {
   from_here: "Summarize from here",
   up_to_here: "Summarize up to here",
@@ -75,14 +71,32 @@ export function useConversationSummary(input: {
   const restoreSummary = useAtomCommand(threadEnvironment.restoreSummary, {
     reportFailure: false,
   });
-  const [pending, setPending] = useState<PendingSummary | null>(null);
+  const [pending, setPending] = useState<ConversationSummaryRequest | null>(null);
   const projectionRef = useRef(projection);
   useEffect(() => {
     projectionRef.current = projection;
   }, [projection]);
 
-  const upToHere = useMemo(() => conversationSummaryUpToHereMessageIds(projection), [projection]);
-  const fromHere = useMemo(() => conversationSummaryFromHereMessageIds(projection), [projection]);
+  const messages = projection?.messages;
+  const runs = projection?.runs;
+  const checkpoints = projection?.checkpoints;
+  // Keyed on the records eligibility reads, not the projection every streamed event replaces.
+  const upToHere = useMemo(
+    () =>
+      conversationSummaryUpToHereMessageIds(
+        messages === undefined || runs === undefined ? null : { messages, runs },
+      ),
+    [messages, runs],
+  );
+  const fromHere = useMemo(
+    () =>
+      conversationSummaryFromHereMessageIds(
+        messages === undefined || runs === undefined || checkpoints === undefined
+          ? null
+          : { messages, runs, checkpoints },
+      ),
+    [checkpoints, messages, runs],
+  );
   const provider = input.providers.find(
     (candidate) => candidate.instanceId === projection?.thread.modelSelection.instanceId,
   );
@@ -92,31 +106,14 @@ export function useConversationSummary(input: {
 
   useEffect(() => {
     if (pending === null || projection === null) return;
-    const request = projection.thread.summarize;
-    const fail = (message: string) => {
-      setPending(null);
-      Alert.alert("Could not summarize", message);
-    };
-    if (request?.requestId === pending.requestId && request.failure !== undefined) {
-      fail(request.failure);
-      return;
-    }
-    const rollbackFailure = projection.thread.rollbackFailure;
-    if (rollbackFailure?.requestId === `${pending.requestId}:summary-complete`) {
-      fail(rollbackFailure.message);
-      return;
-    }
-    const applied = projection.turnItems.some(
-      (item) =>
-        item.type === "compaction" &&
-        item.range?.messageId === pending.messageId &&
-        !pending.existingMarkerIds.has(item.id),
-    );
-    if (!applied) return;
-    const message = projection.messages.find((candidate) => candidate.id === pending.messageId);
-    const run = projection.runs.find((candidate) => candidate.id === message?.runId);
-    if (pending.direction === "from_here" && run?.status !== "rolled_back") return;
+    const outcome = conversationSummaryOutcome(projection, pending);
+    if (outcome === null) return;
     setPending(null);
+    if (outcome.type === "failed") {
+      Alert.alert("Could not summarize", outcome.message);
+      return;
+    }
+    const message = projection.messages.find((candidate) => candidate.id === pending.messageId);
     if (pending.direction !== "from_here" || message === undefined || input.draftKey === null) {
       return;
     }
@@ -146,9 +143,7 @@ export function useConversationSummary(input: {
         requestId,
         messageId,
         direction,
-        existingMarkerIds: new Set(
-          current.turnItems.filter((item) => item.type === "compaction").map((item) => item.id),
-        ),
+        existingMarkerIds: conversationSummaryMarkerIds(current),
       });
       void summarizeThread({
         environmentId: input.environmentId,

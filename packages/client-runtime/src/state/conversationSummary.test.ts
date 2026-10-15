@@ -68,4 +68,21 @@ describe("conversationSummaryFromHereMessageIds", () => {
     } as never);
     expect([...eligible]).toEqual(["first", "third"]);
   });
+
+  it("rewinds past rolled-back turns to the last turn still in the conversation", () => {
+    const eligible = conversationSummaryFromHereMessageIds({
+      messages: [
+        userMessage("first", "run-1"),
+        userMessage("rewound", "run-2"),
+        userMessage("after-rewind", "run-3"),
+      ],
+      runs: [
+        run("run-1", 1, "completed"),
+        run("run-2", 2, "rolled_back"),
+        run("run-3", 3, "completed"),
+      ],
+      checkpoints: [checkpoint(null), checkpoint(1, "stale"), checkpoint(2)],
+    } as never);
+    expect([...eligible]).toEqual(["first"]);
+  });
 });

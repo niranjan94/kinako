@@ -91,6 +91,7 @@ import { ContextHandoffServiceV2 } from "./ContextHandoffService.ts";
 import {
   conversationSummaryCoveredRuns,
   conversationSummaryHistoricalMessage,
+  isSummarizableRun,
 } from "./ConversationSummary.ts";
 import { notificationTurnItem } from "@t3tools/provider-core/server/notification";
 import { isRestartContinuationSource, runOutcome } from "./RestartBackgroundNote.ts";
@@ -9967,8 +9968,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     });
 
   /**
-   * Where a `from_here` summary rewinds the provider: the checkpoint before
-   * `messageRun`, on the active provider thread. A string explains why there
+   * Where a `from_here` summary rewinds the provider: the checkpoint of the
+   * last run still in the conversation before `messageRun`, on the active
+   * provider thread. Rolled-back runs in between keep their ordinals, so the
+   * previous ordinal is not necessarily that run. A string explains why there
    * is none.
    */
   const summaryRollbackTarget = (
@@ -9979,11 +9982,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     messageRun: OrchestrationV2Run,
     providerThread: OrchestrationV2ProviderThread,
   ) => {
-    const targetOrdinal = messageRun.ordinal - 1;
+    const previousRun = projection.runs
+      .filter((run) => run.ordinal < messageRun.ordinal && run.status !== "rolled_back")
+      .toSorted((left, right) => left.ordinal - right.ordinal)
+      .at(-1);
     const checkpoint = projection.checkpoints.findLast((candidate) =>
-      targetOrdinal === 0
+      previousRun === undefined
         ? candidate.ordinalWithinScope === 0 && candidate.appRunOrdinal === null
-        : candidate.appRunOrdinal === targetOrdinal,
+        : candidate.appRunOrdinal === previousRun.ordinal,
     );
     const scope = projection.checkpointScopes.find(
       (candidate) => candidate.id === checkpoint?.scopeId,
@@ -9991,15 +9997,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     if (checkpoint === undefined || checkpoint.status !== "ready" || scope === undefined) {
       return "There is no checkpoint before this message to rewind the agent's context to.";
     }
-    if (targetOrdinal > 0) {
-      const targetRun = projection.runs.find((run) => run.ordinal === targetOrdinal);
-      const targetTurn =
-        targetRun === undefined ? undefined : providerTurnForRun(projection, targetRun);
+    if (previousRun !== undefined) {
+      const targetTurn = providerTurnForRun(projection, previousRun);
       if (targetTurn?.providerThreadId !== providerThread.id) {
         return "The agent's context before this message belongs to another provider thread.";
       }
     }
-    return { checkpoint, scope };
+    return { checkpoint, scope, previousRun };
   };
 
   /** The summarize preconditions both the request and its completion check. */
@@ -10224,10 +10228,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         const rollbackTarget = summaryRollbackTarget(projection, messageRun, providerThread);
         if (typeof rollbackTarget === "string") return yield* recordFailure(rollbackTarget);
         // The marker belongs to the last kept run, so rewinding past it hides the marker too.
-        const anchorRun = projection.runs
-          .filter((run) => run.ordinal < messageRun.ordinal && run.status !== "rolled_back")
-          .toSorted((left, right) => left.ordinal - right.ordinal)
-          .at(-1);
+        const anchorRun = rollbackTarget.previousRun;
         const handoff: OrchestrationV2ContextHandoff = {
           id: handoffId,
           transferId: null,
@@ -10355,16 +10356,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         driver: providerThread.driver,
         nativeThreadId: `pending:summary:${command.requestId}`,
       });
-      const keptRuns = projection.runs
-        .filter(
-          (run) =>
-            run.ordinal >= messageRun.ordinal &&
-            (run.status === "completed" ||
-              run.status === "interrupted" ||
-              run.status === "failed" ||
-              run.status === "cancelled"),
-        )
-        .toSorted((left, right) => left.ordinal - right.ordinal);
+      const keptRuns = conversationSummaryCoveredRuns(projection.runs, messageRun, "from_here");
       const prepared = yield* contextHandoffService
         .prepareProviderHandoff({
           threadId: command.threadId,
@@ -10549,12 +10541,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const emitEvent = emit(events, command);
       const runsSince = projection.runs
         .filter(
-          (run) =>
-            run.providerThreadId === range.summaryProviderThreadId &&
-            (run.status === "completed" ||
-              run.status === "interrupted" ||
-              run.status === "failed" ||
-              run.status === "cancelled"),
+          (run) => run.providerThreadId === range.summaryProviderThreadId && isSummarizableRun(run),
         )
         .toSorted((left, right) => left.ordinal - right.ordinal);
       let handoffIds = previous.handoffIds;

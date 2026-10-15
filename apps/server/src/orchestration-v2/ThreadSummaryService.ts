@@ -127,12 +127,13 @@ const make = Effect.gen(function* () {
     // one-off generations, so fall back to the configured text generation model.
     const fallback = settings.textGenerationModelSelection;
     const result = yield* summarize(projection.thread.modelSelection).pipe(
-      Effect.catchTag("TextGenerationError", (error) =>
-        fallback.instanceId === projection.thread.modelSelection.instanceId &&
-        fallback.model === projection.thread.modelSelection.model
-          ? Effect.fail(error)
-          : summarize(fallback),
-      ),
+      Effect.catchTags({
+        TextGenerationError: (error) =>
+          fallback.instanceId === projection.thread.modelSelection.instanceId &&
+          fallback.model === projection.thread.modelSelection.model
+            ? Effect.fail(error)
+            : summarize(fallback),
+      }),
     );
     return Option.some(result.summary);
   });
@@ -140,11 +141,22 @@ const make = Effect.gen(function* () {
   const execute: ThreadSummaryService["Service"]["execute"] = Effect.fn(
     "ThreadSummaryService.execute",
   )(function* (input) {
-    const outcome = yield* generate(input).pipe(
-      Effect.map((summary) =>
-        Option.match(summary, {
-          onNone: () => ({ type: "stale" as const }),
-          onSome: (text) => ({ type: "complete" as const, summary: text }),
+    // Applying the summary is guarded too: a request left in flight blocks the
+    // thread's next summary and, on web, its composer.
+    yield* generate(input).pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.void,
+          onSome: (summary) =>
+            threads
+              .dispatch({
+                type: "thread.summarize.complete",
+                commandId: CommandId.make(`${input.requestId}:summary-complete`),
+                threadId: input.threadId,
+                requestId: input.requestId,
+                summary,
+              })
+              .pipe(Effect.asVoid),
         }),
       ),
       Effect.catchCause((cause) => {
@@ -159,34 +171,19 @@ const make = Effect.gen(function* () {
           requestId: input.requestId,
           cause,
         }).pipe(
-          Effect.as({
-            type: "failed" as const,
-            message,
-          }),
+          Effect.andThen(
+            threads.dispatch({
+              type: "thread.summarize.fail",
+              commandId: CommandId.make(`${input.requestId}:summary-failed`),
+              threadId: input.threadId,
+              requestId: input.requestId,
+              message,
+            }),
+          ),
+          Effect.asVoid,
         );
       }),
     );
-    switch (outcome.type) {
-      case "stale":
-        return;
-      case "complete":
-        yield* threads.dispatch({
-          type: "thread.summarize.complete",
-          commandId: CommandId.make(`${input.requestId}:summary-complete`),
-          threadId: input.threadId,
-          requestId: input.requestId,
-          summary: outcome.summary,
-        });
-        return;
-      case "failed":
-        yield* threads.dispatch({
-          type: "thread.summarize.fail",
-          commandId: CommandId.make(`${input.requestId}:summary-failed`),
-          threadId: input.threadId,
-          requestId: input.requestId,
-          message: outcome.message,
-        });
-    }
   });
 
   return ThreadSummaryService.of({ execute });

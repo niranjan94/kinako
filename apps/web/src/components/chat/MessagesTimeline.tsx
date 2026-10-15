@@ -2678,7 +2678,6 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
               <SummarizeUserMessageButton
                 messageId={row.message.id}
                 controls={ctx.conversationSummary}
-                canRewind={typeof revertTurnCount === "number"}
               />
             ) : null}
             {resolvedContext.text && (
@@ -2809,7 +2808,6 @@ function RevertUserMessageButton({
 function SummarizeUserMessageButton(props: {
   messageId: MessageId;
   controls: ConversationSummaryTimelineControls;
-  canRewind: boolean;
 }) {
   const activity = use(TimelineRowActivityCtx);
   return (

@@ -450,7 +450,10 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
-import { conversationSummaryUpToHereMessageIds } from "@t3tools/client-runtime/state/conversationSummary";
+import {
+  conversationSummaryFromHereMessageIds,
+  conversationSummaryUpToHereMessageIds,
+} from "@t3tools/client-runtime/state/conversationSummary";
 import {
   type ConversationSummaryTimelineControls,
   SummarizeConversationDialog,
@@ -11305,6 +11308,10 @@ export default function ChatView(props: ChatViewProps) {
     () => conversationSummaryUpToHereMessageIds(serverProjection),
     [serverProjection?.messages, serverProjection?.runs],
   );
+  const summaryFromHereMessageIds = useMemo(
+    () => conversationSummaryFromHereMessageIds(serverProjection),
+    [serverProjection?.messages, serverProjection?.runs, serverProjection?.checkpoints],
+  );
   const activeProviderThreadId = serverProjection?.thread.activeProviderThreadId ?? null;
   const conversationSummaryControls = useMemo<ConversationSummaryTimelineControls | null>(
     () =>
@@ -11315,6 +11322,7 @@ export default function ChatView(props: ChatViewProps) {
               onSummarizeMessageRef.current(messageId, direction),
             onRestore: (turnItemId) => void onRestoreSummaryRef.current(turnItemId),
             upToHereMessageIds: summaryUpToHereMessageIds,
+            fromHereMessageIds: summaryFromHereMessageIds,
             supportsConversationRollback,
             activeProviderThreadId,
           },
@@ -11322,6 +11330,7 @@ export default function ChatView(props: ChatViewProps) {
       activeProviderThreadId,
       canOperateThread,
       paintOnlyDisplayedTimeline,
+      summaryFromHereMessageIds,
       summaryUpToHereMessageIds,
       supportsConversationRollback,
     ],
