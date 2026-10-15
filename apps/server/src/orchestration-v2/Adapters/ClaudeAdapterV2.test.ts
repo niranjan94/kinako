@@ -7,6 +7,7 @@ import * as NodeStream from "node:stream";
 
 import type {
   Query as ClaudeQuery,
+  SDKControlGetContextUsageResponse,
   SDKMessage,
   SDKResultMessage,
   SDKUserMessage,
@@ -88,7 +89,10 @@ import type * as ProviderContinuationRequests from "@t3tools/provider-core/serve
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import * as ClaudeAdapterV2 from "./ClaudeAdapterV2.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import { ClaudeOrchestratorReplayHarness } from "./ClaudeAdapterV2.testkit.ts";
+import {
+  ClaudeOrchestratorReplayHarness,
+  unrecordedClaudeContextUsage,
+} from "./ClaudeAdapterV2.testkit.ts";
 import { provideDeterministicTestRuntime } from "../testkit/DeterministicRuntime.ts";
 import { runOrchestratorV2Scenario } from "../testkit/OrchestratorScenario.ts";
 import { layerProviderReplay } from "../testkit/ProviderReplayHarness.ts";
@@ -1036,6 +1040,7 @@ describe("ClaudeAdapterV2 Auto-accept edits", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   close: Effect.void,
                 };
@@ -1197,6 +1202,7 @@ const captureSdkExecutablePaths = Effect.fn("captureSdkExecutablePaths")(functio
             applyFlagSettings: () => Effect.void,
             setPermissionMode: () => Effect.void,
             stopTask: () => Effect.void,
+            getContextUsage: unrecordedClaudeContextUsage,
             interrupt: Effect.void,
             close: Effect.void,
           };
@@ -1318,6 +1324,7 @@ describe("ClaudeAdapterV2 resume compaction", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   close: Effect.void,
                 };
@@ -1545,6 +1552,7 @@ describe("ClaudeAdapterV2 attachments", () => {
                 applyFlagSettings: () => Effect.void,
                 setPermissionMode: () => Effect.void,
                 stopTask: () => Effect.void,
+                getContextUsage: unrecordedClaudeContextUsage,
                 interrupt: Effect.void,
                 close: Effect.void,
               }),
@@ -1691,6 +1699,7 @@ describe("ClaudeAdapterV2 attachments", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   close: Effect.void,
                 };
@@ -1787,6 +1796,7 @@ describe("ClaudeAdapterV2 native fork", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   close: Effect.void,
                 };
@@ -2098,6 +2108,7 @@ describe("ClaudeAdapterV2 native session identity", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   close: Effect.void,
                 };
@@ -2374,6 +2385,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     readonly stopTask?: (
       taskId: string,
     ) => Effect.Effect<void, ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError>;
+    readonly getContextUsage?: ClaudeAdapterV2.ClaudeAgentSdkQuerySession["getContextUsage"];
     readonly environment?: NodeJS.ProcessEnv;
     readonly subagentLaunchToolUseId?: string;
     readonly nativeSessionId?: string;
@@ -2455,6 +2467,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: options?.stopTask ?? (() => Effect.void),
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   close: Queue.shutdown(processMessages),
                 };
@@ -2495,6 +2508,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     permissionModeChanges.push(mode);
                   }),
                 stopTask: options?.stopTask ?? (() => Effect.void),
+                getContextUsage: options?.getContextUsage ?? unrecordedClaudeContextUsage,
                 interrupt: options?.interrupt ?? Effect.void,
                 close: options?.close?.(sdkMessages) ?? Effect.void,
               };
@@ -3664,6 +3678,67 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           : [],
       );
       assert.deepEqual(reportedContext, [2]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect.each([
+    { title: "attaches the CLI context breakdown to the completed turn", answers: true },
+    { title: "completes the turn without a breakdown the CLI did not give", answers: false },
+  ])("$title", ({ answers }) =>
+    Effect.gen(function* () {
+      const harness = yield* makeWakeHarnessWithOptions({
+        getContextUsage: answers
+          ? Effect.succeed({
+              categories: [
+                { name: "System prompt", tokens: 8_100, color: "gray", kind: "used" },
+                { name: "Messages", tokens: 29_100, color: "blue", kind: "used" },
+                { name: "Free space", tokens: 901_700, color: "gray", kind: "free" },
+                { name: "MCP tools (deferred)", tokens: 58_800, color: "gray", kind: "deferred" },
+              ],
+              totalTokens: 37_200,
+            } as unknown as SDKControlGetContextUsageResponse)
+          : unrecordedClaudeContextUsage,
+      });
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make(`attempt-context-breakdown-${answers}`),
+          text: "Continue.",
+          attachments: [],
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        makeAssistantTextFrame({ uuid: "00000000-0000-4000-8000-000000000670", text: "Done." }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000671", result: "Done." }),
+      );
+      const terminal = yield* Queue.take(harness.terminalReceipts);
+      assert.equal(terminal.status, "completed");
+      const completed = harness.events.findLast(
+        (event) =>
+          event.type === "provider_turn.updated" && event.providerTurn.status === "completed",
+      );
+      assert(completed?.type === "provider_turn.updated");
+      if (!answers) {
+        assert.isUndefined(completed.providerTurn.tokenUsage);
+        return;
+      }
+      assert.equal(completed.providerTurn.tokenUsage?.usedTokens, 37_200);
+      assert.deepEqual(completed.providerTurn.tokenUsage?.categories, [
+        { name: "System prompt", tokens: 8_100, kind: "used" },
+        { name: "Messages", tokens: 29_100, kind: "used" },
+        { name: "Free space", tokens: 901_700, kind: "free" },
+        { name: "MCP tools (deferred)", tokens: 58_800, kind: "deferred" },
+      ]);
     }).pipe(
       Effect.provide(
         Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
@@ -5049,6 +5124,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   // The first CLI process keeps streaming until the test ends
                   // it, so Stop stays parked waiting for it to exit.
@@ -5310,6 +5386,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     stopTask: () => Effect.void,
+                    getContextUsage: unrecordedClaudeContextUsage,
                     interrupt: Effect.void,
                     close: Queue.shutdown(queue),
                   };
@@ -10402,6 +10479,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   // End this process stream so openQuery can replace it.
                   close: Queue.shutdown(sdkMessages),
@@ -10590,6 +10668,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     stopTask: () => Effect.void,
+                    getContextUsage: unrecordedClaudeContextUsage,
                     interrupt: Effect.void,
                     close: Queue.shutdown(sdkMessages),
                   };
@@ -10830,6 +10909,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     stopTask: () => Effect.void,
+                    getContextUsage: unrecordedClaudeContextUsage,
                     interrupt: Effect.void,
                     close: Queue.shutdown(sdkMessages),
                   };
@@ -11029,6 +11109,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   applyFlagSettings: () => Effect.void,
                   setPermissionMode: () => Effect.void,
                   stopTask: () => Effect.void,
+                  getContextUsage: unrecordedClaudeContextUsage,
                   interrupt: Effect.void,
                   close: Queue.shutdown(sdkMessages),
                 };
@@ -11210,6 +11291,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     stopTask: () => Effect.void,
+                    getContextUsage: unrecordedClaudeContextUsage,
                     interrupt: Effect.void,
                     close: Queue.shutdown(sdkMessages),
                   };
@@ -11347,6 +11429,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                     applyFlagSettings: () => Effect.void,
                     setPermissionMode: () => Effect.void,
                     stopTask: () => Effect.void,
+                    getContextUsage: unrecordedClaudeContextUsage,
                     interrupt: Effect.void,
                     close: Queue.shutdown(sdkMessages),
                   };

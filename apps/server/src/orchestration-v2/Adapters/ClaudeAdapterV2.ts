@@ -33,6 +33,7 @@ import {
   type SpawnedProcess as ClaudeSpawnedProcess,
   type SDKAssistantMessage,
   type SDKAPIRetryMessage,
+  type SDKControlGetContextUsageResponse,
   type SDKMessage,
   type SDKRateLimitInfo,
   type SDKResultMessage,
@@ -69,6 +70,7 @@ import {
   type OrchestrationV2ProviderSession,
   type OrchestrationV2ProviderThread,
   type OrchestrationV2ProviderTurn,
+  type OrchestrationV2ProviderTurnTokenUsage,
   type OrchestrationV2RuntimeRequest,
   type OrchestrationV2UserInputQuestion,
   type OrchestrationV2Subagent,
@@ -224,6 +226,30 @@ export function claudeProviderTurnTokenUsage(
     outputTokens,
     reasoningOutputTokens: 0,
     ...(promptCacheTtlMs === undefined ? {} : { promptCacheTtlMs }),
+    updatedAt,
+  };
+}
+
+/** Adds the CLI's /context categories to the turn's last reported usage. */
+export function withClaudeContextUsageCategories(
+  usage: OrchestrationV2ProviderTurnTokenUsage,
+  contextUsage: Pick<SDKControlGetContextUsageResponse, "categories" | "totalTokens">,
+  updatedAt: string,
+): OrchestrationV2ProviderTurnTokenUsage {
+  const categories = contextUsage.categories.flatMap((category) => {
+    const name = category.name.trim().slice(0, 64);
+    const tokens = Math.round(category.tokens);
+    return name.length > 0 && Number.isFinite(tokens) && tokens >= 0
+      ? [{ name, tokens, kind: category.kind }]
+      : [];
+  });
+  if (categories.length === 0) return usage;
+  const totalTokens = Math.round(contextUsage.totalTokens);
+  return {
+    ...usage,
+    // The rows add up to the CLI's own total, so the header has to agree with them.
+    ...(Number.isFinite(totalTokens) && totalTokens >= 0 ? { usedTokens: totalTokens } : {}),
+    categories: categories.slice(0, 32),
     updatedAt,
   };
 }
@@ -426,6 +452,10 @@ export interface ClaudeAgentSdkQuerySession {
     mode: PermissionMode,
   ) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
   readonly stopTask: (taskId: string) => Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
+  readonly getContextUsage: Effect.Effect<
+    SDKControlGetContextUsageResponse,
+    ClaudeAgentSdkQueryRunnerError
+  >;
   readonly interrupt: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
   readonly close: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
 }
@@ -922,6 +952,12 @@ export const layerQueryRunner: Layer.Layer<
                 }),
               ),
             ),
+          // Read-only and not part of the conversation, so it stays out of the
+          // protocol log that replay transcripts are recorded from.
+          getContextUsage: Effect.tryPromise({
+            try: () => queryRuntime.getContextUsage({ detail: "summary" }),
+            catch: (cause) => queryRunnerError(cause, "getContextUsage"),
+          }),
           interrupt: Effect.tryPromise({
             try: () => queryRuntime.interrupt(),
             catch: (cause) => queryRunnerError(cause, "interrupt"),
@@ -3050,6 +3086,7 @@ interface ActiveClaudeTurnContext {
   // Usage of the results that steers ended, oldest first. The final result's
   // usage covers only its own segment, so the turn bills these as well.
   readonly steeredSegmentUsage: Array<SDKResultMessage["usage"]>;
+  latestTokenUsage: OrchestrationV2ProviderTurnTokenUsage | undefined;
   readonly subagentsByTaskId: Map<string, ActiveClaudeSubagent>;
   readonly subagentsByToolUseId: Map<string, ActiveClaudeSubagent>;
   readonly subagentNodesByTaskId: Map<string, OrchestrationV2ExecutionNode["id"]>;
@@ -6043,6 +6080,30 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
 
           const threadDisposition = input.threadDisposition ?? "reusable";
+          const latestTokenUsage = input.context.latestTokenUsage;
+          const contextQuery = yield* Ref.get(queryContext);
+          // The summary estimate is local to the CLI, so a slow or missing
+          // answer only drops the breakdown and never holds up the terminal.
+          const tokenUsage =
+            input.status !== "completed" ||
+            latestTokenUsage === undefined ||
+            contextQuery === null ||
+            contextQuery.stopping
+              ? undefined
+              : yield* contextQuery.query.getContextUsage.pipe(
+                  Effect.timeoutOption("3 seconds"),
+                  Effect.map(
+                    Option.map((contextUsage) =>
+                      withClaudeContextUsageCategories(
+                        latestTokenUsage,
+                        contextUsage,
+                        DateTime.formatIso(input.completedAt),
+                      ),
+                    ),
+                  ),
+                  Effect.catch(() => Effect.succeed(Option.none())),
+                  Effect.map(Option.getOrUndefined),
+                );
           const terminalEvent: ProviderAdapter.ProviderAdapterV2Event =
             input.status === "failed"
               ? {
@@ -6086,6 +6147,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                     status: input.status,
                     completedAt: input.completedAt,
                   }),
+                  ...(tokenUsage === undefined ? {} : { tokenUsage }),
                   turnTokenUsage: normalizeClaudeTurnTokenUsage(
                     input.result,
                     input.context.subagentsByTaskId.size > 0 ||
@@ -7250,11 +7312,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   status: "running",
                   startedAt: context.startedAt,
                   completedAt: null,
-                  tokenUsage: claudeProviderTurnTokenUsage(
+                  tokenUsage: (context.latestTokenUsage = claudeProviderTurnTokenUsage(
                     message.message.usage,
                     context.input.modelSelection,
                     DateTime.formatIso(now),
-                  ),
+                  )),
                 },
               });
             }
@@ -8802,6 +8864,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               rateLimitResetTimes: new Map(),
               latestAssistantRateLimited: false,
               steeredSegmentUsage: [],
+              latestTokenUsage: undefined,
               subagentsByTaskId: new Map(),
               subagentsByToolUseId: new Map(),
               subagentNodesByTaskId: new Map(),

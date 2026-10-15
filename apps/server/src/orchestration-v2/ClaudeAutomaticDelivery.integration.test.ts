@@ -29,6 +29,7 @@ import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ClaudeAdapterV2 from "./Adapters/ClaudeAdapterV2.ts";
+import { unrecordedClaudeContextUsage } from "./Adapters/ClaudeAdapterV2.testkit.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
 import * as EffectWorker from "./EffectWorker.ts";
 import * as EventSink from "./EventSink.ts";
@@ -162,6 +163,7 @@ it.effect.each(["child completion", "scheduled message", "user steering"] as con
                 applyFlagSettings: () => Effect.void,
                 setPermissionMode: () => Effect.void,
                 stopTask: () => Effect.void,
+                getContextUsage: unrecordedClaudeContextUsage,
                 interrupt: Effect.die("automatic delivery must never interrupt"),
                 close: Effect.void,
               }),
