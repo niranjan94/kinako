@@ -156,6 +156,17 @@ This removes the selected message and later conversation from the active thread
 and provider history. It does not undo external actions or separate provider
 memory. The action is available only when the provider supports rewind.
 
+## Summarize part of a conversation
+
+Free up context window space without starting a new thread. Under a sent message, open the summarize menu next to **Edit from here** on web and desktop, or the compress icon on mobile, and choose:
+
+- **Summarize from here** replaces that message and everything after it with a summary in the agent's context. Earlier messages stay intact, and the selected prompt returns to the composer. Its attachments come back too on web and desktop; on mobile, attach them again. This needs a provider that supports rewind.
+- **Summarize up to here** replaces everything before that message with a summary. That message and everything after it stay as they are, and the composer is left alone.
+
+You can add a focus to steer what the summary keeps. Files and checkpoints are not changed. The summary is written by the thread's model, or by the model in **Settings → Source Control → Text generation** when the thread's provider cannot write one.
+
+A **Summarized conversation** marker shows where the summary applies. Open it to read the summary and, for **Summarize from here**, the turns it replaced. On a **Summarize up to here** marker, **Restore full context** switches the agent back to the conversation that holds everything; turns taken since the summary are handed over. **Summarize from here** cannot be undone, like **Edit from here**.
+
 ## Prompt stash
 
 On web and desktop, press `Cmd+S` on macOS or `Ctrl+S` on Windows and Linux to save
