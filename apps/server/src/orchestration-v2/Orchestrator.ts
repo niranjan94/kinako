@@ -332,6 +332,11 @@ export interface OrchestratorV2Shape {
     readonly threadId: ThreadId;
     readonly itemId: TurnItemId;
   }) => Effect.Effect<OrchestrationV2TurnItem | null, OrchestratorV2Error>;
+  /** History items of `runIds`, including rolled-back runs. */
+  readonly getRunHistory: (input: {
+    readonly threadId: ThreadId;
+    readonly runIds: ReadonlyArray<RunId>;
+  }) => Effect.Effect<ReadonlyArray<OrchestrationV2TurnItem>, OrchestratorV2Error>;
   readonly getThreadRecords: <K extends ProjectionRecordField>(
     threadId: ThreadId,
     fields: ReadonlyArray<K>,
@@ -556,6 +561,8 @@ function sameAdditionalDirectorySelection(
     )
   );
 }
+
+const SUMMARIZE_BUSY_MESSAGE = "Wait for the agent to finish before summarizing.";
 
 function isBlockingRun(run: OrchestrationV2Run): boolean {
   return (
@@ -10005,7 +10012,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       return { message: "This thread is archived." } as const;
     }
     if (projection.runs.some((run) => isBlockingRun(run) || run.status === "queued")) {
-      return { message: "Wait for the agent to finish before summarizing." } as const;
+      return { message: SUMMARIZE_BUSY_MESSAGE } as const;
     }
     const messageRun = projection.runs.find((run) => run.userMessageId === messageId);
     if (messageRun === undefined || messageRun.status === "rolled_back") {
@@ -10170,7 +10177,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           },
         });
       const target = summarizeBlocker(projection, request.messageId, request.direction);
-      if ("message" in target) return yield* recordFailure(target.message);
+      if ("message" in target) {
+        return yield* recordFailure(
+          target.message === SUMMARIZE_BUSY_MESSAGE
+            ? "A message was sent while the summary was being written. Summarize again once it finishes."
+            : target.message,
+        );
+      }
       const { messageRun, providerThread, coveredRuns } = target;
       const markerId = idAllocator.derive.runSignalTurnItem({
         runId: messageRun.id,
@@ -12261,6 +12274,15 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             (cause) => new OrchestratorProjectionError({ threadId: input.threadId, cause }),
           ),
         ),
+    getRunHistory: (input) =>
+      (input.runIds.length === 0
+        ? Effect.succeed([])
+        : projectionStore.getTurnStartHistory(input.threadId, input.runIds)
+      ).pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: input.threadId, cause }),
+        ),
+      ),
     getThreadRecords: (threadId, fields, filter) =>
       projectionStore
         .getThreadRecords(threadId, fields, filter)
@@ -12390,6 +12412,7 @@ const layerUnavailable: Layer.Layer<OrchestratorV2> = Layer.succeed(
     getTimelinePage: (threadId) => Effect.fail(new OrchestratorProjectionError({ threadId })),
     getMessageCount: (threadId) => Effect.fail(new OrchestratorProjectionError({ threadId })),
     getTurnItem: ({ threadId }) => Effect.fail(new OrchestratorProjectionError({ threadId })),
+    getRunHistory: ({ threadId }) => Effect.fail(new OrchestratorProjectionError({ threadId })),
     getThreadRecords: (threadId) => Effect.fail(new OrchestratorProjectionError({ threadId })),
     getThreadProjection: (threadId) =>
       Effect.fail(

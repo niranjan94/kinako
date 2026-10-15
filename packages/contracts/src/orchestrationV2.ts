@@ -3401,6 +3401,7 @@ export type OrchestrationV2ServerCommand = OrchestrationV2Command | Orchestratio
 export const ORCHESTRATION_V2_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",
+  getRunHistory: "orchestration.getRunHistory",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   searchThreads: "orchestration.searchThreads",
   searchThread: "orchestration.searchThread",
@@ -3808,6 +3809,18 @@ export const OrchestrationV2GetTurnItemResult = Schema.Struct({
 });
 export type OrchestrationV2GetTurnItemResult = typeof OrchestrationV2GetTurnItemResult.Type;
 
+export const OrchestrationV2GetRunHistoryInput = Schema.Struct({
+  threadId: ThreadId,
+  runIds: Schema.Array(RunId),
+});
+export type OrchestrationV2GetRunHistoryInput = typeof OrchestrationV2GetRunHistoryInput.Type;
+
+/** The messages and tool activity of runs, rolled back or not, as bounded text. */
+export const OrchestrationV2GetRunHistoryResult = Schema.Struct({
+  messages: Schema.Array(OrchestrationV2HistoricalMessage),
+});
+export type OrchestrationV2GetRunHistoryResult = typeof OrchestrationV2GetRunHistoryResult.Type;
+
 const WORKFLOW_SCRIPT_ERROR_MESSAGES = {
   "invalid-path": "Workflow scripts must be absolute .js paths.",
   "root-unavailable": "Script root unavailable.",
@@ -3933,6 +3946,10 @@ export const OrchestrationV2RpcSchemas = {
   getTurnItem: {
     input: OrchestrationV2GetTurnItemInput,
     output: OrchestrationV2GetTurnItemResult,
+  },
+  getRunHistory: {
+    input: OrchestrationV2GetRunHistoryInput,
+    output: OrchestrationV2GetRunHistoryResult,
   },
   launchThread: {
     input: OrchestrationV2ThreadLaunchInput,

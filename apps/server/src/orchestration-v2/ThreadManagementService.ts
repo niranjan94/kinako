@@ -16,6 +16,7 @@ import {
   type ModelSelection,
   type OrchestrationV2Actor,
   type OrchestrationV2Command,
+  type OrchestrationV2GetRunHistoryResult,
   type OrchestrationV2GetTurnItemResult,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ConversationMessage,
@@ -49,8 +50,11 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
 import { projectTurnItemForDetail } from "./WireProjection.ts";
+import { historicalMessage } from "@t3tools/provider-core/server/handoffBudget";
 import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
 import * as ServerSettings from "../serverSettings.ts";
+
+const RUN_HISTORY_MESSAGE_CHARS = 4_000;
 
 export type ThreadManagementSendMode = "auto" | "queue" | "steer" | "restart";
 
@@ -330,6 +334,11 @@ export interface ThreadManagementServiceShape {
     readonly threadId: ThreadId;
     readonly itemId: TurnItemId;
   }) => Effect.Effect<OrchestrationV2GetTurnItemResult, Orchestrator.OrchestratorV2Error>;
+  /** The messages and tool activity of runs, rolled back or not, bounded for the wire. */
+  readonly getRunHistory: (input: {
+    readonly threadId: ThreadId;
+    readonly runIds: ReadonlyArray<RunId>;
+  }) => Effect.Effect<OrchestrationV2GetRunHistoryResult, Orchestrator.OrchestratorV2Error>;
   readonly getThreadRecords: Orchestrator.OrchestratorV2["Service"]["getThreadRecords"];
   readonly getThreadProjection: (
     threadId: ThreadId,
@@ -1153,6 +1162,21 @@ const make = Effect.gen(function* () {
       ensureProjectionTranscript(input.threadId).pipe(
         Effect.andThen(orchestrator.getTurnItem(input)),
         Effect.map((item) => ({ item: item === null ? null : projectTurnItemForDetail(item) })),
+      ),
+    getRunHistory: (input) =>
+      ensureProjectionTranscript(input.threadId).pipe(
+        Effect.andThen(orchestrator.getRunHistory(input)),
+        Effect.map((items) => ({
+          messages: items.flatMap((item) => {
+            const message = historicalMessage(item);
+            if (message === null) return [];
+            return [
+              message.text.length > RUN_HISTORY_MESSAGE_CHARS
+                ? { ...message, text: `${message.text.slice(0, RUN_HISTORY_MESSAGE_CHARS)}…` }
+                : message,
+            ];
+          }),
+        })),
       ),
     getThreadRecords: (threadId, fields, filter) =>
       ensureProjectionTranscript(threadId).pipe(
