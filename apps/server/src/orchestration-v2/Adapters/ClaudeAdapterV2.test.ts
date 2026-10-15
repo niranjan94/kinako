@@ -3698,8 +3698,10 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                 { name: "Messages", tokens: 29_100, color: "blue", kind: "used" },
                 { name: "Free space", tokens: 901_700, color: "gray", kind: "free" },
                 { name: "MCP tools (deferred)", tokens: 58_800, color: "gray", kind: "deferred" },
+                { name: "Unclassified", tokens: 1_000, color: "gray" },
               ],
               totalTokens: 37_200,
+              maxTokens: 938_900,
             } as unknown as SDKControlGetContextUsageResponse)
           : unrecordedClaudeContextUsage,
       });
@@ -3733,6 +3735,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         return;
       }
       assert.equal(completed.providerTurn.tokenUsage?.usedTokens, 37_200);
+      assert.equal(completed.providerTurn.tokenUsage?.maxTokens, 938_900);
       assert.deepEqual(completed.providerTurn.tokenUsage?.categories, [
         { name: "System prompt", tokens: 8_100, kind: "used" },
         { name: "Messages", tokens: 29_100, kind: "used" },

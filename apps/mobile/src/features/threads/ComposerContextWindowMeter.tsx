@@ -4,6 +4,7 @@ import {
   type ContextWindowSnapshot,
   deriveContextWindowBreakdown,
   deriveLatestContextWindowSnapshot,
+  formatContextWindowPercentage as formatPercentage,
   formatContextWindowTokens,
   latestProviderTurnTokenUsage,
 } from "@t3tools/client-runtime/context-window";
@@ -41,10 +42,6 @@ function segmentClassName(kind: ContextWindowSegmentKind, usedIndex: number): st
   if (kind === "free") return "bg-subtle-strong";
   if (kind === "buffer") return "bg-icon-subtle";
   return USED_SEGMENT_CLASS_NAMES[usedIndex % USED_SEGMENT_CLASS_NAMES.length]!;
-}
-
-function formatPercentage(value: number): string {
-  return value < 10 ? `${value.toFixed(1).replace(/\.0$/, "")}%` : `${Math.round(value)}%`;
 }
 
 function useThreadContextWindow(
@@ -101,9 +98,9 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
       </View>
       {rows.length > 0 ? (
         <View className="h-2 flex-row gap-px overflow-hidden rounded-full bg-subtle">
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <View
-              key={row.label}
+              key={index}
               className={cn("h-full", row.className)}
               style={{ width: `${share(row.tokens)}%` }}
             />
@@ -112,8 +109,8 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
       ) : null}
       {rows.length > 0 || (breakdown?.deferred.length ?? 0) > 0 ? (
         <View className="gap-2">
-          {rows.map((row) => (
-            <View key={row.label} className="flex-row items-center gap-3">
+          {rows.map((row, index) => (
+            <View key={`segment-${index}`} className="flex-row items-center gap-3">
               <View className={cn("size-2.5 rounded-xs", row.className)} />
               <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
                 {row.label}
@@ -126,8 +123,8 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
               </Text>
             </View>
           ))}
-          {breakdown?.deferred.map((row) => (
-            <View key={row.label} className="flex-row items-center gap-3 opacity-70">
+          {breakdown?.deferred.map((row, index) => (
+            <View key={`deferred-${index}`} className="flex-row items-center gap-3 opacity-70">
               <View className="size-2.5" />
               <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
                 {row.label}
@@ -159,19 +156,26 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
   );
 }
 
-/** Context window ring for the composer toolbar; tapping it opens the breakdown. */
-export function ComposerContextWindowMeter(props: {
+interface ComposerContextWindowMeterProps {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
-}) {
+}
+
+/** Context window ring for the composer toolbar; tapping it opens the breakdown. */
+export function ComposerContextWindowMeter(props: ComposerContextWindowMeterProps) {
   const preferences = useAtomValue(mobilePreferencesAtom);
   const enabled =
     AsyncResult.isSuccess(preferences) && preferences.value.contextWindowIndicatorEnabled !== false;
+  // Gate before subscribing, so a disabled meter does not re-render on every streamed update.
+  return enabled ? <ContextWindowRing {...props} /> : null;
+}
+
+function ContextWindowRing(props: ComposerContextWindowMeterProps) {
   const usage = useThreadContextWindow(props.environmentId, props.threadId);
   const { scale } = useAndroidControlSizing();
   const [open, setOpen] = useState(false);
 
-  if (!enabled || usage === null) return null;
+  if (usage === null) return null;
 
   const percentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const size = Math.round(20 * scale);

@@ -161,6 +161,16 @@ describe("deriveContextWindowBreakdown", () => {
     });
   });
 
+  it("has no token split without a window size to fill", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([], {
+      usedTokens: 42_000,
+      inputTokens: 40_000,
+      outputTokens: 2_000,
+      updatedAt: "2026-10-15T00:00:00.000Z",
+    });
+    expect(deriveContextWindowBreakdown(snapshot!)).toBeNull();
+  });
+
   it("has nothing to break down when only the total is known", () => {
     const snapshot = deriveLatestContextWindowSnapshot([], {
       usedTokens: 42_000,

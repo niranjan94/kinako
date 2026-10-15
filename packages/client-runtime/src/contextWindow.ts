@@ -209,13 +209,14 @@ export function deriveContextWindowBreakdown(
   }
 
   const inputTokens = snapshot.inputTokens;
-  if (inputTokens == null) return null;
+  // Without a window size the split has nothing to fill, and a bar of only
+  // used segments would read as a full window.
+  if (inputTokens == null || snapshot.maxTokens == null) return null;
   const cachedTokens = Math.min(snapshot.cachedInputTokens ?? 0, inputTokens);
   const outputTokens = snapshot.outputTokens ?? 0;
   // Some providers count more in their total than the split they report.
   const otherTokens = Math.max(0, snapshot.usedTokens - inputTokens - outputTokens);
-  const freeTokens =
-    snapshot.maxTokens == null ? 0 : Math.max(0, snapshot.maxTokens - snapshot.usedTokens);
+  const freeTokens = Math.max(0, snapshot.maxTokens - snapshot.usedTokens);
   const segments: Array<ContextWindowSegment> = [
     { label: "Cached input", tokens: cachedTokens, kind: "used" },
     { label: "New input", tokens: inputTokens - cachedTokens, kind: "used" },
@@ -227,6 +228,10 @@ export function deriveContextWindowBreakdown(
   return visible.some((segment) => segment.kind === "used")
     ? { segments: visible, deferred: [], source: "tokens" }
     : null;
+}
+
+export function formatContextWindowPercentage(value: number): string {
+  return value < 10 ? `${value.toFixed(1).replace(/\.0$/, "")}%` : `${Math.round(value)}%`;
 }
 
 export function formatContextWindowTokens(value: number | null): string {
