@@ -617,6 +617,8 @@ function summaryActionPriority(action: ToolGroupAction | T3McpToolSummaryAction)
     case "thread-configure":
     case "thread-fork":
     case "thread-merge":
+    case "thread-summarize":
+    case "thread-summary-restore":
     case "thread-organize":
     case "thread-update":
     case "queue-edit":
