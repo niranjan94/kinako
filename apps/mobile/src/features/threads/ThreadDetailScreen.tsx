@@ -28,6 +28,7 @@ import type {
   ServerConfig as T3ServerConfig,
   ThreadId,
   UsageLimitsReport,
+  ServerProvider,
 } from "@t3tools/contracts";
 import {
   appendCodexArtifactTemplateUsePrompt,
@@ -143,6 +144,7 @@ import {
   ThreadComposer,
 } from "./ThreadComposer";
 import { ComposerPopoverHost } from "./ComposerPopoverHost";
+import { useConversationSummary } from "./use-conversation-summary";
 import { ThreadFeed, type ThreadFeedHistoryControls } from "./ThreadFeed";
 import { useWorkflowCoordinator } from "./WorkflowRunCard";
 import { useThreadTurnSubagents } from "./ThreadAgentsSheet";
@@ -152,6 +154,7 @@ import type { ThreadContentPresentation } from "./threadContentPresentation";
 import { resolveThreadFeedSubmissionAnchor } from "./thread-feed-live-follow";
 import { useGlobalVoiceInput } from "../voice-input/VoiceInputProvider";
 
+const EMPTY_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 export interface ThreadDetailScreenProps {
   readonly worktreeSetup?: WorktreeSetupCardProps | null;
   readonly setupWorkingStartedAt?: string | null;
@@ -1055,6 +1058,15 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     ],
   );
 
+  const conversationSummary = useConversationSummary({
+    environmentId: props.environmentId,
+    threadId: props.selectedThread.id,
+    draftKey: props.composerDraftKey,
+    providers: props.serverConfig?.providers ?? EMPTY_PROVIDERS,
+    enabled: props.canOperateThread,
+    threadBusy: props.activeThreadBusy,
+  });
+
   const handleEditPendingMessage = useCallback(async (message: QueuedThreadMessage) => {
     try {
       if (
@@ -1163,6 +1175,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             )}
           >
             <ThreadFeed
+              conversationSummary={conversationSummary}
               environmentId={props.environmentId}
               threadId={props.selectedThread.id}
               workspaceRoot={props.threadCwd}
