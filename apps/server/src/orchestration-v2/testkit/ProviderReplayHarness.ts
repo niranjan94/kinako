@@ -48,6 +48,8 @@ import * as ProviderTurnStartServiceTestkit from "../ProviderTurnStartService.te
 import * as McpAppModelContext from "../../mcpApps/McpAppModelContext.ts";
 import * as RunExecutionService from "../RunExecutionService.ts";
 import * as RunFinalizationService from "../RunFinalizationService.ts";
+import * as TextGeneration from "../../textGeneration/TextGeneration.ts";
+import * as ThreadSummaryService from "../ThreadSummaryService.ts";
 import * as ThreadTitleRegenerationService from "../ThreadTitleRegenerationService.ts";
 import * as RuntimePolicy from "../RuntimePolicy.ts";
 import * as TurnItemPositionStore from "../TurnItemPositionStore.ts";
@@ -275,6 +277,9 @@ export function layerWithRegistry<Error>(
     // as server startup does after a crash or restart.
     readonly recoverOnStartup?: boolean;
     readonly continueThreadsAfterServerUpdate?: boolean;
+    // Runs the real summary service over this text generation. Without it,
+    // summarize requests are accepted and never complete.
+    readonly textGeneration?: TextGeneration.TextGeneration["Service"];
   } = {},
 ): Layer.Layer<
   | Orchestrator.OrchestratorV2
@@ -467,6 +472,23 @@ export function layerWithRegistry<Error>(
       });
     }),
   ).pipe(Layer.provide(layerOrchestratorProvided));
+  const layerThreadSummary =
+    options.textGeneration === undefined
+      ? Layer.succeed(
+          ThreadSummaryService.ThreadSummaryService,
+          ThreadSummaryService.ThreadSummaryService.of({ execute: () => Effect.void }),
+        )
+      : ThreadSummaryService.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              layerThreadManagementProvided,
+              layerStores,
+              layerRuntime,
+              layerServerSettings,
+              Layer.succeed(TextGeneration.TextGeneration, options.textGeneration),
+            ),
+          ),
+        );
   const layerContinuationWorkerProvided =
     options.runContinuationWorker === true
       ? ProviderContinuationService.layer.pipe(
@@ -489,6 +511,7 @@ export function layerWithRegistry<Error>(
         layerProviderTurnStartServiceProvided,
         layerRuntimeRequestServiceProvided,
         layerThreadTitleRegenerationTest,
+        layerThreadSummary,
         layerServerSettings,
         layerThreadManagementProvided,
       ),

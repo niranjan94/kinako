@@ -85,6 +85,7 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("provider-thread.rollback"),
     restoreFiles: Schema.optional(Schema.Boolean),
+    keepCheckpoints: Schema.optional(Schema.Boolean),
     providerThreadId: ProviderThreadId,
     checkpointId: CheckpointId,
     scopeId: CheckpointScopeId,
@@ -112,6 +113,10 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
       Schema.Struct({ type: Schema.Literal("regenerate") }),
     ]),
   }),
+  /** Generates the summary for the thread's summarize request, which is this effect's command. */
+  Schema.Struct({
+    type: Schema.Literal("thread-summary.generate"),
+  }),
   /** Follows a Stop: sends `thread.stop` to every delegated task under the stopped thread. */
   Schema.Struct({
     type: Schema.Literal("delegated-tasks.stop"),
@@ -129,6 +134,7 @@ export const REPLAY_SAFE_EFFECT_TYPES_AFTER_PROCESS_LOSS = [
   "preview.cleanup",
   "attachment.cleanup",
   "thread-title.generate",
+  "thread-summary.generate",
   "delegated-tasks.stop",
 ] as const satisfies ReadonlyArray<OrchestrationEffectRequestV2["type"]>;
 

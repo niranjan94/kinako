@@ -31,6 +31,7 @@ import {
   type ThreadPullRequestWatch,
   type OrchestrationV2AppThread,
   type OrchestrationV2ContextHandoff,
+  type OrchestrationV2ConversationSummaryDirection,
   type OrchestrationV2ContextSourcePoint,
   type OrchestrationV2ContextTransfer,
   type OrchestrationV2ContextTransferResolution,
@@ -87,6 +88,10 @@ import { CheckpointServiceV2 } from "./CheckpointService.ts";
 import { CommandPolicyV2, resolveMessageDispatchIntent } from "./CommandPolicy.ts";
 import { CommandReceiptStoreV2 } from "./CommandReceiptStore.ts";
 import { ContextHandoffServiceV2 } from "./ContextHandoffService.ts";
+import {
+  conversationSummaryCoveredRuns,
+  conversationSummaryHistoricalMessage,
+} from "./ConversationSummary.ts";
 import { notificationTurnItem } from "@t3tools/provider-core/server/notification";
 import { isRestartContinuationSource, runOutcome } from "./RestartBackgroundNote.ts";
 import {
@@ -491,6 +496,10 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.user-input.dismiss":
     case "checkpoint.rollback":
     case "checkpoint.rollback.fail":
+    case "thread.summarize":
+    case "thread.summarize.complete":
+    case "thread.summarize.fail":
+    case "thread.summary.restore":
     case "thread.background-work.settle":
     case "thread.stop":
     case "provider.switch":
@@ -9951,6 +9960,659 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     });
 
   /**
+   * Where a `from_here` summary rewinds the provider: the checkpoint before
+   * `messageRun`, on the active provider thread. A string explains why there
+   * is none.
+   */
+  const summaryRollbackTarget = (
+    projection: Pick<
+      OrchestrationV2ThreadProjection,
+      "checkpoints" | "checkpointScopes" | "runs" | "providerTurns" | "attempts"
+    >,
+    messageRun: OrchestrationV2Run,
+    providerThread: OrchestrationV2ProviderThread,
+  ) => {
+    const targetOrdinal = messageRun.ordinal - 1;
+    const checkpoint = projection.checkpoints.findLast((candidate) =>
+      targetOrdinal === 0
+        ? candidate.ordinalWithinScope === 0 && candidate.appRunOrdinal === null
+        : candidate.appRunOrdinal === targetOrdinal,
+    );
+    const scope = projection.checkpointScopes.find(
+      (candidate) => candidate.id === checkpoint?.scopeId,
+    );
+    if (checkpoint === undefined || checkpoint.status !== "ready" || scope === undefined) {
+      return "There is no checkpoint before this message to rewind the agent's context to.";
+    }
+    if (targetOrdinal > 0) {
+      const targetRun = projection.runs.find((run) => run.ordinal === targetOrdinal);
+      const targetTurn =
+        targetRun === undefined ? undefined : providerTurnForRun(projection, targetRun);
+      if (targetTurn?.providerThreadId !== providerThread.id) {
+        return "The agent's context before this message belongs to another provider thread.";
+      }
+    }
+    return { checkpoint, scope };
+  };
+
+  /** The summarize preconditions both the request and its completion check. */
+  const summarizeBlocker = (
+    projection: Pick<OrchestrationV2ThreadProjection, "thread" | "runs" | "providerThreads">,
+    messageId: MessageId,
+    direction: OrchestrationV2ConversationSummaryDirection,
+  ) => {
+    if (projection.thread.deletedAt !== null || projection.thread.archivedAt !== null) {
+      return { message: "This thread is archived." } as const;
+    }
+    if (projection.runs.some((run) => isBlockingRun(run) || run.status === "queued")) {
+      return { message: "Wait for the agent to finish before summarizing." } as const;
+    }
+    const messageRun = projection.runs.find((run) => run.userMessageId === messageId);
+    if (messageRun === undefined || messageRun.status === "rolled_back") {
+      return { message: "This message is no longer part of the conversation." } as const;
+    }
+    const providerThread = projection.providerThreads.find(
+      (candidate) => candidate.id === projection.thread.activeProviderThreadId,
+    );
+    if (providerThread === undefined || providerThread.providerSessionId === null) {
+      return { message: "This thread has no provider conversation to summarize." } as const;
+    }
+    const coveredRuns = conversationSummaryCoveredRuns(projection.runs, messageRun, direction);
+    if (coveredRuns.length === 0) {
+      return {
+        message:
+          direction === "up_to_here"
+            ? "There is nothing before this message to summarize."
+            : "There is nothing from this message on to summarize.",
+      } as const;
+    }
+    return { messageRun, providerThread, coveredRuns } as const;
+  };
+
+  const dispatchThreadSummarize = (
+    command: Extract<OrchestrationV2Command, { readonly type: "thread.summarize" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) =>
+    Effect.gen(function* () {
+      const projection = yield* loadProjectionForCommand(
+        command,
+        ["providerThreads", "checkpoints", "checkpointScopes", "runs", "providerTurns", "attempts"],
+        { turnItemTypes: [] },
+      );
+      const reject = (cause: string) =>
+        new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause,
+        });
+      const inFlight = projection.thread.summarize;
+      if (inFlight !== null && inFlight !== undefined && inFlight.failure === undefined) {
+        return yield* reject("A summary is already being written for this thread.");
+      }
+      const target = summarizeBlocker(projection, command.messageId, command.direction);
+      if ("message" in target) return yield* reject(target.message);
+
+      const capabilities = yield* providerAdapters
+        .get(target.providerThread.providerInstanceId)
+        .pipe(
+          Effect.flatMap((adapter) => adapter.getCapabilities()),
+          Effect.mapError(
+            (cause) =>
+              new OrchestratorProviderAdapterError({
+                commandId: command.commandId,
+                providerInstanceId: target.providerThread.providerInstanceId,
+                cause,
+              }),
+          ),
+        );
+      const policyInput = {
+        commandId: command.commandId,
+        threadId: command.threadId,
+        providerInstanceId: target.providerThread.providerInstanceId,
+        capabilities,
+      };
+      if (command.direction === "from_here") {
+        yield* enforceCommandPolicy(command)(commandPolicy.ensureRollback(policyInput));
+        const rollbackTarget = summaryRollbackTarget(
+          projection,
+          target.messageRun,
+          target.providerThread,
+        );
+        if (typeof rollbackTarget === "string") return yield* reject(rollbackTarget);
+      } else {
+        yield* enforceCommandPolicy(command)(
+          commandPolicy.ensureContextHandoff({ ...policyInput, strategy: "full_thread_summary" }),
+        );
+      }
+
+      const now = yield* DateTime.now;
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "thread.metadata-updated",
+        threadId: command.threadId,
+        providerInstanceId: projection.thread.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          ...projection.thread,
+          summarize: {
+            requestId: command.commandId,
+            messageId: command.messageId,
+            direction: command.direction,
+            ...(command.instructions === undefined ? {} : { instructions: command.instructions }),
+            startedAt: now,
+          },
+          updatedAt: now,
+        },
+      });
+      yield* Ref.update(effects, (existing) => [
+        ...existing,
+        {
+          id: `effect:${command.commandId}:thread-summary.generate`,
+          commandId: command.commandId,
+          threadId: command.threadId,
+          request: { type: "thread-summary.generate" },
+        } satisfies PendingOrchestrationEffectV2,
+      ]);
+    });
+
+  /**
+   * Replaces the covered runs in provider context with the generated summary.
+   * A thread that changed while the summary was written records the failure
+   * rather than rejecting, so the effect that delivered the summary settles.
+   */
+  const dispatchThreadSummarizeComplete = (
+    command: Extract<
+      OrchestrationV2InternalCommand,
+      { readonly type: "thread.summarize.complete" }
+    >,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) =>
+    Effect.gen(function* () {
+      const projection = yield* projectionStore
+        .getThreadRecords(
+          command.threadId,
+          [
+            "providerThreads",
+            "checkpoints",
+            "checkpointScopes",
+            "runs",
+            "providerTurns",
+            "attempts",
+          ],
+          { turnItemTypes: [] },
+        )
+        .pipe(mapDispatchError(command));
+      const request = projection.thread.summarize;
+      if (
+        request === null ||
+        request === undefined ||
+        request.requestId !== command.requestId ||
+        request.failure !== undefined
+      ) {
+        return;
+      }
+      const now = yield* DateTime.now;
+      const emitEvent = emit(events, command);
+      const recordFailure = (failure: string) =>
+        emitEvent({
+          type: "thread.metadata-updated",
+          threadId: command.threadId,
+          providerInstanceId: projection.thread.providerInstanceId,
+          occurredAt: now,
+          payload: {
+            ...projection.thread,
+            summarize: { ...request, failure },
+            updatedAt: now,
+          },
+        });
+      const target = summarizeBlocker(projection, request.messageId, request.direction);
+      if ("message" in target) return yield* recordFailure(target.message);
+      const { messageRun, providerThread, coveredRuns } = target;
+      const markerId = idAllocator.derive.runSignalTurnItem({
+        runId: messageRun.id,
+        signal: `conversation-summary:${command.requestId}`,
+      });
+      const handoffId = yield* mapDispatchError(command)(
+        idAllocator.allocate.contextHandoff({
+          threadId: command.threadId,
+          fromProviderInstanceId: providerThread.providerInstanceId,
+          toProviderInstanceId: providerThread.providerInstanceId,
+        }),
+      );
+      const summaryMessage = conversationSummaryHistoricalMessage({
+        threadId: command.threadId,
+        itemId: markerId,
+        direction: request.direction,
+        summary: command.summary,
+      });
+      const markerBase = {
+        id: markerId,
+        threadId: command.threadId,
+        providerTurnId: null,
+        nativeItemRef: null,
+        parentItemId: null,
+        // Sorts after the previous run's items and before the summarized message.
+        ordinal: messageRun.ordinal * 100 - 2,
+        status: "completed",
+        title: "Summarized conversation",
+        startedAt: now,
+        completedAt: now,
+        updatedAt: now,
+        type: "compaction",
+        driver: providerThread.driver,
+        summary: command.summary,
+      } as const;
+
+      if (request.direction === "from_here") {
+        const rollbackTarget = summaryRollbackTarget(projection, messageRun, providerThread);
+        if (typeof rollbackTarget === "string") return yield* recordFailure(rollbackTarget);
+        // The marker belongs to the last kept run, so rewinding past it hides the marker too.
+        const anchorRun = projection.runs
+          .filter((run) => run.ordinal < messageRun.ordinal && run.status !== "rolled_back")
+          .toSorted((left, right) => left.ordinal - right.ordinal)
+          .at(-1);
+        const handoff: OrchestrationV2ContextHandoff = {
+          id: handoffId,
+          transferId: null,
+          threadId: command.threadId,
+          targetRunId: messageRun.id,
+          fromProviderThreadIds: [providerThread.id],
+          toProviderThreadId: providerThread.id,
+          coveredRunOrdinals: {
+            from: coveredRuns[0]!.ordinal,
+            to: coveredRuns.at(-1)!.ordinal,
+          },
+          strategy: "manual_context",
+          status: "ready",
+          summaryMessageId: null,
+          summaryText: command.summary,
+          history: {
+            messages: [summaryMessage],
+            coverage: `Conversation summary. Thread: ${command.threadId}. Summarized app runs: ${coveredRuns[0]!.ordinal}-${coveredRuns.at(-1)!.ordinal}. The original turns remain readable with t3_thread_read.`,
+            omittedItems: 0,
+          },
+          deliverOnNextTurn: true,
+          createdByProviderInstanceId: providerThread.providerInstanceId,
+          createdAt: now,
+          updatedAt: now,
+        };
+        yield* emitEvent({
+          type: "thread.metadata-updated",
+          threadId: command.threadId,
+          providerInstanceId: projection.thread.providerInstanceId,
+          occurredAt: now,
+          payload: {
+            ...projection.thread,
+            summarize: null,
+            rollbackRequestId: command.commandId,
+            rollbackFailure: null,
+            updatedAt: now,
+          },
+        });
+        yield* emitEvent({
+          type: "context-handoff.updated",
+          threadId: command.threadId,
+          providerInstanceId: providerThread.providerInstanceId,
+          occurredAt: now,
+          payload: handoff,
+        });
+        yield* emitEvent({
+          type: "provider-thread.updated",
+          threadId: command.threadId,
+          driver: providerThread.driver,
+          providerInstanceId: providerThread.providerInstanceId,
+          occurredAt: now,
+          payload: {
+            ...providerThread,
+            handoffIds: [...providerThread.handoffIds, handoff.id],
+            updatedAt: now,
+          },
+        });
+        yield* emitEvent({
+          type: "turn-item.updated",
+          threadId: command.threadId,
+          ...(anchorRun === undefined ? {} : { runId: anchorRun.id }),
+          providerInstanceId: providerThread.providerInstanceId,
+          occurredAt: now,
+          payload: {
+            ...markerBase,
+            runId: anchorRun?.id ?? null,
+            nodeId: anchorRun?.rootNodeId ?? null,
+            providerThreadId: providerThread.id,
+            range: {
+              direction: request.direction,
+              messageId: request.messageId,
+              coveredRunIds: coveredRuns.map((run) => run.id),
+              ...(request.instructions === undefined ? {} : { instructions: request.instructions }),
+            },
+          },
+        });
+        yield* emitEvent({
+          type: "checkpoint.rollback-requested",
+          threadId: command.threadId,
+          providerInstanceId: providerThread.providerInstanceId,
+          occurredAt: now,
+          payload: {
+            scopeId: rollbackTarget.scope.id,
+            checkpointId: rollbackTarget.checkpoint.id,
+            requestedAt: now,
+          },
+        });
+        yield* Ref.update(effects, (existing) => [
+          ...existing,
+          {
+            id: `effect:${command.commandId}:provider-thread.rollback:${providerThread.id}:${rollbackTarget.checkpoint.id}`,
+            commandId: command.commandId,
+            threadId: command.threadId,
+            request: {
+              type: "provider-thread.rollback",
+              restoreFiles: false,
+              keepCheckpoints: true,
+              providerThreadId: providerThread.id,
+              checkpointId: rollbackTarget.checkpoint.id,
+              scopeId: rollbackTarget.scope.id,
+            },
+          } satisfies PendingOrchestrationEffectV2,
+        ]);
+        return;
+      }
+
+      const adapter = yield* providerAdapters.get(providerThread.providerInstanceId).pipe(
+        Effect.mapError(
+          (cause) =>
+            new OrchestratorProviderAdapterError({
+              commandId: command.commandId,
+              providerInstanceId: providerThread.providerInstanceId,
+              cause,
+            }),
+        ),
+      );
+      const summaryProviderSessionId = yield* mapDispatchError(command)(
+        providerSessionIdFor({
+          adapter,
+          providerInstanceId: providerThread.providerInstanceId,
+          threadId: command.threadId,
+        }),
+      );
+      const summaryProviderThreadId = idAllocator.derive.providerThread({
+        driver: providerThread.driver,
+        nativeThreadId: `pending:summary:${command.requestId}`,
+      });
+      const keptRuns = projection.runs
+        .filter(
+          (run) =>
+            run.ordinal >= messageRun.ordinal &&
+            (run.status === "completed" ||
+              run.status === "interrupted" ||
+              run.status === "failed" ||
+              run.status === "cancelled"),
+        )
+        .toSorted((left, right) => left.ordinal - right.ordinal);
+      const prepared = yield* contextHandoffService
+        .prepareProviderHandoff({
+          threadId: command.threadId,
+          targetRunId: messageRun.id,
+          transferId: null,
+          fromProviderThreadIds: [providerThread.id],
+          toProviderThreadId: summaryProviderThreadId,
+          fromProviderInstanceId: providerThread.providerInstanceId,
+          toProviderInstanceId: providerThread.providerInstanceId,
+          coveredRunOrdinals: {
+            from: coveredRuns[0]!.ordinal,
+            to: (keptRuns.at(-1) ?? coveredRuns.at(-1)!).ordinal,
+          },
+          strategy: "full_thread_summary",
+          items: yield* readHandoffItems(
+            command.threadId,
+            keptRuns.map((run) => run.id),
+          ),
+          runs: projection.runs,
+          createdAt: now,
+        })
+        .pipe(mapDispatchError(command));
+      const handoff: OrchestrationV2ContextHandoff = {
+        ...prepared,
+        id: handoffId,
+        summaryText: command.summary,
+        history: {
+          ...prepared.history!,
+          messages: [summaryMessage, ...prepared.history!.messages],
+        },
+        deliverOnNextTurn: true,
+      };
+      const summaryProviderThread: OrchestrationV2ProviderThread = {
+        id: summaryProviderThreadId,
+        driver: providerThread.driver,
+        providerInstanceId: providerThread.providerInstanceId,
+        providerSessionId: summaryProviderSessionId,
+        appThreadId: command.threadId,
+        ownerNodeId: null,
+        nativeThreadRef: null,
+        nativeConversationHeadRef: null,
+        status: "not_loaded",
+        firstRunOrdinal: null,
+        lastRunOrdinal: null,
+        handoffIds: [handoff.id],
+        forkedFrom: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      // Metadata first: its payload carries activeProviderThreadId, which the
+      // provider thread update below then moves to the summary thread.
+      yield* emitEvent({
+        type: "thread.metadata-updated",
+        threadId: command.threadId,
+        providerInstanceId: projection.thread.providerInstanceId,
+        occurredAt: now,
+        payload: { ...projection.thread, summarize: null, updatedAt: now },
+      });
+      yield* emitEvent({
+        type: "context-handoff.updated",
+        threadId: command.threadId,
+        providerInstanceId: providerThread.providerInstanceId,
+        occurredAt: now,
+        payload: handoff,
+      });
+      yield* emitEvent({
+        type: "turn-item.updated",
+        threadId: command.threadId,
+        runId: messageRun.id,
+        providerInstanceId: providerThread.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          ...markerBase,
+          runId: messageRun.id,
+          nodeId: messageRun.rootNodeId,
+          providerThreadId: summaryProviderThread.id,
+          range: {
+            direction: request.direction,
+            messageId: request.messageId,
+            coveredRunIds: coveredRuns.map((run) => run.id),
+            ...(request.instructions === undefined ? {} : { instructions: request.instructions }),
+            previousProviderThreadId: providerThread.id,
+            summaryProviderThreadId: summaryProviderThread.id,
+          },
+        },
+      });
+      yield* emitEvent({
+        type: "provider-thread.updated",
+        threadId: command.threadId,
+        driver: summaryProviderThread.driver,
+        providerInstanceId: summaryProviderThread.providerInstanceId,
+        occurredAt: now,
+        payload: summaryProviderThread,
+      });
+    });
+
+  const dispatchThreadSummarizeFail = (
+    command: Extract<OrchestrationV2InternalCommand, { readonly type: "thread.summarize.fail" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) =>
+    Effect.gen(function* () {
+      const thread = yield* projectionStore
+        .getThread(command.threadId)
+        .pipe(mapDispatchError(command));
+      const request = thread.summarize;
+      if (
+        thread.deletedAt !== null ||
+        request === null ||
+        request === undefined ||
+        request.requestId !== command.requestId ||
+        request.failure !== undefined
+      ) {
+        return;
+      }
+      const now = yield* DateTime.now;
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "thread.metadata-updated",
+        threadId: command.threadId,
+        providerInstanceId: thread.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          ...thread,
+          summarize: { ...request, failure: command.message },
+          updatedAt: now,
+        },
+      });
+    });
+
+  /**
+   * Moves an `up_to_here` summary back to the provider thread that holds the
+   * full context. Turns taken on the summary thread since are handed over.
+   */
+  const dispatchThreadSummaryRestore = (
+    command: Extract<OrchestrationV2Command, { readonly type: "thread.summary.restore" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) =>
+    Effect.gen(function* () {
+      const projection = yield* loadProjectionForCommand(
+        command,
+        ["providerThreads", "runs", "turnItems"],
+        { turnItemTypes: ["compaction"] },
+      );
+      const reject = (cause: string) =>
+        new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause,
+        });
+      const marker = projection.turnItems.find(
+        (item): item is Extract<OrchestrationV2TurnItem, { readonly type: "compaction" }> =>
+          item.id === command.turnItemId && item.type === "compaction",
+      );
+      const range = marker?.range;
+      if (
+        marker === undefined ||
+        range === undefined ||
+        range.direction !== "up_to_here" ||
+        range.previousProviderThreadId === undefined ||
+        range.summaryProviderThreadId === undefined
+      ) {
+        return yield* reject("This summary cannot be restored.");
+      }
+      if (range.restoredAt !== undefined) {
+        return yield* reject("The full context was already restored.");
+      }
+      if (projection.thread.activeProviderThreadId !== range.summaryProviderThreadId) {
+        return yield* reject("The thread has moved to another provider conversation since.");
+      }
+      if (projection.runs.some((run) => isBlockingRun(run) || run.status === "queued")) {
+        return yield* reject("Wait for the agent to finish before restoring the full context.");
+      }
+      const previous = projection.providerThreads.find(
+        (candidate) => candidate.id === range.previousProviderThreadId,
+      );
+      if (previous === undefined) {
+        return yield* reject("The provider conversation with the full context is gone.");
+      }
+      const now = yield* DateTime.now;
+      const emitEvent = emit(events, command);
+      const runsSince = projection.runs
+        .filter(
+          (run) =>
+            run.providerThreadId === range.summaryProviderThreadId &&
+            (run.status === "completed" ||
+              run.status === "interrupted" ||
+              run.status === "failed" ||
+              run.status === "cancelled"),
+        )
+        .toSorted((left, right) => left.ordinal - right.ordinal);
+      let handoffIds = previous.handoffIds;
+      if (runsSince.length > 0) {
+        const handoff = yield* contextHandoffService
+          .prepareProviderHandoff({
+            threadId: command.threadId,
+            targetRunId: runsSince.at(-1)!.id,
+            transferId: null,
+            fromProviderThreadIds: [range.summaryProviderThreadId],
+            toProviderThreadId: previous.id,
+            fromProviderInstanceId: previous.providerInstanceId,
+            toProviderInstanceId: previous.providerInstanceId,
+            coveredRunOrdinals: {
+              from: runsSince[0]!.ordinal,
+              to: runsSince.at(-1)!.ordinal,
+            },
+            strategy: "delta_since_target_last_seen",
+            items: yield* readHandoffItems(
+              command.threadId,
+              runsSince.map((run) => run.id),
+            ),
+            runs: projection.runs,
+            createdAt: now,
+          })
+          .pipe(mapDispatchError(command));
+        yield* emitEvent({
+          type: "context-handoff.updated",
+          threadId: command.threadId,
+          providerInstanceId: previous.providerInstanceId,
+          occurredAt: now,
+          payload: { ...handoff, deliverOnNextTurn: true },
+        });
+        handoffIds = [...handoffIds, handoff.id];
+      }
+      const previousProviderSessionId =
+        previous.providerSessionId ??
+        (yield* providerAdapters.get(previous.providerInstanceId).pipe(
+          Effect.flatMap((adapter) =>
+            providerSessionIdFor({
+              adapter,
+              providerInstanceId: previous.providerInstanceId,
+              threadId: command.threadId,
+            }),
+          ),
+          mapDispatchError(command),
+        ));
+      yield* emitEvent({
+        type: "turn-item.updated",
+        threadId: command.threadId,
+        ...(marker.runId === null ? {} : { runId: marker.runId }),
+        providerInstanceId: previous.providerInstanceId,
+        occurredAt: now,
+        payload: { ...marker, range: { ...range, restoredAt: now }, updatedAt: now },
+      });
+      yield* emitEvent({
+        type: "provider-thread.updated",
+        threadId: command.threadId,
+        driver: previous.driver,
+        providerInstanceId: previous.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          ...previous,
+          providerSessionId: previousProviderSessionId,
+          handoffIds,
+          updatedAt: now,
+        },
+      });
+    });
+
+  /**
    * Parent thread of an app-owned delegated child, or undefined when the
    * thread is not one. Thread lineage and fork origin are immutable, so this
    * is safe to read without holding either thread's dispatch lock.
@@ -11064,6 +11726,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "checkpoint.rollback.fail":
         yield* dispatchCheckpointRollbackFail(command, events);
+        break;
+      case "thread.summarize":
+        yield* dispatchThreadSummarize(command, events, effects);
+        break;
+      case "thread.summarize.complete":
+        yield* dispatchThreadSummarizeComplete(command, events, effects);
+        break;
+      case "thread.summarize.fail":
+        yield* dispatchThreadSummarizeFail(command, events);
+        break;
+      case "thread.summary.restore":
+        yield* dispatchThreadSummaryRestore(command, events);
         break;
       case "thread.background-work.settle":
         yield* dispatchBackgroundWorkSettle(command, events, effects);

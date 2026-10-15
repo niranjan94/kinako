@@ -24,6 +24,7 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "./ProviderTurnStartService.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
+import * as ThreadSummaryService from "./ThreadSummaryService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -87,6 +88,7 @@ export const layerExecutor: Layer.Layer<
   | ProviderTurnControlService.ProviderTurnControlServiceV2
   | ProviderTurnStartService.ProviderTurnStartServiceV2
   | RuntimeRequestService.RuntimeRequestServiceV2
+  | ThreadSummaryService.ThreadSummaryService
   | ThreadTitleRegenerationService.ThreadTitleRegenerationService
   | ThreadManagementService.ThreadManagementService
   | ServerSettings.ServerSettingsService
@@ -102,6 +104,7 @@ export const layerExecutor: Layer.Layer<
     const runtimeRequests = yield* RuntimeRequestService.RuntimeRequestServiceV2;
     const threadTitleRegeneration =
       yield* ThreadTitleRegenerationService.ThreadTitleRegenerationService;
+    const threadSummary = yield* ThreadSummaryService.ThreadSummaryService;
     const threads = yield* ThreadManagementService.ThreadManagementService;
     const settings = yield* ServerSettings.ServerSettingsService;
     return OrchestrationEffectExecutorV2.of({
@@ -424,6 +427,9 @@ export const layerExecutor: Layer.Layer<
                 ...(effect.request.restoreFiles === undefined
                   ? {}
                   : { restoreFiles: effect.request.restoreFiles }),
+                ...(effect.request.keepCheckpoints === undefined
+                  ? {}
+                  : { keepCheckpoints: effect.request.keepCheckpoints }),
               })
               .pipe(
                 // The last failed attempt tells waiting clients it failed,
@@ -515,6 +521,19 @@ export const layerExecutor: Layer.Layer<
                 requestId: effect.commandId,
                 kind: effect.request.kind,
               })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestrationEffectExecutionError({
+                      effectId: effect.id,
+                      effectType: effect.request.type,
+                      cause,
+                    }),
+                ),
+              );
+          case "thread-summary.generate":
+            return threadSummary
+              .execute({ threadId: effect.threadId, requestId: effect.commandId, willRetry })
               .pipe(
                 Effect.mapError(
                   (cause) =>
