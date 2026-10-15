@@ -18,6 +18,11 @@ const SUMMARIZABLE_RUN_STATUSES: ReadonlySet<OrchestrationV2Run["status"]> = new
 const MAX_TRANSCRIPT_ITEM_CHARS = 6_000;
 const MAX_TRANSCRIPT_CHARS = 400_000;
 
+/** Whether `run` settled and is still part of the provider conversation. */
+export function isSummarizableRun(run: OrchestrationV2Run): boolean {
+  return SUMMARIZABLE_RUN_STATUSES.has(run.status);
+}
+
 /** Runs whose provider context a summary at `messageRun` replaces, oldest first. */
 export function conversationSummaryCoveredRuns(
   runs: ReadonlyArray<OrchestrationV2Run>,
@@ -27,7 +32,7 @@ export function conversationSummaryCoveredRuns(
   return runs
     .filter(
       (run) =>
-        SUMMARIZABLE_RUN_STATUSES.has(run.status) &&
+        isSummarizableRun(run) &&
         (direction === "from_here"
           ? run.ordinal >= messageRun.ordinal
           : run.ordinal < messageRun.ordinal),

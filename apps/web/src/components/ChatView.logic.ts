@@ -43,6 +43,10 @@ import {
 } from "@t3tools/shared/codexArtifactTemplates";
 import { presentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
+  conversationSummaryMarkerIds,
+  conversationSummaryOutcome,
+} from "@t3tools/client-runtime/state/conversationSummary";
+import {
   type ChatMessage,
   isImageAttachment,
   type SessionPhase,
@@ -1205,36 +1209,22 @@ export async function waitForThreadSummary(input: {
 }): Promise<void> {
   const threadAtom = environmentThreadDetails.stateAtom(input.threadRef);
   const initial = Option.getOrNull(appAtomRegistry.get(threadAtom).data);
-  const messageRunId = initial?.messages.find((message) => message.id === input.messageId)?.runId;
-  if (messageRunId === undefined) {
+  if (!initial?.messages.some((message) => message.id === input.messageId)) {
     throw new Error("The message to summarize is no longer available.");
   }
-  const existingMarkers = new Set(
-    initial?.turnItems.filter((item) => item.type === "compaction").map((item) => item.id),
-  );
-  // The server applies the summary under this command, which also requests the rollback.
-  const completionId = `${input.requestId}:summary-complete`;
+  const request = {
+    requestId: input.requestId,
+    messageId: input.messageId,
+    direction: input.direction,
+    existingMarkerIds: conversationSummaryMarkerIds(initial),
+  };
   return waitForThreadOutcome({
     threadRef: input.threadRef,
     action: input.summarize,
     inspect: (thread) => {
-      const request = thread.thread.summarize;
-      if (request?.requestId === input.requestId && request.failure !== undefined) {
-        return new Error(request.failure);
-      }
-      const rollbackFailure = thread.thread.rollbackFailure;
-      if (rollbackFailure?.requestId === completionId) return new Error(rollbackFailure.message);
-      const applied = thread.turnItems.some(
-        (item) =>
-          item.type === "compaction" &&
-          item.range?.messageId === input.messageId &&
-          !existingMarkers.has(item.id),
-      );
-      if (!applied) return undefined;
-      if (input.direction === "up_to_here") return true;
-      return thread.runs.some((run) => run.id === messageRunId && run.status === "rolled_back")
-        ? true
-        : undefined;
+      const outcome = conversationSummaryOutcome(thread, request);
+      if (outcome === null) return undefined;
+      return outcome.type === "failed" ? new Error(outcome.message) : true;
     },
     timeoutMessage: "Timed out waiting for the summary.",
     timeoutMs: input.timeoutMs ?? 600_000,

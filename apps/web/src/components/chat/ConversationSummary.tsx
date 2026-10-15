@@ -39,6 +39,8 @@ export interface ConversationSummaryTimelineControls {
   readonly onRestore: (turnItemId: TurnItemId) => void;
   /** Messages with an earlier turn, which "Summarize up to here" can cover. */
   readonly upToHereMessageIds: ReadonlySet<MessageId>;
+  /** Messages with a ready checkpoint before their turn, which "Summarize from here" rewinds to. */
+  readonly fromHereMessageIds: ReadonlySet<MessageId>;
   readonly supportsConversationRollback: boolean;
   readonly activeProviderThreadId: ProviderThreadId | null;
 }
@@ -51,19 +53,19 @@ export const SUMMARY_DIRECTION_TITLES: Record<OrchestrationV2ConversationSummary
 
 function fromHereUnavailableReason(input: {
   readonly controls: ConversationSummaryTimelineControls;
-  readonly canRewind: boolean;
+  readonly messageId: MessageId;
 }): string | null {
   if (!input.controls.supportsConversationRollback) {
     return "This provider cannot rewind its conversation.";
   }
-  return input.canRewind ? null : "There is no checkpoint before this message.";
+  return input.controls.fromHereMessageIds.has(input.messageId)
+    ? null
+    : "There is no checkpoint before this message.";
 }
 
 export function SummarizeMessageMenu(props: {
   readonly messageId: MessageId;
   readonly controls: ConversationSummaryTimelineControls;
-  /** True when "Edit from here" is available, which "from here" also needs. */
-  readonly canRewind: boolean;
   readonly disabled: boolean;
 }) {
   const fromHereReason = fromHereUnavailableReason(props);
