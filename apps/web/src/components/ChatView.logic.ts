@@ -13,7 +13,6 @@ import {
   type ModelSelection,
   type OrchestrationV2ConversationSummaryDirection,
   type OrchestrationV2ProjectedTurnItem,
-  type OrchestrationV2Run,
   type OrchestrationV2ThreadProjection,
   type PreviewAnnotationPayload,
   type ProviderInteractionMode,
@@ -1240,43 +1239,6 @@ export async function waitForThreadSummary(input: {
     timeoutMessage: "Timed out waiting for the summary.",
     timeoutMs: input.timeoutMs ?? 600_000,
   });
-}
-
-const SUMMARIZABLE_RUN_STATUSES: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
-  "completed",
-  "interrupted",
-  "failed",
-  "cancelled",
-]);
-
-/**
- * User messages that "Summarize up to here" can start from: their turn is
- * still in the conversation and an earlier turn ran, as the server requires.
- */
-export function conversationSummaryUpToHereMessageIds(
-  projection: Pick<OrchestrationV2ThreadProjection, "messages" | "runs"> | null | undefined,
-): ReadonlySet<MessageId> {
-  if (!projection) return new Set();
-  const runsById = new Map(projection.runs.map((run) => [run.id, run]));
-  let firstExecutedOrdinal = Number.POSITIVE_INFINITY;
-  for (const run of projection.runs) {
-    if (SUMMARIZABLE_RUN_STATUSES.has(run.status)) {
-      firstExecutedOrdinal = Math.min(firstExecutedOrdinal, run.ordinal);
-    }
-  }
-  const eligible = new Set<MessageId>();
-  for (const message of projection.messages) {
-    const run = message.runId === null ? undefined : runsById.get(message.runId);
-    if (
-      message.role === "user" &&
-      run !== undefined &&
-      run.status !== "rolled_back" &&
-      run.ordinal > firstExecutedOrdinal
-    ) {
-      eligible.add(message.id);
-    }
-  }
-  return eligible;
 }
 
 export interface LocalDispatchSnapshot {

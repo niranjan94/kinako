@@ -450,6 +450,7 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
+import { conversationSummaryUpToHereMessageIds } from "@t3tools/client-runtime/state/conversationSummary";
 import {
   type ConversationSummaryTimelineControls,
   SummarizeConversationDialog,
@@ -556,7 +557,6 @@ import {
   prepareRevertedMessageAttachments,
   waitForRevertedMessage,
   waitForThreadSummary,
-  conversationSummaryUpToHereMessageIds,
   reconcileMountedTerminalThreadIds,
   resolveComposerInteractionMode,
   resolveComposerProviderSelection,
