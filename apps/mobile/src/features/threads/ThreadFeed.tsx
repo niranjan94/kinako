@@ -4,6 +4,12 @@ import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
 import { enrichedContextLinkPresentation } from "../../lib/enrichedLinkPresentation";
 import { ThreadContextDivider } from "./thread-context-divider";
 import { ThreadHandoffDivider, ThreadHandoffRow } from "./thread-handoff-row";
+import {
+  ConversationSummaryDivider,
+  conversationSummaryItem,
+  UserMessageSummarizeButton,
+} from "./thread-conversation-summary";
+import type { ConversationSummaryFeedControls } from "./use-conversation-summary";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { WorkflowRunCard } from "./WorkflowRunCard";
 import { AppActivityIndicator } from "../../components/AppActivityIndicator";
@@ -320,6 +326,8 @@ export interface ThreadFeedProps {
   readonly onEndFollowEnabledChange?: (enabled: boolean) => void;
   readonly skills?: ReadonlyArray<SelectableMarkdownSkill>;
   readonly onUseArtifactTemplate?: (template: CodexArtifactTemplate) => void;
+  /** Absent where the feed cannot change the thread. */
+  readonly conversationSummary?: ConversationSummaryFeedControls | null;
 }
 
 async function waitForThreadShell(
@@ -1000,6 +1008,7 @@ function renderFeedEntry(
     | "threadId"
     | "workspaceRoot"
   > & {
+    readonly conversationSummary: ConversationSummaryFeedControls | null;
     readonly copiedRowId: string | null;
     readonly expandedWorkRows: Record<string, boolean>;
     readonly workRowSizing: ReturnType<typeof deriveThreadWorkLogSizing>;
@@ -1139,6 +1148,19 @@ function renderFeedEntry(
 
   if (entry.type === "activity-group" && isContextCompactionActivityGroup(entry)) {
     const label = entry.activities[0]!.summary;
+    const summaryItem = conversationSummaryItem(entry.activities[0]!.projectedItem.item);
+    if (summaryItem !== null) {
+      return (
+        <ConversationSummaryDivider
+          item={summaryItem}
+          label={label}
+          controls={props.conversationSummary}
+          environmentId={props.environmentId}
+          threadId={props.threadId}
+          iconColor={iconSubtleColor}
+        />
+      );
+    }
     const active =
       props.unsettledTurnId !== null &&
       entry.runId === props.unsettledTurnId &&
@@ -1362,6 +1384,15 @@ function renderFeedEntry(
               >
                 <SymbolView name="pencil" size={14} tintColor={iconSubtleColor} />
               </Pressable>
+            ) : null}
+            {props.conversationSummary != null &&
+            !(entry.pendingMessage && !entry.acknowledged) &&
+            message.runId != null ? (
+              <UserMessageSummarizeButton
+                messageId={message.id}
+                controls={props.conversationSummary}
+                tintColor={iconSubtleColor}
+              />
             ) : null}
             {presentation.text.trim().length > 0 ? (
               <UserMessageCopyButton
@@ -2522,6 +2553,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           <ThreadMediaVisibility>
             {renderFeedEntry(info, {
               environmentId: props.environmentId,
+              conversationSummary: props.conversationSummary ?? null,
               dispatchingMessageId: props.dispatchingMessageId,
               onEditPendingMessage: props.onEditPendingMessage,
               onUseArtifactTemplate: props.onUseArtifactTemplate,
@@ -2574,6 +2606,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       setupAnchorIndex,
       props.dispatchingMessageId,
       props.onEditPendingMessage,
+      props.conversationSummary,
       copiedRowId,
       disclosureToggleSettling,
       expandedWorkRows,

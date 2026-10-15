@@ -10,6 +10,7 @@ import type {
   EnvironmentId,
   OrchestrationV2ProjectedTurnItem,
   ProjectId,
+  RunId,
   ThreadId,
   ThreadPullRequestLink,
   VcsListRefsResult,
@@ -392,6 +393,24 @@ export function useCheckpointDiff(target: CheckpointDiffTarget) {
     targets.turn === null ? null : orchestrationEnvironment.turnDiff(targets.turn),
   );
   return targets.fullThread === null ? turn : fullThread;
+}
+
+/** Messages and tool activity of summarized runs; pass null to skip fetching. */
+export function useRunHistory(
+  target: {
+    readonly environmentId: EnvironmentId;
+    readonly threadId: ThreadId;
+    readonly runIds: ReadonlyArray<RunId>;
+  } | null,
+) {
+  return useEnvironmentQuery(
+    target === null
+      ? null
+      : orchestrationEnvironment.runHistory({
+          environmentId: target.environmentId,
+          input: { threadId: target.threadId, runIds: target.runIds },
+        }),
+  );
 }
 
 /** Full input and output for one tool row; pass null to skip fetching. */
