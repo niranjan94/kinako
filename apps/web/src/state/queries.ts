@@ -14,6 +14,7 @@ import type {
   ProjectContentMatch,
   ProjectEntry,
   ProjectEntryKind,
+  RunId,
   ThreadId,
   TurnItemId,
   VcsListRefsResult,
@@ -380,6 +381,24 @@ export function useCheckpointDiff(
     turnTarget === null ? null : orchestrationEnvironment.turnDiff(turnTarget),
   );
   return fullThreadTarget === null ? turn : fullThread;
+}
+
+/** Messages and tool activity of summarized runs, fetched only while their disclosure is open. */
+export function useRunHistory(
+  target: {
+    readonly environmentId: EnvironmentId;
+    readonly threadId: ThreadId;
+    readonly runIds: ReadonlyArray<RunId>;
+  } | null,
+) {
+  return useEnvironmentQuery(
+    target === null
+      ? null
+      : orchestrationEnvironment.runHistory({
+          environmentId: target.environmentId,
+          input: { threadId: target.threadId, runIds: target.runIds },
+        }),
+  );
 }
 
 /** Full input and output of one timeline item, fetched only while its row is open. */
