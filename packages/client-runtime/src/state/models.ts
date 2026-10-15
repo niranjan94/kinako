@@ -15,6 +15,7 @@ import type {
   ProjectId,
   ProviderInstanceId,
   RunId,
+  ThreadAdditionalDirectory,
   ThreadId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -100,6 +101,7 @@ export interface EnvironmentThreadShell {
   readonly interactionMode: OrchestrationV2ThreadShell["interactionMode"];
   readonly branch: string | null;
   readonly worktreePath: string | null;
+  readonly additionalDirectories: ReadonlyArray<ThreadAdditionalDirectory>;
   readonly lineage: OrchestrationV2ThreadShell["lineage"];
   readonly forkedFrom: OrchestrationV2ThreadShell["forkedFrom"];
   readonly activeProviderThreadId: OrchestrationV2ThreadShell["activeProviderThreadId"];
@@ -203,6 +205,8 @@ function shellRuntime(thread: OrchestrationV2ThreadShell): ThreadRuntimeSummary 
   };
 }
 
+const EMPTY_ADDITIONAL_DIRECTORIES: ReadonlyArray<ThreadAdditionalDirectory> = [];
+
 export function scopeProject(
   environmentId: EnvironmentId,
   project: OrchestrationProjectShell,
@@ -245,6 +249,7 @@ export function presentThreadShell(
     interactionMode: thread.interactionMode,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    additionalDirectories: thread.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES,
     pullRequests: threadPullRequestsOf(thread),
     linkedPullRequest: thread.linkedPullRequest ?? null,
     branchPullRequest: thread.branchPullRequest ?? null,

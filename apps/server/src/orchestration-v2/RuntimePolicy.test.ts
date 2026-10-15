@@ -100,6 +100,7 @@ const layerTest = RuntimePolicy.layerFromProjectStore.pipe(
             faviconPath: null,
             projectIcon: null,
             scripts: [],
+            additionalDirectories: [],
             createdAt: "2026-06-21T00:00:00.000Z",
             updatedAt: "2026-06-21T00:00:00.000Z",
             deletedAt: null,
@@ -131,6 +132,24 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
         modelSelection,
       });
       assert.equal(resolved.cwd, "/project-worktree");
+    }),
+  );
+
+  it.effect("passes additional directories, preferring the thread's worktree of each", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const resolved = yield* policy.resolve({
+        thread: {
+          ...makeThread({ now, worktreePath: null }),
+          additionalDirectories: [
+            { path: "/docs", mode: "local", branch: null, worktreePath: null },
+            { path: "/api", mode: "worktree", branch: "feature", worktreePath: "/api-feature" },
+          ],
+        },
+        modelSelection,
+      });
+      assert.deepEqual(resolved.additionalDirectories, ["/docs", "/api-feature"]);
     }),
   );
 

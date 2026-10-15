@@ -105,6 +105,9 @@ export function makeThreadFixture(overrides: ThreadFixtureOverrides = {}): Threa
     interactionMode: overrides.interactionMode ?? "default",
     branch: overrides.branch ?? null,
     worktreePath: overrides.worktreePath ?? null,
+    ...(overrides.additionalDirectories === undefined
+      ? {}
+      : { additionalDirectories: overrides.additionalDirectories }),
     activeProviderThreadId: overrides.activeProviderThreadId ?? null,
     lineage: overrides.lineage ?? {
       rootThreadId: id,

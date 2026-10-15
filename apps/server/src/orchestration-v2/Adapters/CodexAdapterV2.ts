@@ -717,6 +717,24 @@ function codexRuntimeModeTurnDefaults(runtimeMode: RuntimeMode): {
   }
 }
 
+/** Read-only already reads everywhere; only a workspace-write sandbox needs the extra roots. */
+function withAdditionalWritableRoots(
+  sandboxPolicy: CodexSchema.V2TurnStartParams__SandboxPolicy | null,
+  additionalDirectories: ReadonlyArray<string>,
+): CodexSchema.V2TurnStartParams__SandboxPolicy | null {
+  if (
+    sandboxPolicy === null ||
+    sandboxPolicy.type !== "workspaceWrite" ||
+    additionalDirectories.length === 0
+  ) {
+    return sandboxPolicy;
+  }
+  return {
+    ...sandboxPolicy,
+    writableRoots: [...new Set([...(sandboxPolicy.writableRoots ?? []), ...additionalDirectories])],
+  };
+}
+
 export function buildCodexTurnStartParams(input: {
   readonly nativeThreadId: string;
   readonly codexInput: ReadonlyArray<CodexSchema.V2TurnStartParams__UserInput>;
@@ -736,10 +754,12 @@ export function buildCodexTurnStartParams(input: {
       input.runtimePolicy.approvalPolicy === undefined
         ? runtimeModeDefaults.approvalPolicy
         : yield* decodeTurnApprovalPolicy(input.runtimePolicy.approvalPolicy);
-    const sandboxPolicy =
+    const sandboxPolicy = withAdditionalWritableRoots(
       input.runtimePolicy.sandboxPolicy === undefined
         ? runtimeModeDefaults.sandboxPolicy
-        : yield* decodeTurnSandboxPolicy(input.runtimePolicy.sandboxPolicy);
+        : yield* decodeTurnSandboxPolicy(input.runtimePolicy.sandboxPolicy),
+      input.runtimePolicy.additionalDirectories ?? [],
+    );
     const selectedEffort = getModelSelectionStringOptionValue(
       input.modelSelection,
       "reasoningEffort",

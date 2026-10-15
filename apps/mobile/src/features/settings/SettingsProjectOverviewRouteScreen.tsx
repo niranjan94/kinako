@@ -11,6 +11,7 @@ import { projectEnvironment } from "../../state/projects";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
+import { ProjectAdditionalDirectoriesSection } from "./ProjectAdditionalDirectoriesSection";
 import {
   AndroidSettingsEnvironmentFilter,
   SettingsEnvironmentFilterHeader,
@@ -170,6 +171,11 @@ function ProjectOverviewContent(props: {
           );
         })}
       </SettingsSection>
+
+      <ProjectAdditionalDirectoriesSection
+        members={props.members}
+        environments={props.environments}
+      />
     </>
   );
 }

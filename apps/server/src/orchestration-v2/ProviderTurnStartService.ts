@@ -456,42 +456,58 @@ export const layer: Layer.Layer<
           return;
         }
       }
+      // Storage cleanup removes idle worktrees but keeps their branch and path,
+      // so recreate any that are missing before the provider opens them.
+      const recreateMissingWorktree = (
+        worktreePath: string,
+        branch: string,
+        repository: Effect.Effect<string | undefined>,
+      ) =>
+        Effect.gen(function* () {
+          const exists = yield* fileSystem
+            .exists(worktreePath)
+            .pipe(Effect.orElseSucceed(() => true));
+          if (exists) return;
+          const cwd = yield* repository;
+          if (cwd === undefined) return;
+          yield* Effect.logWarning("provider turn start recreating missing worktree", {
+            threadId: projection.thread.id,
+            worktreePath,
+            branch,
+          });
+          yield* gitWorkflow.pruneWorktrees({ cwd }).pipe(
+            Effect.andThen(
+              gitWorkflow.createWorktree({ cwd, refName: branch, path: worktreePath }),
+            ),
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.failCause(cause)
+                : Effect.logWarning("provider turn start failed to recreate worktree", {
+                    threadId: projection.thread.id,
+                    worktreePath,
+                    cause: Cause.pretty(cause),
+                  }),
+            ),
+          );
+        });
       const { worktreePath, branch } = projection.thread;
       if (worktreePath !== null && branch !== null) {
-        const exists = yield* fileSystem
-          .exists(worktreePath)
-          .pipe(Effect.orElseSucceed(() => true));
-        if (!exists) {
-          const project = yield* projects.getById(projection.thread.projectId).pipe(
-            Effect.map(Option.getOrUndefined),
+        yield* recreateMissingWorktree(
+          worktreePath,
+          branch,
+          projects.getById(projection.thread.projectId).pipe(
+            Effect.map((project) => Option.getOrUndefined(project)?.workspaceRoot),
             Effect.orElseSucceed(() => undefined),
-          );
-          if (project !== undefined) {
-            yield* Effect.logWarning("provider turn start recreating missing worktree", {
-              threadId: projection.thread.id,
-              worktreePath,
-              branch,
-            });
-            yield* gitWorkflow.pruneWorktrees({ cwd: project.workspaceRoot }).pipe(
-              Effect.andThen(
-                gitWorkflow.createWorktree({
-                  cwd: project.workspaceRoot,
-                  refName: branch,
-                  path: worktreePath,
-                }),
-              ),
-              Effect.catchCause((cause) =>
-                Cause.hasInterruptsOnly(cause)
-                  ? Effect.failCause(cause)
-                  : Effect.logWarning("provider turn start failed to recreate worktree", {
-                      threadId: projection.thread.id,
-                      worktreePath,
-                      cause: Cause.pretty(cause),
-                    }),
-              ),
-            );
-          }
-        }
+          ),
+        );
+      }
+      for (const directory of projection.thread.additionalDirectories ?? []) {
+        if (directory.worktreePath === null || directory.branch === null) continue;
+        yield* recreateMissingWorktree(
+          directory.worktreePath,
+          directory.branch,
+          Effect.succeed(directory.path),
+        );
       }
       const selectInheritedBackgroundItems = (
         current: ProjectionStore.ProjectionRuntimeRecoveryState,

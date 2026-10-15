@@ -418,9 +418,10 @@ export interface ProjectionStoreV2Shape {
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionThreadPullRequests>, ProjectionStoreV2Error>;
   /**
-   * Active (not deleted, not archived) threads that have a worktree path, the
-   * same threads as the shell snapshot's `threads`. Reads only the thread rows,
-   * so callers can check who uses a path without a shell snapshot.
+   * Worktree paths of active (not deleted, not archived) threads, including
+   * their additional directories' worktrees; the same threads as the shell
+   * snapshot's `threads`. Reads only the thread rows, so callers can check who
+   * uses a path without a shell snapshot.
    */
   readonly getThreadWorktreePaths: () => Effect.Effect<
     ReadonlyArray<{ readonly threadId: ThreadId; readonly worktreePath: string }>,
@@ -1495,6 +1496,9 @@ export function threadShellFromProjection(
     interactionMode: projection.thread.interactionMode,
     branch: projection.thread.branch,
     worktreePath: projection.thread.worktreePath,
+    ...(projection.thread.additionalDirectories === undefined
+      ? {}
+      : { additionalDirectories: projection.thread.additionalDirectories }),
     pullRequests: threadPullRequestsOf(projection.thread),
     ...(projection.thread.linkedPullRequest === undefined
       ? {}
@@ -1790,6 +1794,9 @@ function shellFromState(input: {
     interactionMode: input.state.thread.interactionMode,
     branch: input.state.thread.branch,
     worktreePath: input.state.thread.worktreePath,
+    ...(input.state.thread.additionalDirectories === undefined
+      ? {}
+      : { additionalDirectories: input.state.thread.additionalDirectories }),
     pullRequests: threadPullRequestsOf(input.state.thread),
     ...(input.state.thread.linkedPullRequest === undefined
       ? {}
@@ -5744,6 +5751,13 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         WHERE deleted_at IS NULL
           AND json_extract(payload_json, '$.archivedAt') IS NULL
           AND json_extract(payload_json, '$.worktreePath') IS NOT NULL
+        UNION ALL
+        SELECT thread.thread_id, json_extract(directory.value, '$.worktreePath') AS worktree_path
+        FROM orchestration_v2_projection_threads AS thread,
+          json_each(thread.payload_json, '$.additionalDirectories') AS directory
+        WHERE thread.deleted_at IS NULL
+          AND json_extract(thread.payload_json, '$.archivedAt') IS NULL
+          AND json_extract(directory.value, '$.worktreePath') IS NOT NULL
       `.pipe(
         Effect.map((rows) =>
           rows.map((row) => ({
@@ -6248,10 +6262,15 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
         Ref.get(replayState).pipe(
           Effect.map((state) =>
             [...state.projections.values()].flatMap(({ thread }) =>
-              thread.deletedAt === null &&
-              thread.archivedAt === null &&
-              thread.worktreePath !== null
-                ? [{ threadId: thread.id, worktreePath: thread.worktreePath }]
+              thread.deletedAt === null && thread.archivedAt === null
+                ? [
+                    thread.worktreePath,
+                    ...(thread.additionalDirectories ?? []).map(
+                      (directory) => directory.worktreePath,
+                    ),
+                  ]
+                    .filter((worktreePath) => worktreePath !== null)
+                    .map((worktreePath) => ({ threadId: thread.id, worktreePath }))
                 : [],
             ),
           ),

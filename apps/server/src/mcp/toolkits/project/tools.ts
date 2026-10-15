@@ -12,6 +12,7 @@ import {
   ProviderInteractionMode,
   Project,
   ProjectCreatePayload,
+  ProjectAdditionalDirectories,
   ProjectUpdatePayload,
   ProjectId,
   OrchestratorMcpFailure,
@@ -121,6 +122,12 @@ const ThreadLaunchTool = Tool.make("t3_thread_launch", {
       OrchestrationV2ThreadLaunchWorkspaceStrategy.annotate({
         description:
           "Choose where this thread runs before starting its agent: worktree creates and binds a new checkout from baseRef; existing_worktree binds worktreePath, which must be one of the project's git worktrees; root uses the project checkout. Omitted means root, not the caller's worktree. For a PR stack use the parent branch as baseRef and startFromOrigin:false. Uncommitted changes are not copied.",
+      }),
+    ),
+    additionalDirectories: Schema.optional(
+      ProjectAdditionalDirectories.annotate({
+        description:
+          "Extra folders the agent may use besides the workspace, as absolute paths on this environment. mode local uses the folder as it is; mode worktree creates a worktree of it on the thread's branch. Omitted uses the project's additional directories; [] uses none. Edits there are not checkpointed, diffed, or rolled back.",
       }),
     ),
     message: Schema.optional(

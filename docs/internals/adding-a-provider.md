@@ -31,6 +31,7 @@ capabilities, never the driver kind.
   mode by answering approvals in T3: T3's check is weaker than the agent's own enforcement. The
   server runs an unoffered stored mode as Supervised
   ([`RuntimePolicy.ts`](../../apps/server/src/orchestration-v2/RuntimePolicy.ts)).
+- **Additional directories.** Pass `runtimePolicy.additionalDirectories` to the provider's own extra-root option, alongside `cwd`. A provider without one must set `supportsAdditionalDirectories: false` in its presentation; the client treats an absent flag as supported, so silently ignoring the roots looks like it works.
 - **Approval and question options.** Pass the provider's own option IDs through unchanged. Every
   request needs a way to decline that the provider honors.
 - **Interaction modes.** Hide the plan toggle (`showInteractionModeToggle: false`) unless the

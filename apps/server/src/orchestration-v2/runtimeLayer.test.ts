@@ -1682,6 +1682,60 @@ it.layer(layerLegacyImportTest)("OrchestrationV2 legacy import", (it) => {
 });
 
 it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
+  it.effect("locks additional directories once the thread exists but records their worktrees", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const threadId = ThreadId.make("runtime-layer-additional-directories-thread");
+      const projectId = ProjectId.make("runtime-layer-additional-directories-project");
+      yield* seedProject({
+        projectId,
+        title: "Additional directories project",
+        workspaceRoot: "/workspace/web",
+        defaultModelSelection: null,
+        createdAt: "2026-09-07T00:00:00.000Z",
+      });
+      const pending = {
+        path: "/workspace/api",
+        mode: "worktree",
+        branch: null,
+        worktreePath: null,
+      } as const;
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("runtime-layer-additional-directories-create"),
+        threadId,
+        projectId,
+        title: "Two repositories",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        additionalDirectories: [pending],
+      });
+      const provisioned = { ...pending, branch: "feature", worktreePath: "/worktrees/api/feature" };
+      yield* orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("runtime-layer-additional-directories-provisioned"),
+        threadId,
+        additionalDirectories: [provisioned],
+      });
+      const relocked = yield* orchestrator
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("runtime-layer-additional-directories-mode-change"),
+          threadId,
+          additionalDirectories: [{ ...provisioned, mode: "local" }],
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(relocked, Orchestrator.OrchestratorDispatchError);
+      const projection = yield* orchestrator.getThreadProjection(threadId);
+      assert.deepEqual(projection.thread.additionalDirectories, [provisioned]);
+    }),
+  );
+
   it.effect("applies lifecycle commands idempotently and emits archive/removal shell deltas", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;

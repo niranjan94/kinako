@@ -144,6 +144,9 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
           runtimeMode,
           interactionMode,
           workspaceStrategy: input.workspaceStrategy ?? { type: "root" },
+          ...(input.additionalDirectories === undefined
+            ? {}
+            : { additionalDirectories: input.additionalDirectories }),
           ...(input.message === undefined && attachments.length === 0
             ? {}
             : {

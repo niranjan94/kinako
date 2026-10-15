@@ -174,6 +174,7 @@ export const make = Effect.gen(function* () {
     autoPull: row.autoPull,
     projectIcon: row.projectIcon,
     scripts: row.scripts,
+    additionalDirectories: row.additionalDirectories,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
@@ -370,6 +371,15 @@ export const make = Effect.gen(function* () {
               projectId: input.projectId,
               workspaceRoot: input.workspaceRoot,
             });
+      const additionalDirectories =
+        input.additionalDirectories === undefined
+          ? undefined
+          : yield* Effect.forEach(input.additionalDirectories, (directory) =>
+              normalizeWorkspaceRoot({
+                projectId: input.projectId,
+                workspaceRoot: directory.path,
+              }).pipe(Effect.map((path) => ({ path, mode: directory.mode }))),
+            );
       yield* commit({
         type: "project.meta.update",
         commandId: input.commandId,
@@ -386,6 +396,7 @@ export const make = Effect.gen(function* () {
           ? {}
           : { defaultThreadEnvMode: input.defaultThreadEnvMode }),
         ...(input.scripts === undefined ? {} : { scripts: input.scripts }),
+        ...(additionalDirectories === undefined ? {} : { additionalDirectories }),
       });
       if (workspaceRoot !== previousRoot) {
         yield* projectEnrichment.invalidate([previousRoot, workspaceRoot]);

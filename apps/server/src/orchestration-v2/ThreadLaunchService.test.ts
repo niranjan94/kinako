@@ -211,6 +211,7 @@ function makeHarness(options: HarnessOptions = {}) {
         layerThreadManagement,
         layerReceipts,
         IdAllocator.layer,
+        NodeServices.layer,
       ),
     ),
   );
@@ -228,6 +229,7 @@ function makeHarness(options: HarnessOptions = {}) {
               faviconPath: null,
               projectIcon: null,
               scripts: project.scripts,
+              additionalDirectories: [],
               createdAt: project.createdAt,
               updatedAt: project.updatedAt,
               deletedAt: project.deletedAt,
@@ -1686,6 +1688,101 @@ it.effect("a retry reuses a recorded worktree without undoing its branch rename"
     );
   }).pipe(Effect.provide(harness.layer));
 });
+
+it.effect(
+  "creates an additional worktree on the primary branch and renames it with the primary",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const sibling = yield* fs.makeTempDirectoryScoped();
+      const harness = makeHarness({
+        createWorktree: (input) =>
+          Effect.succeed({
+            worktree: {
+              path: input.cwd === "/repo" ? "/repo-worktrees/feature" : `${input.cwd}-worktree`,
+              refName: input.newRefName,
+              headSha: "abc",
+            },
+          } as never),
+        git: { isRepository: () => Effect.succeed(true) },
+      });
+      yield* Effect.gen(function* () {
+        const launches = yield* ThreadLaunch.ThreadLaunchService;
+        const threads = yield* ThreadManagement.ThreadManagementService;
+        const launched = yield* launches.launch({
+          ...launchInput({
+            command: "command:launch:additional-worktree",
+            thread: "thread:launch:additional-worktree",
+            message: "Change both repositories",
+            workspace: { type: "worktree", baseRef: "main" },
+          }),
+          additionalDirectories: [{ path: sibling, mode: "worktree" }],
+        });
+        yield* waitUntil(() =>
+          threads
+            .getThreadProjection(launched.threadId)
+            .pipe(
+              Effect.map(
+                (projection) =>
+                  projection.thread.branch === "generated-branch" &&
+                  projection.thread.additionalDirectories?.[0]?.branch === "generated-branch",
+              ),
+            ),
+        );
+        const [primary, additional] = harness.createWorktree.mock.calls.map(([input]) => input);
+        assert.equal(additional?.cwd, sibling);
+        assert.equal(additional?.newRefName, primary?.newRefName);
+        assert.deepEqual(
+          (yield* threads.getThreadProjection(launched.threadId)).thread.additionalDirectories,
+          [
+            {
+              path: sibling,
+              mode: "worktree",
+              branch: "generated-branch",
+              worktreePath: `${sibling}-worktree`,
+            },
+          ],
+        );
+        assert.deepEqual(harness.renameBranch.mock.calls[1]?.[0], {
+          cwd: `${sibling}-worktree`,
+          oldBranch: primary!.newRefName!,
+          newBranch: "generated-branch",
+          exactName: true,
+        });
+      }).pipe(Effect.provide(harness.layer));
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect("fails the launch when an additional worktree directory is not a repository", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const folder = yield* fs.makeTempDirectoryScoped();
+    const harness = makeHarness({ git: { isRepository: () => Effect.succeed(false) } });
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const launched = yield* launches.launch({
+        ...launchInput({
+          command: "command:launch:additional-not-git",
+          thread: "thread:launch:additional-not-git",
+          message: "Use the notes folder",
+        }),
+        additionalDirectories: [{ path: folder, mode: "worktree" }],
+      });
+      yield* waitUntil(() =>
+        threads
+          .getThreadProjection(launched.threadId)
+          .pipe(Effect.map((projection) => projection.runs[0]?.status === "failed")),
+      );
+      const projection = yield* threads.getThreadProjection(launched.threadId);
+      assert.match(
+        projection.turnItems.find((item) => item.type === "error")?.failure.message ?? "",
+        /is not a Git repository, so it cannot use worktree mode/u,
+      );
+      assert.equal(harness.createWorktree.mock.calls.length, 0);
+    }).pipe(Effect.provide(harness.layer));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
 
 it.effect("removes a worktree that failed before the thread recorded it", () => {
   const harness = makeHarness({

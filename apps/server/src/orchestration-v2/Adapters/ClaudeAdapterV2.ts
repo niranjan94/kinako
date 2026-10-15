@@ -1069,6 +1069,8 @@ export function makeClaudeQueryOptions(input: {
    * state.sqlite stay ungranted.
    */
   readonly attachmentsDir?: string;
+  /** The thread's additional directories, granted like `cwd`. */
+  readonly additionalDirectories?: ReadonlyArray<string>;
   readonly settings?: ClaudeSettings;
   readonly sdkSettings?: string | ClaudeSdkSettings;
   readonly environment?: NodeJS.ProcessEnv;
@@ -1171,6 +1173,7 @@ export function makeClaudeQueryOptions(input: {
   };
   const additionalDirectories = [
     ...(input.cwd === null ? [] : [input.cwd]),
+    ...(input.additionalDirectories ?? []),
     ...(input.attachmentsDir === undefined ? [] : [input.attachmentsDir]),
   ];
   const withDirectories =
@@ -8593,6 +8596,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ...(resumeSessionAt === undefined ? {} : { resumeSessionAt }),
             cwd: turnInput.runtimePolicy.cwd,
             attachmentsDir,
+            ...(turnInput.runtimePolicy.additionalDirectories === undefined
+              ? {}
+              : { additionalDirectories: turnInput.runtimePolicy.additionalDirectories }),
             settings: adapterOptions.settings,
             environment: adapterOptions.environment,
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,

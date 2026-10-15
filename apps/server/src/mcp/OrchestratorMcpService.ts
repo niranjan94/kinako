@@ -2351,6 +2351,9 @@ const make = Effect.gen(function* () {
                   interactionMode,
                   branch: parent.thread.branch,
                   worktreePath: parent.thread.worktreePath,
+                  ...(parent.thread.additionalDirectories === undefined
+                    ? {}
+                    : { additionalDirectories: parent.thread.additionalDirectories }),
                 })
                 .pipe(
                   Effect.mapError((error) =>

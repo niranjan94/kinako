@@ -16,6 +16,7 @@ import {
   type PlanId,
   type ProjectId,
   type ProjectIconOverride,
+  type ProjectAdditionalDirectory,
   type ProjectScript,
   type ProviderApprovalDecision,
   type ProviderInteractionMode,
@@ -60,6 +61,7 @@ export interface UpdateProjectInput extends CommandMetadata {
   readonly faviconPath?: string | null;
   readonly defaultThreadEnvMode?: ThreadEnvMode | null;
   readonly scripts?: ReadonlyArray<ProjectScript>;
+  readonly additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory>;
 }
 
 export interface DeleteProjectInput extends CommandMetadata {
@@ -153,6 +155,8 @@ interface StartThreadBootstrap {
     readonly interactionMode: ProviderInteractionMode;
     readonly branch: string | null;
     readonly worktreePath: string | null;
+    /** Overrides the project's additional directories; absent uses the project's. */
+    readonly additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory>;
     readonly createdAt: string;
   };
   readonly prepareWorktree?: {
@@ -380,6 +384,9 @@ export const updateProject = Effect.fn("EnvironmentCommands.updateProject")(func
       ? {}
       : { defaultThreadEnvMode: input.defaultThreadEnvMode }),
     ...(input.scripts === undefined ? {} : { scripts: input.scripts }),
+    ...(input.additionalDirectories === undefined
+      ? {}
+      : { additionalDirectories: input.additionalDirectories }),
   });
 });
 
@@ -682,6 +689,9 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
       runtimeMode: input.runtimeMode,
       interactionMode: input.interactionMode,
       workspaceStrategy,
+      ...(bootstrap?.additionalDirectories === undefined
+        ? {}
+        : { additionalDirectories: bootstrap.additionalDirectories }),
       initialMessage: {
         messageId: input.message.messageId,
         text: input.message.text,

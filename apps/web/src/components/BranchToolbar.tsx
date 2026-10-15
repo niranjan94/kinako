@@ -3,7 +3,13 @@ import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProjectAdditionalDirectory,
+  ThreadAdditionalDirectory,
+  ThreadEnvMode,
+  ThreadId,
+} from "@t3tools/contracts";
 import {
   ChevronDownIcon,
   FolderGit2Icon,
@@ -25,6 +31,7 @@ import {
 } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
+import { ADDITIONAL_DIRECTORIES_CAVEAT, directoryName } from "../lib/additionalDirectories";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { useProject, useThreadShell, useThreadShellsForProjectRefs } from "../state/entities";
 import {
@@ -59,6 +66,9 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
   MenuTrigger,
 } from "./ui/menu";
 import { Separator } from "./ui/separator";
@@ -101,6 +111,54 @@ interface BranchToolbarProps {
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
   composerControlsHostRef?: (element: HTMLDivElement | null) => void;
   contextStripVisible?: boolean;
+  /** False when the selected provider cannot use additional directories. */
+  additionalDirectoriesSupported?: boolean;
+}
+
+const EMPTY_DIRECTORIES: ReadonlyArray<ProjectAdditionalDirectory> = [];
+
+/** The thread's extra roots in the details panel; a started thread shows its worktrees. */
+function AdditionalDirectoriesSummary({
+  directories,
+  supported,
+}: {
+  directories: ReadonlyArray<ProjectAdditionalDirectory | ThreadAdditionalDirectory>;
+  supported: boolean;
+}) {
+  return (
+    <div className="flex flex-col" aria-label="Additional directories">
+      {directories.map((directory) => {
+        const worktreePath = "worktreePath" in directory ? directory.worktreePath : null;
+        const Icon = directory.mode === "worktree" ? FolderGit2Icon : FolderIcon;
+        return (
+          <Tooltip key={directory.path}>
+            <TooltipTrigger
+              render={
+                <span
+                  className={cn(
+                    THREAD_DETAILS_PANEL_LOCKED_ROW_CLASS,
+                    "inline-flex items-center text-muted-foreground",
+                  )}
+                />
+              }
+            >
+              <Icon className={THREAD_DETAILS_PANEL_ICON_CLASS} />
+              <span className="min-w-0 truncate">{directoryName(directory.path)}</span>
+              <span className="ms-auto shrink-0 text-xs font-normal">
+                {resolveEnvModeLabel(directory.mode)}
+              </span>
+            </TooltipTrigger>
+            <TooltipPopup>{worktreePath ?? directory.path}</TooltipPopup>
+          </Tooltip>
+        );
+      })}
+      <p className="px-2.5 pt-1 pb-2 text-xs text-muted-foreground">
+        {supported
+          ? ADDITIONAL_DIRECTORIES_CAVEAT
+          : "This provider cannot use additional directories, so the agent only sees the workspace."}
+      </p>
+    </div>
+  );
 }
 
 function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string) {
@@ -157,6 +215,10 @@ interface RunContextSelectorProps {
   previousWorktreeLabel: string | null;
   previousWorktreeBranch: string | null;
   onUsePreviousWorktree: () => void;
+  additionalDirectories: ReadonlyArray<ProjectAdditionalDirectory>;
+  additionalDirectoriesLocked: boolean;
+  additionalDirectoriesSupported: boolean;
+  onAdditionalDirectoryModeChange: (path: string, mode: ThreadEnvMode) => void;
 }
 
 const RunContextSelector = memo(function RunContextSelector({
@@ -178,6 +240,10 @@ const RunContextSelector = memo(function RunContextSelector({
   previousWorktreeLabel,
   previousWorktreeBranch,
   onUsePreviousWorktree,
+  additionalDirectories,
+  additionalDirectoriesLocked,
+  additionalDirectoriesSupported,
+  onAdditionalDirectoryModeChange,
 }: RunContextSelectorProps) {
   const composerFloatingLayerProps = useComposerMenuProps();
   const activeEnvironment = useMemo(
@@ -397,6 +463,51 @@ const RunContextSelector = memo(function RunContextSelector({
             ) : null}
           </MenuRadioGroup>
         </MenuGroup>
+        {additionalDirectories.length > 0 ? (
+          <>
+            <MenuSeparator />
+            <MenuGroup>
+              <MenuGroupLabel>
+                {additionalDirectoriesSupported
+                  ? "Additional directories"
+                  : "Additional directories (not supported by this provider)"}
+              </MenuGroupLabel>
+              {additionalDirectories.map((directory) => (
+                <MenuSub key={directory.path}>
+                  <MenuSubTrigger disabled={additionalDirectoriesLocked}>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {directory.mode === "worktree" ? (
+                        <FolderGit2Icon className="size-3" />
+                      ) : (
+                        <FolderIcon className="size-3" />
+                      )}
+                      <span className="min-w-0 truncate">{directoryName(directory.path)}</span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {resolveEnvModeLabel(directory.mode)}
+                      </span>
+                    </span>
+                  </MenuSubTrigger>
+                  <MenuSubPopup>
+                    <MenuRadioGroup
+                      value={directory.mode}
+                      onValueChange={(value) => {
+                        if (value === "local" || value === "worktree")
+                          onAdditionalDirectoryModeChange(directory.path, value);
+                      }}
+                    >
+                      <MenuRadioItem value="local" closeOnClick>
+                        {resolveEnvModeLabel("local")}
+                      </MenuRadioItem>
+                      <MenuRadioItem value="worktree" closeOnClick>
+                        {resolveEnvModeLabel("worktree")}
+                      </MenuRadioItem>
+                    </MenuRadioGroup>
+                  </MenuSubPopup>
+                </MenuSub>
+              ))}
+            </MenuGroup>
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );
@@ -616,6 +727,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   onEnvironmentChange,
   composerControlsHostRef,
   contextStripVisible = true,
+  additionalDirectoriesSupported = true,
 }: BranchToolbarProps) {
   const branchSelectorRef = useRef<BranchToolbarBranchSelectorHandle>(null);
   const threadRef = useMemo(
@@ -639,6 +751,23 @@ export const BranchToolbar = memo(function BranchToolbar({
     : (serverThread?.worktreePath ?? draftThread?.worktreePath ?? null);
   const effectiveEnvMode = forceNewWorktree ? "worktree" : envMode;
   const envModeLocked = envLocked || (serverThread !== null && activeWorktreePath !== null);
+  // A draft may override how it uses the project's additional directories;
+  // the thread locks its choice once it exists.
+  const additionalDirectoriesLocked = envLocked || serverThread !== null;
+  const draftAdditionalDirectories =
+    draftThread?.additionalDirectories ?? activeProject?.additionalDirectories;
+  const additionalDirectories =
+    serverThread?.additionalDirectories ?? draftAdditionalDirectories ?? EMPTY_DIRECTORIES;
+  const onAdditionalDirectoryModeChange = useCallback(
+    (path: string, mode: ThreadEnvMode) => {
+      setDraftThreadContext(draftId ?? threadRef, {
+        additionalDirectories: (draftAdditionalDirectories ?? []).map((directory) =>
+          directory.path === path ? { ...directory, mode } : directory,
+        ),
+      });
+    },
+    [draftAdditionalDirectories, draftId, setDraftThreadContext, threadRef],
+  );
 
   // "Previous worktree" hops a draft into the most recently active worktree
   // of this project — the "keep going where I just was" follow-up flow. Only
@@ -731,6 +860,16 @@ export const BranchToolbar = memo(function BranchToolbar({
             previousWorktreeLabel={previousWorktreeLabel}
             previousWorktreeBranch={previousWorktreeSeed?.branch ?? null}
             onUsePreviousWorktree={onUsePreviousWorktree}
+            additionalDirectories={additionalDirectories}
+            additionalDirectoriesLocked={additionalDirectoriesLocked}
+            additionalDirectoriesSupported={additionalDirectoriesSupported}
+            onAdditionalDirectoryModeChange={onAdditionalDirectoryModeChange}
+          />
+        ) : null}
+        {panelSection !== "branch" && additionalDirectories.length > 0 ? (
+          <AdditionalDirectoriesSummary
+            directories={additionalDirectories}
+            supported={additionalDirectoriesSupported}
           />
         ) : null}
         {panelSection !== "workspace" ? (
@@ -785,6 +924,10 @@ export const BranchToolbar = memo(function BranchToolbar({
             previousWorktreeLabel={previousWorktreeLabel}
             previousWorktreeBranch={previousWorktreeSeed?.branch ?? null}
             onUsePreviousWorktree={onUsePreviousWorktree}
+            additionalDirectories={additionalDirectories}
+            additionalDirectoriesLocked={additionalDirectoriesLocked}
+            additionalDirectoriesSupported={additionalDirectoriesSupported}
+            onAdditionalDirectoryModeChange={onAdditionalDirectoryModeChange}
           />
         </div>
       ) : null}
