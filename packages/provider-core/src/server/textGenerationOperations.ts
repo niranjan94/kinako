@@ -17,6 +17,7 @@ import type { ProviderTextGeneration } from "./textGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildConversationSummaryPrompt,
   buildPrContentPrompt,
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
@@ -177,6 +178,24 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     };
   });
 
+  const generateConversationSummary: ProviderTextGeneration["generateConversationSummary"] =
+    Effect.fn(`${name}.generateConversationSummary`)(function* (input) {
+      const generated = yield* run({
+        operation: "generateConversationSummary",
+        cwd: input.cwd,
+        modelSelection: input.modelSelection,
+        ...buildConversationSummaryPrompt(input),
+      });
+      const summary = generated.summary.trim();
+      if (summary.length === 0) {
+        return yield* new TextGenerationError({
+          operation: "generateConversationSummary",
+          detail: `${name} returned an empty summary.`,
+        });
+      }
+      return { summary };
+    });
+
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = Effect.fn(
     `${name}.generateReviewGuide`,
   )(function* (input) {
@@ -194,6 +213,7 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateConversationSummary,
     generateReviewGuide,
   } satisfies ProviderTextGeneration;
 }
