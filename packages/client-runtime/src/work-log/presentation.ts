@@ -52,9 +52,14 @@ export function toolItemForDisplay(item: OrchestrationV2TurnItem): Orchestration
 export function contextCompactionLabel(
   item: Pick<
     Extract<OrchestrationV2TurnItem, { type: "compaction" }>,
-    "status" | "beforeTokenCount" | "afterTokenCount"
+    "status" | "beforeTokenCount" | "afterTokenCount" | "range"
   >,
 ): string {
+  if (item.range !== undefined) {
+    return item.range.restoredAt === undefined
+      ? "Summarized conversation"
+      : "Summarized conversation, full context restored";
+  }
   if (item.status === "running") return "Compacting context";
   if (item.beforeTokenCount !== undefined && item.afterTokenCount !== undefined) {
     return `Context compacted ${formatTokens(item.beforeTokenCount)} → ${formatTokens(item.afterTokenCount)} tokens`;

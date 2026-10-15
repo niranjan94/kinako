@@ -48,7 +48,9 @@ import {
 import {
   type MessageId,
   type WorktreeSetupSnapshot,
+  type OrchestrationV2CompactionRange,
   type OrchestrationV2ProjectedTurnItem,
+  type OrchestrationV2TurnItem,
   type RunAttemptId,
   RunId,
   type ThreadId,
@@ -518,6 +520,20 @@ export type MessagesTimelineRow = MessagesTimelineRowContent & {
   readonly continuesWorkLog?: boolean;
 };
 
+export type ConversationSummaryItem = Extract<
+  OrchestrationV2TurnItem,
+  { readonly type: "compaction" }
+> & { readonly range: OrchestrationV2CompactionRange };
+
+/** The summary a user asked for, when `entry` is the marker of one. */
+function conversationSummaryItem(entry: TimelineEntry): ConversationSummaryItem | null {
+  if (entry.kind !== "work") return null;
+  const item = entry.entry.structuredPayload;
+  return item?.type === "compaction" && item.range !== undefined
+    ? { ...item, range: item.range }
+    : null;
+}
+
 type MessagesTimelineRowContent =
   | {
       kind: "worktree-setup";
@@ -597,6 +613,13 @@ type MessagesTimelineRowContent =
       createdAt: string;
       label: string;
       active: boolean;
+    }
+  | {
+      kind: "conversation-summary";
+      id: string;
+      createdAt: string;
+      label: string;
+      item: ConversationSummaryItem;
     }
   | {
       kind: "message";
@@ -1154,6 +1177,7 @@ function deriveTurnFolds(input: {
       // launching run and stay visible after the surrounding work folds.
       if (
         timelineEntryIsPersistentResourceCard(entry) ||
+        conversationSummaryItem(entry) !== null ||
         input.liveSubagentEntryIds.has(entry.id) ||
         input.completeSupersededReplyEntryIds.has(entry.id)
       ) {
@@ -1647,6 +1671,18 @@ export function deriveMessagesTimelineRows(input: {
     }
 
     if (activeWorkEntryIds.has(timelineEntry.id)) {
+      continue;
+    }
+
+    const summaryItem = conversationSummaryItem(timelineEntry);
+    if (summaryItem !== null) {
+      nextRows.push({
+        kind: "conversation-summary",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        label: timelineEntry.kind === "work" ? timelineEntry.entry.label : "",
+        item: summaryItem,
+      });
       continue;
     }
 
@@ -2280,6 +2316,11 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
     case "context-compaction": {
       const bc = b as typeof a;
       return a.createdAt === bc.createdAt && a.label === bc.label && a.active === bc.active;
+    }
+
+    case "conversation-summary": {
+      const bs = b as typeof a;
+      return a.label === bs.label && a.item.updatedAt === bs.item.updatedAt;
     }
 
     case "proposed-plan":

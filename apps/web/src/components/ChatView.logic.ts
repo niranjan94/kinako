@@ -11,7 +11,10 @@ import {
   ProjectId,
   type MessageId,
   type ModelSelection,
+  type OrchestrationV2ConversationSummaryDirection,
   type OrchestrationV2ProjectedTurnItem,
+  type OrchestrationV2Run,
+  type OrchestrationV2ThreadProjection,
   type PreviewAnnotationPayload,
   type ProviderInteractionMode,
   ProviderDriverKind,
@@ -1105,25 +1108,19 @@ export async function waitForStartedServerThread(
 }
 
 /**
- * Runs `revert` (the rollback command `requestId`) and resolves once the
- * message's run is rolled back. Rejects with the server's reason as soon as
- * the thread records that this rollback failed.
+ * Runs `action`, then resolves once `inspect` reports the thread reached its
+ * outcome: true when done, an Error to reject, undefined to keep waiting. An
+ * Error rejects at once; done only counts after `action` was accepted.
  */
-export async function waitForRevertedMessage(
-  threadRef: ScopedThreadRef,
-  messageId: MessageId,
-  turnCount: number,
-  requestId: CommandId,
-  revert: () => Promise<void>,
-  timeoutMs = 120_000,
-): Promise<void> {
-  const threadAtom = environmentThreadDetails.stateAtom(threadRef);
+function waitForThreadOutcome(input: {
+  readonly threadRef: ScopedThreadRef;
+  readonly action: () => Promise<void>;
+  readonly inspect: (thread: OrchestrationV2ThreadProjection) => true | Error | undefined;
+  readonly timeoutMessage: string;
+  readonly timeoutMs: number;
+}): Promise<void> {
+  const threadAtom = environmentThreadDetails.stateAtom(input.threadRef);
   const readProjection = () => Option.getOrNull(appAtomRegistry.get(threadAtom).data);
-  const initial = readProjection();
-  if (!initial?.messages.some((message) => message.id === messageId)) {
-    throw new Error("The message to rewind is no longer available.");
-  }
-  const messageRunId = initial.messages.find((message) => message.id === messageId)?.runId;
   return new Promise<void>((resolve, reject) => {
     let settled = false;
     let accepted = false;
@@ -1140,31 +1137,146 @@ export async function waitForRevertedMessage(
     const inspect = () => {
       const thread = readProjection();
       if (!thread) return;
-      const failure = thread.thread.rollbackFailure;
-      if (failure?.requestId === requestId) {
-        finish(new Error(failure.message));
-        return;
-      }
-      if (
-        accepted &&
-        thread.runs.some(
-          (run) =>
-            run.id === messageRunId && run.ordinal > turnCount && run.status === "rolled_back",
-        )
-      )
-        finish();
+      const outcome = input.inspect(thread);
+      if (outcome instanceof Error) finish(outcome);
+      else if (outcome === true && accepted) finish();
     };
     unsubscribe = appAtomRegistry.subscribe(threadAtom, inspect);
     timeout = globalThis.setTimeout(() => {
-      finish(new Error("Timed out waiting for the thread to rewind."));
-    }, timeoutMs);
+      finish(new Error(input.timeoutMessage));
+    }, input.timeoutMs);
     Promise.resolve()
-      .then(revert)
+      .then(input.action)
       .then(() => {
         accepted = true;
         inspect();
       }, finish);
   });
+}
+
+/**
+ * Runs `revert` (the rollback command `requestId`) and resolves once the
+ * message's run is rolled back. Rejects with the server's reason as soon as
+ * the thread records that this rollback failed.
+ */
+export async function waitForRevertedMessage(
+  threadRef: ScopedThreadRef,
+  messageId: MessageId,
+  turnCount: number,
+  requestId: CommandId,
+  revert: () => Promise<void>,
+  timeoutMs = 120_000,
+): Promise<void> {
+  const threadAtom = environmentThreadDetails.stateAtom(threadRef);
+  const initial = Option.getOrNull(appAtomRegistry.get(threadAtom).data);
+  const messageRunId = initial?.messages.find((message) => message.id === messageId)?.runId;
+  if (messageRunId === undefined) {
+    throw new Error("The message to rewind is no longer available.");
+  }
+  return waitForThreadOutcome({
+    threadRef,
+    action: revert,
+    inspect: (thread) => {
+      const failure = thread.thread.rollbackFailure;
+      if (failure?.requestId === requestId) return new Error(failure.message);
+      return thread.runs.some(
+        (run) => run.id === messageRunId && run.ordinal > turnCount && run.status === "rolled_back",
+      )
+        ? true
+        : undefined;
+    },
+    timeoutMessage: "Timed out waiting for the thread to rewind.",
+    timeoutMs,
+  });
+}
+
+/**
+ * Runs `summarize` (the summarize command `requestId`) and resolves once its
+ * summary is in the timeline, and for `from_here` once the message's run is
+ * rolled back. Rejects with the server's reason when the summary or its
+ * rollback fails.
+ */
+export async function waitForThreadSummary(input: {
+  readonly threadRef: ScopedThreadRef;
+  readonly messageId: MessageId;
+  readonly direction: OrchestrationV2ConversationSummaryDirection;
+  readonly requestId: CommandId;
+  readonly summarize: () => Promise<void>;
+  readonly timeoutMs?: number;
+}): Promise<void> {
+  const threadAtom = environmentThreadDetails.stateAtom(input.threadRef);
+  const initial = Option.getOrNull(appAtomRegistry.get(threadAtom).data);
+  const messageRunId = initial?.messages.find((message) => message.id === input.messageId)?.runId;
+  if (messageRunId === undefined) {
+    throw new Error("The message to summarize is no longer available.");
+  }
+  const existingMarkers = new Set(
+    initial?.turnItems.filter((item) => item.type === "compaction").map((item) => item.id),
+  );
+  // The server applies the summary under this command, which also requests the rollback.
+  const completionId = `${input.requestId}:summary-complete`;
+  return waitForThreadOutcome({
+    threadRef: input.threadRef,
+    action: input.summarize,
+    inspect: (thread) => {
+      const request = thread.thread.summarize;
+      if (request?.requestId === input.requestId && request.failure !== undefined) {
+        return new Error(request.failure);
+      }
+      const rollbackFailure = thread.thread.rollbackFailure;
+      if (rollbackFailure?.requestId === completionId) return new Error(rollbackFailure.message);
+      const applied = thread.turnItems.some(
+        (item) =>
+          item.type === "compaction" &&
+          item.range?.messageId === input.messageId &&
+          !existingMarkers.has(item.id),
+      );
+      if (!applied) return undefined;
+      if (input.direction === "up_to_here") return true;
+      return thread.runs.some((run) => run.id === messageRunId && run.status === "rolled_back")
+        ? true
+        : undefined;
+    },
+    timeoutMessage: "Timed out waiting for the summary.",
+    timeoutMs: input.timeoutMs ?? 600_000,
+  });
+}
+
+const SUMMARIZABLE_RUN_STATUSES: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
+  "completed",
+  "interrupted",
+  "failed",
+  "cancelled",
+]);
+
+/**
+ * User messages that "Summarize up to here" can start from: their turn is
+ * still in the conversation and an earlier turn ran, as the server requires.
+ */
+export function conversationSummaryUpToHereMessageIds(
+  projection: Pick<OrchestrationV2ThreadProjection, "messages" | "runs"> | null | undefined,
+): ReadonlySet<MessageId> {
+  if (!projection) return new Set();
+  const runsById = new Map(projection.runs.map((run) => [run.id, run]));
+  let firstExecutedOrdinal = Number.POSITIVE_INFINITY;
+  for (const run of projection.runs) {
+    if (SUMMARIZABLE_RUN_STATUSES.has(run.status)) {
+      firstExecutedOrdinal = Math.min(firstExecutedOrdinal, run.ordinal);
+    }
+  }
+  const eligible = new Set<MessageId>();
+  for (const message of projection.messages) {
+    const run = message.runId === null ? undefined : runsById.get(message.runId);
+    if (
+      message.role === "user" &&
+      run !== undefined &&
+      run.status !== "rolled_back" &&
+      run.ordinal > firstExecutedOrdinal
+    ) {
+      eligible.add(message.id);
+    }
+  }
+  return eligible;
 }
 
 export interface LocalDispatchSnapshot {

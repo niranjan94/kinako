@@ -63,6 +63,8 @@ import {
   EnvironmentAuthorizationError,
   type EnvironmentId,
   type MessageId,
+  type OrchestrationV2ConversationSummaryDirection,
+  type TurnItemId,
   type ModelSelection,
   type ProjectScript,
   type ProjectId,
@@ -448,6 +450,10 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
+import {
+  type ConversationSummaryTimelineControls,
+  SummarizeConversationDialog,
+} from "./chat/ConversationSummary";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveTimelineIsAtEnd, worktreeSetupAgentStarted } from "./chat/MessagesTimeline.logic";
@@ -549,6 +555,8 @@ import {
   resolveFileAttachmentUrl,
   prepareRevertedMessageAttachments,
   waitForRevertedMessage,
+  waitForThreadSummary,
+  conversationSummaryUpToHereMessageIds,
   reconcileMountedTerminalThreadIds,
   resolveComposerInteractionMode,
   resolveComposerProviderSelection,
@@ -1664,6 +1672,12 @@ export default function ChatView(props: ChatViewProps) {
     reportFailure: false,
   });
   const revertThreadCheckpoint = useOrchestrationCommand(threadEnvironment.revertCheckpoint, {
+    reportFailure: false,
+  });
+  const summarizeThread = useOrchestrationCommand(threadEnvironment.summarize, {
+    reportFailure: false,
+  });
+  const restoreThreadSummary = useOrchestrationCommand(threadEnvironment.restoreSummary, {
     reportFailure: false,
   });
   const forkThreadFromRun = useAtomCommand(threadEnvironment.forkFromRun, {
@@ -8502,55 +8516,35 @@ export default function ChatView(props: ChatViewProps) {
     setPendingRevert(null);
   }
 
-  const onRevertToTurnCount = useCallback(
-    async (turnCount: number, messageId: MessageId, restoreFiles?: boolean) => {
-      const localApi = readLocalApi();
-      if (
-        !localApi ||
-        !activeThread ||
-        isRevertingCheckpoint ||
-        !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)
-      )
-        return;
+  const readRewindableMessage = useCallback(
+    (messageId: MessageId) => {
       const sourceMessage = serverProjection?.messages.find((message) => message.id === messageId);
-      const message = sourceMessage
-        ? {
-            id: sourceMessage.id,
-            role: sourceMessage.role,
-            text: sourceMessage.text,
-            attachments: sourceMessage.attachments,
-            context: sourceMessage.context,
-            runId: sourceMessage.runId,
-            streaming: false,
-            createdAt: DateTime.formatIso(sourceMessage.createdAt),
-            updatedAt: DateTime.formatIso(sourceMessage.updatedAt),
-          }
-        : undefined;
-      if (!message || message.role !== "user") return;
+      if (!sourceMessage || sourceMessage.role !== "user") return undefined;
+      return {
+        id: sourceMessage.id,
+        role: sourceMessage.role,
+        text: sourceMessage.text,
+        attachments: sourceMessage.attachments,
+        context: sourceMessage.context,
+        runId: sourceMessage.runId,
+        streaming: false,
+        createdAt: DateTime.formatIso(sourceMessage.createdAt),
+        updatedAt: DateTime.formatIso(sourceMessage.updatedAt),
+      };
+    },
+    [serverProjection],
+  );
 
-      if (!supportsConversationRollback) {
-        setThreadError(
-          activeThread.id,
-          "This provider does not support reverting conversation history. Start a new thread instead.",
-        );
-        return;
-      }
-      if (activeEnvironmentUnavailable && activeEnvironmentUnavailableLabel) {
-        setThreadError(
-          activeThread.id,
-          `Reconnect ${activeEnvironmentUnavailableLabel} before reverting checkpoints.`,
-        );
-        return;
-      }
-      if (phase === "running" || isSendBusy || isConnecting) {
-        setThreadError(activeThread.id, "Interrupt the current turn before reverting checkpoints.");
-        return;
-      }
-      if (restoreFiles === undefined) {
-        setPendingRevert({ turnCount, messageId, routeThreadKey });
-        return;
-      }
-
+  /**
+   * Prepares the message's attachments, runs `rewind`, then returns its prompt
+   * and attachments to the composer. Edit and summarize from here share it.
+   */
+  const rewindMessageIntoComposer = useCallback(
+    async (
+      message: NonNullable<ReturnType<typeof readRewindableMessage>>,
+      rewind: () => Promise<void>,
+    ) => {
+      if (!activeThread) return;
       useComposerDraftStore.setState((store) => ({
         rewindingThreadKeys: new Set(store.rewindingThreadKeys).add(routeThreadKey),
       }));
@@ -8577,14 +8571,7 @@ export default function ChatView(props: ChatViewProps) {
             "Make room for this message's attachments in the composer before rewinding.",
           );
         }
-        const commandId = CommandId.make(randomUUID());
-        await waitForRevertedMessage(routeThreadRef, messageId, turnCount, commandId, async () => {
-          const result = await revertThreadCheckpoint({
-            environmentId,
-            input: { commandId, threadId: activeThread.id, turnCount, restoreFiles },
-          });
-          if (result._tag === "Failure") throw squashAtomCommandFailure(result);
-        });
+        await rewind();
         const currentPrompt = store.getComposerDraft(composerDraftTarget)?.prompt ?? "";
         const restoredPrompt = recallableComposerPrompt(message.text);
         const nextPrompt =
@@ -8635,23 +8622,210 @@ export default function ChatView(props: ChatViewProps) {
     },
     [
       activeThread,
-      activeEnvironmentUnavailable,
-      activeEnvironmentUnavailableLabel,
       composerDraftTarget,
       composerRef,
       createAttachmentAssetUrl,
       environmentId,
+      routeThreadKey,
+      setThreadError,
+    ],
+  );
+
+  /** Why the thread cannot rewind or summarize now, or null when it can. */
+  const conversationChangeBlocker = useCallback(
+    (action: string) => {
+      if (activeEnvironmentUnavailable && activeEnvironmentUnavailableLabel) {
+        return `Reconnect ${activeEnvironmentUnavailableLabel} before ${action}.`;
+      }
+      if (phase === "running" || isSendBusy || isConnecting) {
+        return `Interrupt the current turn before ${action}.`;
+      }
+      return null;
+    },
+    [
+      activeEnvironmentUnavailable,
+      activeEnvironmentUnavailableLabel,
       isConnecting,
-      isRevertingCheckpoint,
       isSendBusy,
       phase,
+    ],
+  );
+
+  const onRevertToTurnCount = useCallback(
+    async (turnCount: number, messageId: MessageId, restoreFiles?: boolean) => {
+      const localApi = readLocalApi();
+      if (
+        !localApi ||
+        !activeThread ||
+        isRevertingCheckpoint ||
+        !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)
+      )
+        return;
+      const message = readRewindableMessage(messageId);
+      if (!message) return;
+
+      if (!supportsConversationRollback) {
+        setThreadError(
+          activeThread.id,
+          "This provider does not support reverting conversation history. Start a new thread instead.",
+        );
+        return;
+      }
+      const blocker = conversationChangeBlocker("reverting checkpoints");
+      if (blocker !== null) {
+        setThreadError(activeThread.id, blocker);
+        return;
+      }
+      if (restoreFiles === undefined) {
+        setPendingRevert({ turnCount, messageId, routeThreadKey });
+        return;
+      }
+
+      const commandId = CommandId.make(randomUUID());
+      await rewindMessageIntoComposer(message, () =>
+        waitForRevertedMessage(routeThreadRef, messageId, turnCount, commandId, async () => {
+          const result = await revertThreadCheckpoint({
+            environmentId,
+            input: { commandId, threadId: activeThread.id, turnCount, restoreFiles },
+          });
+          if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+        }),
+      );
+    },
+    [
+      activeThread,
+      conversationChangeBlocker,
+      environmentId,
+      isRevertingCheckpoint,
+      readRewindableMessage,
       revertThreadCheckpoint,
+      rewindMessageIntoComposer,
       routeThreadKey,
       routeThreadRef,
       setThreadError,
       supportsConversationRollback,
-      serverProjection,
     ],
+  );
+
+  const [pendingSummary, setPendingSummary] = useState<{
+    messageId: MessageId;
+    direction: OrchestrationV2ConversationSummaryDirection;
+    routeThreadKey: string;
+  } | null>(null);
+
+  if (pendingSummary && pendingSummary.routeThreadKey !== routeThreadKey) {
+    setPendingSummary(null);
+  }
+
+  const isSummarizing =
+    serverProjection?.thread.summarize != null &&
+    serverProjection.thread.summarize.failure === undefined;
+
+  const onSummarizeMessage = useCallback(
+    (messageId: MessageId, direction: OrchestrationV2ConversationSummaryDirection) => {
+      if (
+        !activeThread ||
+        isRevertingCheckpoint ||
+        isSummarizing ||
+        !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope) ||
+        !readRewindableMessage(messageId)
+      )
+        return;
+      const blocker = conversationChangeBlocker("summarizing");
+      if (blocker !== null) {
+        setThreadError(activeThread.id, blocker);
+        return;
+      }
+      setPendingSummary({ messageId, direction, routeThreadKey });
+    },
+    [
+      activeThread,
+      conversationChangeBlocker,
+      environmentId,
+      isRevertingCheckpoint,
+      isSummarizing,
+      readRewindableMessage,
+      routeThreadKey,
+      setThreadError,
+    ],
+  );
+
+  const confirmSummary = useCallback(
+    async (instructions: string) => {
+      const pending = pendingSummary;
+      setPendingSummary(null);
+      if (!pending || pending.routeThreadKey !== routeThreadKey || !activeThread) return;
+      const message = readRewindableMessage(pending.messageId);
+      if (!message) return;
+      const commandId = CommandId.make(randomUUID());
+      const summarize = () =>
+        waitForThreadSummary({
+          threadRef: routeThreadRef,
+          messageId: pending.messageId,
+          direction: pending.direction,
+          requestId: commandId,
+          summarize: async () => {
+            const result = await summarizeThread({
+              environmentId,
+              input: {
+                commandId,
+                threadId: activeThread.id,
+                messageId: pending.messageId,
+                direction: pending.direction,
+                instructions,
+              },
+            });
+            if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+          },
+        });
+      if (pending.direction === "from_here") {
+        await rewindMessageIntoComposer(message, summarize);
+        return;
+      }
+      setThreadError(activeThread.id, null);
+      await summarize().catch((error: unknown) => {
+        setThreadError(
+          activeThread.id,
+          error instanceof Error ? error.message : "Failed to summarize the conversation.",
+        );
+      });
+    },
+    [
+      activeThread,
+      environmentId,
+      pendingSummary,
+      readRewindableMessage,
+      rewindMessageIntoComposer,
+      routeThreadKey,
+      routeThreadRef,
+      setThreadError,
+      summarizeThread,
+    ],
+  );
+
+  const onRestoreSummary = useCallback(
+    async (turnItemId: TurnItemId) => {
+      if (!activeThread || !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope))
+        return;
+      const blocker = conversationChangeBlocker("restoring the full context");
+      if (blocker !== null) {
+        setThreadError(activeThread.id, blocker);
+        return;
+      }
+      setThreadError(activeThread.id, null);
+      const result = await restoreThreadSummary({
+        environmentId,
+        input: { commandId: CommandId.make(randomUUID()), threadId: activeThread.id, turnItemId },
+      });
+      if (result._tag === "Failure") {
+        const failure = squashAtomCommandFailure(result);
+        setThreadError(
+          activeThread.id,
+          failure instanceof Error ? failure.message : "Failed to restore the full context.",
+        );
+      }
+    },
+    [activeThread, conversationChangeBlocker, environmentId, restoreThreadSummary, setThreadError],
   );
 
   const onRollbackCheckpoint = useCallback(
@@ -11123,6 +11297,35 @@ export default function ChatView(props: ChatViewProps) {
   const onRevertTimelineTurn = useCallback((targetTurnCount: number, messageId: MessageId) => {
     void onRevertToTurnCountRef.current(targetTurnCount, messageId);
   }, []);
+  const onSummarizeMessageRef = useRef(onSummarizeMessage);
+  onSummarizeMessageRef.current = onSummarizeMessage;
+  const onRestoreSummaryRef = useRef(onRestoreSummary);
+  onRestoreSummaryRef.current = onRestoreSummary;
+  const summaryUpToHereMessageIds = useMemo(
+    () => conversationSummaryUpToHereMessageIds(serverProjection),
+    [serverProjection?.messages, serverProjection?.runs],
+  );
+  const activeProviderThreadId = serverProjection?.thread.activeProviderThreadId ?? null;
+  const conversationSummaryControls = useMemo<ConversationSummaryTimelineControls | null>(
+    () =>
+      paintOnlyDisplayedTimeline || !canOperateThread
+        ? null
+        : {
+            onSummarize: (messageId, direction) =>
+              onSummarizeMessageRef.current(messageId, direction),
+            onRestore: (turnItemId) => void onRestoreSummaryRef.current(turnItemId),
+            upToHereMessageIds: summaryUpToHereMessageIds,
+            supportsConversationRollback,
+            activeProviderThreadId,
+          },
+    [
+      activeProviderThreadId,
+      canOperateThread,
+      paintOnlyDisplayedTimeline,
+      summaryUpToHereMessageIds,
+      supportsConversationRollback,
+    ],
+  );
 
   const pendingSidebarFileDrops = useSidebarPendingFileDropStore((state) => state.pending);
   const consumePendingFileDrop = useSidebarPendingFileDropStore(
@@ -11660,10 +11863,11 @@ export default function ChatView(props: ChatViewProps) {
                 onRevertToTurnCount={
                   paintOnlyDisplayedTimeline ? noopHeldRevert : onRevertTimelineTurn
                 }
+                conversationSummary={conversationSummaryControls}
                 {...(!paintOnlyDisplayedTimeline
                   ? { onUseArtifactTemplate: useArtifactTemplate, onSendAppMessage: sendAppMessage }
                   : {})}
-                isRevertingCheckpoint={isRevertingCheckpoint}
+                isRevertingCheckpoint={isRevertingCheckpoint || isSummarizing}
                 onImageExpand={onExpandTimelineImage}
                 onFileOpen={paintOnlyDisplayedTimeline ? noopHeldAttachment : openFileAttachment}
                 onFileDownload={
@@ -11849,13 +12053,15 @@ export default function ChatView(props: ChatViewProps) {
                                     ? "Preparing machine"
                                     : isRevertingCheckpoint
                                       ? "Rewinding conversation"
-                                      : feedbackUploading
-                                        ? "Sending feedback"
-                                        : threadDetailLoading
-                                          ? "Messages loading"
-                                          : worktreeSetupBlocksSend
-                                            ? "Preparing worktree"
-                                            : projectCloneSendBlockReason
+                                      : isSummarizing
+                                        ? "Summarizing conversation"
+                                        : feedbackUploading
+                                          ? "Sending feedback"
+                                          : threadDetailLoading
+                                            ? "Messages loading"
+                                            : worktreeSetupBlocksSend
+                                              ? "Preparing worktree"
+                                              : projectCloneSendBlockReason
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
@@ -12277,6 +12483,11 @@ export default function ChatView(props: ChatViewProps) {
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
+      <SummarizeConversationDialog
+        direction={pendingSummary?.direction ?? null}
+        onCancel={() => setPendingSummary(null)}
+        onConfirm={(instructions) => void confirmSummary(instructions)}
+      />
       <LinkPullRequestDialogHost />
       {expandedImage && (
         <ExpandedImageDialog

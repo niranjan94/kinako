@@ -116,6 +116,11 @@ import {
 } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
+import {
+  ConversationSummaryRow,
+  type ConversationSummaryTimelineControls,
+  SummarizeMessageMenu,
+} from "./ConversationSummary";
 import { WorkflowRunPanel } from "./WorkflowRunPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -330,6 +335,7 @@ interface TimelineRowSharedState {
   runs: ReadonlyArray<HandoffTimelineRun>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertToTurnCount: (targetTurnCount: number, messageId: MessageId) => void;
+  conversationSummary: ConversationSummaryTimelineControls | null;
   onUseArtifactTemplate: (template: CodexArtifactTemplate) => void;
   /** Sends text an MCP App asked to post, after the user approved it. */
   onSendAppMessage: ((text: string) => Promise<void>) | undefined;
@@ -502,6 +508,8 @@ interface MessagesTimelineProps {
   }) => void;
   supportsConversationRollback: boolean;
   onRevertToTurnCount: (targetTurnCount: number, messageId: MessageId) => void;
+  /** Absent where the timeline cannot change the thread, such as paint-only views. */
+  conversationSummary?: ConversationSummaryTimelineControls | null;
   onUseArtifactTemplate?: (template: CodexArtifactTemplate) => void;
   onSendAppMessage?: (text: string) => Promise<void>;
   onRunShellCommand?: (command: string) => void;
@@ -608,6 +616,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   onRollbackCheckpoint,
   supportsConversationRollback,
   onRevertToTurnCount,
+  conversationSummary = null,
   onUseArtifactTemplate = NOOP_USE_ARTIFACT_TEMPLATE,
   onSendAppMessage,
   onRunShellCommand,
@@ -1365,6 +1374,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       runs,
       activeThreadEnvironmentId,
       onRevertToTurnCount,
+      conversationSummary,
       onRunShellCommand,
       findActive,
       onImageExpand,
@@ -1403,6 +1413,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       runs,
       activeThreadEnvironmentId,
       onRevertToTurnCount,
+      conversationSummary,
       onRunShellCommand,
       findActive,
       onImageExpand,
@@ -2164,6 +2175,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
       {row.kind === "attempt-fold" ? <AttemptFoldTimelineRow row={row} /> : null}
       {row.kind === "context-compaction" ? <ContextCompactionTimelineRow row={row} /> : null}
+      {row.kind === "conversation-summary" ? <ConversationSummaryTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -2235,6 +2247,27 @@ function ContextCompactionTimelineRow({
       </span>
       <span className="h-px flex-1 bg-border/70" />
     </div>
+  );
+}
+
+function ConversationSummaryTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "conversation-summary" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  const activity = use(TimelineRowActivityCtx);
+  return (
+    <ConversationSummaryRow
+      item={row.item}
+      label={row.label}
+      controls={ctx.conversationSummary}
+      environmentId={ctx.activeThreadEnvironmentId}
+      markdownCwd={ctx.markdownCwd}
+      threadRef={ctx.threadRef}
+      skills={ctx.skills}
+      disabled={activity.isRevertingCheckpoint || activity.isWorking}
+    />
   );
 }
 
@@ -2641,6 +2674,13 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
             {typeof revertTurnCount === "number" && (
               <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />
             )}
+            {ctx.conversationSummary !== null && row.message.runId != null ? (
+              <SummarizeUserMessageButton
+                messageId={row.message.id}
+                controls={ctx.conversationSummary}
+                canRewind={typeof revertTurnCount === "number"}
+              />
+            ) : null}
             {resolvedContext.text && (
               <MessageCopyButton
                 // Structured paste needs the canonical links to retain their positions.
@@ -2763,6 +2803,20 @@ function RevertUserMessageButton({
       </TooltipTrigger>
       <TooltipPopup side="top">Edit from here</TooltipPopup>
     </Tooltip>
+  );
+}
+
+function SummarizeUserMessageButton(props: {
+  messageId: MessageId;
+  controls: ConversationSummaryTimelineControls;
+  canRewind: boolean;
+}) {
+  const activity = use(TimelineRowActivityCtx);
+  return (
+    <SummarizeMessageMenu
+      {...props}
+      disabled={activity.isRevertingCheckpoint || activity.isWorking}
+    />
   );
 }
 

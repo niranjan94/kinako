@@ -1,4 +1,8 @@
-import { findRecordedWorktreeSetup, resolveVisibleWorktreeSetup } from "./ChatView.logic";
+import {
+  conversationSummaryUpToHereMessageIds,
+  findRecordedWorktreeSetup,
+  resolveVisibleWorktreeSetup,
+} from "./ChatView.logic";
 import {
   recallCheckoutIsRepo,
   rememberCheckoutIsRepo,
@@ -141,6 +145,44 @@ const readySession = {
   lastError: null,
   updatedAt: "2026-03-29T00:00:10.000Z",
 };
+
+describe("conversationSummaryUpToHereMessageIds", () => {
+  const userMessage = (id: string, runId: string) => ({ id, role: "user", runId });
+  const run = (id: string, ordinal: number, status: string) => ({ id, ordinal, status });
+
+  it("offers messages with an earlier turn still in the conversation", () => {
+    const eligible = conversationSummaryUpToHereMessageIds({
+      messages: [
+        userMessage("first", "run-1"),
+        userMessage("second", "run-2"),
+        userMessage("rewound", "run-3"),
+        { id: "reply", role: "assistant", runId: "run-2" },
+      ],
+      runs: [
+        run("run-1", 1, "completed"),
+        run("run-2", 2, "completed"),
+        run("run-3", 3, "rolled_back"),
+      ],
+    } as never);
+    expect([...eligible]).toEqual(["second"]);
+  });
+
+  it("starts from the first turn that ran", () => {
+    const eligible = conversationSummaryUpToHereMessageIds({
+      messages: [
+        userMessage("never-ran", "run-1"),
+        userMessage("first-ran", "run-2"),
+        userMessage("next", "run-3"),
+      ],
+      runs: [
+        run("run-1", 1, "rolled_back"),
+        run("run-2", 2, "completed"),
+        run("run-3", 3, "failed"),
+      ],
+    } as never);
+    expect([...eligible]).toEqual(["next"]);
+  });
+});
 
 describe("resolveDraftPromotionNavigationTarget", () => {
   const serverThreadRef = { environmentId, threadId };

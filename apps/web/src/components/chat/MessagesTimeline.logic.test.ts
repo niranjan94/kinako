@@ -1435,6 +1435,107 @@ describe("deriveMessagesTimelineRows", () => {
     ).toBeDefined();
   });
 
+  it("keeps a conversation summary visible when its turn folds", () => {
+    const summaryItem = {
+      id: "summary-item" as never,
+      threadId: "thread-1" as never,
+      runId: "turn-1" as never,
+      nodeId: null,
+      providerThreadId: null,
+      providerTurnId: null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: 198,
+      status: "completed" as const,
+      title: "Summarized conversation",
+      startedAt: null,
+      completedAt: null,
+      updatedAt: DateTime.makeUnsafe("2026-01-01T00:00:30Z"),
+      type: "compaction" as const,
+      driver: null,
+      summary: "The release marker is violet.",
+      range: {
+        direction: "from_here" as const,
+        messageId: "user-2" as never,
+        coveredRunIds: ["turn-2" as never],
+      },
+    };
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry",
+          kind: "message" as const,
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user" as const,
+            text: "Build it",
+            runId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry-1",
+          kind: "work" as const,
+          createdAt: "2026-01-01T00:00:08Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:08Z",
+            runId: "turn-1" as never,
+            label: "Ran command",
+            tone: "tool" as const,
+          },
+        },
+        {
+          id: "assistant-final-entry",
+          kind: "message" as const,
+          createdAt: "2026-01-01T00:00:20Z",
+          message: {
+            id: "assistant-final" as never,
+            role: "assistant" as const,
+            text: "Done",
+            runId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:20Z",
+            updatedAt: "2026-01-01T00:00:22Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "summary-entry",
+          kind: "work" as const,
+          createdAt: "2026-01-01T00:00:30Z",
+          entry: {
+            id: "summary",
+            createdAt: "2026-01-01T00:00:30Z",
+            runId: "turn-1" as never,
+            label: "Summarized conversation",
+            tone: "info" as const,
+            sourceActivityKind: "context-compaction",
+            structuredPayload: summaryItem,
+          },
+        },
+      ],
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+
+    expect(rows.map((row) => row.id)).toEqual([
+      "user-entry",
+      "turn-fold:turn-1",
+      "assistant-final-entry",
+      "summary-entry",
+    ]);
+    expect(rows.at(-1)).toMatchObject({
+      kind: "conversation-summary",
+      label: "Summarized conversation",
+      item: { summary: "The release marker is violet." },
+    });
+  });
+
   it.each([1, 2, 3])("folds %i completed activities after the terminal response", (count) => {
     const runId = RunId.make("turn-1");
     const timelineEntries = [
