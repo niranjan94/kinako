@@ -229,6 +229,8 @@ and your next message starts the agent again with the new setup.
 Provider commands must start the message to run. T3 Code commands such as
 `/model` and `/plan`, and skill mentions, work on any line.
 
+The context meter next to the composer shows how full the thread's context window is. Hover it on web and desktop, or tap it on mobile, to see what fills the window. Claude itemizes the window by category, such as system prompt, tools, memory files, and messages. Other providers report how the last request split into cached input, new input, and output. Claude's breakdown updates when a turn finishes, so the cached and new input split shows while a turn runs. Turn the meter off in **Settings → General → Context window indicator** on web and desktop, or **Settings → Thread behavior** on mobile.
+
 Send `/compact` in an existing conversation to reduce context usage when the
 provider supports it. Web and desktop also offer compaction from the context meter.
 
