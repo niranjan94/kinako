@@ -14,7 +14,7 @@ import {
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import { ModelSelection } from "./modelSelection.ts";
 import type { OrchestrationV2StoredEvent } from "./orchestrationV2.ts";
-import { ProjectScript, StoredProjectIcon } from "./project.ts";
+import { ProjectAdditionalDirectories, ProjectScript, StoredProjectIcon } from "./project.ts";
 
 /**
  * Which client dispatched the command that produced this event (#7774).
@@ -70,6 +70,7 @@ export const ApplicationProjectMetaUpdatedPayload = Schema.Struct({
   faviconPath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   projectIcon: Schema.optional(Schema.NullOr(StoredProjectIcon)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
+  additionalDirectories: Schema.optional(ProjectAdditionalDirectories),
   updatedAt: IsoDateTime,
 });
 export type ApplicationProjectMetaUpdatedPayload = typeof ApplicationProjectMetaUpdatedPayload.Type;

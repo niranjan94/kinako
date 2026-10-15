@@ -3,6 +3,7 @@ import {
   type EventId,
   MAX_SCRIPT_ID_LENGTH,
   type ModelSelection,
+  type ProjectAdditionalDirectory,
   type ProjectIconOverride,
   ProjectId,
   type ProjectScript,
@@ -37,6 +38,7 @@ export interface ProjectMetaUpdateCommand {
   readonly faviconPath?: string | null;
   readonly projectIcon?: ProjectIconOverride | null;
   readonly scripts?: ReadonlyArray<ProjectScript>;
+  readonly additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory>;
 }
 
 export interface ProjectDeleteCommand {
@@ -202,6 +204,19 @@ export function planProjectCommand(input: {
           }
         }
       }
+      if (command.additionalDirectories !== undefined) {
+        const workspaceRoot = command.workspaceRoot ?? project.workspaceRoot;
+        const seen = new Set<string>();
+        for (const directory of command.additionalDirectories) {
+          if (directory.path === workspaceRoot) {
+            return invariant("An additional directory cannot be the project root.");
+          }
+          if (seen.has(directory.path)) {
+            return invariant(`Additional directory ${directory.path} is listed twice.`);
+          }
+          seen.add(directory.path);
+        }
+      }
       if (command.workspaceRoot !== undefined) {
         const conflict = requireWorkspaceAvailable(command.workspaceRoot);
         if (conflict !== undefined) return Result.fail(conflict);
@@ -223,6 +238,9 @@ export function planProjectCommand(input: {
           ...(command.faviconPath === undefined ? {} : { faviconPath: command.faviconPath }),
           ...(command.projectIcon === undefined ? {} : { projectIcon: command.projectIcon }),
           ...(command.scripts === undefined ? {} : { scripts: command.scripts }),
+          ...(command.additionalDirectories === undefined
+            ? {}
+            : { additionalDirectories: command.additionalDirectories }),
           updatedAt: occurredAt,
         },
       });

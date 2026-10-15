@@ -62,6 +62,7 @@ import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 const PI_PRESENTATION = {
   displayName: "Pi",
   showInteractionModeToggle: false,
+  supportsAdditionalDirectories: false,
   supportedRuntimeModes: ["approval-required", "auto-accept-edits", "full-access"],
   // The adapter reports context usage from Pi's streaming usage while a
   // turn runs, so clients can reserve the meter before the first settle.

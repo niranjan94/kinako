@@ -13,18 +13,22 @@ import {
   type OrchestrationV2ThreadProjection,
   type ProviderDriverKind,
   type ProviderInteractionMode,
+  type ProjectAdditionalDirectory,
   ProjectId,
   type RunId,
   type RuntimeMode,
   type ScheduledTaskId,
+  type ThreadAdditionalDirectory,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -83,6 +87,8 @@ export interface ThreadLaunchInput {
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
   readonly workspaceStrategy: ThreadLaunchWorkspaceStrategy;
+  /** Overrides the project's additional directories; absent uses the project's. */
+  readonly additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory>;
   readonly initialMessage?: ThreadLaunchInitialMessage;
   readonly importedNativeThread?: {
     readonly ref: {
@@ -109,6 +115,13 @@ type PreparationInput = Pick<
   readonly reusedWorktree?: { readonly baseRef: string };
 };
 
+/** An additional worktree one preparation attempt created, for cleanup on failure. */
+interface AdditionalWorktree {
+  readonly repository: string;
+  path: string | null;
+  recorded: boolean;
+}
+
 export interface ThreadLaunchPreparationInput {
   readonly commandId: CommandId;
   readonly threadId: ThreadId;
@@ -129,6 +142,7 @@ export class ThreadLaunchError extends Schema.TaggedError<ThreadLaunchError>()(
       "read-receipt",
       "generate-metadata",
       "provision-worktree",
+      "provision-additional-directory",
       "run-setup-script",
       "create-thread",
       "update-thread",
@@ -216,6 +230,8 @@ const make = Effect.gen(function* () {
   const ids = yield* IdAllocator.IdAllocatorV2;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const preparationScope = yield* Scope.make("sequential");
   const scheduledLaunches = yield* Ref.make<ReadonlySet<CommandId>>(new Set());
   yield* Effect.addFinalizer(() => Scope.close(preparationScope, Exit.void));
@@ -297,6 +313,188 @@ const make = Effect.gen(function* () {
       });
   });
 
+  /**
+   * Creates the worktrees the thread's additional directories ask for, recording
+   * each one as it lands so a retry only creates what is still missing. Created
+   * worktrees are pushed to `created` so a failed launch can remove them.
+   */
+  const provisionAdditionalDirectories = Effect.fn(
+    "ThreadLaunchService.provisionAdditionalDirectories",
+  )(function* (
+    input: PreparationInput,
+    threadId: ThreadId,
+    primary: { readonly branch: string | null; readonly worktreePath: string | null },
+    created: Array<AdditionalWorktree>,
+  ) {
+    const fail = mapError(input, "provision-additional-directory", threadId);
+    const shell = yield* threads
+      .getThreadShell(threadId)
+      .pipe(Effect.mapError(mapError(input, "update-thread", threadId)));
+    const directories = [...(shell?.additionalDirectories ?? [])];
+    let temporaryBranch: string | null = null;
+    for (const [index, directory] of directories.entries()) {
+      if (!(yield* fileSystem.exists(directory.path).pipe(Effect.orElseSucceed(() => false)))) {
+        return yield* fail(`Additional directory ${directory.path} does not exist.`);
+      }
+      if (directory.mode !== "worktree" || directory.worktreePath !== null) continue;
+      if (!(yield* git.isRepository(directory.path).pipe(Effect.mapError(fail)))) {
+        return yield* fail(
+          `Additional directory ${directory.path} is not a Git repository, so it cannot use worktree mode.`,
+        );
+      }
+      // Sharing the primary worktree's branch name keeps related changes easy to
+      // pair up; a thread on the project checkout gets a temporary name instead.
+      let branch: string;
+      if (primary.worktreePath !== null && primary.branch !== null) {
+        branch = primary.branch;
+      } else {
+        if (temporaryBranch === null) {
+          const uuid = yield* randomUuidV4;
+          temporaryBranch = buildTemporaryWorktreeBranchName(() => uuid.replaceAll("-", ""));
+        }
+        branch = temporaryBranch;
+      }
+      if (
+        yield* git
+          .hasCommit({ cwd: directory.path, refName: `refs/heads/${branch}` })
+          .pipe(Effect.mapError(fail))
+      ) {
+        return yield* fail(
+          `Branch ${branch} already exists in ${directory.path}. Delete or rename it there, or use the current checkout for this directory.`,
+        );
+      }
+      const entry: AdditionalWorktree = {
+        repository: directory.path,
+        path: null,
+        recorded: false,
+      };
+      created.push(entry);
+      const worktree = yield* git
+        .createWorktree(
+          { cwd: directory.path, refName: "HEAD", newRefName: branch, path: null },
+          {
+            progress: {
+              onWorktreeClaimed: (claimed) =>
+                Effect.sync(() => {
+                  entry.path = claimed;
+                }),
+            },
+          },
+        )
+        .pipe(Effect.mapError(fail));
+      entry.path = worktree.worktree.path;
+      directories[index] = {
+        ...directory,
+        branch: worktree.worktree.refName,
+        worktreePath: worktree.worktree.path,
+      };
+      yield* threads
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make(`${input.commandId}:additional-directory:${index}`),
+          threadId,
+          additionalDirectories: directories,
+        })
+        .pipe(Effect.mapError(mapError(input, "update-thread", threadId)));
+      entry.recorded = true;
+    }
+    return directories;
+  });
+
+  /** Renames temporary additional branches; one that cannot take the name keeps its own. */
+  const renameAdditionalBranches = Effect.fn("ThreadLaunchService.renameAdditionalBranches")(
+    function* (
+      input: PreparationInput,
+      threadId: ThreadId,
+      directories: ReadonlyArray<ThreadAdditionalDirectory>,
+      name: { readonly newBranch: string; readonly exactName: boolean },
+    ) {
+      if (directories.length === 0) return;
+      const renamed = new Map<string, string>();
+      for (const directory of directories) {
+        const worktreePath = directory.worktreePath!;
+        yield* git
+          .renameBranch({
+            cwd: worktreePath,
+            oldBranch: directory.branch!,
+            newBranch: name.newBranch,
+            ...(name.exactName ? { exactName: true } : {}),
+          })
+          .pipe(
+            Effect.tap((result) => Effect.sync(() => renamed.set(worktreePath, result.branch))),
+            Effect.catchCause((cause) =>
+              Effect.logWarning("Additional worktree branch rename failed", {
+                commandId: input.commandId,
+                threadId,
+                path: worktreePath,
+                cause,
+              }),
+            ),
+          );
+      }
+      if (renamed.size === 0) return;
+      const shell = yield* threads.getThreadShell(threadId);
+      if (shell?.additionalDirectories === undefined) return;
+      yield* threads.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make(`${input.commandId}:additional-branch-rename`),
+        threadId,
+        additionalDirectories: shell.additionalDirectories.map((directory) => {
+          const branch =
+            directory.worktreePath === null ? undefined : renamed.get(directory.worktreePath);
+          return branch === undefined ? directory : { ...directory, branch };
+        }),
+      });
+    },
+  );
+
+  /** Removes additional worktrees a failed launch leaves behind and forgets the recorded ones. */
+  const removeAdditionalWorktrees = Effect.fn("ThreadLaunchService.removeAdditionalWorktrees")(
+    function* (
+      input: PreparationInput,
+      threadId: ThreadId,
+      worktrees: ReadonlyArray<AdditionalWorktree>,
+    ) {
+      const forgotten = new Set<string>();
+      for (const worktree of worktrees) {
+        const worktreePath = worktree.path;
+        if (worktreePath === null) continue;
+        yield* git
+          .removeWorktree({ cwd: worktree.repository, path: worktreePath, force: true })
+          .pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                if (worktree.recorded) forgotten.add(worktreePath);
+              }),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.logWarning("Failed to remove an abandoned additional worktree", {
+                commandId: input.commandId,
+                threadId,
+                path: worktreePath,
+                cause,
+              }),
+            ),
+          );
+      }
+      if (forgotten.size === 0) return;
+      const shell = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
+      if (shell?.additionalDirectories === undefined) return;
+      yield* threads
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make(`${input.commandId}:cancel-additional-directories`),
+          threadId,
+          additionalDirectories: shell.additionalDirectories.map((directory) =>
+            directory.worktreePath !== null && forgotten.has(directory.worktreePath)
+              ? { ...directory, branch: null, worktreePath: null }
+              : directory,
+          ),
+        })
+        .pipe(Effect.ignore);
+    },
+  );
+
   const prepareInBackground = Effect.fn("ThreadLaunchService.prepareInBackground")(function* (
     input: PreparationInput,
     threadId: ThreadId,
@@ -316,6 +514,7 @@ const make = Effect.gen(function* () {
     const reused = input.reusedWorktree;
     const tracked = input.workspaceStrategy.type === "worktree" || reused !== undefined;
     let createdWorktreePath: string | null = null;
+    const createdAdditionalWorktrees: Array<AdditionalWorktree> = [];
     let setupTerminalId: string | null = null;
     let workspaceRecorded = false;
     let runReleased = false;
@@ -496,42 +695,70 @@ const make = Effect.gen(function* () {
       }
       workspaceRecorded = true;
 
+      const additionalDirectories = yield* provisionAdditionalDirectories(
+        input,
+        threadId,
+        { branch, worktreePath },
+        createdAdditionalWorktrees,
+      );
+      const createdAdditionalPaths = new Set(
+        createdAdditionalWorktrees.flatMap((created) => (created.recorded ? [created.path] : [])),
+      );
+      const additionalRenames = additionalDirectories.filter(
+        (directory) =>
+          directory.worktreePath !== null &&
+          directory.branch !== null &&
+          createdAdditionalPaths.has(directory.worktreePath) &&
+          isTemporaryWorktreeBranch(directory.branch),
+      );
+
       // Rename temporary branches (server-invented above, or sent by clients
       // that name worktrees themselves) in the background so generation latency
       // never delays provisioning or the provider turn. The temporary name
       // simply sticks if generation or the rename fails.
-      if (
+      const primaryRename =
         reused === undefined &&
         worktreePath !== null &&
         branch !== null &&
-        initialMessage !== undefined &&
         isTemporaryWorktreeBranch(branch)
-      ) {
-        const oldBranch = branch;
-        const worktreeCwd = worktreePath;
-        yield* generateBranchNameFor(worktreeCwd, initialMessage).pipe(
-          Effect.flatMap(({ branch: newBranch, exactName }) =>
-            git.renameBranch({
-              cwd: worktreeCwd,
-              oldBranch,
-              newBranch,
-              ...(exactName ? { exactName: true } : {}),
-            }),
-          ),
-          Effect.flatMap((renamed) =>
-            threads.dispatch({
-              type: "thread.metadata.update",
-              commandId: CommandId.make(`${input.commandId}:branch-rename`),
-              threadId,
-              branch: renamed.branch,
-              worktreePath: worktreeCwd,
+          ? { oldBranch: branch, worktreeCwd: worktreePath }
+          : null;
+      const nameCwd = primaryRename?.worktreeCwd ?? additionalRenames[0]?.worktreePath ?? null;
+      if (initialMessage !== undefined && nameCwd !== null) {
+        yield* generateBranchNameFor(nameCwd, initialMessage).pipe(
+          Effect.flatMap((generated) =>
+            Effect.gen(function* () {
+              let newBranch = generated.branch;
+              let exactName = generated.exactName;
+              if (primaryRename !== null) {
+                const renamed = yield* git.renameBranch({
+                  cwd: primaryRename.worktreeCwd,
+                  oldBranch: primaryRename.oldBranch,
+                  newBranch,
+                  ...(exactName ? { exactName: true } : {}),
+                });
+                yield* threads.dispatch({
+                  type: "thread.metadata.update",
+                  commandId: CommandId.make(`${input.commandId}:branch-rename`),
+                  threadId,
+                  branch: renamed.branch,
+                  worktreePath: primaryRename.worktreeCwd,
+                });
+                // Additional worktrees follow the primary's final name exactly.
+                newBranch = renamed.branch;
+                exactName = true;
+              }
+              yield* renameAdditionalBranches(input, threadId, additionalRenames, {
+                newBranch,
+                exactName,
+              });
             }),
           ),
           Effect.catchCause((cause) =>
             Effect.logWarning("Thread worktree branch rename failed", {
               commandId: input.commandId,
               threadId,
-              oldBranch,
+              oldBranch: primaryRename?.oldBranch ?? additionalRenames[0]?.branch,
               cause,
             }),
           ),
@@ -686,6 +913,13 @@ const make = Effect.gen(function* () {
                 ),
               );
           }
+          yield* removeAdditionalWorktrees(
+            input,
+            threadId,
+            createdAdditionalWorktrees.filter(
+              (created) => !created.recorded || (cancelled && !runReleased),
+            ),
+          );
         }),
       ),
     );
@@ -810,6 +1044,35 @@ const make = Effect.gen(function* () {
         )("Reusing an existing thread requires a thread id.");
       }
 
+      const additionalDirectories: ReadonlyArray<ThreadAdditionalDirectory> = (
+        input.additionalDirectories ??
+        project.additionalDirectories ??
+        []
+      ).map((directory) => ({ ...directory, branch: null, worktreePath: null }));
+      const seenAdditionalPaths = new Set<string>();
+      for (const directory of additionalDirectories) {
+        if (!path.isAbsolute(directory.path)) {
+          return yield* mapError(
+            input,
+            "resolve-project",
+          )(`Additional directory ${directory.path} must be an absolute path.`);
+        }
+        const resolved = path.resolve(directory.path);
+        if (resolved === path.resolve(project.workspaceRoot)) {
+          return yield* mapError(
+            input,
+            "resolve-project",
+          )("An additional directory cannot be the project root.");
+        }
+        if (seenAdditionalPaths.has(resolved)) {
+          return yield* mapError(
+            input,
+            "resolve-project",
+          )(`Additional directory ${directory.path} is listed twice.`);
+        }
+        seenAdditionalPaths.add(resolved);
+      }
+
       const launchReceipt = yield* readReceipt(input, input.commandId);
       yield* threads.assertProviderInstanceEnabled({
         projectId: input.projectId,
@@ -882,6 +1145,7 @@ const make = Effect.gen(function* () {
                 type: "thread.metadata.update",
                 commandId: input.commandId,
                 threadId: candidateThreadId,
+                additionalDirectories,
                 expectedEmpty: true,
               })
             : threads.dispatch({
@@ -895,6 +1159,7 @@ const make = Effect.gen(function* () {
                 interactionMode: input.interactionMode,
                 branch: initialBranch,
                 worktreePath: initialWorktreePath,
+                ...(additionalDirectories.length === 0 ? {} : { additionalDirectories }),
                 ...(input.importedNativeThread === undefined
                   ? {}
                   : { importedNativeThread: input.importedNativeThread }),

@@ -3,7 +3,11 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
 import { makeThreadFixture } from "./test-fixtures";
-import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "./worktreeCleanup";
+import {
+  formatWorktreePathForDisplay,
+  getOrphanedAdditionalWorktreesForThread,
+  getOrphanedWorktreePathForThread,
+} from "./worktreeCleanup";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
 
@@ -107,5 +111,35 @@ describe("formatWorktreePathForDisplay", () => {
   it("ignores trailing slashes", () => {
     const result = formatWorktreePathForDisplay("/tmp/custom-worktrees/my-worktree/");
     expect(result).toBe("my-worktree");
+  });
+});
+
+describe("getOrphanedAdditionalWorktreesForThread", () => {
+  it("returns only additional worktrees no other thread uses, with their repository", () => {
+    const shared = {
+      path: "/repos/api",
+      mode: "worktree" as const,
+      branch: "feature",
+      worktreePath: "/worktrees/api/feature",
+    };
+    const own = {
+      path: "/repos/docs",
+      mode: "worktree" as const,
+      branch: "feature",
+      worktreePath: "/worktrees/docs/feature",
+    };
+    const local = { path: "/repos/lib", mode: "local" as const, branch: null, worktreePath: null };
+    const target = makeThread({
+      id: ThreadId.make("thread-target"),
+      additionalDirectories: [shared, own, local],
+    });
+    const sibling = makeThread({
+      id: ThreadId.make("thread-sibling"),
+      additionalDirectories: [shared],
+    });
+
+    expect(getOrphanedAdditionalWorktreesForThread([target, sibling], target.id)).toEqual([
+      { repository: "/repos/docs", worktreePath: "/worktrees/docs/feature" },
+    ]);
   });
 });

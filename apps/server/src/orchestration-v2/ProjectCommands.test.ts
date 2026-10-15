@@ -30,6 +30,7 @@ const row = (overrides: Partial<ProjectRow> = {}): ProjectRow => ({
   faviconPath: null,
   projectIcon: null,
   scripts: [],
+  additionalDirectories: [],
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   deletedAt: null,
@@ -174,6 +175,23 @@ describe("planProjectCommand", () => {
     for (const text of ["ABC", "किखिगि"]) {
       assert.equal(
         failureOf(update({ projectIcon: { kind: "monogram", text, color: "violet" } }))._tag,
+        "ProjectCommandInvariantError",
+      );
+    }
+  });
+
+  it("rejects an additional directory that repeats the root or another entry", () => {
+    const sibling = { path: "/tmp/sibling", mode: "worktree" } as const;
+    assert.deepEqual(
+      payloadOf(update({ additionalDirectories: [sibling] })).additionalDirectories,
+      [sibling],
+    );
+    for (const additionalDirectories of [
+      [{ path: "/tmp/scripts", mode: "local" as const }],
+      [sibling, { ...sibling, mode: "local" as const }],
+    ]) {
+      assert.equal(
+        failureOf(update({ additionalDirectories }))._tag,
         "ProjectCommandInvariantError",
       );
     }

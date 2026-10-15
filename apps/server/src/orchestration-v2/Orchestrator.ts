@@ -534,6 +534,20 @@ function withoutPreparationResult(
   return rest;
 }
 
+function sameAdditionalDirectorySelection(
+  current: OrchestrationV2AppThread["additionalDirectories"],
+  next: NonNullable<OrchestrationV2AppThread["additionalDirectories"]>,
+): boolean {
+  const previous = current ?? [];
+  return (
+    previous.length === next.length &&
+    previous.every(
+      (directory, index) =>
+        directory.path === next[index]!.path && directory.mode === next[index]!.mode,
+    )
+  );
+}
+
 function isBlockingRun(run: OrchestrationV2Run): boolean {
   return (
     run.status === "preparing" ||
@@ -2287,6 +2301,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       interactionMode: command.interactionMode,
       branch: command.branch,
       worktreePath: command.worktreePath,
+      ...(command.additionalDirectories === undefined || command.additionalDirectories.length === 0
+        ? {}
+        : { additionalDirectories: command.additionalDirectories }),
       activeProviderThreadId: null,
       lineage: {
         parentThreadId: null,
@@ -2568,6 +2585,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         commandId: command.commandId,
         commandType: command.type,
         cause: `Thread ${command.threadId} worktree changed before the metadata update could be applied.`,
+      });
+    }
+    if (
+      command.type === "thread.metadata.update" &&
+      command.additionalDirectories !== undefined &&
+      command.expectedEmpty !== true &&
+      !sameAdditionalDirectorySelection(thread.additionalDirectories, command.additionalDirectories)
+    ) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Thread ${command.threadId} additional directories are locked once the thread exists.`,
       });
     }
     if (command.type === "thread.metadata.update" && command.expectedEmpty === true) {
@@ -3056,6 +3085,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 : {}),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
+            ...(command.additionalDirectories === undefined
+              ? {}
+              : { additionalDirectories: command.additionalDirectories }),
             ...(command.linkedPullRequest === undefined
               ? {}
               : {

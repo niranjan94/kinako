@@ -141,6 +141,14 @@ such as another drive, set **Settings → Storage → Worktree location** to an 
 `D:\worktrees` or `~/worktrees`. The setting is per machine. Existing worktrees stay where they
 are, and cleanup covers both the default folder and the custom one.
 
+## Additional directories
+
+Threads in a project can also read and edit other folders, such as a sibling backend repository or a shared library. Add them in the project's settings under **Additional directories**: pick another project on the same environment or choose any folder there. Each checkout keeps its own list, because the folders are paths on that checkout's machine. On mobile, pick a project or type a path.
+
+For each folder, choose how threads use it. **Current checkout** uses the folder as it is. **New worktree** gives each thread its own worktree of the folder on the same branch as the thread's worktree, so the folder must be a Git repository that does not already have that branch. Before you send a new thread's first message you can change a folder's mode from the workspace menu in the composer; after that the thread keeps its choice, and **Thread details** lists the folders it uses. Deleting the thread offers to delete these worktrees along with its own, and storage cleanup treats them like the thread's worktree.
+
+Only the thread's workspace is checkpointed. Edits in additional directories do not appear in diffs, are not undone by rolling back or editing an earlier message, and commit and pull request actions stay on the workspace. Claude, Codex, Cursor, Antigravity, Grok and ACP agents receive additional directories, though an ACP agent may ignore them. OpenCode, Pi and Muse Code cannot use them, and the composer's workspace menu says so.
+
 ## Storage cleanup
 
 Open **Settings → Storage** to enable automatic cleanup on one machine or all connected

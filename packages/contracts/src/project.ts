@@ -45,6 +45,38 @@ export const ProjectScript = Schema.Struct({
 });
 export type ProjectScript = typeof ProjectScript.Type;
 
+export const PROJECT_ADDITIONAL_DIRECTORIES_MAX = 16;
+
+/**
+ * A folder threads can use besides the project root. The path is local to the
+ * project's environment. Edits there are not checkpointed or diffed, and git
+ * actions stay on the primary root.
+ */
+export const ProjectAdditionalDirectory = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  mode: ThreadEnvMode,
+});
+export type ProjectAdditionalDirectory = typeof ProjectAdditionalDirectory.Type;
+
+export const ProjectAdditionalDirectories = Schema.Array(ProjectAdditionalDirectory).check(
+  Schema.isMaxLength(PROJECT_ADDITIONAL_DIRECTORIES_MAX),
+);
+
+/** A thread's locked copy of an additional directory, with the worktree created for it. */
+export const ThreadAdditionalDirectory = Schema.Struct({
+  ...ProjectAdditionalDirectory.fields,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ThreadAdditionalDirectory = typeof ThreadAdditionalDirectory.Type;
+
+/** The directory a provider should use: the thread's worktree of it, or the folder itself. */
+export function resolveThreadAdditionalDirectoryPath(directory: ThreadAdditionalDirectory): string {
+  return directory.mode === "worktree" && directory.worktreePath !== null
+    ? directory.worktreePath
+    : directory.path;
+}
+
 export const ProjectIconColor = Schema.Literals([
   "gray",
   "red",
@@ -174,6 +206,7 @@ export const Project = Schema.Struct({
   // Opt-in because background sync performs network I/O and may move the checkout.
   autoPull: Schema.optional(Schema.Boolean),
   scripts: Schema.Array(ProjectScript),
+  additionalDirectories: Schema.optional(ProjectAdditionalDirectories),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -214,6 +247,7 @@ export const ProjectUpdatePayload = Schema.Struct({
   faviconPath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
+  additionalDirectories: Schema.optional(ProjectAdditionalDirectories),
 });
 export type ProjectUpdatePayload = typeof ProjectUpdatePayload.Type;
 

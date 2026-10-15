@@ -8,6 +8,7 @@ import {
   NodeId,
   ORCHESTRATION_V2_WS_METHODS,
   PlanId,
+  type ProjectAdditionalDirectory,
   ProjectId,
   ProviderInstanceId,
   ProviderDriverKind,
@@ -359,6 +360,50 @@ describe("V2 environment commands", () => {
           branch: "feature",
         },
       });
+    }).pipe(Effect.provide(layerTestCrypto)),
+  );
+
+  it.effect("sends a draft's additional directory override and omits it otherwise", () =>
+    Effect.gen(function* () {
+      const launches: OrchestrationV2ThreadLaunchInput[] = [];
+      const supervisor = yield* makeSupervisor({ commands: [], projects: [], launches });
+      const launch = (
+        suffix: string,
+        additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory>,
+      ) =>
+        startThreadTurn({
+          commandId: CommandId.make(`launch-additional-${suffix}`),
+          threadId: v2ThreadId,
+          message: {
+            messageId: MessageId.make(`message-additional-${suffix}`),
+            role: "user",
+            text: "Change both repositories",
+            attachments: [],
+          },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          bootstrap: {
+            createThread: {
+              projectId: ProjectId.make("project-1"),
+              title: "Thread",
+              modelSelection: v2Projection.thread.modelSelection,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              ...(additionalDirectories === undefined ? {} : { additionalDirectories }),
+              createdAt: "2026-06-20T00:00:00.000Z",
+            },
+          },
+        }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+
+      yield* launch("override", [{ path: "/workspace/api", mode: "worktree" }]);
+      yield* launch("default");
+
+      expect(launches[0]?.additionalDirectories).toEqual([
+        { path: "/workspace/api", mode: "worktree" },
+      ]);
+      expect(launches[1]).not.toHaveProperty("additionalDirectories");
     }).pipe(Effect.provide(layerTestCrypto)),
   );
 

@@ -3,6 +3,7 @@ import {
   OrchestrationV2AppThread,
   ProjectId,
   ProviderInstanceId,
+  resolveThreadAdditionalDirectoryPath,
   type RuntimeMode,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -65,8 +66,18 @@ export const layer: Layer.Layer<RuntimePolicyV2> = Layer.succeed(RuntimePolicyV2
       runtimeMode: input.thread.runtimeMode,
       interactionMode: input.thread.interactionMode,
       cwd: input.thread.worktreePath,
+      ...additionalDirectoriesOf(input.thread),
     }),
 });
+
+function additionalDirectoriesOf(thread: OrchestrationV2AppThread): {
+  readonly additionalDirectories?: ReadonlyArray<string>;
+} {
+  const directories = thread.additionalDirectories ?? [];
+  return directories.length === 0
+    ? {}
+    : { additionalDirectories: directories.map(resolveThreadAdditionalDirectoryPath) };
+}
 
 /**
  * The mode a provider runs a thread in. A mode the provider does not offer
@@ -129,6 +140,7 @@ export const layerFromProjectStore: Layer.Layer<
           runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
           interactionMode: input.thread.interactionMode,
           cwd,
+          ...additionalDirectoriesOf(input.thread),
         });
       }),
     });

@@ -467,6 +467,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel, type ThreadDetailsPanelProps } from "./chat/ThreadDetailsPanel";
+import { directoryName } from "../lib/additionalDirectories";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   type EnvironmentOption,
@@ -3296,6 +3297,15 @@ export default function ChatView(props: ChatViewProps) {
   const conversationProviderStatus =
     providerStatuses.find((status) => status.instanceId === activeRuntime?.providerInstanceId) ??
     activeProviderStatus;
+  const additionalDirectoriesSupported =
+    activeProviderStatus?.supportsAdditionalDirectories !== false;
+  // Checkpoints cover only the primary root, so restore must not look complete.
+  const additionalDirectoriesRestoreNote =
+    serverThread !== null && serverThread.additionalDirectories.length > 0
+      ? `Files in ${serverThread.additionalDirectories
+          .map((directory) => directoryName(directory.path))
+          .join(", ")} are not restored.`
+      : null;
   const supportsConversationRollback =
     canOperateThread &&
     conversationProviderStatus !== null &&
@@ -8661,9 +8671,22 @@ export default function ChatView(props: ChatViewProps) {
       const localApi = readLocalApi();
       const confirmed =
         localApi == null
-          ? window.confirm("Roll back this thread to the selected checkpoint?")
+          ? window.confirm(
+              [
+                "Roll back this thread to the selected checkpoint?",
+                additionalDirectoriesRestoreNote,
+              ]
+                .filter(Boolean)
+                .join("\n"),
+            )
           : await localApi.dialogs.confirm(
-              "Roll back this thread to the selected checkpoint?\nThis action cannot be undone.",
+              [
+                "Roll back this thread to the selected checkpoint?",
+                "This action cannot be undone.",
+                additionalDirectoriesRestoreNote,
+              ]
+                .filter(Boolean)
+                .join("\n"),
             );
       if (!confirmed) return;
 
@@ -9663,6 +9686,9 @@ export default function ChatView(props: ChatViewProps) {
                       interactionMode: target.interactionMode,
                       branch: activeThreadBranch,
                       worktreePath: null,
+                      ...(draftThread?.additionalDirectories === undefined
+                        ? {}
+                        : { additionalDirectories: draftThread.additionalDirectories }),
                       createdAt: messageCreatedAt,
                     },
                     prepareWorktree: {
@@ -10003,6 +10029,9 @@ export default function ChatView(props: ChatViewProps) {
                       interactionMode: sendInteractionMode,
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
+                      ...(draftThread?.additionalDirectories === undefined
+                        ? {}
+                        : { additionalDirectories: draftThread.additionalDirectories }),
                       createdAt: activeThread.createdAt,
                     },
                   }
@@ -11310,6 +11339,7 @@ export default function ChatView(props: ChatViewProps) {
     gitCwd,
     isGitRepo,
     envLocked,
+    additionalDirectoriesSupported,
     availableEnvironments: logicalProjectEnvironments,
     autoEnvironmentLabel,
     onAutoEnvironment:
@@ -11980,6 +12010,7 @@ export default function ChatView(props: ChatViewProps) {
                                     }
                                   : {})}
                                 envLocked={envLocked}
+                                additionalDirectoriesSupported={additionalDirectoriesSupported}
                                 onComposerFocusRequest={scheduleComposerFocus}
                                 {...(canCheckoutPullRequestIntoThread
                                   ? { onCheckoutPullRequestRequest: openPullRequestDialog }
@@ -12219,6 +12250,7 @@ export default function ChatView(props: ChatViewProps) {
             <AlertDialogDescription>
               Rewind chat to before this message. Your prompt and attachments return to the
               composer.
+              {additionalDirectoriesRestoreNote ? ` ${additionalDirectoriesRestoreNote}` : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

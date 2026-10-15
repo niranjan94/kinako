@@ -68,6 +68,29 @@ describe("acpPermissionDisposition", () => {
     );
   });
 
+  it("auto-allows mutations inside the thread's additional directories", () => {
+    const additional = NodePath.resolve(process.cwd(), "acp-thread-additional-directory");
+    const withAdditional: AcpRuntimePolicy = {
+      ...policy,
+      additionalDirectories: [additional],
+      sandboxPolicy: { type: "workspaceWrite", networkAccess: false },
+    };
+    assert.equal(
+      acpPermissionDisposition(
+        withAdditional,
+        permissionRequest("edit", [{ path: NodePath.join(additional, "README.md") }]),
+      ),
+      "allow",
+    );
+    assert.equal(
+      acpPermissionDisposition(
+        withAdditional,
+        permissionRequest("edit", [{ path: NodePath.join(writableRoot, "README.md") }]),
+      ),
+      "deny",
+    );
+  });
+
   it("denies missing or out-of-root mutation locations", () => {
     const outside = NodePath.resolve(process.cwd(), "outside-acp-permission-workspace", "file.ts");
     assert.equal(acpPermissionDisposition(policy, permissionRequest("edit")), "deny");
