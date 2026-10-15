@@ -84,6 +84,8 @@ export interface Preferences {
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
   /** Device-local counterpart of desktop's `planModeEnabled` legacy flag. */
   readonly planModeEnabled?: boolean;
+  /** Device-local counterpart of web's `contextWindowIndicatorEnabled`; unset means on. */
+  readonly contextWindowIndicatorEnabled?: boolean;
   /** Device-local counterpart of web's `sidebarWorkingShelfEnabled` beta. */
   readonly workingShelfEnabled?: boolean;
   /** @deprecated Retained to migrate favorites to the connected environment. */
@@ -160,6 +162,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     projectGroupingEnabled?: boolean;
     projectGroupingMode?: SidebarProjectGroupingMode;
     planModeEnabled?: boolean;
+    contextWindowIndicatorEnabled?: boolean;
     workingShelfEnabled?: boolean;
     modelFavorites?: Preferences["modelFavorites"];
     threadListSettledShelfExpanded?: boolean;
@@ -258,6 +261,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.planModeEnabled === "boolean") {
     preferences.planModeEnabled = parsed.planModeEnabled;
+  }
+  if (typeof parsed.contextWindowIndicatorEnabled === "boolean") {
+    preferences.contextWindowIndicatorEnabled = parsed.contextWindowIndicatorEnabled;
   }
   if (typeof parsed.workingShelfEnabled === "boolean") {
     preferences.workingShelfEnabled = parsed.workingShelfEnabled;

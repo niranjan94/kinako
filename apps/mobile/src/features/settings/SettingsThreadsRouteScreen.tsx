@@ -47,6 +47,7 @@ export function SettingsThreadsRouteScreen() {
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
         >
           <AutoSettleSettingsRows />
+          <ComposerSettingsSection />
           <BetaSettingsSection />
           <LegacySettingsSection />
         </ScrollView>
@@ -256,6 +257,32 @@ function AutoSettleSettingsRows() {
           </View>
         </SettingsSection>
       ) : null}
+    </View>
+  );
+}
+
+/** Device-local counterpart of web's composer toggles in Settings → General. */
+function ComposerSettingsSection() {
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const contextWindowIndicatorEnabled =
+    !AsyncResult.isSuccess(preferences) ||
+    preferences.value.contextWindowIndicatorEnabled !== false;
+
+  return (
+    <View className="gap-3">
+      <SettingsSection title="Composer">
+        <SettingsSwitchRow
+          icon="chart.bar.xaxis"
+          label="Context window indicator"
+          value={contextWindowIndicatorEnabled}
+          onValueChange={(value) => savePreferences({ contextWindowIndicatorEnabled: value })}
+        />
+      </SettingsSection>
+      <Text className="px-2 text-sm text-foreground-muted">
+        Show how full the thread's context window is in the composer. Tap it for a breakdown of what
+        fills the window.
+      </Text>
     </View>
   );
 }
