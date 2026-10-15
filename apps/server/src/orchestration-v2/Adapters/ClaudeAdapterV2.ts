@@ -238,7 +238,7 @@ const CLAUDE_CONTEXT_USAGE_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 /** Adds the CLI's /context categories to the turn's last reported usage. */
-export function withClaudeContextUsageCategories(
+function withClaudeContextUsageCategories(
   usage: OrchestrationV2ProviderTurnTokenUsage,
   contextUsage: Pick<SDKControlGetContextUsageResponse, "categories" | "totalTokens" | "maxTokens">,
   updatedAt: string,
