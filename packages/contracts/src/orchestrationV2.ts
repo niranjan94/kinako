@@ -362,6 +362,21 @@ export const OrchestrationV2LimitRecoveryUpdate = Schema.Struct({
 );
 export type OrchestrationV2LimitRecoveryUpdate = typeof OrchestrationV2LimitRecoveryUpdate.Type;
 
+export const OrchestrationV2ConversationSummaryDirection = Schema.Literals([
+  "from_here",
+  "up_to_here",
+]);
+export type OrchestrationV2ConversationSummaryDirection =
+  typeof OrchestrationV2ConversationSummaryDirection.Type;
+
+const OrchestrationV2ThreadSummarizeFields = {
+  requestId: CommandId,
+  messageId: MessageId,
+  direction: OrchestrationV2ConversationSummaryDirection,
+  instructions: Schema.optional(TrimmedNonEmptyString),
+  failure: Schema.optional(TrimmedNonEmptyString),
+} as const;
+
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -427,6 +442,12 @@ export const OrchestrationV2AppThread = Schema.Struct({
         requestId: CommandId,
         startedAt: Schema.DateTimeUtc,
       }),
+    ),
+  ),
+  /** Latest accepted summarize request, and its failure once it failed for good. */
+  summarize: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({ ...OrchestrationV2ThreadSummarizeFields, startedAt: Schema.DateTimeUtc }),
     ),
   ),
   /** Latest accepted rollback. Only its failure is recorded in `rollbackFailure`. */
@@ -1052,6 +1073,11 @@ export const OrchestrationV2ContextHandoff = Schema.Struct({
     }),
   ),
   detailInTurnItem: Schema.optional(Schema.Literal(true)),
+  /**
+   * Prepared before its run exists. Delivered on the next turn of
+   * `toProviderThreadId`, whatever `targetRunId` says.
+   */
+  deliverOnNextTurn: Schema.optional(Schema.Literal(true)),
   createdByProviderInstanceId: Schema.NullOr(ProviderInstanceId),
   createdAt: Schema.DateTimeUtc,
   updatedAt: Schema.DateTimeUtc,
@@ -1425,6 +1451,31 @@ export const OrchestrationV2UserMessageInputIntent = Schema.Literals([
 export type OrchestrationV2UserMessageInputIntent =
   typeof OrchestrationV2UserMessageInputIntent.Type;
 
+const OrchestrationV2CompactionRangeFields = {
+  direction: OrchestrationV2ConversationSummaryDirection,
+  /** The user message the user summarized from or up to. */
+  messageId: MessageId,
+  /** Runs the summary replaced in provider context, oldest first. */
+  coveredRunIds: Schema.Array(RunId),
+  instructions: Schema.optional(Schema.String),
+  /** `up_to_here` only: the provider thread holding the full context, kept for restore. */
+  previousProviderThreadId: Schema.optional(ProviderThreadId),
+  /** `up_to_here` only: the provider thread seeded with the summary. */
+  summaryProviderThreadId: Schema.optional(ProviderThreadId),
+} as const;
+
+/** A summary the user asked for over part of a thread, rather than a whole-thread compaction. */
+export const OrchestrationV2CompactionRange = Schema.Struct({
+  ...OrchestrationV2CompactionRangeFields,
+  restoredAt: Schema.optional(Schema.DateTimeUtc),
+});
+export type OrchestrationV2CompactionRange = typeof OrchestrationV2CompactionRange.Type;
+
+const OrchestrationV2CompactionRangeJson = Schema.Struct({
+  ...OrchestrationV2CompactionRangeFields,
+  restoredAt: Schema.optional(Schema.DateTimeUtcFromString),
+});
+
 const OrchestrationV2TurnItemBaseFields = {
   toolNonExecutionKind: Schema.optional(Schema.String),
   toolSurface: Schema.optional(ToolActivitySurface),
@@ -1614,6 +1665,7 @@ export const OrchestrationV2TurnItem = Schema.Union([
     summary: Schema.optional(Schema.String),
     beforeTokenCount: Schema.optional(NonNegativeInt),
     afterTokenCount: Schema.optional(NonNegativeInt),
+    range: Schema.optional(OrchestrationV2CompactionRange),
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2144,6 +2196,14 @@ export const OrchestrationV2AppThreadJson = OrchestrationV2AppThread.mapFields((
       }),
     ),
   ),
+  summarize: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        ...OrchestrationV2ThreadSummarizeFields,
+        startedAt: Schema.DateTimeUtcFromString,
+      }),
+    ),
+  ),
   deletedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 }));
 export type OrchestrationV2AppThreadJson = typeof OrchestrationV2AppThreadJson.Type;
@@ -2412,6 +2472,7 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
     summary: Schema.optional(Schema.String),
     beforeTokenCount: Schema.optional(NonNegativeInt),
     afterTokenCount: Schema.optional(NonNegativeInt),
+    range: Schema.optional(OrchestrationV2CompactionRangeJson),
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
@@ -3131,6 +3192,26 @@ export const OrchestrationV2Command = Schema.Union([
     scopeId: CheckpointScopeId,
     checkpointId: CheckpointId,
   }),
+  /**
+   * Replaces part of the provider's context with a summary, leaving files and
+   * checkpoints alone. `from_here` covers `messageId` and everything after it;
+   * `up_to_here` covers everything before it.
+   */
+  Schema.Struct({
+    type: Schema.Literal("thread.summarize"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    messageId: MessageId,
+    direction: OrchestrationV2ConversationSummaryDirection,
+    instructions: Schema.optional(TrimmedNonEmptyString),
+  }),
+  /** Switches an `up_to_here` summary back to the provider thread with the full context. */
+  Schema.Struct({
+    type: Schema.Literal("thread.summary.restore"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    turnItemId: TurnItemId,
+  }),
   Schema.Struct({
     type: Schema.Literal("thread.fork"),
     ...OrchestrationV2CreationFields,
@@ -3237,6 +3318,22 @@ const OrchestrationV2InternalCommand = Schema.Union([
   /** Records that the provider rollback `requestId` failed for good. */
   Schema.Struct({
     type: Schema.Literal("checkpoint.rollback.fail"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    requestId: CommandId,
+    message: TrimmedNonEmptyString,
+  }),
+  /** Applies the summary generated for summarize request `requestId`. */
+  Schema.Struct({
+    type: Schema.Literal("thread.summarize.complete"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    requestId: CommandId,
+    summary: TrimmedNonEmptyString,
+  }),
+  /** Records that summarize request `requestId` failed for good. */
+  Schema.Struct({
+    type: Schema.Literal("thread.summarize.fail"),
     commandId: CommandId,
     threadId: ThreadId,
     requestId: CommandId,
