@@ -230,25 +230,39 @@ export function claudeProviderTurnTokenUsage(
   };
 }
 
+const CLAUDE_CONTEXT_USAGE_KINDS: ReadonlySet<string> = new Set([
+  "used",
+  "free",
+  "buffer",
+  "deferred",
+]);
+
 /** Adds the CLI's /context categories to the turn's last reported usage. */
 export function withClaudeContextUsageCategories(
   usage: OrchestrationV2ProviderTurnTokenUsage,
-  contextUsage: Pick<SDKControlGetContextUsageResponse, "categories" | "totalTokens">,
+  contextUsage: Pick<SDKControlGetContextUsageResponse, "categories" | "totalTokens" | "maxTokens">,
   updatedAt: string,
 ): OrchestrationV2ProviderTurnTokenUsage {
+  // A user-configured Claude executable can predate `kind`, so rows are
+  // checked at runtime rather than trusted to match the SDK's types.
   const categories = contextUsage.categories.flatMap((category) => {
     const name = category.name.trim().slice(0, 64);
     const tokens = Math.round(category.tokens);
-    return name.length > 0 && Number.isFinite(tokens) && tokens >= 0
+    return name.length > 0 &&
+      Number.isFinite(tokens) &&
+      tokens >= 0 &&
+      CLAUDE_CONTEXT_USAGE_KINDS.has(category.kind)
       ? [{ name, tokens, kind: category.kind }]
       : [];
   });
   if (categories.length === 0) return usage;
   const totalTokens = Math.round(contextUsage.totalTokens);
+  const maxTokens = Math.round(contextUsage.maxTokens);
   return {
     ...usage,
-    // The rows add up to the CLI's own total, so the header has to agree with them.
+    // The rows add up to the CLI's own total and window, so the header has to agree with them.
     ...(Number.isFinite(totalTokens) && totalTokens >= 0 ? { usedTokens: totalTokens } : {}),
+    ...(Number.isFinite(maxTokens) && maxTokens > 0 ? { maxTokens } : {}),
     categories: categories.slice(0, 32),
     updatedAt,
   };
@@ -6086,7 +6100,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const latestTokenUsage = input.context.latestTokenUsage;
           const contextQuery = yield* Ref.get(queryContext);
           // The summary estimate is local to the CLI, so a slow or missing
-          // answer only drops the breakdown and never holds up the terminal.
+          // answer only drops the breakdown and holds up the terminal by at
+          // most the timeout.
           const tokenUsage =
             input.status !== "completed" ||
             latestTokenUsage === undefined ||
@@ -7164,11 +7179,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   status: "running",
                   startedAt: context.startedAt,
                   completedAt: null,
-                  tokenUsage: {
+                  tokenUsage: (context.latestTokenUsage = {
                     usedTokens: afterTokenCount,
                     maxTokens: claudeContextWindow(context.input.modelSelection),
                     updatedAt: DateTime.formatIso(now),
-                  },
+                  }),
                 },
               });
             }

@@ -3,6 +3,7 @@ import {
   type ContextWindowBreakdown,
   type ContextWindowSnapshot,
   deriveContextWindowBreakdown,
+  formatContextWindowPercentage,
   formatContextWindowTokens,
 } from "@t3tools/client-runtime/context-window";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -15,13 +16,7 @@ import { Minimize2Icon } from "lucide-react";
 import { composerFloatingLayerProps } from "./composerEventScope";
 
 function formatPercentage(value: number | null): string | null {
-  if (value === null || !Number.isFinite(value)) {
-    return null;
-  }
-  if (value < 10) {
-    return `${value.toFixed(1).replace(/\.0$/, "")}%`;
-  }
-  return `${Math.round(value)}%`;
+  return value === null || !Number.isFinite(value) ? null : formatContextWindowPercentage(value);
 }
 
 function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }) {
@@ -41,17 +36,17 @@ function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }
         role="img"
         aria-label="Context window usage by category"
       >
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <div
-            key={row.label}
+            key={index}
             className="h-full"
             style={{ width: `${share(row.tokens)}%`, backgroundColor: row.color }}
           />
         ))}
       </div>
       <dl className="flex flex-col gap-0.5 text-2xs leading-4">
-        {rows.map((row) => (
-          <div key={row.label} className="flex items-center gap-2">
+        {rows.map((row, index) => (
+          <div key={`segment-${index}`} className="flex items-center gap-2">
             <span
               aria-hidden="true"
               className="size-2 shrink-0 rounded-xs"
@@ -66,8 +61,8 @@ function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }
             </dd>
           </div>
         ))}
-        {deferred.map((row) => (
-          <div key={row.label} className="flex items-center gap-2 opacity-70">
+        {deferred.map((row, index) => (
+          <div key={`deferred-${index}`} className="flex items-center gap-2 opacity-70">
             <span aria-hidden="true" className="size-2 shrink-0" />
             <dt className="min-w-0 flex-1 truncate text-secondary-label">{row.label}</dt>
             <dd className="tabular-nums text-secondary-label">

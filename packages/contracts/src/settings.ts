@@ -450,8 +450,8 @@ export const ClientSettingsSchema = Schema.Struct({
   // default UI; this beta flag restores it (plus the /plan and /default slash
   // commands) for users who still rely on the old workflow.
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  // Replaces the retired `contextWindowMeterEnabled`, which defaulted off and
-  // was saved with every settings write, so its stored `false` is ignored.
+  // Must not reuse the `contextWindowMeterEnabled` key: stored settings carry
+  // its old default `false`, which would hide the indicator for everyone.
   contextWindowIndicatorEnabled: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
