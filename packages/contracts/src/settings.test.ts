@@ -660,15 +660,16 @@ describe("ClientSettings sidebar", () => {
   });
 });
 
-describe("ClientSettings context window meter", () => {
-  it("defaults off and preserves an explicit legacy opt-in", () => {
-    expect(decodeClientSettings({}).contextWindowMeterEnabled).toBe(false);
+describe("ClientSettings context window indicator", () => {
+  it("defaults on, ignoring the retired off-by-default key", () => {
+    expect(decodeClientSettings({}).contextWindowIndicatorEnabled).toBe(true);
     expect(
-      decodeClientSettings({ contextWindowMeterEnabled: true }).contextWindowMeterEnabled,
+      decodeClientSettings({ contextWindowMeterEnabled: false }).contextWindowIndicatorEnabled,
     ).toBe(true);
     expect(
-      decodeClientSettingsPatch({ contextWindowMeterEnabled: true }).contextWindowMeterEnabled,
-    ).toBe(true);
+      decodeClientSettingsPatch({ contextWindowIndicatorEnabled: false })
+        .contextWindowIndicatorEnabled,
+    ).toBe(false);
   });
 });
 
