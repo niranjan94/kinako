@@ -45,11 +45,10 @@ export interface ConversationSummaryTimelineControls {
   readonly activeProviderThreadId: ProviderThreadId | null;
 }
 
-export const SUMMARY_DIRECTION_TITLES: Record<OrchestrationV2ConversationSummaryDirection, string> =
-  {
-    from_here: "Summarize from here",
-    up_to_here: "Summarize up to here",
-  };
+const SUMMARY_DIRECTION_TITLES: Record<OrchestrationV2ConversationSummaryDirection, string> = {
+  from_here: "Summarize from here",
+  up_to_here: "Summarize up to here",
+};
 
 function fromHereUnavailableReason(input: {
   readonly controls: ConversationSummaryTimelineControls;

@@ -24,7 +24,7 @@ import * as ProjectStore from "./ProjectStore.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 
-export const SUMMARY_FAILED_MESSAGE = "The summary could not be generated.";
+const SUMMARY_FAILED_MESSAGE = "The summary could not be generated.";
 
 export class ThreadSummaryGenerationError extends Schema.TaggedError<ThreadSummaryGenerationError>()(
   "ThreadSummaryGenerationError",
