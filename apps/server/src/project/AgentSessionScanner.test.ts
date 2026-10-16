@@ -245,6 +245,16 @@ const writeSessionListFixture = Effect.fn("AgentSessionScanner.test.writeSession
       mtimeMs: input.nowMs - 30 * 60 * 1000,
     });
     yield* writeTranscript({
+      filePath: path.join(codexDir, "rollout-2026-08-24T11-10-00-codex-kinako.jsonl"),
+      contents: codexTranscript(
+        input.workspace,
+        "codex-kinako",
+        { originator: "Kinako" },
+        "From Kinako",
+      ),
+      mtimeMs: input.nowMs - 20 * 60 * 1000,
+    });
+    yield* writeTranscript({
       filePath: path.join(codexDir, "rollout-2026-08-24T11-30-00-codex-agent.jsonl"),
       contents: codexTranscript(
         input.workspace,
@@ -373,6 +383,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         // Another project's session, app-started ones, and an unknown id are not importable here.
         expect(Option.isNone(yield* read("claudeAgent", "claude-other"))).toBe(true);
         expect(Option.isNone(yield* read("codex", "codex-t3"))).toBe(true);
+        expect(Option.isNone(yield* read("codex", "codex-kinako"))).toBe(true);
         expect(Option.isNone(yield* read("claudeAgent", "claude-sdk"))).toBe(true);
         expect(Option.isNone(yield* read("codex", "missing"))).toBe(true);
       }),

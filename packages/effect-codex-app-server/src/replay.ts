@@ -204,6 +204,9 @@ function normalizeReplayFrame(value: unknown): unknown {
         ...params,
         clientInfo: {
           ...(params.clientInfo as Record<string, unknown>),
+          // Forks rename the client, so recordings match on shape, not on its name.
+          name: "<ignored>",
+          title: "<ignored>",
           version: "<ignored>",
         },
       };

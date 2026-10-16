@@ -36,6 +36,7 @@ import * as ServerConfig from "../config.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as ServerSettings from "../serverSettings.ts";
 import {
   createTranscriptJsonReader,
@@ -540,7 +541,7 @@ function shouldRetainDecodedRecord(
   );
 }
 
-const T3_CODEX_ORIGINATORS = new Set(["T3 Code", "t3code_desktop"]);
+const T3_CODEX_ORIGINATORS = new Set([FORK_DISPLAY_NAME, "T3 Code", "t3code_desktop"]);
 
 /**
  * Whether a session was started by an app rather than in a terminal: T3 Code's own sessions, other
