@@ -3,8 +3,8 @@ import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-na
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useCallback, useRef, useState } from "react";
 import { Platform } from "react-native";
-import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
-import { MaterialButton } from "../../components/MaterialButton";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { composerPullRequests } from "../../state/pull-requests";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -66,7 +66,7 @@ export function IssueCommentSheet({ route }: StaticScreenProps<IssueParams>) {
       subtitle={`#${params.number} · ${params.repository}`}
       busy={busy}
       footer={
-        <MaterialButton
+        <Button
           label={busy ? "Posting…" : "Post comment"}
           fullWidth
           tone={Platform.OS === "android" ? "primary" : "contrast"}

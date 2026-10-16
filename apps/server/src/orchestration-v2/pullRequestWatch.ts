@@ -44,11 +44,8 @@ const NO_AUTO_FIX_CONTEXT: PullRequestAutoFixContext = {
 };
 
 export interface PullRequestWatchReport {
-  /** What the agent has not been told yet. Empty means no wake. */
   readonly changes: ReadonlyArray<PullRequestWatchChange>;
-  /** The watch to record, whether or not anything is reported. */
   readonly next: ThreadPullRequestWatch;
-  /** This report spends the last wake before the limit, so watching stops after it. */
   readonly exhausted: boolean;
 }
 
@@ -57,13 +54,6 @@ const isFailedCheck = (check: PullRequestCheck) =>
   check.status === "failure" || check.status === "cancelled" || check.status === "action-required";
 
 /**
- * Compares a watched pull request with what its agent was last told. Each check is reported as
- * soon as it fails, so a check that never finishes (an advisory review bot) cannot hold the
- * news back. "Passed" is reported once the checks the base branch requires all passed, or all
- * checks where the host marks none required. Remarks count when someone other than the agent's
- * own account wrote them, so its own replies never wake it. `remarks` is null when the
- * conversation could not be read; remarks then wait for a later pass.
- *
  * With auto-fix on, a failure on a head commit not yet handed over becomes a fix request, at most
  * once per head. Further failures on that head stay quiet, and once its fix turn ends with the
  * head unchanged and still red, auto-fix pauses. So does a failure after the attempt limit.
@@ -90,7 +80,6 @@ export function evaluatePullRequestWatch(
   if (detail.checks.length > 0) {
     const failed = detail.checks.filter(isFailedCheck);
     const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
-    // A check that runs again leaves the list, so a rerun that fails again is reported.
     failedChecks = failed.map((check) => check.name);
 
     const required = detail.checks.filter((check) => check.required === true);
@@ -130,7 +119,6 @@ export function evaluatePullRequestWatch(
       autoFix = { ...autoFix, pausedReason: "no-push", fixMessageId: null };
     }
 
-    // A watch saved before passedChecks existed takes the current names, so it does not wake.
     const told = passed && passedChecks.length === 0 ? gateNames : passedChecks;
     // A required job created and finished between two passes is never seen pending. Without
     // required checks, any check counts, and advisory bots keep adding passed ones: no wake.
@@ -144,7 +132,6 @@ export function evaluatePullRequestWatch(
 
   const own = (detail.viewer ?? detail.author?.login)?.toLowerCase();
   const through = Date.parse(watch.remarksThrough);
-  // An edit counts as new activity, so bots that rewrite one summary comment still wake the agent.
   const activeAt = (remark: PullRequestComment) => remark.editedAt ?? remark.createdAt;
   // GitHub times are per second, so remarks at the boundary time are told apart by ID.
   const fresh = (remarks ?? []).filter((remark) => {
@@ -280,7 +267,6 @@ function closingLine(input: {
   return `Look into each item and act on it as your task requires. ${FORK_DISPLAY_NAME} keeps watching and wakes you on the next change, so end your turn when you are done. When you hand the work back to the user, call unwatch_pull_request first so the thread returns to their inbox.`;
 }
 
-/** The wake the agent reads and the timeline notification the user sees. */
 export function pullRequestWatchMessage(input: {
   readonly number: number;
   readonly url: string;

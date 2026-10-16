@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
 import { useCallback } from "react";
 import { Keyboard, Linking, Platform, Share } from "react-native";
-import type { ControlPillMenuProps } from "../../components/ControlPillMenu.types";
+import type { MenuProps } from "../../components/ui/Menu.types";
 import { useAndroidWorkspaceSelection } from "../workspace/useAndroidWorkspaceSelection";
 import {
   issueHandoffMenuAction,
@@ -44,7 +44,7 @@ export function useIssueListActions() {
   const handoff = useIssueHandoff();
   const { projectsFor, canStart, start } = handoff;
   const actions = useCallback(
-    (entry: EnvironmentIssueListEntry): ControlPillMenuProps["actions"] => {
+    (entry: EnvironmentIssueListEntry): MenuProps["actions"] => {
       const projects = projectsFor(entry);
       const disabled = !canStart(entry.environmentId);
       return [

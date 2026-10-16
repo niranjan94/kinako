@@ -1,0 +1,92 @@
+# Issues: a search across one or more repositories, one issue with a page of its conversation, and
+# the node id a comment on it is addressed by.
+
+fragment IssueRow on Issue {
+  number
+  title
+  url
+  state
+  createdAt
+  updatedAt
+  closedAt
+  repository {
+    nameWithOwner
+  }
+  author {
+    login
+    avatarUrl
+    ... on User {
+      name
+    }
+  }
+  labels(first: 20) {
+    nodes {
+      name
+      color
+    }
+  }
+  assignees(first: 10) {
+    nodes {
+      login
+      avatarUrl
+      name
+    }
+  }
+}
+
+query IssueSearch($q: String!, $first: Int!, $after: String) {
+  search(query: $q, type: ISSUE, first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ... on Issue {
+        ...IssueRow
+        comments {
+          totalCount
+        }
+      }
+    }
+  }
+}
+
+query IssueDetail($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    viewerPermission
+    issue(number: $number) {
+      ...IssueRow
+      body
+      locked
+      comments(first: 100, after: $after) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          body
+          createdAt
+          lastEditedAt
+          url
+          author {
+            login
+            avatarUrl
+            ... on User {
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+query IssueNodeId($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      id
+    }
+  }
+}

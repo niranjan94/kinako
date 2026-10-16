@@ -100,7 +100,6 @@ server.listen(Number(process.env.T3_TEST_PORT ?? 0), "127.0.0.1", () => {
                 ),
               ),
             );
-            // A failed PID assertion must still close the owned fixture server.
             yield* Effect.addFinalizer(() =>
               Effect.gen(function* () {
                 if (yield* child.isRunning) {
@@ -166,7 +165,6 @@ server.listen(0, "127.0.0.1", () => {
               { cwd: fixture, detached: false },
             ),
           );
-          // A failed assertion must still stop this captured fixture process.
           yield* Effect.addFinalizer(() =>
             child.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore),
           );
@@ -197,7 +195,6 @@ server.listen(0, "127.0.0.1", () => {
             yield* fs.writeFileString(path.join(stateDir, name), contents);
           }
           const script = buildRemoteStopScript(stateKey);
-          // Every state path derives from the launch directory. Never use the developer's SSH state.
           const isolatedScript = script.replace(
             /^LAUNCH_DIR=.*$/mu,
             'LAUNCH_DIR="$T3_TEST_LAUNCH_DIR"',

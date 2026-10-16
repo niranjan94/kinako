@@ -4,7 +4,6 @@ import { FORK_HOME_DIR_NAME } from "@t3tools/shared/forkBrand";
 
 export const quoteRemoteArg = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 
-/** Resolve common non-interactive SDK and Node locations without sourcing user shell scripts. */
 export const remoteDeviceEnvironment = `export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 if [ -z "$ANDROID_HOME" ]; then
   if [ -d "$HOME/Library/Android/sdk" ]; then export ANDROID_HOME="$HOME/Library/Android/sdk";

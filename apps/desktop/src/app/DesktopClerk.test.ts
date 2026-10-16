@@ -37,7 +37,6 @@ import * as DesktopClerk from "./DesktopClerk.ts";
 import * as DesktopWebLinks from "./DesktopWebLinks.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
-/** Clerk forwards web links; tests that are not about links ignore them. */
 const ignoreWebLinks = DesktopWebLinks.DesktopWebLinks.of({
   receive: () => Effect.void,
   setRendererReady: () => Effect.void,
@@ -138,8 +137,6 @@ describe("DesktopClerk", () => {
         events.push("createClerkBridge");
         return { cleanup: vi.fn(), isPrimaryInstance: true };
       });
-      // runSync throws if the layer ever suspends, which would let Electron emit
-      // ready before the bridge exists.
       // oxlint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- The assertion IS that the layer builds synchronously; it.effect would mask a regression to async.
       Effect.runSync(
         Effect.scoped(Layer.build(layerDesktopClerk(isDevelopment, events, platform))),
@@ -407,13 +404,10 @@ it.effect("hands web and app links to the renderer and leaves other links alone"
         listeners.get("open-url")!(event, url);
         return event.preventDefault.mock.calls.length;
       };
-      // macOS hands the default browser every web link.
       assert.strictEqual(open("https://example.com/page"), 1);
       assert.strictEqual(open("http://localhost:3000/"), 1);
-      // Prompt and thread links ride the same queue; the renderer routes them in the app.
       assert.strictEqual(open("kinako://new?prompt=hi"), 1);
       assert.strictEqual(open("kinako://threads/env-1/thread-1"), 1);
-      // Anything else is not a web page; Electron keeps its own handling.
       assert.strictEqual(open("mailto:hello@example.com"), 0);
       assert.strictEqual(open("kinako://somewhere-else"), 0);
       yield* Effect.yieldNow;

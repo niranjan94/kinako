@@ -3,10 +3,6 @@ import { pullRequestListKey } from "./pullRequestList";
 
 const isItemRoute = (name: string) => name.startsWith("PullRequest") || name.startsWith("Issue");
 
-/**
- * Follow the displayed PR or issue through its detail routes and sheets, not an older stack
- * entry. Both share one key format: a host numbers them from one sequence per repository.
- */
 export function selectedPullRequestKey(state: Pick<NavigationState, "routes" | "index">) {
   for (let index = state.index; index >= 0; index--) {
     const route = state.routes[index];

@@ -15,7 +15,6 @@ export const DEFAULT_PR_LIST_CONTROLS: PullRequestListControls = {
   sort: "updated",
 };
 
-/** A scope saved on the Scratch folder is no longer offered, so it reads as "All projects". */
 export function withoutScratchProjectScope(
   controls: PullRequestListControls,
   projects: readonly { id: string; environmentId: string; isScratch?: true }[],
@@ -43,7 +42,6 @@ export type EnvironmentPullRequestListEntry = PullRequestListEntry & {
 export const scopedPullRequestListKey = (entry: EnvironmentPullRequestListEntry) =>
   `${entry.environmentId}:${pullRequestListKey(entry)}`;
 
-/** Provider refreshes and diff-count batches recreate entries; unchanged rows can stay mounted. */
 export function pullRequestListRowsAreEqual(
   previous: EnvironmentPullRequestListEntry,
   next: EnvironmentPullRequestListEntry,
@@ -77,7 +75,6 @@ export function pullRequestListRowsAreEqual(
   );
 }
 
-/** Keep cursors and viewer identities with the environment that issued them. */
 export function mergeEnvironmentPullRequestPages(
   sources: readonly { environmentId: EnvironmentId; pages: PullRequestListPages }[],
 ) {
@@ -272,7 +269,6 @@ export function filterPullRequestList<
     if ((filters.draft === "only" && !entry.isDraft) || (filters.draft === "hide" && entry.isDraft))
       return false;
     if (!matchesListAuthorAndLabels(entry, filters, viewer)) return false;
-    // Hosts without a review rollup still perform their own review filtering.
     if (filters.review && entry.reviewDecision && entry.reviewDecision !== filters.review)
       return false;
     if (filters.review === "none" && entry.reviewDecision) return false;

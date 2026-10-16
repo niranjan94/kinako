@@ -9,7 +9,6 @@ import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
-/** A connected local environment receives the callback; only the remote environment owns tokens. */
 export function subscribeCodexAuthCallback(input: CodexAuthCallbackInput) {
   const failure = (error: unknown) =>
     new ProviderSetupError({

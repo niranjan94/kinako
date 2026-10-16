@@ -20,10 +20,11 @@ import { formatTokens } from "@t3tools/shared/usageFormat";
 import * as DateTime from "effect/DateTime";
 import { Atom } from "effect/reactivity";
 import { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, View, type ColorValue } from "react-native";
+import { Pressable, ScrollView, View, type ColorValue } from "react-native";
 
-import { AppText as Text } from "../../components/AppText";
-import { SymbolView } from "../../components/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import * as Dialog from "../../components/ui/Dialog";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { orchestrationEnvironment } from "../../state/orchestration";
 import { serverEnvironment } from "../../state/server";
@@ -198,7 +199,7 @@ export function WorkflowRunCard(props: {
     });
     setStopping(false);
     if (result._tag === "Failure") {
-      Alert.alert("Could not stop workflow", "Try again.");
+      Dialog.alert("Could not stop workflow", "Try again.");
     }
   };
 

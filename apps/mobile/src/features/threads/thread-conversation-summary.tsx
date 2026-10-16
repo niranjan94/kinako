@@ -9,9 +9,9 @@ import type {
 import { useState } from "react";
 import { Pressable, View, type ColorValue } from "react-native";
 
-import { AppText as Text } from "../../components/AppText";
-import { SymbolView } from "../../components/AppSymbol";
-import { ControlPillMenu } from "../../components/ControlPillMenu";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { Menu } from "../../components/ui/Menu";
 import { useRunHistory } from "../../state/queries";
 import { ThreadContextDivider } from "./thread-context-divider";
 import type { ConversationSummaryFeedControls } from "./use-conversation-summary";
@@ -54,7 +54,7 @@ export function UserMessageSummarizeButton(props: {
     };
   });
   return (
-    <ControlPillMenu
+    <Menu
       actions={actions}
       onPressAction={({ nativeEvent }) => {
         const direction = DIRECTIONS.find((candidate) => candidate.id === nativeEvent.event);
@@ -74,7 +74,7 @@ export function UserMessageSummarizeButton(props: {
           tintColor={props.tintColor}
         />
       </Pressable>
-    </ControlPillMenu>
+    </Menu>
   );
 }
 

@@ -1,7 +1,6 @@
 import type { PinnedRuntimeProgress } from "../cloud/pinnedRuntime.ts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
-/** A single status line below the download bar; redirected output remains plain. */
 export function createUpdateProgress(
   output: Pick<NodeJS.WriteStream, "write" | "isTTY" | "columns"> = process.stderr,
 ) {

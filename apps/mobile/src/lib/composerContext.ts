@@ -25,6 +25,7 @@ import {
   isImageReferencesOnly,
   replaceComposerContextReferences,
   sanitizeComposerContextLabel,
+  toKindScopedComposerContextId,
 } from "@t3tools/shared/composerContextReferences";
 import {
   collectComposerInlineTokens,
@@ -34,7 +35,6 @@ import {
 const isMessageContext = Schema.is(OrchestrationMessageContext);
 const decodeMessageContext = Schema.decodeUnknownOption(OrchestrationMessageContext);
 
-/** Recovery drafts can exceed wire limits, but must never enter the outbox in that state. */
 export function composerContextSendBlockReason(
   context?: OrchestrationMessageContext,
 ): string | null {
@@ -47,7 +47,6 @@ export function composerContextSendBlockReason(
     : null;
 }
 
-/** Resolve the tapped source, not its display label, which can be only a basename. */
 export function composerMentionPath(source: string, context?: OrchestrationMessageContext) {
   const reference = collectComposerContextReferences(source)[0];
   if (reference) {
@@ -65,10 +64,6 @@ export interface ComposerDocumentAttachment {
   readonly sizeBytes: number;
 }
 
-/**
- * The attachment behind a chip when it is a document rather than a picture, video or PDF.
- * Those three open in native viewers; documents open in the file screen.
- */
 export function composerDocumentAttachment(
   source: string,
   context?: OrchestrationMessageContext,
@@ -90,7 +85,6 @@ export function composerDocumentAttachmentRecord(
   return record;
 }
 
-/** Retain a bounded native undo history without persisting removed payloads in the draft. */
 export function createComposerContextHistory() {
   const records = new Map<string, ComposerContextRecord>();
   return (text: string, current?: OrchestrationMessageContext) => {
@@ -115,7 +109,7 @@ export function threadComposerContext(ref: ScopedThreadRef, title: string): Thre
   return {
     version: 1,
     kind: "thread",
-    contextId: ComposerContextId.make(`thread_${ref.threadId}`),
+    contextId: toKindScopedComposerContextId("thread", ref.threadId),
     label,
     environmentId: ref.environmentId,
     threadId: ref.threadId,
@@ -179,7 +173,6 @@ export function issueComposerContext(issue: HandoffIssue, id: string): ReviewCom
   };
 }
 
-/** Native editors collapse the canonical source range to a single atomic attachment. */
 export function composerContextEditorTokens(text: string, tokens: readonly ComposerInlineToken[]) {
   const references = collectComposerContextReferences(text);
   return [
@@ -194,7 +187,6 @@ export function composerContextEditorTokens(text: string, tokens: readonly Compo
   ].sort((a, b) => a.start - b.start);
 }
 
-/** Prunes removed references, retaining the screenshot bound to a preview annotation. */
 export function referencedComposerContext(text: string, context?: OrchestrationMessageContext) {
   if (!context) return undefined;
   const ids = new Set(collectComposerContextReferences(text).map((ref) => ref.contextId));
@@ -267,8 +259,6 @@ export function reidentifyComposerContext(
 
 /**
  * Keep queued records canonical; choose the wire format against the host at dispatch time.
- * An image-only prompt goes out as the attachment-only prompt web sends, so the agent is still
- * asked to respond. The images stay in the message's attachments and context records.
  */
 export function serializeComposerMessageForServer(
   composerText: string,

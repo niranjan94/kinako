@@ -1,8 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off
 // @effect-diagnostics globalTimers:off
 // @effect-diagnostics globalDateInEffect:off
-// The helpers mirror the inline Node snippets the SSH launch script used to
-// run, byte for byte in behaviour, so they stay on plain Node APIs.
 import * as NodeFS from "node:fs";
 import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
@@ -12,14 +10,6 @@ import { Argument, Command } from "effect/cli";
 
 import packageJson from "../../package.json" with { type: "json" };
 import { seedServiceState } from "../serviceLauncher.ts";
-
-/**
- * Small helpers the SSH launch script needs on the remote host. The script
- * used to run these as inline `node -` snippets; archive-distributed runtimes
- * have no Node on the remote, so the executable provides them instead. Output
- * and exit codes match the snippets exactly because the shell script parses
- * them.
- */
 
 const canBind = (port: number) =>
   new Promise<boolean>((resolve) => {
@@ -48,7 +38,6 @@ const answersOnLoopback = (port: number) =>
     socket.once("error", () => resolve(false));
   });
 
-/** Prints the first free loopback port from the preferred one, scanning `window` ports. */
 const pickPort = Command.make("pick-port", {
   portFile: Argument.String("port-file"),
   defaultPort: Argument.Int("default-port"),
@@ -89,7 +78,6 @@ const probe = (port: number, probeTimeoutMs: number) =>
     request.once("error", () => resolve(false));
   });
 
-/** Exits 0 once the loopback server answers, 1 when the deadline passes first. */
 const waitReady = Command.make("wait-ready", {
   port: Argument.Int("port"),
   timeoutMs: Argument.Int("timeout-ms"),

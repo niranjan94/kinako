@@ -6,7 +6,6 @@ import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/
 import type { PullRequestListKind } from "../../persistence/mobile-preferences";
 import { DEFAULT_PR_LIST_CONTROLS, type PullRequestListControls } from "./pullRequestList";
 
-/** The pull request list's environment, kind and filters, restored on the next launch. */
 export function usePullRequestListControls() {
   const preferences = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);

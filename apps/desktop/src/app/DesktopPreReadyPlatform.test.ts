@@ -175,7 +175,7 @@ describe("DesktopPreReadyPlatform", () => {
         const identity = yield* Effect.promise(() => portalIdentity);
         assert.equal(identity.desktopName, "io.niranjan.Kinako.desktop");
         assert.include(identity.desktopEntry ?? "", 'Exec="/Applications/current.AppImage" %U');
-        assert.include(identity.desktopEntry ?? "", "Name=Kinako (Alpha)");
+        assert.include(identity.desktopEntry ?? "", "Name=Kinako (Beta)");
         assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/kinako;");
         assert.include(
           identity.desktopEntry ?? "",

@@ -7,7 +7,6 @@ import {
 } from "./linuxCaptureSession.ts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
-/** Niri owns the keybinding; this endpoint triggers capture without first focusing T3. */
 export async function startNiriCaptureShortcut(
   appId: string,
   onCapture: () => void,

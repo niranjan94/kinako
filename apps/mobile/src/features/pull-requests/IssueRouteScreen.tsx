@@ -7,28 +7,22 @@ import {
   type IssueListEntry,
 } from "@t3tools/contracts";
 import { useCallback, useState, type ReactElement } from "react";
-import {
-  ActivityIndicator,
-  Linking,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  View,
-} from "react-native";
+import { Linking, Platform, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
-import { AppText as Text } from "../../components/AppText";
-import { SymbolView } from "../../components/AppSymbol";
-import { ControlPillMenu } from "../../components/ControlPillMenu";
-import { EmptyState } from "../../components/EmptyState";
-import { MaterialButton } from "../../components/MaterialButton";
-import { MaterialIconButton } from "../../components/MaterialIconButton";
-import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
+import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { Button } from "../../components/ui/Button";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { IconButton } from "../../components/ui/IconButton";
+import { Menu } from "../../components/ui/Menu";
+import { Toolbar } from "../../components/ui/Toolbar";
+import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import { relativeTime } from "../../lib/time";
 import { NativeScrollViewMarker as ScrollViewMarker } from "../../native/NativeScrollViewMarker";
-import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
+import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { composerPullRequests } from "../../state/pull-requests";
 import { useEnvironmentQuery } from "../../state/query";
 import { usePullToRefresh } from "../../state/use-pull-to-refresh";
@@ -44,7 +38,6 @@ import {
 } from "./issueHandoffActions";
 import { issueTarget, type IssueParams } from "./issueRoute";
 import { issueStatus } from "./issueStatus";
-import { MaterialFloatingToolbar } from "./MaterialFloatingToolbar";
 import { openOnProviderLabel } from "./pullRequestActions";
 import { PullRequestDescription } from "./PullRequestDescription";
 import { pullRequestLabelColor } from "./pullRequestList";
@@ -135,7 +128,7 @@ function IssueActionToolbar(props: {
   const choose = projects.length > 1;
   if (Platform.OS === "android") {
     const send = (
-      <MaterialButton
+      <Button
         label="Send to agent"
         tone="primary"
         disabled={disabled}
@@ -145,7 +138,7 @@ function IssueActionToolbar(props: {
       />
     );
     const ask = (
-      <MaterialIconButton
+      <IconButton
         icon="questionmark.bubble"
         accessibilityLabel="Ask about issue"
         disabled={disabled}
@@ -156,13 +149,13 @@ function IssueActionToolbar(props: {
     );
     const menu = (mode: IssueHandoffMode, child: ReactElement) =>
       choose ? (
-        <ControlPillMenu
+        <Menu
           title="Choose a project"
           actions={issueHandoffProjectActions(mode, projects)}
           onPressAction={({ nativeEvent }) => select(nativeEvent.event)}
         >
           <View pointerEvents="none">{child}</View>
-        </ControlPillMenu>
+        </Menu>
       ) : (
         child
       );
@@ -173,30 +166,30 @@ function IssueActionToolbar(props: {
         style={{ paddingBottom: insets.bottom + 16 }}
         onLayout={(event) => props.onHeightChange(event.nativeEvent.layout.height)}
       >
-        <MaterialFloatingToolbar>
+        <Toolbar>
           <View className="flex-row items-center gap-2">
             {menu("ask", ask)}
             <View className="min-w-0 shrink">{menu("send", send)}</View>
           </View>
-        </MaterialFloatingToolbar>
+        </Toolbar>
       </View>
     );
   }
   const projectItems = (mode: IssueHandoffMode) =>
     projects.map((project) => (
-      <NativeHeaderToolbar.MenuAction
+      <Toolbar.MenuAction
         key={project.id}
         icon="folder"
         subtitle={project.workspaceRoot}
         onPress={() => start(mode, project.id)}
       >
-        <NativeHeaderToolbar.Label>{project.title}</NativeHeaderToolbar.Label>
-      </NativeHeaderToolbar.MenuAction>
+        <Toolbar.Label>{project.title}</Toolbar.Label>
+      </Toolbar.MenuAction>
     ));
   return (
-    <NativeHeaderToolbar placement="bottom">
+    <Toolbar placement="bottom">
       {choose ? (
-        <NativeHeaderToolbar.Menu
+        <Toolbar.Menu
           identifier="issue-ask"
           icon="questionmark.bubble"
           title="Ask about issue"
@@ -205,9 +198,9 @@ function IssueActionToolbar(props: {
           separateBackground
         >
           {projectItems("ask")}
-        </NativeHeaderToolbar.Menu>
+        </Toolbar.Menu>
       ) : (
-        <NativeHeaderToolbar.Button
+        <Toolbar.Button
           identifier="issue-ask"
           icon="questionmark.bubble"
           accessibilityLabel="Ask about issue"
@@ -216,9 +209,9 @@ function IssueActionToolbar(props: {
           separateBackground
         />
       )}
-      <NativeHeaderToolbar.Spacer flexible />
+      <Toolbar.Spacer flexible />
       {choose ? (
-        <NativeHeaderToolbar.Menu
+        <Toolbar.Menu
           identifier="issue-send"
           title="Send to agent"
           accessibilityLabel="Send to agent"
@@ -228,9 +221,9 @@ function IssueActionToolbar(props: {
           separateBackground
         >
           {projectItems("send")}
-        </NativeHeaderToolbar.Menu>
+        </Toolbar.Menu>
       ) : (
-        <NativeHeaderToolbar.Button
+        <Toolbar.Button
           identifier="issue-send"
           label="Send to agent"
           accessibilityLabel="Send to agent"
@@ -241,8 +234,8 @@ function IssueActionToolbar(props: {
           separateBackground
         />
       )}
-      <NativeHeaderToolbar.Spacer flexible />
-    </NativeHeaderToolbar>
+      <Toolbar.Spacer flexible />
+    </Toolbar>
   );
 }
 
@@ -328,27 +321,23 @@ export function IssueRouteScreen({ route }: StaticScreenProps<IssueParams>) {
             ]}
           />
         ) : null}
-        <NativeHeaderToolbar placement="right">
-          <NativeHeaderToolbar.Menu
-            title="Issue"
-            accessibilityLabel="Issue actions"
-            icon="ellipsis"
-          >
+        <Toolbar placement="right">
+          <Toolbar.Menu title="Issue" accessibilityLabel="Issue actions" icon="ellipsis">
             {canComment ? (
-              <NativeHeaderToolbar.MenuAction icon="plus.bubble" onPress={openComment}>
-                <NativeHeaderToolbar.Label>Add comment</NativeHeaderToolbar.Label>
-              </NativeHeaderToolbar.MenuAction>
+              <Toolbar.MenuAction icon="plus.bubble" onPress={openComment}>
+                <Toolbar.Label>Add comment</Toolbar.Label>
+              </Toolbar.MenuAction>
             ) : null}
             {identity && providerLabel ? (
-              <NativeHeaderToolbar.MenuAction
+              <Toolbar.MenuAction
                 icon="arrow.up.right"
                 onPress={() => void Linking.openURL(identity.url)}
               >
-                <NativeHeaderToolbar.Label>{providerLabel}</NativeHeaderToolbar.Label>
-              </NativeHeaderToolbar.MenuAction>
+                <Toolbar.Label>{providerLabel}</Toolbar.Label>
+              </Toolbar.MenuAction>
             ) : null}
-          </NativeHeaderToolbar.Menu>
-        </NativeHeaderToolbar>
+          </Toolbar.Menu>
+        </Toolbar>
         <View
           className={
             Platform.OS === "android"
@@ -378,7 +367,7 @@ export function IssueRouteScreen({ route }: StaticScreenProps<IssueParams>) {
               {identity ? (
                 <IssueIdentity issue={identity} />
               ) : result.isPending ? (
-                <ActivityIndicator className="my-12" colorClassName="accent-icon" />
+                <AppActivityIndicator className="my-12" colorClassName="accent-icon" />
               ) : null}
               {result.error && !issue ? (
                 <EmptyState
@@ -428,7 +417,7 @@ export function IssueRouteScreen({ route }: StaticScreenProps<IssueParams>) {
                   </View>
                 </>
               ) : identity && result.isPending ? (
-                <ActivityIndicator className="my-8" colorClassName="accent-icon" />
+                <AppActivityIndicator className="my-8" colorClassName="accent-icon" />
               ) : null}
             </ScrollView>
           </ScrollViewMarker>

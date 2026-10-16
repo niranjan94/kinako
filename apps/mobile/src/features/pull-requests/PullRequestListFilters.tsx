@@ -1,7 +1,7 @@
 import { sortProjectsByGroupOrder } from "@t3tools/client-runtime/state/project-grouping";
 import { useMemo } from "react";
 import { ScrollView } from "react-native";
-import type { ControlPillMenuProps } from "../../components/ControlPillMenu.types";
+import type { MenuProps } from "../../components/ui/Menu.types";
 import type { PullRequestListKind } from "../../persistence/mobile-preferences";
 import { ListFilterMenu } from "../workspace/ListFilterMenu";
 import { issueListState } from "./issueList";
@@ -36,7 +36,6 @@ function choices(field: string, options: Readonly<Record<string, string>>, selec
   }));
 }
 
-/** The project list's own order, which is the order its sidebar and new-task picker show. */
 function useProjectsInSidebarOrder<Project extends { id: string; environmentId: string }>(
   projects: readonly Project[],
 ) {
@@ -184,7 +183,7 @@ export function PullRequestListFilters(props: {
         Number(Boolean(value.filters.draft)) +
         Number(Boolean(value.filters.review)) +
         Number(Boolean(value.filters.checks)));
-  const pullRequestOnly: ControlPillMenuProps["actions"] = [
+  const pullRequestOnly: MenuProps["actions"] = [
     {
       id: "drafts",
       title: value.filters.draft ? DRAFTS[value.filters.draft] : "Drafts",
@@ -201,7 +200,7 @@ export function PullRequestListFilters(props: {
       subactions: choices("checks", CHECKS, value.filters.checks ?? "all"),
     },
   ];
-  const more: ControlPillMenuProps["actions"] = [
+  const more: MenuProps["actions"] = [
     ...(issues ? [] : pullRequestOnly),
     {
       id: "projects",

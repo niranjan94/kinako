@@ -86,7 +86,6 @@ export function useComposerPullRequestSearch(input: {
   environmentId: EnvironmentId | null;
   projectId: ProjectId | null;
   repository: string | null;
-  /** The thread's linked pull requests, offered in numeric searches from any repository. */
   threadPullRequests?: ReadonlyArray<ThreadPullRequestLink> | undefined;
   query: string | null;
 }) {
@@ -413,7 +412,6 @@ export function useRunHistory(
   );
 }
 
-/** Full input and output for one tool row; pass null to skip fetching. */
 export function useTurnItemDetail(
   target: {
     readonly environmentId: EnvironmentId;

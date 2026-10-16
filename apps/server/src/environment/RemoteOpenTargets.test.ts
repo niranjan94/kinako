@@ -22,10 +22,6 @@ interface CommandResult {
   readonly stdout: string;
 }
 
-/**
- * Spawner answering `tailscale status --json` and `tailscale debug prefs`, and whose macOS
- * `scutil --get LocalHostName` prints `localHostName`.
- */
 const layerSpawner = (
   input: { readonly status: CommandResult; readonly prefs: CommandResult },
   localHostName = "",
@@ -87,7 +83,6 @@ const resolveTargets = (input: {
     ),
   );
 
-// `tailscale debug prefs` output, trimmed. `tailscale up --ssh` sets RunSSH.
 const prefsJson = (prefs: { readonly RunSSH: boolean; readonly WantRunning: boolean }) => ({
   exitCode: 0,
   stdout: JSON.stringify(

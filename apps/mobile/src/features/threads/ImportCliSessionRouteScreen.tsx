@@ -17,18 +17,20 @@ import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { AgentSessionListItem, ThreadId } from "@t3tools/contracts";
 import * as Haptics from "expo-haptics";
 import { useEffect, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, View } from "react-native";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppActivityIndicator } from "../../components/AppActivityIndicator";
-import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
-import { AppText as Text } from "../../components/AppText";
-import { EmptyState } from "../../components/EmptyState";
-import { MaterialScreenContent } from "../../components/MaterialScreenContent";
+import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { ScreenContent } from "../../components/ui/ScreenContent";
+import { Toolbar } from "../../components/ui/Toolbar";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { cn } from "../../lib/cn";
 import { relativeTime } from "../../lib/time";
-import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
+import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -77,13 +79,13 @@ export function ImportCliSessionRouteScreen({
         options={{ headerShown: Platform.OS !== "android", title: SCREEN_TITLE }}
       />
       {isSheetRoot ? (
-        <NativeHeaderToolbar placement="left">
-          <NativeHeaderToolbar.Button
+        <Toolbar placement="left">
+          <Toolbar.Button
             accessibilityLabel="Cancel import"
             label="Cancel"
             onPress={() => (navigation.getParent() ?? navigation).goBack()}
           />
-        </NativeHeaderToolbar>
+        </Toolbar>
       ) : null}
       {Platform.OS === "android" ? (
         <AndroidScreenHeader
@@ -92,7 +94,7 @@ export function ImportCliSessionRouteScreen({
           onBack={() => navigation.goBack()}
         />
       ) : null}
-      <MaterialScreenContent>
+      <ScreenContent>
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={{
@@ -112,7 +114,7 @@ export function ImportCliSessionRouteScreen({
             />
           )}
         </ScrollView>
-      </MaterialScreenContent>
+      </ScreenContent>
     </View>
   );
 }
@@ -193,7 +195,7 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
         return;
       }
       if (!isAtomCommandInterrupted(result)) {
-        Alert.alert(
+        Dialog.alert(
           "Could not import session",
           failureMessage(squashAtomCommandFailure(result), "The session could not be imported."),
         );

@@ -119,14 +119,10 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(script, "npm exec");
     assert.notInclude(script, "t3@latest");
     assert.notInclude(script, 'exec t3 "$@"');
-    // Concurrent launches serialize on a per-version mkdir lock and recheck
-    // the completion marker after acquiring it.
     assert.include(
       script,
       'T3_LOCK="$HOME/.kinako/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
     );
-    // mkdir is the exclusive create; the pid follows atomically. A dead owner
-    // is reclaimed at once, a never-published owner after a short grace.
     assert.include(script, 'while ! mkdir "$T3_LOCK" 2>/dev/null; do');
     assert.include(script, 'mv "$T3_LOCK/pid.tmp" "$T3_LOCK/pid"');
     assert.include(script, 'if ! kill -0 "$T3_LOCK_OWNER" 2>/dev/null; then');
@@ -141,8 +137,6 @@ describe("ssh tunnel scripts", () => {
       script.indexOf('"$T3_STAGING/kinako" --version'),
       script.indexOf('> "$T3_STAGING/.install-complete"'),
     );
-    // Node discovery is defined for the dev path but only ever invoked inside
-    // the node-script branch, which the archive path skips entirely.
     assert.equal(script.split("ensure_remote_node_path || true").length - 1, 1);
     assert.isBelow(
       script.indexOf("ensure_remote_node_path || true"),
@@ -761,7 +755,7 @@ describe("ssh tunnel scripts", () => {
 // On macOS, Node can bind 127.0.0.1:<port> while another process (such as the
 // desktop app with network access on) listens on *:<port>. Linux refuses that
 // bind unless both sockets set SO_REUSEPORT, so on Linux the preload adds it to
-// the picker's probe and the holder sets it too. macOS needs neither.
+// the picker's probe and the holder sets it too.
 const MACOS_BIND_PRELOAD = `const net = require("node:net");
 const listen = net.Server.prototype.listen;
 net.Server.prototype.listen = function (port, host, callback) {
@@ -830,7 +824,6 @@ describe("remote port picker", () => {
   );
 });
 
-// Runs a generated script with an isolated HOME, as an SSH remote would.
 const runScript = (home: string, args: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -863,9 +856,6 @@ const runScript = (home: string, args: ReadonlyArray<string>) =>
     return { stdout, stderr, exitCode };
   });
 
-// The archive runner is generated shell; string assertions cannot prove the
-// lock excludes concurrent installers. Run the real script against a tiny
-// fake archive served from a file:// mirror.
 describe("archive runner script", () => {
   const hostPlatform = HostProcess.Platform.defaultValue();
   const hostArch = HostProcess.Architecture.defaultValue();
@@ -874,9 +864,6 @@ describe("archive runner script", () => {
 
   const runRunner = (home: string, runner: string) => runScript(home, [runner, "--version"]);
 
-  // A fake "executable" that answers --version, packed the way the release
-  // workflow packs the real archive: one top-level directory named after the
-  // stem, checksummed in SHA256SUMS.
   const makeMirror = Effect.fn("makeMirror")(function* (root: string) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const platform = hostPlatform === "darwin" ? "darwin" : "linux";
@@ -927,8 +914,6 @@ describe("archive runner script", () => {
           archiveVersion,
         );
 
-        // A lock left by a crashed installer (dead pid) must not block the
-        // next launch, and neither must one that never published a pid.
         const lock = `${versionsDir}/.${archiveVersion}.install.lock`;
         yield* fs.remove(`${versionsDir}/${archiveVersion}`, { recursive: true });
         yield* fs.makeDirectory(lock);
@@ -1279,7 +1264,6 @@ esac
         const [server] = yield* host.servers;
         yield* host.fs.remove(`${host.home}/ready/${first.remotePort}`);
 
-        // Shorten the one-minute readiness budget so the test stays fast.
         const script = yield* host.fs.readFileString(host.launchScript);
         assert.include(script, 'wait_ready "60000"');
         yield* host.fs.writeFileString(

@@ -12,11 +12,6 @@ import { resolveScopedSettingsTargets, selectScopedSettingsEnvironments } from "
 import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope";
 import { selectSingleEnvironmentScope } from "./settingsScopeAxis";
 
-/**
- * Each member's decoded project file, so file-backed settings show the file as a
- * layer in the inheritance chain. A member is only present once its read has
- * settled; the query atom caches per (environment, cwd).
- */
 function useMemberProjectFiles(scope: ReturnType<typeof resolveSettingsScope>) {
   const members = scope.kind === "project" || scope.kind === "checkout" ? scope.members : [];
   return useAtomValue(
@@ -35,7 +30,6 @@ function useMemberProjectFiles(scope: ReturnType<typeof resolveSettingsScope>) {
                 settled = false;
                 break;
               }
-              // A pending in-app save overlays the query, like useProjectFileQuery.
               data =
                 get(optimisticFileAtom(member.environmentId, member.workspaceRoot, fileName))
                   ?.data ?? Option.getOrNull(AsyncResult.value(result));
@@ -86,8 +80,6 @@ function useResolvedSettingsScope(rawSearch: SettingsScopeSearch, singleEnvironm
       selected.connectedEnvironments,
       projectFiles,
     );
-    // The representative target supplies display values; project scopes
-    // prefer the member on the primary environment, like environments do.
     const target =
       targets.find(
         (candidate) => candidate.environmentId === selected.environment?.environmentId,

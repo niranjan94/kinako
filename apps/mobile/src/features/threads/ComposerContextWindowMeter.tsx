@@ -15,9 +15,9 @@ import { Pressable, ScrollView, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { withUniwind } from "uniwind";
 
-import { AppSheet } from "../../components/AppSheet";
-import { AppText as Text } from "../../components/AppText";
-import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
+import { Sheet } from "../../components/ui/Sheet";
+import { AppText as Text } from "../../components/ui/AppText";
+import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import { cn } from "../../lib/cn";
 import { mobilePreferencesAtom } from "../../state/preferences";
 import { useThreadProjection, useThreadVisibleTurnItems } from "../../state/use-thread-detail";
@@ -223,9 +223,9 @@ function ContextWindowRing(props: ComposerContextWindowMeterProps) {
         </ThemedSvg>
       </Pressable>
       {open ? (
-        <AppSheet title="Context Window" onClose={() => setOpen(false)}>
+        <Sheet title="Context Window" onClose={() => setOpen(false)}>
           <ContextWindowDetails usage={usage} />
-        </AppSheet>
+        </Sheet>
       ) : null}
     </>
   );

@@ -3,7 +3,7 @@ import { sendIssueToAgentPrompt } from "@t3tools/client-runtime/issue-handoff";
 import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
 import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Alert } from "react-native";
+import * as Dialog from "../../components/ui/Dialog";
 import { issueComposerContext } from "../../lib/composerContext";
 import { uuidv4 } from "../../lib/uuid";
 import { useProjects } from "../../state/entities";
@@ -58,7 +58,7 @@ export function useIssueHandoff() {
       const project =
         projectsFor(issue).find((candidate) => !projectId || candidate.id === projectId) ?? null;
       if (!project) {
-        Alert.alert(
+        Dialog.alert(
           "No project for this repository",
           `Add ${issue.repository} as a project on this environment, then try again.`,
         );
@@ -96,7 +96,10 @@ export function useIssueHandoff() {
           },
         });
       } catch (cause) {
-        Alert.alert("Couldn't start a task", cause instanceof Error ? cause.message : "Try again.");
+        Dialog.alert(
+          "Couldn't start a task",
+          cause instanceof Error ? cause.message : "Try again.",
+        );
       } finally {
         pending.current = false;
         setBusy(false);

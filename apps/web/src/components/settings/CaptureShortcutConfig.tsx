@@ -20,7 +20,6 @@ import { APP_BASE_NAME } from "~/branding";
 
 const DEFAULT_SHORTCUT = parseKeybindingShortcut("Ctrl+Shift+3")!;
 
-/** Wizard-owned config review; config contents never leave the desktop bridge. */
 export function CaptureShortcutConfig({
   state,
   disabled = false,

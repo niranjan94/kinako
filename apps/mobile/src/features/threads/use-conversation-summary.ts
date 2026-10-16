@@ -18,7 +18,7 @@ import * as Cause from "effect/Cause";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform } from "react-native";
 
-import { showTextInputDialog } from "../../components/ConfirmDialogHost";
+import * as Dialog from "../../components/ui/Dialog";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { flushComposerDrafts, mergeComposerDraftContent } from "../../state/use-composer-drafts";
 import { useThreadProjection } from "../../state/use-thread-detail";
@@ -110,7 +110,7 @@ export function useConversationSummary(input: {
     if (outcome === null) return;
     setPending(null);
     if (outcome.type === "failed") {
-      Alert.alert("Could not summarize", outcome.message);
+      Dialog.alert("Could not summarize", outcome.message);
       return;
     }
     const message = projection.messages.find((candidate) => candidate.id === pending.messageId);
@@ -122,7 +122,7 @@ export function useConversationSummary(input: {
       .then(() => flushComposerDrafts())
       .then(() => {
         if (message.attachments.length > 0) {
-          Alert.alert(
+          Dialog.alert(
             "Attachments not restored",
             "The prompt is back in the composer. Attach its files again before sending.",
           );
@@ -157,7 +157,7 @@ export function useConversationSummary(input: {
       }).then((result) => {
         if (result._tag === "Success") return;
         setPending(null);
-        Alert.alert("Could not summarize", failureMessage(result.cause, "Please try again."));
+        Dialog.alert("Could not summarize", failureMessage(result.cause, "Please try again."));
       });
     },
     [input.environmentId, input.threadId, summarizeThread],
@@ -181,7 +181,7 @@ export function useConversationSummary(input: {
         );
         return;
       }
-      showTextInputDialog({
+      Dialog.prompt({
         title: `${TITLES[direction]}: optional focus`,
         initialValue: "",
         confirmText: "Summarize",
@@ -202,7 +202,7 @@ export function useConversationSummary(input: {
         },
       }).then((result) => {
         if (result._tag === "Success") return;
-        Alert.alert(
+        Dialog.alert(
           "Could not restore the full context",
           failureMessage(result.cause, "Please try again."),
         );

@@ -13,26 +13,13 @@ import { useProjectFileQuery } from "~/components/files/projectFilesQueryState";
 const NO_SCRIPTS: ReadonlyArray<T3ProjectFileScript> = [];
 
 export interface T3ProjectFileState {
-  /**
-   * - `valid`: the project file exists and decoded.
-   * - `invalid`: the project file exists but fails to decode (the server then
-   *   ignores the whole file, including `iconPath` and every script).
-   * - `missing`: no readable project file at the workspace root.
-   * - `loading`: the file query has not settled yet.
-   */
   status: "loading" | "missing" | "invalid" | "valid";
   /** `kinako.json` unless only upstream's `t3.json` exists. */
   fileName: string;
-  /** The decoded file when status is `valid`, null otherwise. */
   file: T3ProjectFile | null;
   scripts: ReadonlyArray<T3ProjectFileScript>;
 }
 
-/**
- * Decoded state of the project's checked-in project file (`kinako.json`, else
- * upstream's `t3.json`), including whether the file exists but is broken —
- * which the runtime otherwise swallows silently.
- */
 export function useT3ProjectFileState(
   environmentId: EnvironmentId,
   cwd: string | null,
@@ -74,11 +61,6 @@ export function useT3ProjectFileState(
   }, [contents, fileName, isPending]);
 }
 
-/**
- * Scripts declared in the project file, offered in the
- * scripts menu for import. Missing, truncated, or invalid files resolve to
- * an empty list.
- */
 export function useT3ProjectFileScripts(
   environmentId: EnvironmentId,
   cwd: string | null,

@@ -3,7 +3,7 @@ import type { ProjectAdditionalDirectory } from "@t3tools/contracts";
 import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { AppText as Text, AppTextInput } from "../../components/AppText";
+import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { projectEnvironment } from "../../state/projects";
 import { useAtomCommand } from "../../state/use-atom-command";

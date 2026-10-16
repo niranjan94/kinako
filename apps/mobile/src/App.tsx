@@ -1,4 +1,4 @@
-import { PermissionUpdateNotice } from "./components/PermissionUpdateNotice";
+import { PermissionUpdateNotice } from "./features/connection/PermissionUpdateNotice";
 import * as Linking from "expo-linking";
 import {
   FORK_DEV_URL_SCHEME,
@@ -15,7 +15,7 @@ import { createStaticNavigation } from "@react-navigation/native";
 
 import { RegistryContext } from "@effect/atom-react";
 import { ThreadArrangementHost } from "./features/threads/ThreadArrangementSheet";
-import { ConfirmDialogHost } from "./components/ConfirmDialogHost";
+import * as Dialog from "./components/ui/Dialog";
 import { CloudAuthProvider } from "./features/cloud/CloudAuthProvider";
 import { prepareNativeShowcaseCapture } from "./features/showcase/nativeShowcaseScene";
 import { IncomingShareProvider } from "./features/sharing/IncomingShareProvider";
@@ -25,7 +25,7 @@ import {
 } from "./features/settings/appearance/AppearancePreferencesProvider";
 import { RootStack } from "./Stack";
 import { appAtomRegistry } from "./state/atom-registry";
-import { OverlayPortalHost } from "./components/OverlayPortal";
+import { OverlayPortalHost } from "./components/ui/OverlayPortal";
 import { shouldHandleAppLink } from "./lib/appLinking";
 import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
 import { useUiRuntimeMemoryWarningGc } from "./lib/useUiRuntimeMemoryWarningGc";
@@ -40,9 +40,7 @@ if (process.env.EXPO_PUBLIC_SHOWCASE === "1") {
   prepareNativeShowcaseCapture();
 }
 
-void SplashScreen.preventAutoHideAsync().catch(() => {
-  // The native module can be unavailable in non-native test environments.
-});
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const appLinking = {
   prefixes: [
@@ -51,7 +49,6 @@ const appLinking = {
     `${FORK_DEV_URL_SCHEME}://`,
     `${FORK_PREVIEW_URL_SCHEME}://`,
   ],
-  // Keep the compact thread list available beneath a directly opened thread.
   config: { initialRouteName: "Home" },
   filter: shouldHandleAppLink,
 };
@@ -106,7 +103,7 @@ function AppContent() {
                   <IncomingShareProvider>
                     <Navigation linking={appLinking} theme={navigationTheme} />
                   </IncomingShareProvider>
-                  <ConfirmDialogHost />
+                  <Dialog.Host />
                   <ThreadArrangementHost />
                 </NativeLayoutMetricsProvider>
               </GlobalVoiceInputControl>
