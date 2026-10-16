@@ -61,7 +61,7 @@ separately. Signing out of T3 Connect does not stop or uninstall the service.
 A sleeping computer stops running agents and disconnects every remote client. To prevent that, open **Settings → General** and choose **Keep awake**. The setting belongs to each environment and applies to the computer that runs it, even when you change it from another device.
 
 - **While agents work** keeps the computer awake while any turn is running or waiting for your answer, and for 30 seconds after the last one ends. Scheduled tasks count too.
-- **Always** keeps it awake for as long as T3 Code runs.
+- **Always** keeps it awake for as long as Kinako runs.
 
 The screen can still turn off. Closing a laptop lid usually still puts it to sleep, unless the laptop is plugged in and connected to an external display.
 

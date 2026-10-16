@@ -13,7 +13,7 @@ an existing worktree, use **New thread in this worktree** from the branch toolba
 When you change a new thread's project, T3 Code stays in the current environment
 if that project exists there. Otherwise it selects an environment that has it.
 
-To continue a Claude Code or Codex session you started in a terminal, search the command palette for **Import CLI session**. See [Claude](./providers-claude.md#bring-a-claude-code-session-into-t3-code) and [Codex](./providers-codex.md#bring-a-codex-cli-session-into-t3-code).
+To continue a Claude Code or Codex session you started in a terminal, search the command palette for **Import CLI session**. See [Claude](./providers-claude.md#bring-a-claude-code-session-into-kinako) and [Codex](./providers-codex.md#bring-a-codex-cli-session-into-kinako).
 
 ### Start without a project
 
