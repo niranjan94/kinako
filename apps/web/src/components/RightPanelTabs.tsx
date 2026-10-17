@@ -1,3 +1,4 @@
+import { DatabaseIcon } from "lucide-react";
 import { pullRequestHostOf, type SourceControlProviderKind } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { useProjects, useServerConfigs, useThreadShells } from "~/state/entities";
@@ -141,6 +142,8 @@ interface RightPanelTabsProps {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddDatabase?: (() => void) | undefined;
+  databaseAvailable?: boolean | undefined;
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
@@ -318,6 +321,8 @@ function RightPanelEmptyState(props: {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddDatabase?: (() => void) | undefined;
+  databaseAvailable?: boolean | undefined;
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
@@ -379,6 +384,14 @@ function RightPanelEmptyState(props: {
       available: props.pullRequestsAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequests,
       onClick: props.onAddPullRequests,
+    },
+    {
+      label: "Databases",
+      icon: DatabaseIcon,
+      shortcut: "Q",
+      available: props.databaseAvailable === true,
+      disabledReason: "Database access requires terminal permission.",
+      onClick: () => props.onAddDatabase?.(),
     },
     {
       label: "Device",
@@ -565,6 +578,8 @@ function surfaceTitle(
   switch (surface.kind) {
     case "diff":
       return "Diff";
+    case "database":
+      return "Databases";
     case "files":
       return "Files";
     case "file":
@@ -640,6 +655,8 @@ function SurfaceIcon({
     }
     case "diff":
       return <FileDiff className="size-3 shrink-0" />;
+    case "database":
+      return <DatabaseIcon className="size-3 shrink-0" />;
     case "files":
       return <Files className="size-3 shrink-0" />;
     case "file":
@@ -968,6 +985,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.pullRequestsAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.pullRequests,
       onClick: props.onAddPullRequests,
+    },
+    {
+      label: "Databases",
+      icon: DatabaseIcon,
+      shortcut: "Q",
+      available: props.databaseAvailable === true,
+      disabledReason: "Database access requires terminal permission.",
+      onClick: () => props.onAddDatabase?.(),
     },
     {
       label: "Device",
@@ -1437,6 +1462,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
             onAddFiles={props.onAddFiles}
+            onAddDatabase={props.onAddDatabase}
+            databaseAvailable={props.databaseAvailable}
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
             onAddDevice={props.onAddDevice}

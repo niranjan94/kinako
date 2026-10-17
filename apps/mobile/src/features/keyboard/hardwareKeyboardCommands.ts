@@ -12,6 +12,7 @@ export type HardwareKeyboardCommand =
   | "back"
   | "files"
   | "terminal"
+  | "database"
   | "review"
   | "copyThreadReference"
   | "toggleSidebar"

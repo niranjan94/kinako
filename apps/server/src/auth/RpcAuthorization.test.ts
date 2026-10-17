@@ -207,6 +207,29 @@ describe("RPC authorization scopes", () => {
     }
   });
 
+  it("treats saved database credentials as settings and running SQL like a terminal", () => {
+    for (const method of [
+      WS_METHODS.databaseSaveConnection,
+      WS_METHODS.databaseDeleteConnection,
+      WS_METHODS.databaseTestConnection,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
+    }
+    for (const method of [
+      WS_METHODS.databaseListConnections,
+      WS_METHODS.databaseIntrospect,
+      WS_METHODS.databaseExecute,
+      WS_METHODS.databaseOpenSession,
+      WS_METHODS.databaseCloseSession,
+      WS_METHODS.databaseBrowseTable,
+      WS_METHODS.databaseFetchPage,
+      WS_METHODS.databaseCloseQuery,
+      WS_METHODS.databaseCancelQuery,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthTerminalOperateScope);
+    }
+  });
+
   it("rejects unknown RPC method names", () => {
     for (const method of ["server.notRegistered", "toString", "constructor"]) {
       expect(() => requiredScopeForRpcMethod(method)).toThrow(

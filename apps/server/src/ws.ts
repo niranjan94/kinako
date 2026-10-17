@@ -1,4 +1,8 @@
-import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import {
+  OrchestrationDispatchCommandError,
+  CoreWsRpcGroup,
+  DatabaseRpcGroup,
+} from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 
@@ -232,6 +236,7 @@ import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as PullRequestReviewGuideService from "./pullRequest/PullRequestReviewGuideService.ts";
+import * as DatabaseService from "./database/DatabaseService.ts";
 import { listLinkedPullRequestThreads } from "./pullRequest/linkedThreads.ts";
 import { pullRequestSyncKey } from "./pullRequest/pullRequestSyncKey.ts";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -544,6 +549,8 @@ const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 
 // Middleware added later wraps middleware added earlier, so instrumentation wraps authorization.
 const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
+const CoreServerWsRpcGroup = CoreWsRpcGroup.middleware(RpcInstrumentation);
+const DatabaseServerRpcGroup = DatabaseRpcGroup.middleware(RpcInstrumentation);
 // Replaying each intervening event costs a shell refetch; past this gap a
 // single O(active-threads) snapshot is cheaper and bounded.
 const SHELL_RESUME_MAX_GAP = 1_000;
@@ -1165,7 +1172,7 @@ const layerWsRpc = (
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
 ) =>
-  ServerWsRpcGroup.toLayer(
+  CoreServerWsRpcGroup.toLayer(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
       const sql = yield* SqlClient.SqlClient;
@@ -1789,7 +1796,7 @@ const layerWsRpc = (
         return result;
       });
 
-      const handlers = ServerWsRpcGroup.of({
+      const handlers = CoreServerWsRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -3122,6 +3129,26 @@ const layerWsRpc = (
     }),
   );
 
+const databaseRpcLayer = DatabaseServerRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const database = yield* DatabaseService.DatabaseService;
+    return DatabaseServerRpcGroup.of({
+      [WS_METHODS.databaseListConnections]: (input) => database.listConnections(input),
+      [WS_METHODS.databaseSaveConnection]: (input) => database.saveConnection(input),
+      [WS_METHODS.databaseDeleteConnection]: (input) => database.deleteConnection(input),
+      [WS_METHODS.databaseTestConnection]: (input) => database.testConnection(input),
+      [WS_METHODS.databaseIntrospect]: (input) => database.introspect(input),
+      [WS_METHODS.databaseOpenSession]: (input) => database.openSession(input),
+      [WS_METHODS.databaseCloseSession]: (input) => database.closeSession(input),
+      [WS_METHODS.databaseBrowseTable]: (input) => database.browseTable(input),
+      [WS_METHODS.databaseExecute]: (input) => database.execute(input),
+      [WS_METHODS.databaseFetchPage]: (input) => database.fetchPage(input),
+      [WS_METHODS.databaseCloseQuery]: (input) => database.closeQuery(input),
+      [WS_METHODS.databaseCancelQuery]: (input) => database.cancelQuery(input),
+    });
+  }),
+);
+
 // RpcServer's default sends a socket-level Defect frame instead, and the client
 // ends every pending request on the socket with it.
 export const WS_RPC_SERVER_OPTIONS = {
@@ -3136,6 +3163,7 @@ export const layer = Layer.unwrap(
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
+    const database = yield* DatabaseService.DatabaseService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3191,6 +3219,7 @@ export const layer = Layer.unwrap(
               previewAutomationBroker,
               serverBrowser,
             ).pipe(
+              Layer.merge(databaseRpcLayer),
               Layer.provideMerge(RpcSerialization.layerJson),
               // Request fibers run in the handlers' context, so this reporter sees
               // their defects, not the rest of the server's.
@@ -3209,6 +3238,8 @@ export const layer = Layer.unwrap(
                   reviewGuides,
                 ),
               ),
+              // Open result sets outlive one socket: a reconnecting client keeps paging them.
+              Layer.provide(Layer.succeed(DatabaseService.DatabaseService, database)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

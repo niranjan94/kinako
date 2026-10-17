@@ -723,6 +723,7 @@ function useDraftHeroLayoutTransition(
 const PreviewPanel = lazy(() =>
   import("./preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
+const DatabasePanel = lazy(() => import("./database/DatabasePanel"));
 const DiffPanel = lazy(() => import("./DiffPanel"));
 const selectAutoShowFloatingPreview = (settings: { browserAutoShowFloatingPreview: boolean }) =>
   settings.browserAutoShowFloatingPreview;
@@ -5260,6 +5261,10 @@ export default function ChatView(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "files");
   };
   const addFilesSurfaceStable = useStableCallback(addFilesSurface);
+  const addDatabaseSurfaceStable = useStableCallback(() => {
+    if (!activeThreadRef || !activeProject || !canOperateTerminal) return;
+    useRightPanelStore.getState().open(activeThreadRef, "database");
+  });
   const supportsThreadPullRequests =
     serverConfig?.environment.capabilities.threadPullRequests === true;
   const visiblePullRequests = visibleThreadPullRequests(
@@ -7760,6 +7765,12 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
 
+      if (command === "database.open") {
+        event.preventDefault();
+        event.stopPropagation();
+        addDatabaseSurfaceStable();
+        return;
+      }
       if (command === "rightPanel.toggle") {
         event.preventDefault();
         event.stopPropagation();
@@ -8012,7 +8023,8 @@ export default function ChatView(props: ChatViewProps) {
   // A focused desktop browser page forwards these chords as menu actions.
   useEffect(() => {
     return window.desktopBridge?.onMenuAction((action) => {
-      if (action === "rightPanel.toggle") toggleRightPanelStable();
+      if (action === "database.open") addDatabaseSurfaceStable();
+      else if (action === "rightPanel.toggle") toggleRightPanelStable();
       else if (action === "rightPanel.toggleMaximized") toggleRightPanelMaximizedStable();
     });
   }, [toggleRightPanelStable, toggleRightPanelMaximizedStable]);
@@ -10752,6 +10764,15 @@ export default function ChatView(props: ChatViewProps) {
         newShortcutLabel={newTerminalShortcutLabel ?? undefined}
         closeShortcutLabel={closeTerminalShortcutLabel ?? undefined}
       />
+    ) : renderedRightPanelSurface?.kind === "database" && activeProject && activeThreadRef ? (
+      <Suspense fallback={null}>
+        <DatabasePanel
+          environmentId={activeThreadRef.environmentId}
+          projectId={activeProject.id}
+          threadRef={activeThreadRef}
+          workspaceRoot={activeProject.workspaceRoot}
+        />
+      </Suspense>
     ) : renderedRightPanelSurface?.kind === "diff" ? (
       <Suspense fallback={null}>
         <DiffPanel
@@ -11727,6 +11748,8 @@ export default function ChatView(props: ChatViewProps) {
           onAddTerminal={addTerminalSurfaceStable}
           onAddDiff={addDiffSurfaceStable}
           onAddFiles={addFilesSurfaceStable}
+          onAddDatabase={addDatabaseSurfaceStable}
+          databaseAvailable={canOperateTerminal}
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddDevice={addDeviceSurfaceStable}
@@ -11782,6 +11805,8 @@ export default function ChatView(props: ChatViewProps) {
             onAddTerminal={addTerminalSurfaceStable}
             onAddDiff={addDiffSurfaceStable}
             onAddFiles={addFilesSurfaceStable}
+            onAddDatabase={addDatabaseSurfaceStable}
+            databaseAvailable={canOperateTerminal}
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
             onAddDevice={addDeviceSurfaceStable}
