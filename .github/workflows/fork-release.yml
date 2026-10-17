@@ -307,15 +307,20 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # checkout's credential cleanup traverses orphaned gitlinks in .repos.
+      # This public repository needs no credentials or submodule traversal.
       - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.preflight.outputs.ref }}
-          persist-credentials: false
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
+        shell: bash
+        env:
+          CHECKOUT_REF: ${{ needs.preflight.outputs.ref }}
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$CHECKOUT_REF"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
