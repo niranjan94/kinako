@@ -151,6 +151,22 @@
   ],
   "packageOverrides": [
     {
+      "name": "pg-types",
+      "version": "2.2.0",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2014 Brian M. Carlson"]
+      }
+    },
+    {
+      "name": "pgpass",
+      "version": "1.0.5",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2013-2016 Hannes Hörl"]
+      }
+    },
+    {
       "name": "@bufbuild/protobuf",
       "version": "1.10.0",
       "generatedNotices": [
