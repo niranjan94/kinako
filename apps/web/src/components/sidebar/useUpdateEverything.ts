@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { PROVIDER_DISPLAY_NAMES } from "@t3tools/contracts";
+import { FORK_NPM_PACKAGE_NAME } from "@t3tools/shared/forkBrand";
 import { Atom } from "effect/reactivity";
 import { useMemo } from "react";
 
@@ -79,7 +80,7 @@ export function useUpdateEverything(localUpdateVersion: string | null) {
       .map((server) => ({
         environmentId: server.environmentId,
         label: server.serverLabel,
-        reason: `t3@${targetVersion} is not on npm yet`,
+        reason: `${FORK_NPM_PACKAGE_NAME}@${targetVersion} is not on npm yet`,
       })),
   ];
   const restarts = collectRestartingMachines(machines, servers, localUpdateVersion !== null);

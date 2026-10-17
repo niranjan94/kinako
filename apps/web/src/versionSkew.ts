@@ -1,6 +1,11 @@
-import type { EnvironmentId, ServerConfig, ServerSelfUpdateCapability } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ServerConfig,
+  ServerInstallation,
+  ServerSelfUpdateCapability,
+} from "@t3tools/contracts";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_NPM_PACKAGE_NAME } from "@t3tools/shared/forkBrand";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
 
@@ -97,8 +102,20 @@ export function supportsServerUpdateThreadContinuation(
   return serverConfig?.environment.capabilities.serverUpdateThreadContinuation === true;
 }
 
-export function manualServerUpdateCommand(): string {
-  return `${FORK_CLI_NAME} update`;
+/** Installs without a known npm origin came from the install script, which updates itself. */
+export function manualServerUpdateCommand(
+  targetVersion: string,
+  installation?: ServerInstallation,
+): string {
+  const spec = `${FORK_NPM_PACKAGE_NAME}@${targetVersion}`;
+  if (installation === undefined) return `${FORK_CLI_NAME} update`;
+  if (installation.kind === "npm-global") {
+    const prefix = `'${installation.prefix.replaceAll("'", "'\\''")}'`;
+    return `npm install --global --prefix ${prefix} ${spec}`;
+  }
+  const runner =
+    installation.kind === "pnpm-dlx" ? "pnpm dlx" : installation.kind === "bunx" ? "bunx" : "npx";
+  return `${runner} ${spec}`;
 }
 
 export function serverUpdateGuidance(capability: ServerSelfUpdateCapability): string {

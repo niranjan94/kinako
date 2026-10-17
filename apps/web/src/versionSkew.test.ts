@@ -25,8 +25,25 @@ const MISMATCH_HINT =
   "Version mismatch. Try syncing the client and server to the same Kinako version.";
 
 describe("versionSkew", () => {
-  it("hands users the install script's update command", () => {
-    expect(manualServerUpdateCommand()).toBe("kinako update");
+  it("hands install-script installs their own update command", () => {
+    expect(manualServerUpdateCommand("0.0.45")).toBe("kinako update");
+  });
+
+  it("updates only the proven npm prefix and safely quotes its path", () => {
+    expect(manualServerUpdateCommand("0.0.45", { kind: "npm-global", prefix: "/opt/node" })).toBe(
+      "npm install --global --prefix '/opt/node' kinako-cli@0.0.45",
+    );
+    expect(
+      manualServerUpdateCommand("0.0.45", { kind: "npm-global", prefix: "/opt/maria's node" }),
+    ).toBe("npm install --global --prefix '/opt/maria'\\''s node' kinako-cli@0.0.45");
+  });
+
+  it("relaunches package runners at the target version", () => {
+    expect(manualServerUpdateCommand("0.0.45", { kind: "npx" })).toBe("npx kinako-cli@0.0.45");
+    expect(manualServerUpdateCommand("0.0.45", { kind: "pnpm-dlx" })).toBe(
+      "pnpm dlx kinako-cli@0.0.45",
+    );
+    expect(manualServerUpdateCommand("0.0.45", { kind: "bunx" })).toBe("bunx kinako-cli@0.0.45");
   });
   beforeEach(() => {
     branding.APP_VERSION = "0.0.34";

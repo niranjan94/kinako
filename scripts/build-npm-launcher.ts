@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Builds the `t3` npm package behind `npx t3` / `npm i -g t3`: a launcher
+ * Builds the `kinako-cli` npm package behind `npx kinako-cli` / `npm i -g kinako-cli`: a launcher
  * with no dependencies that downloads this exact version's CLI archive from
  * the GitHub Release on first run (scripts/npm-launcher/t3.mjs).
  * The executables are not published to npm. npm's publish-time scanning held
@@ -8,7 +8,7 @@
  * live, and every install in that window ran a launcher with nothing to
  * launch.
  *
- * Output: `<output-dir>/t3/` (the package tree) and `<output-dir>/t3.tgz`,
+ * Output: `<output-dir>/kinako-cli/` (the package tree) and `<output-dir>/kinako-cli.tgz`,
  * which is what gets published.
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -22,13 +22,57 @@ import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
+import {
+  FORK_CLI_NAME,
+  FORK_DISPLAY_NAME,
+  FORK_HOME_DIR_NAME,
+  FORK_NPM_PACKAGE_NAME,
+  FORK_REPOSITORY,
+} from "@t3tools/shared/forkBrand";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
 import { windowsSystemTar } from "./build-cli-archive.ts";
 
-export const NPM_LAUNCHER_PACKAGE_NAME = "t3";
+export const NPM_LAUNCHER_PACKAGE_NAME = FORK_NPM_PACKAGE_NAME;
+
+/**
+ * Upstream's launcher source, rebranded at build time so the file itself
+ * stays identical to upstream's and merges cleanly. Every literal must still
+ * be present: a miss means upstream changed the launcher and this list needs
+ * updating, which the build reports instead of shipping a launcher that
+ * downloads upstream's release.
+ */
+const LAUNCHER_REBRAND: ReadonlyArray<readonly [string, string]> = [
+  ['path.join(os.homedir(), ".t3")', `path.join(os.homedir(), "${FORK_HOME_DIR_NAME}")`],
+  ["`t3-${version}-${key}.", `\`${FORK_CLI_NAME}-\${version}-\${key}.`],
+  [
+    "https://github.com/pingdotgg/t3code/releases",
+    `https://github.com/${FORK_REPOSITORY}/releases`,
+  ],
+  ['"t3.exe" : "t3"', `"${FORK_CLI_NAME}.exe" : "${FORK_CLI_NAME}"`],
+  ["t3: ", `${FORK_CLI_NAME}: `],
+  ["T3 Code", FORK_DISPLAY_NAME],
+];
+
+export class NpmLauncherRebrandError extends Schema.TaggedError<NpmLauncherRebrandError>()(
+  "NpmLauncherRebrandError",
+  { literal: Schema.String },
+) {
+  override get message(): string {
+    return `scripts/npm-launcher/t3.mjs no longer contains ${JSON.stringify(this.literal)}; update LAUNCHER_REBRAND in scripts/build-npm-launcher.ts.`;
+  }
+}
+
+export const rebrandLauncher = Effect.fn("rebrandLauncher")(function* (source: string) {
+  let output = source;
+  for (const [from, to] of LAUNCHER_REBRAND) {
+    if (!output.includes(from)) return yield* new NpmLauncherRebrandError({ literal: from });
+    output = output.replaceAll(from, to);
+  }
+  return output;
+});
 
 const encodePackageJson = Schema.encodeEffect(fromJsonStringPretty(Schema.Unknown));
 
@@ -46,11 +90,11 @@ export function npmLauncherPackageManifest(version: string) {
   return {
     name: NPM_LAUNCHER_PACKAGE_NAME,
     version,
-    description:
-      "T3 Code CLI. Downloads the self-contained executable for this platform from the GitHub Release.",
+    description: `${FORK_DISPLAY_NAME} CLI. Downloads the self-contained executable for this platform from the GitHub Release.`,
     license: serverPackageJson.license,
-    repository: serverPackageJson.repository,
-    bin: { t3: "./bin/t3.mjs" },
+    // npm provenance rejects a publish whose repository is not the one that built it.
+    repository: { type: "git", url: `https://github.com/${FORK_REPOSITORY}` },
+    bin: { [FORK_CLI_NAME]: `./bin/${FORK_CLI_NAME}.mjs` },
     files: ["bin", "dist"],
     engines: { node: ">=20.11" },
   };
@@ -77,10 +121,19 @@ export const buildNpmLauncher = Effect.fn("buildNpmLauncher")(function* (input: 
     path.join(stageDir, "package.json"),
     `${yield* encodePackageJson(npmLauncherPackageManifest(input.version))}\n`,
   );
-  yield* fs.copyFile(path.join(sourceDir, "t3.mjs"), path.join(stageDir, "bin/t3.mjs"));
-  yield* fs.chmod(path.join(stageDir, "bin/t3.mjs"), 0o755);
-  yield* fs.copyFile(path.join(sourceDir, "bin.mjs"), path.join(stageDir, "dist/bin.mjs"));
-  const readme = yield* path.fromFileUrl(new URL("../apps/server/README.md", import.meta.url));
+  yield* fs.writeFileString(
+    path.join(stageDir, `bin/${FORK_CLI_NAME}.mjs`),
+    yield* rebrandLauncher(yield* fs.readFileString(path.join(sourceDir, "t3.mjs"))),
+  );
+  yield* fs.chmod(path.join(stageDir, `bin/${FORK_CLI_NAME}.mjs`), 0o755);
+  yield* fs.writeFileString(
+    path.join(stageDir, "dist/bin.mjs"),
+    (yield* fs.readFileString(path.join(sourceDir, "bin.mjs"))).replace(
+      "../bin/t3.mjs",
+      `../bin/${FORK_CLI_NAME}.mjs`,
+    ),
+  );
+  const readme = yield* path.fromFileUrl(new URL("../README.md", import.meta.url));
   if (yield* fs.exists(readme)) {
     yield* fs.copyFile(readme, path.join(stageDir, "README.md"));
   }
@@ -115,7 +168,7 @@ const command = Command.make(
     outputDir: Flag.String("output-dir").pipe(Flag.withDefault("npm-packages")),
   },
   buildNpmLauncher,
-).pipe(Command.withDescription("Build the t3 npm launcher package."));
+).pipe(Command.withDescription(`Build the ${NPM_LAUNCHER_PACKAGE_NAME} npm launcher package.`));
 
 if (import.meta.main) {
   Command.run(command, { version: "0.0.0" }).pipe(

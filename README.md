@@ -49,9 +49,10 @@ The fork sends no traffic to upstream's infrastructure. Every change so far:
 - **`kinako triage` works against this repository.** The agent it starts fetches the playbook, clones the source, searches issues, and files new ones here, labelled `via-triage`.
 - **`.env.example` no longer carries upstream's production Clerk and relay values.**
 - **CI runs on GitHub-hosted runners** (Ubuntu 24.04 and macOS) instead of Blacksmith, with job timeouts doubled to match the slower machines.
-- **Own release workflow.** `fork-release.yml` builds macOS (signed and notarized), Windows, and Linux desktop installers plus CLI archives, publishes them to this repository's GitHub Releases, and ends with an iOS build uploaded to TestFlight.
+- **npm launcher.** The `kinako-cli` package provides the `kinako` command, downloads verified CLI archives from this repository, and uses `~/.kinako`. Update hints match npm, npx, pnpm, or Bun installs.
+- **Own release workflow.** `fork-release.yml` builds macOS (signed and notarized), Windows, and Linux desktop installers plus CLI archives, publishes them to this repository's GitHub Releases, publishes `kinako-cli@nightly` to npm, and ends with an iOS build uploaded to TestFlight.
 
-Upstream links that only open when you click them (marketing and legal pages, npm upgrade hints) are left as-is. [FORK.md](./FORK.md) maps each change to the files it touches and covers merging upstream and cutting releases.
+Upstream links that only open when you click them (marketing and legal pages) are left as-is. [FORK.md](./FORK.md) maps each change to the files it touches and covers merging upstream and cutting releases.
 
 ## Installation
 
@@ -67,19 +68,37 @@ Upstream links that only open when you click them (marketing and legal pages, np
 
 ### Command line
 
+With Node.js 20.11 or newer, run the npm launcher:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.sh | sh
+npx kinako-cli@nightly
+```
+
+Or install it globally:
+
+```bash
+npm install -g kinako-cli@nightly
+kinako
+```
+
+The launcher downloads the matching CLI archive on first run. CLI builds support macOS Apple Silicon, Linux x64/arm64, and Windows x64/arm64; Intel Macs can use the desktop app.
+
+To install without npm, on macOS or Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.sh | T3CODE_CHANNEL=nightly sh
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
+$env:T3CODE_CHANNEL = "nightly"
 irm https://raw.githubusercontent.com/niranjan94/kinako/main/scripts/install.ps1 | iex
 ```
 
-This fork publishes nightlies only, so add `T3CODE_CHANNEL=nightly` (`$env:T3CODE_CHANNEL = "nightly"` in PowerShell) before the install command.
+This fork publishes nightlies only; use the `nightly` npm tag or the channel shown above.
 
-Then run `kinako` to start the server and open the local web app. `kinako service install` keeps it running in the background, `kinako update` moves to a newer release of this fork, and `kinako --help` has the full reference.
+Then run `kinako` to start the server and open the local web app. `kinako service install` keeps it running in the background, and `kinako --help` has the full reference. Update a script install with `kinako update`, a global npm install with `npm install -g kinako-cli@nightly`, or rerun `npx kinako-cli@nightly`.
 
 ### Desktop app
 

@@ -213,6 +213,7 @@ export function ServerUpdateAction({
   environmentId,
   serverLabel,
   selfUpdate,
+  installation,
   desktopAppUpdate = false,
   threadContinuation = false,
   targetVersion,
@@ -284,7 +285,8 @@ export function ServerUpdateAction({
     );
   }
 
-  const manualCommand = selfUpdate === null ? manualServerUpdateCommand() : null;
+  const manualCommand =
+    selfUpdate === null ? manualServerUpdateCommand(targetVersion, installation) : null;
   const actionLabel = manualCommand !== null ? "Copy update command" : label;
   const onClick =
     manualCommand !== null

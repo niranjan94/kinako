@@ -293,6 +293,61 @@ jobs:
           fail_on_unmatched_files: true
           token: ${{ github.token }}
 
+  # The `kinako-cli` npm package is a launcher that downloads this version's
+  # CLI archive from the GitHub Release, so it publishes only once that
+  # release exists. Publishing uses npm trusted publishing (no token); see
+  # FORK.md for the one-time npm setup.
+  publish_cli:
+    name: Publish CLI to npm
+    if: github.repository == 'niranjan94/kinako' && github.ref == 'refs/heads/main'
+    needs: [preflight, release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+
+      - name: Setup npm registry
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@11.19.0 --ignore-scripts
+
+      - name: Install launcher dependencies
+        run: vp install --frozen-lockfile --filter=@t3tools/scripts...
+
+      - name: Test the npm launcher
+        run: vp test run scripts/build-npm-launcher.test.ts
+
+      - name: Build the npm launcher
+        env:
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+        run: node scripts/build-npm-launcher.ts --version "$RELEASE_VERSION" --output-dir npm-packages
+
+      - name: Publish the npm launcher with provenance
+        run: npm publish npm-packages/kinako-cli.tgz --access public --tag nightly --provenance
+
   ios:
     name: iOS TestFlight
     needs: [preflight, release]

@@ -15,25 +15,25 @@ import {
 
 it("formats package runner commands from their cache entry paths", () => {
   for (const [entryPath, expected] of [
-    ["/home/theo/.npm/_npx/abc123/node_modules/t3/dist/bin.mjs", "npx t3 serve"],
+    ["/home/theo/.npm/_npx/abc123/node_modules/t3/dist/bin.mjs", "npx kinako-cli serve"],
     [
       "C:\\Users\\theo\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\t3\\dist\\bin.mjs",
-      "npx t3 serve",
+      "npx kinako-cli serve",
     ],
-    ["/home/theo/.cache/pnpm/dlx/abc/node_modules/t3/dist/bin.mjs", "pnpm dlx t3 serve"],
+    ["/home/theo/.cache/pnpm/dlx/abc/node_modules/t3/dist/bin.mjs", "pnpm dlx kinako-cli serve"],
     [
       "/home/theo/.local/share/pnpm/.pnpm/dlx/abc/node_modules/t3/dist/bin.mjs",
-      "pnpm dlx t3 serve",
+      "pnpm dlx kinako-cli serve",
     ],
     [
       "C:\\Users\\theo\\AppData\\Local\\pnpm-cache\\dlx\\abc\\node_modules\\t3\\dist\\bin.mjs",
-      "pnpm dlx t3 serve",
+      "pnpm dlx kinako-cli serve",
     ],
-    ["/home/theo/.bun/install/cache/t3@0.0.31/dist/bin.mjs", "bunx t3 serve"],
-    ["/tmp/bunx-1000-t3@latest/node_modules/t3/dist/bin.mjs", "bunx t3 serve"],
+    ["/home/theo/.bun/install/cache/t3@0.0.31/dist/bin.mjs", "bunx kinako-cli serve"],
+    ["/tmp/bunx-1000-t3@latest/node_modules/t3/dist/bin.mjs", "bunx kinako-cli serve"],
     [
       "C:\\Users\\theo\\AppData\\Local\\Temp\\bunx-0-t3@latest\\node_modules\\t3\\dist\\bin.mjs",
-      "bunx t3 serve",
+      "bunx kinako-cli serve",
     ],
   ] as const) {
     assert.equal(formatCliCommand({ subcommand: "serve", entryPath, version: "0.0.31" }), expected);
@@ -56,10 +56,10 @@ it("treats stable installs as direct invocations", () => {
 
 it("re-suggests the prerelease channel only for prerelease builds", () => {
   for (const [version, expected] of [
-    ["0.0.31-nightly.20260729", "npx t3@nightly serve"],
-    ["0.0.31-preview.20260729.1", "npx t3@preview serve"],
-    ["0.0.31-foo-preview.20260729.1", "npx t3 serve"],
-    ["0.0.31", "npx t3 serve"],
+    ["0.0.31-nightly.20260729", "npx kinako-cli@nightly serve"],
+    ["0.0.31-preview.20260729.1", "npx kinako-cli@preview serve"],
+    ["0.0.31-foo-preview.20260729.1", "npx kinako-cli serve"],
+    ["0.0.31", "npx kinako-cli serve"],
   ] as const) {
     assert.equal(
       formatCliCommand({
@@ -79,7 +79,7 @@ it("formats serve suggestions to match the launching command", () => {
       entryPath: "/home/theo/.npm/_npx/abc/node_modules/t3/dist/bin.mjs",
       version: "0.0.31-nightly.20260729",
     }),
-    "npx t3@nightly serve",
+    "npx kinako-cli@nightly serve",
   );
   assert.equal(
     formatCliCommand({
@@ -87,7 +87,7 @@ it("formats serve suggestions to match the launching command", () => {
       entryPath: "/tmp/bunx-1000-t3@latest/node_modules/t3/dist/bin.mjs",
       version: "0.0.31",
     }),
-    "bunx t3 serve",
+    "bunx kinako-cli serve",
   );
   assert.equal(
     formatCliCommand({
@@ -128,12 +128,12 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
       const npx = "/home/theo/.npm/_npx/abc/node_modules/t3/dist/bin.mjs";
       // sudo's secure_path already has a system Node.
       expect(yield* rootCommand({ node: "/usr/bin/node", entry: npx })).toBe(
-        "sudo npx t3 browser setup",
+        "sudo npx kinako-cli browser setup",
       );
       // nvm, fnm, and tarball installs are dropped by sudo's PATH reset.
       expect(
         yield* rootCommand({ node: "/home/theo/.nvm/versions/node/v24/bin/node", entry: npx }),
-      ).toBe('sudo env "PATH=$PATH" npx t3 browser setup');
+      ).toBe('sudo env "PATH=$PATH" npx kinako-cli browser setup');
       expect(
         yield* rootCommand({
           node: "/home/theo/.local/node/bin/node",
@@ -236,19 +236,19 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
       yield* fs.writeFileString(executable, "");
       for (const [relative, kind] of [
-        ["npm/_npx/hash/node_modules/t3/dist/bin.mjs", "npx"],
-        ["npm/_npx/hash/node_modules/t3/bin/t3.mjs", "npx"],
-        ["pnpm/dlx/hash/node_modules/t3/dist/bin.mjs", "pnpm-dlx"],
-        [".bun/install/cache/t3/dist/bin.mjs", "bunx"],
+        ["npm/_npx/hash/node_modules/kinako-cli/dist/bin.mjs", "npx"],
+        ["npm/_npx/hash/node_modules/kinako-cli/bin/kinako.mjs", "npx"],
+        ["pnpm/dlx/hash/node_modules/kinako-cli/dist/bin.mjs", "pnpm-dlx"],
+        [".bun/install/cache/kinako-cli/dist/bin.mjs", "bunx"],
       ] as const) {
         const entry = path.join(root, relative);
         yield* fs.makeDirectory(path.dirname(entry), { recursive: true });
         yield* fs.writeFileString(entry, "");
         yield* fs.writeFileString(
           path.join(path.dirname(entry), "../package.json"),
-          `{"name":"t3","version":"${packageJson.version}","bin":{"t3":"./bin/t3.mjs"}}`,
+          `{"name":"kinako-cli","version":"${packageJson.version}","bin":{"kinako":"./bin/kinako.mjs"}}`,
         );
-        const launchedBy = entry.endsWith("t3.mjs");
+        const launchedBy = entry.endsWith("kinako.mjs");
         const installation = yield* resolveServerInstallation.pipe(
           Effect.provideService(HostProcess.Arguments, [launchedBy ? executable : "node", entry]),
           Effect.provideService(HostProcess.ExecutablePath, executable),
@@ -269,15 +269,15 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped();
       const prefix = path.join(root, "bunx-tools");
-      const packageRoot = path.join(prefix, "lib/node_modules/t3");
+      const packageRoot = path.join(prefix, "lib/node_modules/kinako-cli");
       const entry = path.join(packageRoot, "dist/bin.mjs");
-      const globalBin = path.join(prefix, "bin/t3");
+      const globalBin = path.join(prefix, "bin/kinako");
       yield* fs.makeDirectory(path.dirname(entry), { recursive: true });
       yield* fs.makeDirectory(path.dirname(globalBin), { recursive: true });
       yield* fs.writeFileString(entry, "");
       yield* fs.writeFileString(
         path.join(packageRoot, "package.json"),
-        '{"name":"t3","version":"0.0.45","bin":{"t3":"./dist/bin.mjs"}}',
+        '{"name":"kinako-cli","version":"0.0.45","bin":{"kinako":"./dist/bin.mjs"}}',
       );
       const resolve = resolveServerInstallation.pipe(
         Effect.provideService(HostProcess.Arguments, ["node", entry]),
@@ -288,7 +288,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       yield* fs.symlink(entry, globalBin);
       expect(yield* resolve).toEqual({ kind: "npm-global", prefix });
       yield* fs.remove(globalBin);
-      yield* fs.writeFileString(globalBin, "an unrelated t3 command");
+      yield* fs.writeFileString(globalBin, "an unrelated kinako command");
       expect(yield* resolve).toBeNull();
       expect(yield* resolve.pipe(Effect.provideService(HostProcess.Platform, "win32"))).toBeNull();
     }),
@@ -300,15 +300,15 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped();
       const prefix = path.join(root, "bunx-tools");
-      const packageRoot = path.join(prefix, "lib/node_modules/t3");
-      const launcher = path.join(packageRoot, "bin/t3.mjs");
+      const packageRoot = path.join(prefix, "lib/node_modules/kinako-cli");
+      const launcher = path.join(packageRoot, "bin/kinako.mjs");
       const executable = path.join(root, ".t3/runtime/versions/1.0.0/t3");
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
       yield* fs.makeDirectory(path.join(prefix, "bin"));
       yield* fs.writeFileString(launcher, "");
       yield* fs.writeFileString(executable, "");
-      yield* fs.symlink(launcher, path.join(prefix, "bin/t3"));
+      yield* fs.symlink(launcher, path.join(prefix, "bin/kinako"));
       const resolve = resolveServerInstallation.pipe(
         Effect.provideService(HostProcess.ExecutablePath, executable),
         Effect.provideService(HostProcess.Arguments, [executable, executable]),
@@ -316,7 +316,7 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
         Effect.provideService(HostProcess.Platform, "linux"),
         Effect.provideService(HostProcess.Environment, { T3CODE_NPM_LAUNCHER_PATH: launcher }),
       );
-      // A launcher for another version is some other `t3` the server spawned
+      // A launcher for another version is some other `kinako` the server spawned
       // (the variable is inherited), not the install this executable runs from.
       for (const [version, expected] of [
         ["0.0.1", null],
@@ -324,10 +324,16 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
       ] as const) {
         yield* fs.writeFileString(
           path.join(packageRoot, "package.json"),
-          `{"name":"t3","version":"${version}","bin":{"t3":"./bin/t3.mjs"}}`,
+          `{"name":"kinako-cli","version":"${version}","bin":{"kinako":"./bin/kinako.mjs"}}`,
         );
         expect(yield* resolve).toEqual(expected);
       }
+      // Upstream's `t3` package uses the same launcher layout but is not this install.
+      yield* fs.writeFileString(
+        path.join(packageRoot, "package.json"),
+        `{"name":"t3","version":"${packageJson.version}","bin":{"t3":"./bin/t3.mjs"}}`,
+      );
+      expect(yield* resolve).toBeNull();
     }),
   );
 

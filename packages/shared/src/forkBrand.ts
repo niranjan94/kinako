@@ -15,6 +15,9 @@ export const FORK_HOME_DIR_NAME = ".kinako";
 /** CLI command, release archive prefix, and single-executable name. */
 export const FORK_CLI_NAME = "kinako";
 
+/** npm package of the CLI launcher. Its command is still `FORK_CLI_NAME`; `kinako` on npm belongs to someone else. */
+export const FORK_NPM_PACKAGE_NAME = "kinako-cli";
+
 /** GitHub `owner/name` for releases, triage, and issues. */
 export const FORK_REPOSITORY = "niranjan94/kinako";
 
