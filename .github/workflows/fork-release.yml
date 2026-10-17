@@ -10,9 +10,14 @@ name: Fork release
 
 on:
   workflow_dispatch:
+    inputs:
+      cli_release_version:
+        description: "Publish only the npm launcher for an existing nightly release (without v)"
+        required: false
+        type: string
 
 concurrency:
-  group: fork-release
+  group: ${{ inputs.cli_release_version != '' && 'fork-release-cli-retry' || 'fork-release' }}
   cancel-in-progress: false
 
 permissions:
@@ -27,7 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      version: ${{ steps.meta.outputs.version }}
+      version: ${{ steps.existing.outputs.version || steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
       name: ${{ steps.meta.outputs.name }}
       ref: ${{ github.sha }}
@@ -41,6 +46,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
+        if: inputs.cli_release_version == ''
         uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
@@ -51,6 +57,7 @@ jobs:
 
       - id: meta
         name: Resolve nightly version
+        if: inputs.cli_release_version == ''
         env:
           RUN_STARTED_AT: ${{ github.run_started_at }}
         run: |
@@ -61,7 +68,28 @@ jobs:
             --sha "$GITHUB_SHA" \
             --github-output
 
+      - id: existing
+        name: Verify existing CLI release
+        if: inputs.cli_release_version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLI_RELEASE_VERSION: ${{ inputs.cli_release_version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CLI_RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}\.[0-9]+$ ]]; then
+            echo "Expected an exact nightly version without the v prefix." >&2
+            exit 1
+          fi
+          ready=$(gh release view "v$CLI_RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,assets --jq '.isDraft == false and any(.assets[]; .name == "SHA256SUMS")')
+          if [[ "$ready" != true ]]; then
+            echo "The release must be published and contain CLI archive checksums." >&2
+            exit 1
+          fi
+          echo "version=$CLI_RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+
   build_bundle:
+    if: inputs.cli_release_version == ''
     name: Build JS bundle
     needs: [preflight]
     runs-on: ubuntu-24.04
@@ -116,6 +144,7 @@ jobs:
   # Labels must stay "<OS> <arch>": the Windows jobs wait for the job named
   # "Build Linux <arch>" to upload the CLI archive they embed for WSL.
   desktop:
+    if: inputs.cli_release_version == ''
     name: Desktop ${{ matrix.label }}
     needs: [preflight, build_bundle]
     strategy:
@@ -192,6 +221,7 @@ jobs:
       cli_archive: ${{ matrix.cli_archive }}
 
   release:
+    if: inputs.cli_release_version == ''
     name: Publish GitHub Release
     needs: [preflight, desktop]
     runs-on: ubuntu-24.04
@@ -299,7 +329,11 @@ jobs:
   # FORK.md for the one-time npm setup.
   publish_cli:
     name: Publish CLI to npm
-    if: github.repository == 'niranjan94/kinako' && github.ref == 'refs/heads/main'
+    if: >-
+      ${{ !cancelled() && github.repository == 'niranjan94/kinako' && github.ref == 'refs/heads/main' &&
+      needs.preflight.result == 'success' &&
+      (needs.release.result == 'success' ||
+        (inputs.cli_release_version != '' && needs.release.result == 'skipped')) }}
     needs: [preflight, release]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -351,9 +385,10 @@ jobs:
         run: node scripts/build-npm-launcher.ts --version "$RELEASE_VERSION" --output-dir npm-packages
 
       - name: Publish the npm launcher with provenance
-        run: npm publish npm-packages/kinako-cli.tgz --access public --tag nightly --provenance
+        run: npm publish ./npm-packages/kinako-cli.tgz --access public --tag nightly --provenance
 
   ios:
+    if: inputs.cli_release_version == ''
     name: iOS TestFlight
     needs: [preflight, release]
     uses: ./.github/workflows/fork-ios.yml
