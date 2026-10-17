@@ -66,6 +66,7 @@ const ACTION_ICONS: Record<string, AppSymbolName> = {
   archive: "archivebox",
   files: "doc.text",
   terminal: "terminal",
+  database: "internaldrive",
   review: "arrow.triangle.pull",
   copyThreadReference: "link",
 };
@@ -319,6 +320,7 @@ export function CommandPalette(props: {
       const threadActions = [
         ["files", "Go to file", ["open", "files", "browse", "search"]],
         ["terminal", "Open terminal", ["shell", "console"]],
+        ["database", "Open databases", ["sql", "query", "postgres", "sqlite"]],
         ["review", "Review changes", ["diff", "git", "pull request"]],
         ["copyThreadReference", "Copy PR link or thread ID", ["reference", "clipboard"]],
       ] as const;

@@ -26,6 +26,7 @@ export type SettingsPath =
   | "/settings/scheduled-tasks"
   | "/settings/source-control"
   | "/settings/storage"
+  | "/settings/databases"
   | "/settings/connections"
   | "/settings/archived";
 
@@ -85,6 +86,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/source-control": "Source Control",
   "/settings/storage": "Storage",
   "/settings/connections": "Connections",
+  "/settings/databases": "Databases",
   "/settings/archived": "Archive",
 };
 
@@ -130,6 +132,14 @@ const SOURCE_CONTROL_HOST_SEARCH_ITEMS = sourceControlClients.definitions.flatMa
 );
 
 export const SETTINGS_SEARCH_ITEMS = [
+  {
+    id: "database-connections",
+    title: "Database connections",
+    to: "/settings/databases",
+    targetId: "database-connections",
+    searchTerms: ["postgres", "sqlite", "sql", "database", "password", "read-only"],
+    scope: "environment-defaults",
+  },
   {
     id: "storage-worktree-keep-when",
     targetId: "storage-worktrees",
@@ -1008,6 +1018,7 @@ const SEARCH_ITEMS_BY_ID = new Map(SETTINGS_SEARCH_ITEMS.map((item) => [item.id,
 
 const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScope | null>> = {
   "/settings/diagnostics": "environment",
+  "/settings/databases": null,
   "/settings/projects": "project",
   "/settings/general": null,
   "/settings/appearance": null,

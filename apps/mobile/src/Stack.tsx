@@ -1,3 +1,4 @@
+import { ThreadDatabaseRouteScreen } from "./features/database/ThreadDatabaseRouteScreen";
 import { ComponentCatalogScreen } from "./features/development/ComponentCatalogScreen";
 import { PullRequestGuideStopScreen } from "./features/pull-requests/guide/PullRequestGuideScreen";
 import { PullRequestInlineCommentScreen } from "./features/pull-requests/PullRequestInlineCommentScreen";
@@ -785,6 +786,11 @@ const RootStackConfig = createWorkspaceStackNavigator({
       screen: ThreadRouteScreen,
       linking: THREAD_LINKING_PREFIX,
       options: GLASS_HEADER_OPTIONS,
+    }),
+    ThreadDatabase: createNativeStackScreen({
+      screen: ThreadDatabaseRouteScreen,
+      linking: `${THREAD_LINKING_PREFIX}/database`,
+      options: { ...GLASS_HEADER_OPTIONS, title: "Database" },
     }),
     ThreadTerminal: createNativeStackScreen({
       screen: ThreadTerminalRouteScreen,

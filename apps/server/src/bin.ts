@@ -1,8 +1,8 @@
 /**
  * Every ACP agent spawns `t3 acp-mcp-bridge` while opening its session, and terminal-fallback
  * agents run `t3 acp-mcp-call` per tool call, so their startup sits on first-message latency.
- * Both dispatch here before the full CLI module graph (seconds of evaluation) loads; everything
- * else defers to the real CLI in ./binCli.ts.
+ * These and SQLite session subprocesses dispatch before the full CLI module graph (seconds of
+ * evaluation) loads; ordinary commands defer to ./binCli.ts.
  */
 import { isEntrypoint } from "./entrypoint.ts";
 
@@ -14,7 +14,10 @@ if (
   })
 ) {
   const command = process.argv[2];
-  if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {
+  if (command === "database-session-process") {
+    const { runSqliteProcess } = await import("./database/sqliteProcess.ts");
+    runSqliteProcess();
+  } else if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {
     const { runAcpMcpCliFastPath } = await import("./mcp/AcpMcpStdioBridge.ts");
     await runAcpMcpCliFastPath(command, process.argv.slice(3));
   } else {

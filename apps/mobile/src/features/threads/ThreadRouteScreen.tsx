@@ -798,6 +798,13 @@ function ThreadRouteContent(
       : [],
     terminalSessions: terminalMenuSessions,
     showDirectFileControl: layout.usesSplitView,
+    onOpenDatabase: () => {
+      if (selectedThread && canOperateTerminal)
+        navigation.navigate("ThreadDatabase", {
+          environmentId: String(selectedThread.environmentId),
+          threadId: String(selectedThread.id),
+        });
+    },
     onOpenTerminal: handleOpenTerminal,
     onOpenNewTerminal: handleOpenNewTerminal,
     onRunProjectScript: handleRunProjectScript,

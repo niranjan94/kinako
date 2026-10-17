@@ -1,4 +1,8 @@
-"use client";
+import { databaseState } from "../state/database";
+import { Atom } from "effect/reactivity";
+import { DatabaseIcon } from "lucide-react";
+import { databasePanelIntent } from "./database/databasePanelIntent";
+("use client");
 
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -1772,6 +1776,17 @@ function OpenCommandPaletteDialog(props: {
     });
   }, [clearOpenIntent, browseNavigation, openIntent, projectThreadItems, pushPaletteView]);
 
+  const canUseDatabase = useAtomValue(
+    useMemo(
+      () =>
+        Atom.make((get) =>
+          activeThread
+            ? get(databaseState.execute.permissionAtom(activeThread.environmentId))
+            : false,
+        ),
+      [activeThread?.environmentId],
+    ),
+  );
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
 
   if (projects.length > 0) {
@@ -1989,6 +2004,28 @@ function OpenCommandPaletteDialog(props: {
         icon: <PullRequestGlyph.link className={ITEM_ICON_CLASS} />,
         run: async () => {
           useRightPanelStore.getState().open(threadRef, "pull-requests");
+        },
+      });
+    }
+  }
+
+  if (activeThread !== null) {
+    const ref = { environmentId: activeThread.environmentId, threadId: activeThread.id };
+    for (const [intent, title] of [
+      ["explorer", "Database explorer"],
+      ["table", "Open table…"],
+      ["query", "New query"],
+    ] as const) {
+      actionItems.push({
+        kind: "action",
+        value: `action:database-${intent}`,
+        title,
+        disabled: !canUseDatabase,
+        searchTerms: ["database", "sql", "postgres", "sqlite", "query", "table"],
+        icon: <DatabaseIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          databasePanelIntent.set(ref, intent);
+          useRightPanelStore.getState().open(ref, "database");
         },
       });
     }

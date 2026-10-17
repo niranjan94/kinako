@@ -1,3 +1,5 @@
+import { DatabaseToolkit } from "./toolkits/database/tools.ts";
+import * as DatabaseHandlers from "./toolkits/database/handlers.ts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -842,6 +844,7 @@ export const layer = Layer.mergeAll(
   layerEnvironmentToolkit,
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
+  toolkitRegistration(DatabaseToolkit, DatabaseHandlers.layer),
   layerPullRequestsToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,

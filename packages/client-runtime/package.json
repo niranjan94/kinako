@@ -446,6 +446,10 @@
     "./pull-request-markdown": {
       "types": "./src/pullRequestMarkdown.ts",
       "default": "./src/pullRequestMarkdown.ts"
+    },
+    "./state/database": {
+      "types": "./src/state/database.ts",
+      "default": "./src/state/database.ts"
     }
   },
   "scripts": {

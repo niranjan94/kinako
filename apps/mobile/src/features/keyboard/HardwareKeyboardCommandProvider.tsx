@@ -109,6 +109,7 @@ export function HardwareKeyboardCommandProvider({
     if (activeThreadRef !== null) {
       commands.add("files");
       commands.add("terminal");
+      commands.add("database");
       commands.add("review");
       if (pathname.split("/")[4] !== "terminal") commands.add("copyThreadReference");
     }
@@ -165,6 +166,8 @@ export function HardwareKeyboardCommandProvider({
       if (command === "files" && !/\/files(?:\/|$)/.test(pathname)) {
         navigation.navigate("ThreadFiles", thread);
       }
+      if (command === "database" && !/\/database(?:\/|$)/.test(pathname))
+        navigation.navigate("ThreadDatabase", thread);
       if (command === "terminal" && !/\/terminal(?:\/|$)/.test(pathname)) {
         navigation.navigate("ThreadTerminal", thread);
       }

@@ -1,3 +1,4 @@
+import { DatabaseIcon } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -89,6 +90,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/source-control": GitBranchIcon,
   "/settings/storage": HardDriveIcon,
   "/settings/connections": Link2Icon,
+  "/settings/databases": DatabaseIcon,
   "/settings/archived": ArchiveIcon,
 };
 

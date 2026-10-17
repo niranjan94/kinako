@@ -9,6 +9,7 @@ import { vi } from "vite-plus/test";
 import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
+  AuthTerminalOperateScope,
   AuthSourceControlWriteScope,
   ThreadId,
   EnvironmentId,
@@ -59,6 +60,54 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect("checks database grants on the destination for availability and execution", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const groups = [
+          {
+            scope: AuthSettingsWriteScope,
+            tags: [
+              WS_METHODS.databaseSaveConnection,
+              WS_METHODS.databaseDeleteConnection,
+              WS_METHODS.databaseTestConnection,
+            ],
+          },
+          {
+            scope: AuthTerminalOperateScope,
+            tags: [
+              WS_METHODS.databaseListConnections,
+              WS_METHODS.databaseIntrospect,
+              WS_METHODS.databaseOpenSession,
+              WS_METHODS.databaseCloseSession,
+              WS_METHODS.databaseExecute,
+              WS_METHODS.databaseFetchPage,
+              WS_METHODS.databaseBrowseTable,
+              WS_METHODS.databaseCloseQuery,
+              WS_METHODS.databaseCancelQuery,
+            ],
+          },
+        ];
+        for (const { scope, tags } of groups) {
+          registry.set(
+            sessions(env),
+            AsyncResult.success({ ...grant(false), scopes: [scope], permissions: [scope] }),
+          );
+          registry.set(sessions(other), AsyncResult.success(grant(false)));
+          for (const tag of tags) {
+            const permissions = createCommandPermissions(runtime, tag);
+            expect(registry.get(permissions.permissionAtom(env))).toBe(true);
+            yield* permissions.authorize(registry, env);
+            expect(registry.get(permissions.permissionAtom(other))).toBe(false);
+            expect((yield* permissions.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
+              "EnvironmentAuthorizationError",
+            );
+          }
+        }
+      }),
+    ),
+  );
+
   it.effect("requires the destination settings grant to run storage cleanup", () =>
     Effect.scoped(
       Effect.gen(function* () {

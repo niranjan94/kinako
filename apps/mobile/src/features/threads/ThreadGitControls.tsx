@@ -109,6 +109,7 @@ type ThreadGitControlsProps = ThreadGitMenuProps & {
   readonly showDirectFileControl?: boolean;
   readonly onOpenTerminal: (terminalId?: string | null) => void;
   readonly onOpenNewTerminal: () => void;
+  readonly onOpenDatabase?: () => void;
   readonly onRunProjectScript: (script: ProjectScript) => Promise<void>;
 };
 
@@ -286,6 +287,18 @@ function useThreadGitHeaderActionItems(props: ThreadGitControlsProps): ThreadGit
         label: "Terminal",
         menu: {
           items: [
+            ...(props.onOpenDatabase
+              ? [
+                  {
+                    label: "Databases",
+                    description: "Browse and query read-only",
+                    icon: { name: "internaldrive", type: "sfSymbol" as const },
+                    disabled: !props.canOperateTerminal,
+                    onPress: props.onOpenDatabase,
+                    type: "action" as const,
+                  },
+                ]
+              : []),
             ...props.projectScripts.map((script) => ({
               description: script.command,
               disabled: !props.canOperateTerminal,
@@ -424,6 +437,7 @@ function useThreadGitHeaderActionItems(props: ThreadGitControlsProps): ThreadGit
       props.gitStatus,
       props.onMergeBack,
       props.onOpenNewTerminal,
+      props.onOpenDatabase,
       props.onOpenTerminal,
       props.onRunProjectScript,
       props.projectScripts,
@@ -473,6 +487,15 @@ export function ThreadGitControls(props: ThreadGitControlsProps) {
           disabled={!props.canOpenTerminal}
           separateBackground
         >
+          {props.onOpenDatabase ? (
+            <Toolbar.MenuAction
+              icon="internaldrive"
+              disabled={!props.canOperateTerminal}
+              onPress={props.onOpenDatabase}
+            >
+              Databases
+            </Toolbar.MenuAction>
+          ) : null}
           {props.projectScripts.length > 0 ? (
             props.projectScripts.map((script) => (
               <Toolbar.MenuAction

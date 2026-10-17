@@ -1,4 +1,24 @@
 import {
+  DatabaseConnection,
+  DatabaseConnectionDraft,
+  DatabaseProjectContext,
+  DatabaseOpenSessionInput,
+  DatabaseSessionInput,
+  DatabaseBrowseTableInput,
+  DatabaseBrowseTableResult,
+  DatabaseDeleteConnectionInput,
+  DatabaseExecuteInput,
+  DatabaseExecuteResult,
+  DatabaseFetchPageInput,
+  DatabaseFetchPageResult,
+  DatabaseIntrospectInput,
+  DatabaseIntrospectResult,
+  DatabaseListConnectionsResult,
+  DatabaseQueryInput,
+  DatabaseRequestError,
+  DatabaseTestConnectionResult,
+} from "./database.ts";
+import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -401,6 +421,20 @@ export const WS_METHODS = {
   shellOpenInEditor: "shell.openInEditor",
 
   filesystemBrowse: "filesystem.browse",
+  databaseListConnections: "database.listConnections",
+  databaseSaveConnection: "database.saveConnection",
+  databaseDeleteConnection: "database.deleteConnection",
+  databaseTestConnection: "database.testConnection",
+  databaseIntrospect: "database.introspect",
+  databaseExecute: "database.execute",
+  databaseOpenSession: "database.openSession",
+  databaseCloseSession: "database.closeSession",
+  databaseBrowseTable: "database.browseTable",
+
+  databaseFetchPage: "database.fetchPage",
+  databaseCloseQuery: "database.closeQuery",
+  databaseCancelQuery: "database.cancelQuery",
+
   filesystemGetMetadata: "filesystem.getMetadata",
   agentSessionsScan: "agentSessions.scan",
   agentSessionsImport: "agentSessions.import",
@@ -1299,6 +1333,73 @@ const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   error: Schema.Union([FilesystemBrowseError, EnvironmentAuthorizationError]),
 });
 
+const DatabaseRpcError = Schema.Union([DatabaseRequestError, EnvironmentAuthorizationError]);
+
+const WsDatabaseListConnectionsRpc = Rpc.make(WS_METHODS.databaseListConnections, {
+  payload: DatabaseProjectContext,
+  success: DatabaseListConnectionsResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseSaveConnectionRpc = Rpc.make(WS_METHODS.databaseSaveConnection, {
+  payload: DatabaseConnectionDraft,
+  success: DatabaseConnection,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseDeleteConnectionRpc = Rpc.make(WS_METHODS.databaseDeleteConnection, {
+  payload: DatabaseDeleteConnectionInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseTestConnectionRpc = Rpc.make(WS_METHODS.databaseTestConnection, {
+  payload: DatabaseConnectionDraft,
+  success: DatabaseTestConnectionResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseIntrospectRpc = Rpc.make(WS_METHODS.databaseIntrospect, {
+  payload: DatabaseIntrospectInput,
+  success: DatabaseIntrospectResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseExecuteRpc = Rpc.make(WS_METHODS.databaseExecute, {
+  payload: DatabaseExecuteInput,
+  success: DatabaseExecuteResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseFetchPageRpc = Rpc.make(WS_METHODS.databaseFetchPage, {
+  payload: DatabaseFetchPageInput,
+  success: DatabaseFetchPageResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseCloseQueryRpc = Rpc.make(WS_METHODS.databaseCloseQuery, {
+  payload: DatabaseQueryInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseCancelQueryRpc = Rpc.make(WS_METHODS.databaseCancelQuery, {
+  payload: DatabaseQueryInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseOpenSessionRpc = Rpc.make(WS_METHODS.databaseOpenSession, {
+  payload: DatabaseOpenSessionInput,
+  error: DatabaseRpcError,
+});
+const WsDatabaseCloseSessionRpc = Rpc.make(WS_METHODS.databaseCloseSession, {
+  payload: DatabaseSessionInput,
+  error: DatabaseRpcError,
+});
+const WsDatabaseBrowseTableRpc = Rpc.make(WS_METHODS.databaseBrowseTable, {
+  payload: DatabaseBrowseTableInput,
+  success: DatabaseBrowseTableResult,
+  error: DatabaseRpcError,
+});
+
 const WsAgentSessionsScanRpc = Rpc.make(WS_METHODS.agentSessionsScan, {
   payload: AgentSessionScanInput,
   success: AgentSessionScanResult,
@@ -1922,7 +2023,8 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
   { error: EnvironmentAuthorizationError },
 ) {}
 
-export const WsRpcGroup = RpcGroup.make(
+// Separate handler groups keep RPC inference within TypeScript's instantiation limit.
+export const CoreWsRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -2126,3 +2228,20 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
 ).middleware(RpcScopeAuthorization);
+
+export const DatabaseRpcGroup = RpcGroup.make(
+  WsDatabaseListConnectionsRpc,
+  WsDatabaseSaveConnectionRpc,
+  WsDatabaseDeleteConnectionRpc,
+  WsDatabaseTestConnectionRpc,
+  WsDatabaseIntrospectRpc,
+  WsDatabaseExecuteRpc,
+  WsDatabaseFetchPageRpc,
+  WsDatabaseCloseQueryRpc,
+  WsDatabaseCancelQueryRpc,
+  WsDatabaseOpenSessionRpc,
+  WsDatabaseCloseSessionRpc,
+  WsDatabaseBrowseTableRpc,
+).middleware(RpcScopeAuthorization);
+
+export const WsRpcGroup = CoreWsRpcGroup.merge(DatabaseRpcGroup);
