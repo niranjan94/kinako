@@ -198,11 +198,13 @@ export const DatabaseGrid = memo(function DatabaseGrid({
   const download = (format: "csv" | "json") => {
     const csv = (value: string) => '"' + value.replaceAll('"', '""') + '"';
     // Joins can repeat a column name; keep every value in the exported objects.
-    const keys = columns.map((column, index) =>
-      columns.findIndex((other) => other.name === column.name) === index
-        ? column.name
-        : `${column.name}_${index + 1}`,
-    );
+    const used = new Set<string>();
+    const keys = columns.map((column) => {
+      let key = column.name;
+      for (let suffix = 2; used.has(key); suffix++) key = `${column.name}_${suffix}`;
+      used.add(key);
+      return key;
+    });
     const contents =
       format === "json"
         ? JSON.stringify(

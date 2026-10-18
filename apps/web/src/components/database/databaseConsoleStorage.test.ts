@@ -1,6 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import { DatabaseConnectionId, DatabaseQueryId, DatabaseSessionId } from "@t3tools/contracts";
-import { persistDatabaseWorkspace, restoreDatabaseWorkspace } from "./databaseConsoleStorage";
+import {
+  flushDatabaseWorkspaces,
+  persistDatabaseWorkspace,
+  restoreDatabaseWorkspace,
+} from "./databaseConsoleStorage";
 
 const connectionId = DatabaseConnectionId.make("connection");
 
@@ -37,6 +41,7 @@ describe("database console storage", () => {
         },
       ],
     });
+    flushDatabaseWorkspaces();
     expect(restoreDatabaseWorkspace("thread-a")).toEqual({
       activeId: "table",
       tabs: [
@@ -72,7 +77,9 @@ describe("database console storage", () => {
       activeId: "console",
       tabs: [{ id: "console", connectionId, title: "Console 1", sql: "SELECT 2", loading: false }],
     });
+    flushDatabaseWorkspaces();
     persistDatabaseWorkspace("thread-b", { activeId: null, tabs: [] });
+    flushDatabaseWorkspaces();
     expect(restoreDatabaseWorkspace("thread-b")).toBeNull();
   });
 });

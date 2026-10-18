@@ -22,7 +22,7 @@ import {
   SquareTerminalIcon,
   Table2Icon,
 } from "lucide-react";
-import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { databaseState } from "../../state/database";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
 import { DatabaseToolbarButton, DatabaseHint } from "./DatabaseToolbarButton";
@@ -71,6 +71,7 @@ function DatabaseNode({
     databaseState.metadata(databaseCacheKey(environmentId, { ...input, revision })),
   );
   const [expanded, setExpanded] = useState(false);
+  const groupId = useId();
   const [error, setError] = useState<string | null>(null);
   // Filtering searches the schemas of connections already loaded; it never opens a new connection.
   const open =
@@ -111,6 +112,8 @@ function DatabaseNode({
           data-database-tree-row
           role="treeitem"
           aria-expanded={open}
+          // The child group renders beside this button, so ownership has to be explicit.
+          aria-owns={open ? groupId : undefined}
           aria-level={level}
           tabIndex={-1}
           className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs outline-none hover:bg-accent focus:bg-accent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
@@ -155,7 +158,7 @@ function DatabaseNode({
         </button>
       </DatabaseHint>
       {open && (
-        <div className="ml-4" role="group">
+        <div id={groupId} className="ml-4" role="group">
           {error && !metadata ? (
             <p role="alert" className="break-words px-2 py-1 text-xs text-destructive-foreground">
               {error}
