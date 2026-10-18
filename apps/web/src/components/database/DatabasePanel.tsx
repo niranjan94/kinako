@@ -75,15 +75,6 @@ const exportName = (tab: DatabaseWorkspaceTab) =>
     .replace(/[^\w.-]+/g, "-")
     .toLowerCase();
 
-// A missing file fails while resolving its real path; any other failure leaves existence unknown.
-const isMissingFile = (error: unknown) =>
-  typeof error === "object" &&
-  error !== null &&
-  "failure" in error &&
-  error.failure === "operation_failed" &&
-  "operation" in error &&
-  error.operation === "realpath-target";
-
 const sqlLocation = (sql: string, offset: number) => {
   const before = sql.slice(0, offset).split("\n");
   return `Line ${before.length}, column ${(before.at(-1)?.length ?? 0) + 1}`;
@@ -253,10 +244,12 @@ export default function DatabasePanel({
     };
     addTab(next);
     if ((panel.current?.clientWidth ?? 0) < 760) setExplorerOpen(false);
+    const token = ownershipToken(key);
     try {
-      await ensureSession(next.id, connection);
+      await ensureSession(next.id, connection, token);
       updateTab(next.id, { loading: false });
     } catch (error) {
+      if (!isLive(token, next.id)) return;
       updateTab(next.id, {
         loading: false,
         error: databaseErrorMessage(error),
@@ -267,6 +260,7 @@ export default function DatabasePanel({
   const loadTable = async (tabId: string, more = false) => {
     const current = activeTab(tabId);
     if (!current?.table || pending.current.has(tabId)) return;
+    const token = ownershipToken(key);
     pending.current.add(tabId);
     updateTab(tabId, { loading: true, error: undefined });
     try {
@@ -286,6 +280,7 @@ export default function DatabasePanel({
           },
         }),
       );
+      if (!isLive(token, tabId)) return;
       const oldRows = more && current.result?.kind === "rows" ? current.result.rows : [];
       updateTab(tabId, {
         result: {
@@ -299,6 +294,7 @@ export default function DatabasePanel({
         loading: false,
       });
     } catch (error) {
+      if (!isLive(token, tabId)) return;
       updateTab(tabId, {
         loading: false,
         error: databaseErrorMessage(error),
@@ -418,6 +414,7 @@ export default function DatabasePanel({
             error.failure !== "session-not-found"
           )
             throw error;
+          if (!isLive(token, tab.id)) throw error;
           // Expiry or connection edits can close an idle session before the client knows.
           updateTab(tab.id, { sessionId: undefined });
           sessionId = await ensureSession(tab.id, tabConnection, token);
@@ -460,7 +457,7 @@ export default function DatabasePanel({
       });
     } finally {
       pending.current.delete(tab.id);
-      updateTab(tab.id, { loading: false });
+      if (isLive(token, tab.id)) updateTab(tab.id, { loading: false });
     }
   };
   const cancel = () => {
@@ -483,6 +480,7 @@ export default function DatabasePanel({
       return;
     }
     if (!tab.queryId || pending.current.has(tab.id)) return;
+    const token = ownershipToken(key);
     pending.current.add(tab.id);
     paging.current.add(tab.id);
     updateTab(tab.id, { loading: true });
@@ -493,6 +491,7 @@ export default function DatabasePanel({
           input: { projectId, queryId: tab.queryId },
         }),
       );
+      if (!isLive(token, tab.id)) return;
       if (activeTab(tab.id)?.queryId !== tab.queryId) throw new Error("Query cancelled.");
       updateTab(tab.id, {
         result: {
@@ -503,6 +502,8 @@ export default function DatabasePanel({
         loading: false,
       });
     } catch (error) {
+      // Closing the panel already released this query's resources.
+      if (!isLive(token, tab.id)) return;
       const cancelled = activeTab(tab.id)?.queryId === undefined;
       const sessionLost =
         cancelled ||
@@ -584,25 +585,15 @@ export default function DatabasePanel({
           environmentId,
           input: { cwd: workspaceRoot, relativePath: filePath },
         });
-        const failure = AsyncResult.isSuccess(probe) ? null : squashAtomCommandFailure(probe);
-        if (failure !== null && !isMissingFile(failure)) {
-          if (
-            !(await confirm(
-              `Save to ${filePath} anyway?\nCould not check whether it already exists: ${databaseErrorMessage(failure)}`,
-            ))
-          )
-            return;
-        } else if (AsyncResult.isSuccess(probe)) {
-          const existing = probe.value.contents;
-          if (
-            existing !== tab.sql &&
-            existing !== tab.savedSql &&
-            !(await confirm(
-              `Overwrite ${filePath}?\nThe file has contents this console did not write.`,
-            ))
-          )
-            return;
-        }
+        // The server cannot tell a missing file from an unreadable one, so any failure asks.
+        const question = !AsyncResult.isSuccess(probe)
+          ? `Save to ${filePath}?\nIt does not exist yet, or could not be read: ${databaseErrorMessage(squashAtomCommandFailure(probe))}`
+          : probe.value.truncated
+            ? `Overwrite ${filePath}?\nThe file is too large to compare with this console.`
+            : probe.value.contents !== tab.sql && probe.value.contents !== tab.savedSql
+              ? `Overwrite ${filePath}?\nThe file has contents this console did not write.`
+              : null;
+        if (question && !(await confirm(question))) return;
         databaseValue(
           await projectEnvironment.writeFile.run(registry, {
             environmentId,
