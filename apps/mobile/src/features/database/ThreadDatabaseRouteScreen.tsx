@@ -19,6 +19,7 @@ import { AsyncResult } from "effect/reactivity";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
 import { AppText, AppTextInput } from "../../components/ui/AppText";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { Button } from "../../components/ui/Button";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import { databaseState } from "../../state/database";
@@ -31,12 +32,24 @@ function value<A, E>(result: AtomCommandResult<A, E>): A {
   const error = squashAtomCommandFailure(result);
   throw error instanceof Error ? error : new Error(String(error));
 }
+const errorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : typeof error === "object" && error !== null && "message" in error
+      ? String(error.message)
+      : String(error);
 const cellText = (cell: DatabaseCell) =>
   cell === null
     ? "NULL"
     : typeof cell === "object"
       ? `${cell.truncated}… (${cell.length} characters)`
       : String(cell);
+
+const LEVEL_LABELS = {
+  project: "This project",
+  environment: "This environment",
+  global: "All environments",
+} as const;
 
 type Props = StaticScreenProps<{ environmentId: string; threadId: string }>;
 export function ThreadDatabaseRouteScreen(_props: Props) {
@@ -78,6 +91,7 @@ function DatabaseScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<string | null>(null);
+  const [listed, setListed] = useState<string | null>(null);
   const queryId = useRef<DatabaseQueryId | undefined>(undefined);
   const mounted = useRef(true);
   const running = useRef(false);
@@ -89,6 +103,7 @@ function DatabaseScreen({
   } | null>(null);
   useEffect(() => {
     if (!allowed || status !== "connected") return;
+    const key = `${environmentId}:${projectId}:${revision}`;
     void databaseState.listConnections
       .run(registry, { environmentId, input: { projectId } })
       .then((result) => {
@@ -96,7 +111,9 @@ function DatabaseScreen({
           value(result);
           if (registry.get(databaseState.revision(environmentId)) !== revision) return;
         } catch (error) {
-          if (mounted.current) setError(String(error));
+          if (mounted.current) setError(errorMessage(error));
+        } finally {
+          if (mounted.current) setListed(key);
         }
       });
   }, [allowed, environmentId, projectId, registry, revision, status]);
@@ -127,7 +144,7 @@ function DatabaseScreen({
       );
       if (mounted.current) setMetadata(data);
     } catch (error) {
-      if (mounted.current) setError(String(error));
+      if (mounted.current) setError(errorMessage(error));
     } finally {
       running.current = false;
       if (mounted.current) setBusy(false);
@@ -162,7 +179,7 @@ function DatabaseScreen({
       if (mounted.current) setResult(data);
       else await closeResult();
     } catch (error) {
-      if (mounted.current) setError(String(error));
+      if (mounted.current) setError(errorMessage(error));
     } finally {
       running.current = false;
       if (mounted.current) setBusy(false);
@@ -199,7 +216,7 @@ function DatabaseScreen({
         });
       }
     } catch (error) {
-      if (mounted.current) setError(String(error));
+      if (mounted.current) setError(errorMessage(error));
     } finally {
       running.current = false;
       if (mounted.current) setBusy(false);
@@ -223,12 +240,22 @@ function DatabaseScreen({
       if (mounted.current)
         setResult({ ...result, rows: [...result.rows, ...data.rows], hasMore: data.hasMore });
     } catch (error) {
-      if (mounted.current) setError(String(error));
+      if (mounted.current) setError(errorMessage(error));
     } finally {
       running.current = false;
       if (mounted.current) setBusy(false);
     }
   };
+  const listing = status === "connected" && listed !== `${environmentId}:${projectId}:${revision}`;
+  const parent =
+    scope.kind === "objects"
+      ? { label: "All schemas", scope: { kind: "schemas" } as const }
+      : scope.kind === "columns"
+        ? {
+            label: scope.schema,
+            scope: { kind: "objects", schema: scope.schema } as const,
+          }
+        : null;
   const resultColumns = useMemo(
     () =>
       result?.kind === "rows"
@@ -256,7 +283,7 @@ function DatabaseScreen({
               <DatabaseRow
                 key={item.id}
                 busy={busy}
-                label={`${item.name} · ${item.level}${item.readOnly ? " · Read-only" : ""}`}
+                label={`${item.name} · ${LEVEL_LABELS[item.level]}${item.readOnly ? " · Read-only" : ""}`}
                 onPress={() => {
                   setConnection(item);
                   setResult(null);
@@ -264,11 +291,19 @@ function DatabaseScreen({
                 }}
               />
             ))}
-            {connections.length === 0 && (
-              <AppText className="p-4">
-                Create a database connection in Settings → Databases on web or desktop.
-              </AppText>
-            )}
+            {connections.length === 0 &&
+              (listing || status !== "connected" ? (
+                <View className="flex-row items-center gap-2 p-4">
+                  <AppActivityIndicator />
+                  <AppText>
+                    {status === "connected" ? "Loading connections…" : "Connecting…"}
+                  </AppText>
+                </View>
+              ) : (
+                <AppText className="p-4">
+                  Create a database connection in Settings → Databases on web or desktop.
+                </AppText>
+              ))}
           </ScrollView>
         ) : (
           <>
@@ -288,12 +323,13 @@ function DatabaseScreen({
                 {connection.name} · Read-only
               </AppText>
             </View>
-            <ScrollView style={{ maxHeight: 220 }}>
-              {scope.kind !== "schemas" && (
+            <ScrollView style={result ? { maxHeight: "40%" } : { flex: 1 }}>
+              {parent && (
                 <DatabaseRow
                   busy={busy}
-                  label="Schemas"
-                  onPress={() => void describe({ kind: "schemas" })}
+                  label={`‹ ${parent.label}`}
+                  accessibilityLabel={`Back to ${parent.label}`}
+                  onPress={() => void describe(parent.scope)}
                 />
               )}
               {metadata?.kind === "schemas" &&
@@ -346,7 +382,8 @@ function DatabaseScreen({
               <View className="flex-row gap-2">
                 <Button
                   label="Run read-only query"
-                  disabled={busy || !allowed}
+                  loading={busy}
+                  disabled={!allowed || !sql.trim()}
                   onPress={() => void execute()}
                 />
                 <Button
@@ -368,7 +405,6 @@ function DatabaseScreen({
                 {error}
               </AppText>
             )}
-            {busy && <AppText className="px-3 py-1 text-xs">Working…</AppText>}
             {result?.kind === "failed" ? (
               <AppText accessibilityRole="alert" className="p-3">
                 {result.message}
@@ -376,7 +412,11 @@ function DatabaseScreen({
               </AppText>
             ) : result?.kind === "command" ? (
               <AppText className="p-3">
-                {result.command} · {result.durationMs} ms
+                {result.command}
+                {result.affectedRows !== null
+                  ? ` · ${result.affectedRows} ${result.affectedRows === 1 ? "row" : "rows"}`
+                  : ""}{" "}
+                · {result.durationMs} ms
               </AppText>
             ) : result?.kind === "rows" ? (
               <>
@@ -463,17 +503,19 @@ function DatabaseScreen({
 
 function DatabaseRow({
   label,
+  accessibilityLabel,
   busy,
   onPress,
 }: {
   label: string;
+  accessibilityLabel?: string;
   busy: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       disabled={busy}
       onPress={onPress}
       className="border-b border-border px-4 py-3"
