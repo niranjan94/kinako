@@ -51,7 +51,7 @@ const readJson = <A>(name: string, is: (value: unknown) => value is A): A | null
 
 // Each thread is its own item, and the index is re-read before every write, so windows
 // editing different threads never overwrite each other.
-const write = (key: string, value: string | null) => {
+const write = (key: string, value: string | null): boolean => {
   const index = readJson(INDEX_KEY, isStoredIndex) ?? {};
   const { [key]: _previous, ...others } = index;
   const evictable = Object.entries(others).toSorted(([, a], [, b]) => a - b);
@@ -61,19 +61,19 @@ const write = (key: string, value: string | null) => {
   if (value === null) {
     storage.removeItem(itemKey(key));
     storage.setItem(INDEX_KEY, JSON.stringify(kept));
-    return;
+    return true;
   }
   for (;;) {
     try {
       storage.setItem(itemKey(key), value);
       storage.setItem(INDEX_KEY, JSON.stringify({ ...kept, [key]: Date.now() }));
-      return;
+      return true;
     } catch (error) {
       // Over quota: drop the least recently used thread and try again.
       const oldest = Object.entries(kept).toSorted(([, a], [, b]) => a - b)[0];
       if (!oldest) {
         console.warn("Could not save database consoles", error);
-        return;
+        return false;
       }
       storage.removeItem(itemKey(oldest[0]));
       delete kept[oldest[0]];
@@ -88,8 +88,8 @@ const flush = (key: string) => {
   if (!entry) return;
   clearTimeout(entry.timer);
   pending.delete(key);
-  write(key, entry.value);
-  written.set(key, entry.value);
+  // A failed write stays unrecorded, so the next change for this thread tries again.
+  if (write(key, entry.value)) written.set(key, entry.value);
 };
 if (typeof window !== "undefined" && typeof window.addEventListener === "function")
   window.addEventListener("beforeunload", () => {
