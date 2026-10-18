@@ -14,7 +14,7 @@ import {
   type ProjectId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { useContext, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { databaseState } from "../../state/database";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
@@ -143,11 +143,12 @@ export default function DatabasePanel({
   const panelId = useId();
   const revision = useAtomValue(databaseState.revision(environmentId));
   // Statements can change search_path; their outcomes invalidate the completion source's cache.
-  const completionContext = useMemo(
-    () => ({ sessionId: tab?.sessionId, result: tab?.result, revision }),
-    [tab?.sessionId, tab?.result, revision],
-  );
-  const completion = useMemo(() => {
+  const completionContext = (() => ({
+    sessionId: tab?.sessionId,
+    result: tab?.result,
+    revision,
+  }))();
+  const completion = (() => {
     if (!tabConnection) return undefined;
     return createSqlSchemaCompletion(tabConnection.target.engine, async (scope) => {
       const input = {
@@ -163,7 +164,7 @@ export default function DatabasePanel({
         }),
       );
     });
-  }, [environmentId, projectId, tabConnection, registry, completionContext]);
+  })();
   const readFile = useAtomQueryRunner(projectEnvironment.readFile, { refresh: true });
   const probeFile = useAtomQueryRunner(projectEnvironment.readFile, {
     refresh: true,
@@ -245,17 +246,17 @@ export default function DatabasePanel({
     addTab(next);
     if ((panel.current?.clientWidth ?? 0) < 760) setExplorerOpen(false);
     const token = ownershipToken(key);
-    try {
+    return await (async () => {
       await ensureSession(next.id, connection, token);
       updateTab(next.id, { loading: false });
-    } catch (error) {
+    })().catch(async (error: unknown) => {
       if (!isLive(token, next.id)) return;
       updateTab(next.id, {
         loading: false,
         error: databaseErrorMessage(error),
         sessionId: undefined,
       });
-    }
+    });
   };
   const loadTable = async (tabId: string, more = false) => {
     const current = activeTab(tabId);
@@ -263,8 +264,8 @@ export default function DatabasePanel({
     const token = ownershipToken(key);
     pending.current.add(tabId);
     updateTab(tabId, { loading: true, error: undefined });
-    try {
-      const table = current.table;
+    const table = current.table;
+    return await (async () => {
       const result = databaseValue(
         await databaseState.browseTable.run(registry, {
           environmentId,
@@ -293,17 +294,19 @@ export default function DatabasePanel({
         table: { ...table, offset: result.nextOffset, after: result.nextAfter },
         loading: false,
       });
-    } catch (error) {
-      if (!isLive(token, tabId)) return;
-      updateTab(tabId, {
-        loading: false,
-        error: databaseErrorMessage(error),
-        // Rows from the previous filter would read as the answer to the failed one.
-        ...(more ? {} : { result: undefined }),
+    })()
+      .catch(async (error: unknown) => {
+        if (!isLive(token, tabId)) return;
+        updateTab(tabId, {
+          loading: false,
+          error: databaseErrorMessage(error),
+          // Rows from the previous filter would read as the answer to the failed one.
+          ...(more ? {} : { result: undefined }),
+        });
+      })
+      .finally(() => {
+        pending.current.delete(tabId);
       });
-    } finally {
-      pending.current.delete(tabId);
-    }
   };
   const openTable = (connection: DatabaseConnection, schema: string, object: string) => {
     const existing = registry
@@ -373,7 +376,7 @@ export default function DatabasePanel({
     }
     pending.current.add(tab.id);
     updateTab(tab.id, { loading: true, error: undefined, errorAt: undefined, progress: undefined });
-    try {
+    return await (async () => {
       if (tab.queryId)
         databaseValue(
           await databaseState.closeQuery.run(registry, {
@@ -403,10 +406,7 @@ export default function DatabasePanel({
               },
             }),
           );
-        let result;
-        try {
-          result = await execute();
-        } catch (error) {
+        const result = await execute().catch(async (error: unknown) => {
           if (
             typeof error !== "object" ||
             error === null ||
@@ -418,8 +418,8 @@ export default function DatabasePanel({
           // Expiry or connection edits can close an idle session before the client knows.
           updateTab(tab.id, { sessionId: undefined });
           sessionId = await ensureSession(tab.id, tabConnection, token);
-          result = await execute();
-        }
+          return execute();
+        });
         if (!isLive(token, tab.id)) {
           void releaseDatabaseResources(
             databaseState,
@@ -444,21 +444,23 @@ export default function DatabasePanel({
             }),
           );
       }
-    } catch (error) {
-      if (!isLive(token, tab.id)) return;
-      updateTab(tab.id, {
-        error: databaseErrorMessage(error),
-        ...(typeof error === "object" &&
-        error !== null &&
-        "failure" in error &&
-        error.failure === "session-not-found"
-          ? { sessionId: undefined }
-          : {}),
+    })()
+      .catch(async (error: unknown) => {
+        if (!isLive(token, tab.id)) return;
+        updateTab(tab.id, {
+          error: databaseErrorMessage(error),
+          ...(typeof error === "object" &&
+          error !== null &&
+          "failure" in error &&
+          error.failure === "session-not-found"
+            ? { sessionId: undefined }
+            : {}),
+        });
+      })
+      .finally(() => {
+        pending.current.delete(tab.id);
+        if (isLive(token, tab.id)) updateTab(tab.id, { loading: false });
       });
-    } finally {
-      pending.current.delete(tab.id);
-      if (isLive(token, tab.id)) updateTab(tab.id, { loading: false });
-    }
   };
   const cancel = () => {
     if (tab?.queryId && tab.loading) {
@@ -484,47 +486,51 @@ export default function DatabasePanel({
     pending.current.add(tab.id);
     paging.current.add(tab.id);
     updateTab(tab.id, { loading: true });
-    try {
+    const queryId = tab.queryId;
+    const previousResult = tab.result;
+    return await (async () => {
       const result = databaseValue(
         await databaseState.fetchPage.run(registry, {
           environmentId,
-          input: { projectId, queryId: tab.queryId },
+          input: { projectId, queryId },
         }),
       );
       if (!isLive(token, tab.id)) return;
       if (activeTab(tab.id)?.queryId !== tab.queryId) throw new Error("Query cancelled.");
       updateTab(tab.id, {
         result: {
-          ...tab.result,
-          rows: [...tab.result.rows, ...result.rows],
+          ...previousResult,
+          rows: [...previousResult.rows, ...result.rows],
           hasMore: result.hasMore,
         },
         loading: false,
       });
-    } catch (error) {
-      // Closing the panel already released this query's resources.
-      if (!isLive(token, tab.id)) return;
-      const cancelled = activeTab(tab.id)?.queryId === undefined;
-      const sessionLost =
-        cancelled ||
-        (typeof error === "object" &&
-          error !== null &&
-          "failure" in error &&
-          error.failure === "engine-failed");
-      if (sessionLost)
-        void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
-      updateTab(tab.id, {
-        loading: false,
-        ...(sessionLost ? { sessionId: undefined, queryId: undefined } : {}),
-        result: { ...tab.result, hasMore: false },
-        error: cancelled
-          ? "Query cancelled. Run again to start a new session."
-          : databaseErrorMessage(error),
+    })()
+      .catch(async (error: unknown) => {
+        // Closing the panel already released this query's resources.
+        if (!isLive(token, tab.id)) return;
+        const cancelled = activeTab(tab.id)?.queryId === undefined;
+        const sessionLost =
+          cancelled ||
+          (typeof error === "object" &&
+            error !== null &&
+            "failure" in error &&
+            error.failure === "engine-failed");
+        if (sessionLost)
+          void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
+        updateTab(tab.id, {
+          loading: false,
+          ...(sessionLost ? { sessionId: undefined, queryId: undefined } : {}),
+          result: { ...previousResult, hasMore: false },
+          error: cancelled
+            ? "Query cancelled. Run again to start a new session."
+            : databaseErrorMessage(error),
+        });
+      })
+      .finally(() => {
+        pending.current.delete(tab.id);
+        paging.current.delete(tab.id);
       });
-    } finally {
-      pending.current.delete(tab.id);
-      paging.current.delete(tab.id);
-    }
   };
   const closeTab = async (tab: DatabaseWorkspaceTab) => {
     if (
@@ -579,7 +585,7 @@ export default function DatabasePanel({
     setNotice(null);
     const confirm = (message: string) =>
       ensureLocalApi().dialogs.confirm(message, { variant: "destructive" });
-    try {
+    return await (async () => {
       if (save) {
         const probe = await probeFile({
           environmentId,
@@ -617,9 +623,9 @@ export default function DatabasePanel({
         updateTab(tab.id, { sql: result.contents, savedSql: result.contents });
       }
       setNotice(save ? `Saved ${filePath}` : `Opened ${filePath}`);
-    } catch (error) {
+    })().catch(async (error: unknown) => {
       setNotice(databaseErrorMessage(error));
-    }
+    });
   };
 
   const onLoadMore = useStableCallback(() => {

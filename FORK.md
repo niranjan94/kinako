@@ -52,6 +52,8 @@ Agents should use the `merge-upstream` skill (`.agents/skills/merge-upstream/`),
 
 Merge conflicts come from fork changes that touch the same lines as upstream. Keep new patches out of `package.json` versions, `pnpm-lock.yaml`, upstream workflows, and busy UI files. Prefer new fork-only files and environment variables.
 
+Kinako keeps migrations 63 and 64 for additional directories and database connections. Upstream's `DropUnusedV1Projections` migration runs as 65; preserve existing IDs on future merges. The mobile store promotion row is omitted until Kinako has public distribution links.
+
 ## Rebrand seams
 
 Kinako's identity lives in `packages/shared/src/forkBrand.ts`. Call sites import from it instead of carrying literals, so most upstream changes merge cleanly; a conflict on one of these lines usually means upstream touched the same literal, and the fix is to keep the import. Internal names stay upstream's on purpose: the `@t3tools/*` scope, contract names, and `T3CODE_*` environment variables. The worktree-local dev state directory is `.kinako` like the home directory; `.t3` stays in `.gitignore` so older worktrees' data is not committed.
@@ -70,6 +72,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `scripts/npm-launcher/t3.mjs` stays byte-identical to upstream's. `LAUNCHER_REBRAND` in `scripts/build-npm-launcher.ts` swaps its home directory, archive stem, release URL, executable name, and messages at build time; the generated package names its launcher `bin/kinako.mjs` and updates the `dist/bin.mjs` compatibility import, and the build fails if upstream changed one of those literals. Add new upstream literals to that list.
 - `AGENTS.md`: the Kinako paragraph under the introduction, and the live database path in rule 2 and Test data.
 - `.github/triage/PLAYBOOK.md` and its byte-identical copy in `apps/server/src/cli/triagePrompt.ts`: the fork's repository for playbook updates, source clones, and issues, and the `kinako` CLI.
+- `apps/mobile/scripts/measure-renders.mts`: profiling targets use Kinako's app ID and dev URL scheme.
 - `apps/desktop/src/app/DesktopUserData.ts`, `apps/desktop/src/app/DesktopLegacyLocalStorage.ts`: no import from upstream's desktop profiles. `resolveUserDataPath` copies nothing and `V1_PROFILE_NAMES` stays empty.
 
 The icon glyph is in `assets/{prod,nightly,dev}/app-icon.icon/Assets/text.svg`, `assets/prod/logo.svg`, both `T3Wordmark.tsx` components, `apps/mobile/assets/widget/T3Mark.svg`, the Android notification drawable, and the DMG backgrounds. After changing it, run `vp run icons:export` (needs Icon Composer.app) and `vp run icons:export:android`. The dev icon's `annotations.svg` still draws dimension lines for the old T3 glyph.

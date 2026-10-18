@@ -24,10 +24,14 @@ function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }
   const windowTokens = segments.reduce((sum, segment) => sum + segment.tokens, 0);
   const share = (tokens: number) => (windowTokens > 0 ? (tokens / windowTokens) * 100 : 0);
   let usedIndex = 0;
-  const rows = segments.map((segment) => ({
-    ...segment,
-    color: contextWindowSegmentColor(segment.kind, segment.kind === "used" ? usedIndex++ : 0),
-  }));
+  const rows = [];
+  for (const segment of segments) {
+    const color = contextWindowSegmentColor(
+      segment.kind,
+      segment.kind === "used" ? usedIndex++ : 0,
+    );
+    rows.push({ ...segment, color });
+  }
 
   return (
     <div className="flex flex-col gap-2">

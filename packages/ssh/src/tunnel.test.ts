@@ -2,7 +2,7 @@ import * as NodeNet from "node:net";
 
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AuthAdministrativeScopes } from "@t3tools/contracts";
+import { AuthStandardClientScopes } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
@@ -258,7 +258,7 @@ describe("ssh tunnel scripts", () => {
     assert.include(pairing, 'PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"');
     assert.notInclude(pairing, "server-home");
     const pairingScopes = [...pairing.matchAll(/--scope (\S+)/g)].map((match) => match[1]);
-    assert.deepStrictEqual(pairingScopes, [...AuthAdministrativeScopes]);
+    assert.deepStrictEqual(pairingScopes, [...AuthStandardClientScopes]);
     assert.include(pairing, "T3_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
   });
 
@@ -457,7 +457,8 @@ describe("ssh tunnel scripts", () => {
               kills += 1;
             });
           }
-          if (args.includes("--")) return makeSuccessfulProcess('{"remotePort":3773}\n');
+          if (args.some((arg, index) => arg === "-s" && args[index + 1] === "--"))
+            return makeSuccessfulProcess('{"remotePort":3773}\n');
           if (args.includes("sh")) stops += 1;
           return makeSuccessfulProcess("");
         }),
@@ -501,7 +502,7 @@ describe("ssh tunnel scripts", () => {
         Effect.gen(function* () {
           const args = commandArgs(command);
           if (args.includes("-N")) return makeRunningProcess(() => {});
-          if (args.includes("--")) {
+          if (args.some((arg, index) => arg === "-s" && args[index + 1] === "--")) {
             launches += 1;
             return makeSuccessfulProcess(
               launches === 2
@@ -564,7 +565,7 @@ describe("ssh tunnel scripts", () => {
               tunnelKillCount += 1;
             });
           }
-          if (args.includes("sh") && args.includes("--")) {
+          if (args.some((arg, index) => arg === "-s" && args[index + 1] === "--")) {
             return makeSuccessfulProcess('{"remotePort":3773}\n');
           }
           if (args.includes("sh")) {
@@ -608,6 +609,7 @@ describe("ssh tunnel scripts", () => {
         assert.include(firstTunnelArgs, "ControlMaster=no");
         assert.include(firstTunnelArgs, "ControlPath=none");
         assert.include(firstTunnelArgs, "ControlPersist=no");
+        assert.deepEqual(firstTunnelArgs?.slice(-2), ["--", "julius@devbox"]);
 
         const disconnected = yield* Effect.result(manager.disconnectEnvironment(target));
         if (mode === "failed stop") {
@@ -685,7 +687,7 @@ describe("ssh tunnel scripts", () => {
               }
               return tunnel;
             }
-            if (args.includes("--")) {
+            if (args.some((arg, index) => arg === "-s" && args[index + 1] === "--")) {
               if (isTarget) {
                 launches += 1;
                 remoteRunning = true;

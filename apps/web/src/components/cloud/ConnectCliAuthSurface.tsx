@@ -1,7 +1,7 @@
 import { useAuth, useClerk } from "@clerk/react";
 import { readConnectAuthorizeRequest } from "@t3tools/shared/connectAuth";
 import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import {
   buildConnectCliClerkAuthorizeUrl,
@@ -45,7 +45,7 @@ export function ConnectCliAuthorizeSurface() {
   const signInOpened = useRef(false);
   const redirecting = useRef(false);
 
-  const openSignIn = useCallback(() => {
+  const openSignIn = () => {
     if (!request) {
       return;
     }
@@ -55,7 +55,8 @@ export function ConnectCliAuthorizeSurface() {
         isElectron,
       ),
     );
-  }, [clerk, request]);
+  };
+  const openSignInOnLoad = useEffectEvent(openSignIn);
 
   useEffect(() => {
     if (!request || !isLoaded || redirecting.current) {
@@ -64,7 +65,7 @@ export function ConnectCliAuthorizeSurface() {
     if (!isSignedIn) {
       if (!signInOpened.current) {
         signInOpened.current = true;
-        openSignIn();
+        openSignInOnLoad();
       }
       return;
     }
@@ -74,7 +75,7 @@ export function ConnectCliAuthorizeSurface() {
     }
     redirecting.current = true;
     window.location.assign(authorizeUrl);
-  }, [isLoaded, isSignedIn, openSignIn, request]);
+  }, [isLoaded, isSignedIn, request]);
 
   if (!request) {
     return (

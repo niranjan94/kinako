@@ -5,7 +5,7 @@ import type {
   ProjectId,
   PullRequestListCursors,
 } from "@t3tools/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { useIssueList, type EnvironmentQueryTarget } from "../../state/pullRequests";
 import { appendIssuePage, type EnvironmentIssueEntry } from "./issue.logic";
@@ -36,55 +36,57 @@ export function useIssueListView({
   host: string | undefined;
   query: string;
 }) {
-  const firstPageTargets = useMemo(
-    () =>
-      enabled
-        ? environmentQueries.map(({ environmentId, projectIds }) => ({
-            environmentId,
-            input: {
-              state,
-              limit: PAGE_SIZE,
-              ...(projectId ? { projectId } : {}),
-              ...(projectIds ? { projectIds } : {}),
-              ...(host ? { host } : {}),
-              ...(query ? { query } : {}),
-            } satisfies IssueListInput,
-          }))
-        : NO_TARGETS,
-    [enabled, environmentQueries, host, projectId, query, state],
-  );
-  const filterKey = useMemo(() => JSON.stringify(firstPageTargets), [firstPageTargets]);
+  const firstPageTargets = (() =>
+    enabled
+      ? environmentQueries.map(({ environmentId, projectIds }) => ({
+          environmentId,
+          input: {
+            state,
+            limit: PAGE_SIZE,
+            ...(projectId ? { projectId } : {}),
+            ...(projectIds ? { projectIds } : {}),
+            ...(host ? { host } : {}),
+            ...(query ? { query } : {}),
+          } satisfies IssueListInput,
+        }))
+      : NO_TARGETS)();
+  const filterKey = (() => JSON.stringify(firstPageTargets))();
   const [page, setPage] = useState<{
     readonly key: string;
     readonly cursors: Readonly<Record<string, PullRequestListCursors>> | null;
   }>({ key: filterKey, cursors: null });
   const cursors = page.key === filterKey ? page.cursors : null;
-  const targets = useMemo(
-    () =>
-      cursors === null
-        ? firstPageTargets
-        : firstPageTargets.flatMap((target) => {
-            const next = cursors[target.environmentId];
-            return next === undefined
-              ? []
-              : [{ ...target, input: { ...target.input, cursors: next } }];
-          }),
-    [cursors, firstPageTargets],
-  );
+  const targets = (() =>
+    cursors === null
+      ? firstPageTargets
+      : firstPageTargets.flatMap((target) => {
+          const next = cursors[target.environmentId];
+          return next === undefined
+            ? []
+            : [{ ...target, input: { ...target.input, cursors: next } }];
+        }))();
   const list = useIssueList(targets);
   const [held, setHeld] = useState<{
     readonly key: string;
     readonly entries: ReadonlyArray<EnvironmentIssueEntry>;
+    readonly source: ReturnType<typeof useIssueList>["data"];
   } | null>(null);
-  useEffect(() => {
-    if (list.data === null || list.isPending) return;
-    const answer = list.data.entries;
-    setHeld((previous) =>
-      cursors !== null && previous?.key === filterKey
-        ? { key: filterKey, entries: appendIssuePage(previous.entries, answer) }
-        : { key: filterKey, entries: answer },
-    );
-  }, [cursors, filterKey, list.data, list.isPending]);
+  if (
+    list.data !== null &&
+    !list.isPending &&
+    (held?.source !== list.data || held.key !== filterKey)
+  ) {
+    const source = list.data;
+    const answer = source.entries;
+    setHeld((previous) => ({
+      key: filterKey,
+      source,
+      entries:
+        cursors !== null && previous?.key === filterKey
+          ? appendIssuePage(previous.entries, answer)
+          : answer,
+    }));
+  }
 
   const entries =
     held?.key === filterKey ? held.entries : cursors === null ? (list.data?.entries ?? []) : [];

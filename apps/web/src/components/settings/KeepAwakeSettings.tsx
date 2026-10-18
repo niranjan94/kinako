@@ -1,8 +1,7 @@
-import { DEFAULT_UNIFIED_SETTINGS, KeepAwakeMode } from "@t3tools/contracts";
+import { DEFAULT_UNIFIED_SETTINGS, KeepAwakeMode, type EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
-import { useMemo } from "react";
 
 import { serverEnvironment } from "../../state/server";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -23,6 +22,16 @@ const KEEP_AWAKE_MODE_LABELS: Record<KeepAwakeMode, string> = {
 
 const isKeepAwakeMode = Schema.is(KeepAwakeMode);
 
+const keepAwakeStatusesAtom = Atom.family((key: string) => {
+  const environmentIds = JSON.parse(key) as ReadonlyArray<EnvironmentId>;
+  return Atom.make((get) =>
+    environmentIds.flatMap((environmentId) => {
+      const result = get(serverEnvironment.keepAwakeStatus({ environmentId, input: {} }));
+      return result._tag === "Success" ? [result.value] : [];
+    }),
+  );
+});
+
 export function KeepAwakeSettingsRow() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
@@ -34,22 +43,10 @@ export function KeepAwakeSettingsRow() {
       (target) => target.serverConfig?.environment.capabilities.keepAwake === true,
     );
   const statuses = useAtomValue(
-    useMemo(
-      () =>
-        Atom.make((get) =>
-          supported
-            ? connectedEnvironments.flatMap((target) => {
-                const result = get(
-                  serverEnvironment.keepAwakeStatus({
-                    environmentId: target.environmentId,
-                    input: {},
-                  }),
-                );
-                return result._tag === "Success" ? [result.value] : [];
-              })
-            : [],
-        ),
-      [connectedEnvironments, supported],
+    keepAwakeStatusesAtom(
+      JSON.stringify(
+        supported ? connectedEnvironments.map(({ environmentId }) => environmentId) : [],
+      ),
     ),
   );
   if (!supported) return null;

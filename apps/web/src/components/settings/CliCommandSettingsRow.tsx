@@ -1,6 +1,6 @@
 import type { DesktopCliCommandState } from "@t3tools/contracts";
 import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { APP_BASE_NAME } from "../../branding";
 import { Button } from "../ui/button";
@@ -27,25 +27,22 @@ export function CliCommandSettingsRow() {
     };
   }, [bridge]);
 
-  const change = useCallback(
-    (action: "install" | "uninstall") => {
-      if (!bridge || pending) return;
-      setPending(true);
-      void bridge[action]()
-        .then(setState)
-        .catch((error: unknown) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: `Could not ${action === "install" ? "install" : "remove"} ${FORK_CLI_NAME}`,
-              description: error instanceof Error ? error.message : "Something went wrong.",
-            }),
-          );
-        })
-        .finally(() => setPending(false));
-    },
-    [bridge, pending],
-  );
+  const change = (action: "install" | "uninstall") => {
+    if (!bridge || pending) return;
+    setPending(true);
+    void bridge[action]()
+      .then(setState)
+      .catch((error: unknown) => {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: `Could not ${action === "install" ? "install" : "remove"} ${FORK_CLI_NAME}`,
+            description: error instanceof Error ? error.message : "Something went wrong.",
+          }),
+        );
+      })
+      .finally(() => setPending(false));
+  };
 
   if (!bridge || !state?.supported) return null;
   const installed = state.installedPath !== null;

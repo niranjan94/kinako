@@ -1,5 +1,5 @@
 import {
-  AuthAdministrativeScopes,
+  AuthStandardClientScopes,
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
   type DesktopSshNetworkAccessState,
@@ -797,7 +797,7 @@ printf '{"remotePort":%s,"serverKind":"%s","networkAccess":%s}\\n' "$REMOTE_PORT
 // SSH access already controls the remote account (it could run `auth session
 // issue` itself), so the paired client gets administrative scopes and can
 // manage that environment's clients.
-const REMOTE_PAIRING_SCOPE_FLAGS = AuthAdministrativeScopes.map((scope) => `--scope ${scope}`).join(
+const REMOTE_PAIRING_SCOPE_FLAGS = AuthStandardClientScopes.map((scope) => `--scope ${scope}`).join(
   " ",
 );
 
@@ -1283,6 +1283,7 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     "-N",
     "-L",
     `${input.localPort}:127.0.0.1:${input.remotePort}`,
+    "--",
     hostSpec,
   ];
   const sshCommand = yield* resolveSshCommand;

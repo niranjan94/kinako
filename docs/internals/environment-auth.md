@@ -7,11 +7,13 @@ identity and relay credentials belong to a separate trust boundary, described in
 ## Authority survives transport changes
 
 Pairing delegates a set of scopes. Exchanging a bootstrap credential can narrow
-that grant but cannot widen it. Ordinary pairing does not grant access-management
-or relay-management authority. SSH provisioning is the exception: SSH access
-already controls the remote account, so its pairing link carries the
-administrative scopes ([tunnel](../../packages/ssh/src/tunnel.ts)). Creating another pairing link requires both
-`access:write` and every scope being delegated. The
+that grant but cannot widen it. The default grant includes access and relay
+management: `terminal:operate` is a shell as the server's user and
+`orchestration:operate` can start a full-access agent, and either can mint a
+session with every scope through `t3 auth session issue`, so withholding
+management from the default would not be a boundary. A narrower client gets
+explicit scopes. Creating another pairing link requires both `access:write` and
+every scope being delegated. The
 [auth handlers](../../apps/server/src/auth/http.ts) enforce this at issuance;
 client labels and device metadata have no authorization role.
 

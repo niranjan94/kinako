@@ -13,7 +13,7 @@ import {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { waitForThreadShell } from "~/state/entities";
@@ -98,7 +98,7 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
   const [listState, setListState] = useState<SessionListState>({ status: "loading" });
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  const fetchSessions = useCallback(async (): Promise<SessionListState | null> => {
+  const fetchSessions = async (): Promise<SessionListState | null> => {
     const result = await listSessions({
       environmentId: projectRef.environmentId,
       input: { projectId: projectRef.projectId },
@@ -111,7 +111,7 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
       status: "error",
       message: failureMessage(squashAtomCommandFailure(result), "Could not list sessions."),
     };
-  }, [listSessions, projectRef.environmentId, projectRef.projectId]);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +147,7 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
   const runRowAction = async (session: AgentSessionListItem) => {
     if (pendingKey !== null) return;
     setPendingKey(sessionKey(session));
-    try {
+    return await (async () => {
       if (session.importedThreadId !== null) {
         await openThread(session.importedThreadId);
         return;
@@ -177,9 +177,9 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
         toastManager.add({ type: "success", title: "Session imported" });
       }
       await openThread(result.value.threadId);
-    } finally {
+    })().finally(() => {
       setPendingKey(null);
-    }
+    });
   };
 
   return (

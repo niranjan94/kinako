@@ -22,7 +22,7 @@ import {
   SquareTerminalIcon,
   Table2Icon,
 } from "lucide-react";
-import { memo, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { memo, useContext, useEffect, useId, useRef, useState } from "react";
 import { databaseState } from "../../state/database";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
 import { DatabaseToolbarButton, DatabaseHint } from "./DatabaseToolbarButton";
@@ -54,19 +54,16 @@ function DatabaseNode({
   const kind = scope.kind;
   const schema = scope.kind === "schemas" ? "" : scope.schema;
   const object = scope.kind === "columns" ? scope.object : "";
-  const input = useMemo(
-    () => ({
-      connectionId: connection.id,
-      projectId,
-      scope:
-        kind === "schemas"
-          ? { kind }
-          : kind === "objects"
-            ? { kind, schema }
-            : { kind, schema, object },
-    }),
-    [connection.id, projectId, kind, schema, object],
-  );
+  const input = (() => ({
+    connectionId: connection.id,
+    projectId,
+    scope:
+      kind === "schemas"
+        ? { kind }
+        : kind === "objects"
+          ? { kind, schema }
+          : { kind, schema, object },
+  }))();
   const metadata = useAtomValue(
     databaseState.metadata(databaseCacheKey(environmentId, { ...input, revision })),
   );

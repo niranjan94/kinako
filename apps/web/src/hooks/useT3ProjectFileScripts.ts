@@ -6,7 +6,6 @@ import {
 } from "@t3tools/contracts";
 import { FORK_PROJECT_FILE_NAME } from "@t3tools/shared/forkBrand";
 import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
-import { useMemo } from "react";
 
 import { useProjectFileQuery } from "~/components/files/projectFilesQueryState";
 
@@ -44,7 +43,7 @@ export function useT3ProjectFileState(
   const fileName = active.fileName;
   const contents = active.data && !active.data.truncated ? active.data.contents : null;
   const isPending = forkQuery.isPending || upstreamQuery.isPending;
-  return useMemo(() => {
+  return (() => {
     if (contents === null) {
       return {
         status: isPending ? "loading" : "missing",
@@ -58,7 +57,7 @@ export function useT3ProjectFileState(
       return { status: "invalid", fileName, file: null, scripts: NO_SCRIPTS } as const;
     }
     return { status: "valid", fileName, file, scripts: file.scripts ?? NO_SCRIPTS } as const;
-  }, [contents, fileName, isPending]);
+  })();
 }
 
 export function useT3ProjectFileScripts(

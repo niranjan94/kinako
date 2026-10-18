@@ -1,7 +1,7 @@
 import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 import type { DatabaseCell, DatabaseColumnInfo, DatabaseResultColumn } from "@t3tools/contracts";
 import { DataGrid, type Column, type SortColumn } from "react-data-grid";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   CopyIcon,
   DownloadIcon,
@@ -79,18 +79,15 @@ export const DatabaseGrid = memo(function DatabaseGrid({
     window.addEventListener("pointerup", stop);
     return () => window.removeEventListener("pointerup", stop);
   }, []);
-  const bounds = useMemo(
-    () =>
-      range
-        ? {
-            top: Math.min(range.anchor.row, range.end.row),
-            bottom: Math.max(range.anchor.row, range.end.row),
-            left: Math.min(range.anchor.column, range.end.column),
-            right: Math.max(range.anchor.column, range.end.column),
-          }
-        : null,
-    [range],
-  );
+  const bounds = (() =>
+    range
+      ? {
+          top: Math.min(range.anchor.row, range.end.row),
+          bottom: Math.max(range.anchor.row, range.end.row),
+          left: Math.min(range.anchor.column, range.end.column),
+          right: Math.max(range.anchor.column, range.end.column),
+        }
+      : null)();
   const sortColumns = columns.flatMap<SortColumn>((column, index) => {
     const name = `"${column.name.replaceAll('"', '""')}"`;
     if (orderBy === `${name} ASC`) return [{ columnKey: String(index), direction: "ASC" as const }];
@@ -98,91 +95,88 @@ export const DatabaseGrid = memo(function DatabaseGrid({
       return [{ columnKey: String(index), direction: "DESC" as const }];
     return [];
   });
-  const gridRows = useMemo(() => rows.map((cells, id) => ({ cells, id })), [rows]);
-  const gridColumns = useMemo<Column<Row>[]>(
-    () => [
-      {
-        key: "row-number",
-        name: "",
-        width: 44,
-        minWidth: 44,
-        maxWidth: 44,
-        frozen: true,
-        resizable: false,
-        cellClass: "database-row-number",
-        renderCell: ({ row }) => row.id + 1,
-      },
-      ...columns.map<Column<Row>>((column, index) => ({
-        key: String(index),
-        name: column.name,
-        renderHeaderCell: ({ sortDirection }) => {
-          const info = columnInfo.find((info) => info.name === column.name);
-          return (
-            <div
-              className="flex min-w-0 items-center gap-1.5"
-              aria-description={`${column.name}${column.dataType ? ` · ${column.dataType}` : ""}`}
-            >
-              {info?.primaryKey ? (
-                <KeyRoundIcon className="size-3 shrink-0 text-warning-foreground" />
-              ) : info?.references ? (
-                <LinkIcon className="size-3 shrink-0 text-primary" />
-              ) : null}
-              <span className="truncate">{column.name}</span>
-              {sortDirection && (
-                <span className="text-muted-foreground">{sortDirection === "ASC" ? "↑" : "↓"}</span>
-              )}
-              <span className="ml-auto truncate text-3xs font-normal text-muted-foreground">
-                {column.dataType}
-              </span>
-            </div>
-          );
-        },
-        resizable: true,
-        sortable: !!onOrderBy,
-        width: Math.min(
-          360,
-          Math.max(
-            120,
-            column.name.length * 8 + 50,
-            ...rows.slice(0, 30).map((row) => Math.min(text(row[index]).length, 40) * 7 + 24),
-          ),
-        ),
-        cellClass: (row) =>
-          bounds &&
-          row.id >= bounds.top &&
-          row.id <= bounds.bottom &&
-          index >= bounds.left &&
-          index <= bounds.right
-            ? "database-range-cell"
-            : undefined,
-        renderCell: ({ row }) => {
-          const cell = row.cells[index];
-          const foreignKey = columnInfo.find((info) => info.name === column.name)?.references;
-          return (
-            <span
-              className={`block truncate ${cell === null ? "italic text-muted-foreground" : ""}`}
-              onPointerEnter={() => {
-                if (dragging.current)
-                  setRange((previous) =>
-                    previous ? { ...previous, end: { row: row.id, column: index } } : null,
-                  );
-              }}
-              aria-label={
-                foreignKey
-                  ? `References ${foreignKey.schema}.${foreignKey.object}.${foreignKey.column}`
-                  : undefined
-              }
-            >
-              {foreignKey ? "↗ " : ""}
-              {text(cell)}
-              {typeof cell === "object" && cell !== null ? "…" : ""}
+  const gridRows = (() => rows.map((cells, id) => ({ cells, id })))();
+  const gridColumns = ((): Column<Row>[] => [
+    {
+      key: "row-number",
+      name: "",
+      width: 44,
+      minWidth: 44,
+      maxWidth: 44,
+      frozen: true,
+      resizable: false,
+      cellClass: "database-row-number",
+      renderCell: ({ row }) => row.id + 1,
+    },
+    ...columns.map<Column<Row>>((column, index) => ({
+      key: String(index),
+      name: column.name,
+      renderHeaderCell: ({ sortDirection }) => {
+        const info = columnInfo.find((info) => info.name === column.name);
+        return (
+          <div
+            className="flex min-w-0 items-center gap-1.5"
+            aria-description={`${column.name}${column.dataType ? ` · ${column.dataType}` : ""}`}
+          >
+            {info?.primaryKey ? (
+              <KeyRoundIcon className="size-3 shrink-0 text-warning-foreground" />
+            ) : info?.references ? (
+              <LinkIcon className="size-3 shrink-0 text-primary" />
+            ) : null}
+            <span className="truncate">{column.name}</span>
+            {sortDirection && (
+              <span className="text-muted-foreground">{sortDirection === "ASC" ? "↑" : "↓"}</span>
+            )}
+            <span className="ml-auto truncate text-3xs font-normal text-muted-foreground">
+              {column.dataType}
             </span>
-          );
-        },
-      })),
-    ],
-    [columns, columnInfo, bounds, rows, onOrderBy],
-  );
+          </div>
+        );
+      },
+      resizable: true,
+      sortable: !!onOrderBy,
+      width: Math.min(
+        360,
+        Math.max(
+          120,
+          column.name.length * 8 + 50,
+          ...rows.slice(0, 30).map((row) => Math.min(text(row[index]).length, 40) * 7 + 24),
+        ),
+      ),
+      cellClass: (row) =>
+        bounds &&
+        row.id >= bounds.top &&
+        row.id <= bounds.bottom &&
+        index >= bounds.left &&
+        index <= bounds.right
+          ? "database-range-cell"
+          : undefined,
+      renderCell: ({ row }) => {
+        const cell = row.cells[index];
+        const foreignKey = columnInfo.find((info) => info.name === column.name)?.references;
+        return (
+          <span
+            className={`block truncate ${cell === null ? "italic text-muted-foreground" : ""}`}
+            onPointerEnter={() => {
+              if (dragging.current)
+                setRange((previous) =>
+                  previous ? { ...previous, end: { row: row.id, column: index } } : null,
+                );
+            }}
+            aria-label={
+              foreignKey
+                ? `References ${foreignKey.schema}.${foreignKey.object}.${foreignKey.column}`
+                : undefined
+            }
+          >
+            {foreignKey ? "↗ " : ""}
+            {text(cell)}
+            {typeof cell === "object" && cell !== null ? "…" : ""}
+          </span>
+        );
+      },
+    })),
+  ])();
   const selectedText = () =>
     bounds
       ? rows

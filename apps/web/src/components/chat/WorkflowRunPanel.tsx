@@ -1,3 +1,4 @@
+import { useEnvironmentProviders } from "../../state/environments";
 import { useAtomValue } from "@effect/atom-react";
 import { resolveSubagentMetadata } from "@t3tools/client-runtime/state/subagent-display";
 import {
@@ -9,7 +10,7 @@ import {
 import { NodeId, type ScopedThreadRef, type ServerProvider, ThreadId } from "@t3tools/contracts";
 import { formatTokens } from "@t3tools/shared/usageFormat";
 import { LoaderCircleIcon, SquareIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import ChatMarkdown from "../ChatMarkdown";
 import { orchestrationEnvironment } from "../../state/orchestration";
@@ -134,23 +135,19 @@ function PhaseSection({
 export function WorkflowRunPanel({
   parentRef,
   threadId,
-  providerStatuses,
   markdownCwd,
   onOpenThread,
 }: {
   parentRef: ScopedThreadRef;
   threadId: ThreadId;
-  providerStatuses: ReadonlyArray<ServerProvider>;
   markdownCwd: string | undefined;
   onOpenThread: (threadId: ThreadId) => void;
 }) {
+  const providerStatuses = useEnvironmentProviders().get(parentRef.environmentId) ?? [];
   const coordinator = useAtomValue(environmentThreadDetails.threadAtom(parentRef), (thread) =>
     findWorkflowCoordinator(thread?.projection.subagents, threadId),
   );
-  const group = useMemo(
-    () => (coordinator === null ? null : deriveWorkflowRun(coordinator)),
-    [coordinator],
-  );
+  const group = (() => (coordinator === null ? null : deriveWorkflowRun(coordinator)))();
   const stopWorkflow = useAtomCommand(orchestrationEnvironment.stopWorkflow);
   const canStop = useAtomValue(
     orchestrationEnvironment.stopWorkflow.permissionAtom(parentRef.environmentId),

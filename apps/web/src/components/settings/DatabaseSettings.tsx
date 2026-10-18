@@ -7,7 +7,7 @@ import {
 } from "@t3tools/client-runtime/state/database";
 import type { DatabaseConnection, EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
-import { useContext, useMemo, useState, type ReactNode } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { databaseState } from "../../state/database";
 import { useEnvironments } from "../../state/environments";
 import { DatabaseConnectionDialog } from "../database/DatabaseConnectionDialog";
@@ -17,6 +17,22 @@ import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ensureLocalApi } from "../../localApi";
+
+const connectionCopiesAtom = Atom.family((key: string) => {
+  const { contexts, globalOnly } = JSON.parse(key) as {
+    contexts: ReadonlyArray<{ environmentId: EnvironmentId; projectId?: ProjectId }>;
+    globalOnly: boolean;
+  };
+  return Atom.make((get) =>
+    contexts.flatMap(({ environmentId, projectId }) =>
+      get(
+        databaseState.connections(databaseCacheKey(environmentId, projectId ? { projectId } : {})),
+      )
+        .filter((connection) => !globalOnly || connection.level === "global")
+        .map((connection) => ({ environmentId, connection })),
+    ),
+  );
+});
 
 function ConnectionLoader({
   environmentId,
@@ -99,46 +115,24 @@ export function DatabaseSettings() {
   const { scope, targets, connectedEnvironments, target } = useSettingsScope();
   const { environments } = useEnvironments();
   const ids = connectedEnvironments.map((item) => item.environmentId);
-  const contexts = useMemo(
-    () =>
-      connectedEnvironments.map((environment) => ({
-        environmentId: environment.environmentId,
-        projectId:
-          targets.find((item) => item.environmentId === environment.environmentId)?.projectId ??
-          undefined,
-      })),
-    [connectedEnvironments, targets],
-  );
+  const contexts = (() =>
+    connectedEnvironments.map((environment) => ({
+      environmentId: environment.environmentId,
+      projectId:
+        targets.find((item) => item.environmentId === environment.environmentId)?.projectId ??
+        undefined,
+    })))();
   const copies = useAtomValue(
-    useMemo(
-      () =>
-        Atom.make((get) =>
-          contexts.flatMap(({ environmentId, projectId }) =>
-            get(
-              databaseState.connections(
-                databaseCacheKey(environmentId, projectId ? { projectId } : {}),
-              ),
-            ).map((connection) => ({ environmentId, connection })),
-          ),
-        ),
-      [contexts],
-    ),
+    connectionCopiesAtom(JSON.stringify({ contexts, globalOnly: false })),
   );
-  const globalEnvironments = useMemo(
-    () => environments.filter((item) => item.connection.phase === "connected"),
-    [environments],
-  );
+  const globalEnvironments = (() =>
+    environments.filter((item) => item.connection.phase === "connected"))();
   const globalCopies = useAtomValue(
-    useMemo(
-      () =>
-        Atom.make((get) =>
-          globalEnvironments.flatMap(({ environmentId }) =>
-            get(databaseState.connections(databaseCacheKey(environmentId, {})))
-              .filter((connection) => connection.level === "global")
-              .map((connection) => ({ environmentId, connection })),
-          ),
-        ),
-      [globalEnvironments],
+    connectionCopiesAtom(
+      JSON.stringify({
+        contexts: globalEnvironments.map(({ environmentId }) => ({ environmentId })),
+        globalOnly: true,
+      }),
     ),
   );
   const coverage = databaseGlobalCoverage(

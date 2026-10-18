@@ -168,7 +168,7 @@ credentials, and agent work stay on the remote machine.
 
 The remote host must be Linux or an Apple Silicon Mac with `curl` or `wget`,
 `tar`, `sha256sum` or `shasum`, and [provider setup](./install.md#providers).
-The first launch downloads T3 Code's server to `~/.t3/runtime` on the host, so
+The first launch downloads Kinako's server to `~/.kinako/runtime` on the host, so
 it takes longer than later ones.
 Provider CLIs must be on the `PATH` of a non-interactive login shell there;
 check with:
@@ -184,6 +184,11 @@ the connection stops a server that T3 Code launched; a server that was already
 running is left alone.
 
 The server only listens on the host's loopback address, so other devices cannot reach it until you allow it. To pair a phone or another computer with it directly, open **Clients** on the environment's row and turn on **Network access**. The server restarts on the host's network, and new pairing links offer a QR code for each of its LAN and Tailscale addresses. The setting belongs to the host, so every device connecting to it over SSH sees the same server. A server you started on the host yourself keeps its own binding.
+Each desktop app keeps one session on the host for its SSH connection and reuses
+it when it reconnects. Revoke sessions you no longer use in **Settings →
+Connections** on the host, or on a headless host with `kinako auth session list` and
+`kinako auth session revoke <id>`. A desktop that can still sign in over SSH pairs
+again on its next connect.
 
 For Antigravity's Google callback on a remote host, see
 [remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device).
@@ -266,9 +271,11 @@ npx t3 pair --scope orchestration:read --scope relay:read
 
 The selected scopes replace the default permissions. The same option works with
 `npx t3 auth pairing create` and `npx t3 auth session issue`; each command's
-`--help` lists the available scopes. Without `--scope`, pairing tokens retain
-standard client permissions and issued bearer sessions retain administrative
-permissions.
+`--help` lists the available scopes. Without `--scope`, pairing tokens and issued
+bearer sessions get every permission, including managing access and T3 Connect.
+A terminal or a full-access agent on the host can reach those as well, so a
+client that should not manage access also needs to go without `terminal:operate`
+and `orchestration:operate`.
 
 To change an existing client's permissions, create a fresh pairing link with the
 scopes it needs. In a browser opened directly on the environment, open that link
@@ -287,12 +294,13 @@ worktrees. It does not restrict what a task does. Starting a task in a new
 worktree still creates that branch and worktree with `orchestration:operate`,
 and the agent it runs can use Git however the environment allows.
 
-Settings changes, provider management, and environment maintenance can be granted
-separately from access administration. New standard pairings include these
-permissions. Existing clients can stay connected after an update, but newly separated
-features may require pairing again with the permissions they need. Older clients
-may show controls that the server denies. Create a fresh pairing link to change
-a client's permissions.
+Settings changes, provider management, environment maintenance, access
+management, and T3 Connect management can each be granted separately. New
+pairings without `--scope` include all of them. Existing clients keep the
+permissions they paired with and can stay connected after an update, but newly
+separated features may require pairing again with the permissions they need.
+Older clients may show controls that the server denies. Create a fresh pairing
+link to change a client's permissions.
 
 `filesystem:read` allows browsing host files, opening workspace files, and viewing
 local changes. Add `filesystem:write` to allow editing files or saving plans to
@@ -344,7 +352,7 @@ when SSH closes, see [background-service troubleshooting](./background-service.m
 | HTTP 408, 429, or 5xx                                     | Check network and relay availability. Startup retries temporary failures for up to ten minutes.                                             |
 
 After fixing a permanent rejection, restart the host's server. On Linux, use
-`systemctl --user restart t3code.service` for the background service. For a
+`systemctl --user restart kinako.service` for the background service. For a
 foreground server, stop it and run `t3 serve` again with your usual options.
 Include the diagnostic message and trace ID when reporting a persistent failure.
 

@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import type { EnvironmentId, IssueDetail, IssueRef, PullRequestComment } from "@t3tools/contracts";
 import { BotIcon, ExternalLinkIcon, SendIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { changeRequestRepositoryUrl } from "~/lib/openPullRequestLink";
 import { cn } from "~/lib/utils";
@@ -135,15 +135,15 @@ export function IssueDetailPanel({
   const invalidate = useAtomCommand(pullRequestEnvironment.invalidate, { reportFailure: false });
   const [invalidating, setInvalidating] = useState(false);
   const refreshDetail = query.refresh;
-  const refreshFromHost = useCallback(async () => {
+  const refreshFromHost = async () => {
     setInvalidating(true);
-    try {
+    return await (async () => {
       await invalidate({ environmentId, input: { reference } });
       refreshDetail();
-    } finally {
+    })().finally(() => {
       setInvalidating(false);
-    }
-  }, [environmentId, invalidate, reference, refreshDetail]);
+    });
+  };
   const appliedRefreshToken = useRef(refreshToken);
   useEffect(() => {
     if (appliedRefreshToken.current === refreshToken) return;
@@ -152,14 +152,11 @@ export function IssueDetailPanel({
   }, [refreshToken, refreshFromHost]);
   const hostClient = sourceControlClients.get(detail?.provider);
   const repositoryUrl = detail === null ? null : changeRequestRepositoryUrl(detail.url);
-  const markdownContext = useMemo(
-    () => ({
-      repositoryUrl:
-        repositoryUrl === null ? null : hostClient.referenceAutolinkRepositoryUrl(repositoryUrl),
-      threadRef: null,
-    }),
-    [hostClient, repositoryUrl],
-  );
+  const markdownContext = (() => ({
+    repositoryUrl:
+      repositoryUrl === null ? null : hostClient.referenceAutolinkRepositoryUrl(repositoryUrl),
+    threadRef: null,
+  }))();
 
   if (detail === null) {
     return (

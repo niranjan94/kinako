@@ -70,11 +70,11 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
   const windowTokens = breakdown?.segments.reduce((sum, segment) => sum + segment.tokens, 0) ?? 0;
   const share = (tokens: number) => (windowTokens > 0 ? (tokens / windowTokens) * 100 : 0);
   let usedIndex = 0;
-  const rows =
-    breakdown?.segments.map((segment) => ({
-      ...segment,
-      className: segmentClassName(segment.kind, segment.kind === "used" ? usedIndex++ : 0),
-    })) ?? [];
+  const rows = [];
+  for (const segment of breakdown?.segments ?? []) {
+    const className = segmentClassName(segment.kind, segment.kind === "used" ? usedIndex++ : 0);
+    rows.push({ ...segment, className });
+  }
 
   return (
     <ScrollView

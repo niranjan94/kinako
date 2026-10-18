@@ -406,6 +406,8 @@ export function layerWithRegistry<Error>(
         }),
         layerRunExecutionServiceProvided,
         layerRuntime,
+        layerServerConfig,
+        layerServerSettings,
       ),
     ),
   );
@@ -425,6 +427,8 @@ export function layerWithRegistry<Error>(
         layerProviderSessionManagerProvided,
         ThreadCommandExecutor.layer,
         layerRuntime,
+        layerServerConfig,
+        layerServerSettings,
       ),
     ),
   );

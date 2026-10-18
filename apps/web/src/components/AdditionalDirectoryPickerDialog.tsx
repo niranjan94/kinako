@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { filterFilesystemBrowseEntries } from "@t3tools/client-runtime/state/filesystem";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { FolderIcon, FolderSearchIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { useClientSettings } from "../hooks/useSettings";
 import {
@@ -61,18 +61,15 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
   const threads = useThreadShells();
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const excluded = useMemo(() => new Set(props.excludedPaths), [props.excludedPaths]);
+  const excluded = (() => new Set(props.excludedPaths))();
 
   const { onOpenChange, onSelect } = props;
-  const select = useCallback(
-    (path: string) => {
-      onOpenChange(false);
-      onSelect(path);
-    },
-    [onOpenChange, onSelect],
-  );
+  const select = (path: string) => {
+    onOpenChange(false);
+    onSelect(path);
+  };
 
-  const projectItems = useMemo<CommandPaletteActionItem[]>(() => {
+  const projectItems = ((): CommandPaletteActionItem[] => {
     const candidates = projects.filter(
       (project) =>
         project.environmentId === props.environmentId &&
@@ -99,7 +96,7 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
         icon: <ProjectFavicon project={project} className="size-4" />,
         run: async () => select(project.workspaceRoot),
       }));
-  }, [excluded, projectSortOrder, projects, props.environmentId, query, select, threads]);
+  })();
 
   const browseAccess = useFilesystemReadAccess(props.environmentId);
   const directoryPath = browsing ? getBrowseDirectoryPath(query) : "";
@@ -112,7 +109,7 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
       : null,
   );
   const browseResult = browseQuery.data;
-  const browseItems = useMemo<CommandPaletteActionItem[]>(() => {
+  const browseItems = ((): CommandPaletteActionItem[] => {
     if (!browsing || browseResult == null) return [];
     const { visibleEntries } = filterFilesystemBrowseEntries(
       browseResult.entries,
@@ -128,7 +125,7 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
       keepOpen: true,
       run: async () => setQuery(appendBrowsePathSegment(query, entry.name)),
     }));
-  }, [browseResult, browsing, query]);
+  })();
 
   const environment = environments.find(
     (candidate) => candidate.environmentId === props.environmentId,

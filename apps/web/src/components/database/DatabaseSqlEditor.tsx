@@ -22,7 +22,7 @@ import {
 import { sql, keywordCompletionSource } from "@codemirror/lang-sql";
 import { sqlDialect } from "./sqlDialect";
 import type { DatabaseEngine } from "@t3tools/contracts";
-import { useEffect, useEffectEvent, useImperativeHandle, useMemo, useRef, type Ref } from "react";
+import { useEffect, useEffectEvent, useImperativeHandle, useRef, type Ref } from "react";
 import { sqlStatementRanges, type SqlStatement } from "./sqlStatements";
 import { sqlFunctionCompletion } from "./sqlCompletion";
 
@@ -80,18 +80,15 @@ export function DatabaseSqlEditor({
   const changed = useEffectEvent(onChange);
   const run = useEffectEvent(onRun);
   const cancel = useEffectEvent(onCancel);
-  const completion = useMemo(
-    () =>
-      autocompletion({
-        override: [
-          ...(completionSource ? [completionSource] : []),
-          keywordCompletionSource(sqlDialect(engine), true),
-          sqlFunctionCompletion,
-        ],
-        maxRenderedOptions: 12,
-      }),
-    [completionSource, engine],
-  );
+  const completion = (() =>
+    autocompletion({
+      override: [
+        ...(completionSource ? [completionSource] : []),
+        keywordCompletionSource(sqlDialect(engine), true),
+        sqlFunctionCompletion,
+      ],
+      maxRenderedOptions: 12,
+    }))();
   const initial = useEffectEvent(() => ({ value, completion }));
   const suggestions = useRef(new Compartment());
   const runSelection = useEffectEvent((view: EditorView) => {

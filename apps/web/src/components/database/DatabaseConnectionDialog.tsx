@@ -104,7 +104,7 @@ export function DatabaseConnectionDialog({
   const test = async () => {
     setBusy(true);
     setMessage(null);
-    try {
+    return await (async () => {
       const result = databaseValue(
         await databaseState.testConnection.run(registry, {
           environmentId: copyTo ?? environmentId,
@@ -116,16 +116,18 @@ export function DatabaseConnectionDialog({
           ? { tone: "success", text: `Connected (${result.serverVersion})` }
           : { tone: "error", text: result.message },
       );
-    } catch (error) {
-      setMessage({ tone: "error", text: databaseErrorMessage(error) });
-    } finally {
-      setBusy(false);
-    }
+    })()
+      .catch(async (error: unknown) => {
+        setMessage({ tone: "error", text: databaseErrorMessage(error) });
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
   const save = async () => {
     setBusy(true);
     setMessage(null);
-    try {
+    return await (async () => {
       let input = draft();
       if (level === "global")
         input = databaseGlobalDraft(input, globalId, new Date().toISOString());
@@ -164,11 +166,13 @@ export function DatabaseConnectionDialog({
       if (failures.length) throw new Error(failures.join("\n"));
       if (level === "global") useDatabaseGlobalDeletes.getState().clear(globalId);
       onClose();
-    } catch (error) {
-      setMessage({ tone: "error", text: databaseErrorMessage(error) });
-    } finally {
-      setBusy(false);
-    }
+    })()
+      .catch(async (error: unknown) => {
+        setMessage({ tone: "error", text: databaseErrorMessage(error) });
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
   const loopback = engine === "postgres" && /^(localhost|127\.|\[?::1\]?$|0\.0\.0\.0$)/i.test(host);
   const canSubmit = !busy && canSave && name.trim() !== "";
