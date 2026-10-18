@@ -120,6 +120,7 @@ export function DatabaseSqlEditor({
           highlightActiveLine(),
           highlightActiveLineGutter(),
           drawSelection(),
+          EditorView.lineWrapping,
           EditorView.contentAttributes.of({
             "aria-label": "SQL query",
             "aria-description":
