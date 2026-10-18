@@ -50,6 +50,7 @@ import { databaseValue, useDatabaseConnections } from "./databaseHooks";
 import { databasePanelIntent, useDatabasePanelIntent } from "./databasePanelIntent";
 import { sqlNeedsWriteConfirmation, sqlStatements } from "./sqlStatements";
 import { createSqlSchemaCompletion } from "./sqlCompletion";
+import { persistDatabaseWorkspace } from "./databaseConsoleStorage";
 
 const owners = new Map<string, () => void>();
 useRightPanelStore.subscribe((state, previous) => {
@@ -142,14 +143,29 @@ export default function DatabasePanel({
     registry.set(workspaceAtom, { tabs: [...current.tabs, next], activeId: next.id });
   };
   const releaseOwner = useEffectEvent(() => {
-    for (const tab of registry.get(workspaceAtom).tabs) {
+    const current = registry.get(workspaceAtom);
+    for (const tab of current.tabs) {
       void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
     }
-    registry.set(workspaceAtom, { tabs: [], activeId: null });
+    // Closing the panel ends sessions, but reopening it should bring the SQL back.
+    registry.set(workspaceAtom, {
+      ...current,
+      tabs: current.tabs.map(
+        ({ sessionId: _session, queryId: _query, result: _result, error: _error, ...tab }) => ({
+          ...tab,
+          loading: false,
+          ...(tab.table ? { table: { ...tab.table, offset: 0, after: null } } : {}),
+        }),
+      ),
+    });
   });
   useEffect(() => {
     owners.set(key, () => releaseOwner());
   }, [key]);
+  useEffect(() => {
+    persistDatabaseWorkspace(key, registry.get(workspaceAtom));
+    return registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(key, next));
+  }, [key, registry, workspaceAtom]);
   const ensureSession = async (tabId: string, connection: DatabaseConnection) => {
     const existing = activeTab(tabId)?.sessionId;
     if (existing) return existing;
@@ -435,6 +451,12 @@ export default function DatabasePanel({
     databasePanelIntent.consume(threadRef);
     if (intent === "query" && selected) void newQuery(selected);
   });
+  const reloadTable = useEffectEvent((id: string) => void loadTable(id));
+  const restoredTable =
+    allowed && !loading && tab?.table && !tab.result && !tab.loading && !tab.error ? tab.id : null;
+  useEffect(() => {
+    if (restoredTable) reloadTable(restoredTable);
+  }, [restoredTable]);
   const showExplorer =
     (explorerOpen ?? (!compact || !tab)) || intent === "table" || intent === "explorer";
   const readyForQuery = selected !== undefined;

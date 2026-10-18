@@ -11,7 +11,10 @@ import { Atom } from "effect/reactivity";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { createEnvironmentRpcCommand } from "./runtime.ts";
 
-export function createDatabaseState<R, ER>(runtime: Atom.AtomRuntime<EnvironmentRegistry | R, ER>) {
+export function createDatabaseState<R, ER>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, ER>,
+  options: { restoreWorkspace?: (key: string) => DatabaseWorkspace | null } = {},
+) {
   const revision = Atom.family((_id: EnvironmentId) => Atom.make(0));
   const connections = Atom.family((_key: string) => Atom.make<readonly DatabaseConnection[]>([]));
   const completion = Atom.family((_key: string) =>
@@ -33,9 +36,11 @@ export function createDatabaseState<R, ER>(runtime: Atom.AtomRuntime<Environment
     connections,
     metadata,
     completion,
-    workspaces: Atom.family((_key: string) =>
+    workspaces: Atom.family((key: string) =>
       // Settings temporarily unmounts the panel; retain its SQL and session ownership.
-      Atom.make<DatabaseWorkspace>({ tabs: [], activeId: null }).pipe(Atom.keepAlive),
+      Atom.make<DatabaseWorkspace>(
+        options.restoreWorkspace?.(key) ?? { tabs: [], activeId: null },
+      ).pipe(Atom.keepAlive),
     ),
     listConnections: createEnvironmentRpcCommand(runtime, {
       label: "database:list",
@@ -228,6 +233,8 @@ export interface DatabaseWorkspaceTab {
   title: string;
   sql: string;
   filePath?: string;
+  /** SQL as last read from or written to `filePath`. */
+  savedSql?: string;
   sessionId?: import("@t3tools/contracts").DatabaseSessionId | undefined;
   queryId?: import("@t3tools/contracts").DatabaseQueryId | undefined;
   result?: import("@t3tools/contracts").DatabaseExecuteResult;
