@@ -17,7 +17,12 @@ export function sqlStatements(sql: string, engine: DatabaseEngine, cursor?: numb
   return statement ? [statement.text] : [];
 }
 
-export function sqlNeedsWriteConfirmation(sql: string, engine: DatabaseEngine = "postgres") {
+export type SqlWriteRisk = "unfiltered-write" | "drop";
+
+export function sqlWriteRisk(
+  sql: string,
+  engine: DatabaseEngine = "postgres",
+): SqlWriteRisk | null {
   const tokens: string[] = [];
   const dialect = sqlDialect(engine);
   dialect.language.parser.parse(sql).iterate({
@@ -29,17 +34,22 @@ export function sqlNeedsWriteConfirmation(sql: string, engine: DatabaseEngine = 
   const unfiltered = new Set<number>();
   let depth = 0;
   for (const [index, token] of tokens.entries()) {
-    if (token === ";" && unfiltered.size) return true;
+    if (token === "DROP" || token === "TRUNCATE") return "drop";
+    if (token === ";" && unfiltered.size) return "unfiltered-write";
     if (token === "(") depth++;
     else if (token === ")") {
-      if (unfiltered.has(depth)) return true;
+      if (unfiltered.has(depth)) return "unfiltered-write";
       depth--;
     } else if (
       (token === "UPDATE" || token === "DELETE") &&
-      !["FOR", "KEY", "DO"].includes(tokens[index - 1] ?? "")
+      // Row locks, upserts, foreign key actions, and trigger events name the verb without running it.
+      !["FOR", "KEY", "DO", "ON", "OF", "OR", "BEFORE", "AFTER"].includes(tokens[index - 1] ?? "")
     ) {
       unfiltered.add(depth);
     } else if (token === "WHERE") unfiltered.delete(depth);
   }
-  return unfiltered.size > 0;
+  return unfiltered.size > 0 ? "unfiltered-write" : null;
 }
+
+export const sqlNeedsWriteConfirmation = (sql: string, engine: DatabaseEngine = "postgres") =>
+  sqlWriteRisk(sql, engine) !== null;
