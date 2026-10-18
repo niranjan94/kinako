@@ -35,6 +35,7 @@ export const DatabaseGrid = memo(function DatabaseGrid({
   rows,
   columnInfo = EMPTY_COLUMN_INFO,
   hasMore,
+  expires = false,
   loading,
   onLoadMore,
   orderBy,
@@ -44,6 +45,8 @@ export const DatabaseGrid = memo(function DatabaseGrid({
   rows: readonly (readonly DatabaseCell[])[];
   columnInfo?: readonly DatabaseColumnInfo[];
   hasMore: boolean;
+  /** Unread query rows are discarded by the server after a minute idle. */
+  expires?: boolean;
   loading: boolean;
   onLoadMore: () => void;
   orderBy?: string;
@@ -262,6 +265,9 @@ export const DatabaseGrid = memo(function DatabaseGrid({
         <span role="status">
           {rows.length.toLocaleString()} rows{hasMore ? "+" : ""}
         </span>
+        {hasMore && expires && (
+          <span className="ml-2 truncate">· Unread rows expire after 60 seconds idle</span>
+        )}
         {bounds && (
           <span className="ml-2">
             {bounds.bottom - bounds.top + 1} × {bounds.right - bounds.left + 1} selected

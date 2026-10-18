@@ -46,12 +46,17 @@ import {
   Table2Icon,
   XIcon,
 } from "lucide-react";
-import { databaseValue, useDatabaseConnections } from "./databaseHooks";
+import { databaseErrorMessage, databaseValue, useDatabaseConnections } from "./databaseHooks";
 import { databasePanelIntent, useDatabasePanelIntent } from "./databasePanelIntent";
-import { sqlStatements, sqlWriteRisk } from "./sqlStatements";
+import { sqlStatementRanges, sqlWriteRisk, type SqlStatement } from "./sqlStatements";
 import { ensureLocalApi } from "../../localApi";
 import { createSqlSchemaCompletion } from "./sqlCompletion";
 import { persistDatabaseWorkspace } from "./databaseConsoleStorage";
+
+const sqlLocation = (sql: string, offset: number) => {
+  const before = sql.slice(0, offset).split("\n");
+  return `Line ${before.length}, column ${(before.at(-1)?.length ?? 0) + 1}`;
+};
 
 const owners = new Map<string, () => void>();
 useRightPanelStore.subscribe((state, previous) => {
@@ -208,7 +213,11 @@ export default function DatabasePanel({
       await ensureSession(next.id, connection);
       updateTab(next.id, { loading: false });
     } catch (error) {
-      updateTab(next.id, { loading: false, error: String(error), sessionId: undefined });
+      updateTab(next.id, {
+        loading: false,
+        error: databaseErrorMessage(error),
+        sessionId: undefined,
+      });
     }
   };
   const loadTable = async (tabId: string, more = false) => {
@@ -246,7 +255,12 @@ export default function DatabasePanel({
         loading: false,
       });
     } catch (error) {
-      updateTab(tabId, { loading: false, error: String(error) });
+      updateTab(tabId, {
+        loading: false,
+        error: databaseErrorMessage(error),
+        // Rows from the previous filter would read as the answer to the failed one.
+        ...(more ? {} : { result: undefined }),
+      });
     } finally {
       pending.current.delete(tabId);
     }
@@ -282,7 +296,7 @@ export default function DatabasePanel({
       input: { projectId, connectionId: connection.id, scope: { kind: "columns", schema, object } },
     });
   };
-  const run = async (statements: string[]) => {
+  const run = async (statements: SqlStatement[]) => {
     if (
       !tab ||
       !tabConnection ||
@@ -297,8 +311,8 @@ export default function DatabasePanel({
       ? undefined
       : statements
           .map((statement) => ({
-            statement,
-            risk: sqlWriteRisk(statement, tabConnection.target.engine),
+            statement: statement.text,
+            risk: sqlWriteRisk(statement.text, tabConnection.target.engine),
           }))
           .find((item) => item.risk !== null);
     if (risky) {
@@ -318,7 +332,7 @@ export default function DatabasePanel({
       if (!confirmed) return;
     }
     pending.current.add(tab.id);
-    updateTab(tab.id, { loading: true, error: undefined });
+    updateTab(tab.id, { loading: true, error: undefined, errorAt: undefined, progress: undefined });
     try {
       if (tab.queryId)
         databaseValue(
@@ -331,7 +345,10 @@ export default function DatabasePanel({
       for (const [index, statement] of statements.entries()) {
         if (!activeTab(tab.id)) break;
         const queryId = DatabaseQueryId.make(randomUUID());
-        updateTab(tab.id, { queryId });
+        updateTab(tab.id, {
+          queryId,
+          progress: statements.length > 1 ? { index, total: statements.length } : undefined,
+        });
         const execute = async () =>
           databaseValue(
             await databaseState.execute.run(registry, {
@@ -341,7 +358,7 @@ export default function DatabasePanel({
                 sessionId,
                 connectionId: tabConnection.id,
                 queryId,
-                sql: statement,
+                sql: statement.text,
               },
             }),
           );
@@ -372,6 +389,7 @@ export default function DatabasePanel({
         }
         updateTab(tab.id, { result });
         if (result.kind === "failed") {
+          if (result.position) updateTab(tab.id, { errorAt: statement.from + result.position - 1 });
           if (result.cancelled && tabConnection.target.engine === "sqlite")
             updateTab(tab.id, { sessionId: undefined });
           break;
@@ -386,7 +404,7 @@ export default function DatabasePanel({
       }
     } catch (error) {
       updateTab(tab.id, {
-        error: String(error),
+        error: databaseErrorMessage(error),
         ...(typeof error === "object" &&
         error !== null &&
         "failure" in error &&
@@ -452,7 +470,9 @@ export default function DatabasePanel({
         loading: false,
         ...(sessionLost ? { sessionId: undefined, queryId: undefined } : {}),
         result: { ...tab.result, hasMore: false },
-        error: cancelled ? "Query cancelled. Run again to start a new session." : String(error),
+        error: cancelled
+          ? "Query cancelled. Run again to start a new session."
+          : databaseErrorMessage(error),
       });
     } finally {
       pending.current.delete(tab.id);
@@ -553,7 +573,7 @@ export default function DatabasePanel({
       }
       setNotice(save ? `Saved ${filePath}` : `Opened ${filePath}`);
     } catch (error) {
-      setNotice(String(error));
+      setNotice(databaseErrorMessage(error));
     }
   };
 
@@ -583,7 +603,13 @@ export default function DatabasePanel({
           <Table2Icon className="size-3.5 text-muted-foreground" />
           <span className="font-medium">Result</span>
           <span className="ml-auto text-2xs text-muted-foreground" role="status">
-            {tab.loading ? "Running…" : tab.result ? `${tab.result.durationMs} ms` : "Ready"}
+            {tab.loading
+              ? tab.progress
+                ? `Running statement ${tab.progress.index + 1} of ${tab.progress.total}…`
+                : "Running…"
+              : tab.result
+                ? `${tab.result.durationMs} ms`
+                : "Ready"}
           </span>
         </div>
       )}
@@ -597,6 +623,12 @@ export default function DatabasePanel({
       )}
       {tab.result?.kind === "failed" ? (
         <div role="alert" className="overflow-auto p-4 font-mono text-xs">
+          {tab.progress && (
+            <p className="mb-2 text-muted-foreground">
+              Statement {tab.progress.index + 1} of {tab.progress.total}{" "}
+              {tab.result.cancelled ? "was cancelled" : "failed"}. Earlier statements ran.
+            </p>
+          )}
           <p
             className={
               tab.result.cancelled
@@ -611,10 +643,11 @@ export default function DatabasePanel({
               SQLite session reset. Run again to start a new session.
             </p>
           )}
-          {tab.result.code && (
+          {(tab.result.code || tab.errorAt !== undefined) && (
             <p className="mt-2 text-muted-foreground">
-              {tab.result.code}
-              {tab.result.position ? ` · position ${tab.result.position}` : ""}
+              {[tab.result.code, tab.errorAt !== undefined && sqlLocation(tab.sql, tab.errorAt)]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
           )}
         </div>
@@ -632,13 +665,20 @@ export default function DatabasePanel({
           rows={tab.result.rows}
           {...(columnMetadata?.kind === "columns" ? { columnInfo: columnMetadata.columns } : {})}
           hasMore={tab.result.hasMore}
+          expires={!tab.table}
           loading={tab.loading}
           onLoadMore={onLoadMore}
           {...(tab.table ? { orderBy: tab.table.orderBy, onOrderBy } : {})}
         />
       ) : (
         <div className="flex flex-1 items-center justify-center px-6 text-xs text-muted-foreground">
-          {tab.loading ? "Executing query…" : "Run a query to see results here."}
+          {tab.loading
+            ? tab.table
+              ? "Loading rows…"
+              : "Executing query…"
+            : tab.table
+              ? "Fix the filter and apply it again."
+              : "Run a query to see results here."}
         </div>
       )}
     </div>
@@ -668,7 +708,7 @@ export default function DatabasePanel({
             <MenuItem
               disabled={tab.loading || !tab.sql.trim()}
               onClick={() =>
-                void run(sqlStatements(tab.sql, tabConnection?.target.engine ?? "postgres"))
+                void run(sqlStatementRanges(tab.sql, tabConnection?.target.engine ?? "postgres"))
               }
             >
               Run entire script
@@ -728,6 +768,7 @@ export default function DatabasePanel({
           value={tab.sql}
           engine={tabConnection?.target.engine ?? "postgres"}
           completionSource={completion}
+          errorAt={tab.errorAt}
           onChange={(sql) => updateTab(tab.id, { sql })}
           onRun={(statements) => void run(statements)}
           onCancel={cancel}

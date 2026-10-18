@@ -24,7 +24,7 @@ import { memo, useContext, useEffect, useMemo, useState } from "react";
 import { databaseState } from "../../state/database";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
 import { DatabaseToolbarButton, DatabaseHint } from "./DatabaseToolbarButton";
-import { databaseValue } from "./databaseHooks";
+import { databaseErrorMessage, databaseValue } from "./databaseHooks";
 
 function DatabaseNode({
   environmentId,
@@ -75,7 +75,7 @@ function DatabaseNode({
         databaseValue(result);
         if (active) setError(null);
       } catch (error) {
-        if (active) setError(String(error));
+        if (active) setError(databaseErrorMessage(error));
       }
     });
     return () => {
