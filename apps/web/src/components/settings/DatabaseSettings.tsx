@@ -15,6 +15,7 @@ import { databaseValue, useDatabaseConnections } from "../database/databaseHooks
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
+import { ensureLocalApi } from "../../localApi";
 
 function ConnectionLoader({
   environmentId,
@@ -150,12 +151,16 @@ export function DatabaseSettings() {
         : "environment";
   const initialEnvironment = target?.environmentId ?? ids[0];
   const remove = async (connection: DatabaseConnection, environmentId: EnvironmentId) => {
-    if (
-      !window.confirm(
-        `Delete database connection “${connection.name}”${connection.level === "global" ? " from every reachable environment" : ""}?`,
-      )
-    )
-      return;
+    const confirmed = await ensureLocalApi().dialogs.confirm(
+      [
+        `Delete ${connection.name}?`,
+        connection.level === "global"
+          ? "The connection is removed from every reachable environment. Offline environments keep their copy until you delete it here."
+          : "Its stored password is removed too. Database contents are not affected.",
+      ].join("\n"),
+      { variant: "destructive" },
+    );
+    if (!confirmed) return;
     const destinations =
       connection.level === "global"
         ? environments

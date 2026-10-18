@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { sqlNeedsWriteConfirmation, sqlStatements } from "./sqlStatements";
+import { sqlNeedsWriteConfirmation, sqlStatements, sqlWriteRisk } from "./sqlStatements";
 
 describe("SQL editor statements", () => {
   it("keeps quoted semicolons and Postgres dollar quoted blocks intact", () => {
@@ -46,5 +46,15 @@ describe("SQL editor statements", () => {
     expect(
       sqlNeedsWriteConfirmation("UPDATE customers SET [where] = 1 WHERE id = 1", "sqlite"),
     ).toBe(false);
+  });
+  it("flags destructive DDL but not foreign key or trigger clauses", () => {
+    expect(sqlWriteRisk("DROP TABLE users")).toBe("drop");
+    expect(sqlWriteRisk("TRUNCATE users")).toBe("drop");
+    expect(sqlWriteRisk("ALTER TABLE users DROP COLUMN note", "sqlite")).toBe("drop");
+    expect(sqlWriteRisk("ALTER TABLE users ADD COLUMN note text")).toBeNull();
+    expect(
+      sqlWriteRisk("CREATE TABLE posts (author int REFERENCES users ON DELETE CASCADE)"),
+    ).toBeNull();
+    expect(sqlWriteRisk("SELECT 'DROP TABLE users'")).toBeNull();
   });
 });

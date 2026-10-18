@@ -48,7 +48,8 @@ import {
 } from "lucide-react";
 import { databaseValue, useDatabaseConnections } from "./databaseHooks";
 import { databasePanelIntent, useDatabasePanelIntent } from "./databasePanelIntent";
-import { sqlNeedsWriteConfirmation, sqlStatements } from "./sqlStatements";
+import { sqlStatements, sqlWriteRisk } from "./sqlStatements";
+import { ensureLocalApi } from "../../localApi";
 import { createSqlSchemaCompletion } from "./sqlCompletion";
 import { persistDatabaseWorkspace } from "./databaseConsoleStorage";
 
@@ -129,7 +130,11 @@ export default function DatabasePanel({
       );
     });
   }, [environmentId, projectId, tabConnection, registry, completionContext]);
-  const readFile = useAtomQueryRunner(projectEnvironment.readFile);
+  const readFile = useAtomQueryRunner(projectEnvironment.readFile, { refresh: true });
+  const probeFile = useAtomQueryRunner(projectEnvironment.readFile, {
+    refresh: true,
+    reportFailure: false,
+  });
   const updateTab = (id: string, patch: Partial<DatabaseWorkspaceTab>) => {
     const current = registry.get(workspaceAtom);
     registry.set(workspaceAtom, {
@@ -288,13 +293,30 @@ export default function DatabasePanel({
       !allowed
     )
       return;
-    if (
-      statements.some((statement) =>
-        sqlNeedsWriteConfirmation(statement, tabConnection.target.engine),
-      ) &&
-      !window.confirm("This script includes UPDATE or DELETE without WHERE. Run it?")
-    )
-      return;
+    const risky = tabConnection.readOnly
+      ? undefined
+      : statements
+          .map((statement) => ({
+            statement,
+            risk: sqlWriteRisk(statement, tabConnection.target.engine),
+          }))
+          .find((item) => item.risk !== null);
+    if (risky) {
+      const statement =
+        risky.statement.length > 300 ? `${risky.statement.slice(0, 300)}…` : risky.statement;
+      const confirmed = await ensureLocalApi().dialogs.confirm(
+        [
+          `Run this on ${tabConnection.name}?`,
+          risky.risk === "drop"
+            ? "It drops or truncates data."
+            : "It runs UPDATE or DELETE without a WHERE clause, so it changes every row.",
+          "",
+          statement,
+        ].join("\n"),
+        { variant: "destructive" },
+      );
+      if (!confirmed) return;
+    }
     pending.current.add(tab.id);
     updateTab(tab.id, { loading: true, error: undefined });
     try {
@@ -437,7 +459,17 @@ export default function DatabasePanel({
       paging.current.delete(tab.id);
     }
   };
-  const closeTab = (tab: DatabaseWorkspaceTab) => {
+  const closeTab = async (tab: DatabaseWorkspaceTab) => {
+    if (
+      !tab.table &&
+      tab.sql.trim() &&
+      tab.sql !== tab.savedSql &&
+      !(await ensureLocalApi().dialogs.confirm(
+        `Close ${tab.title}?\nIts SQL is not saved to a file and will be discarded.`,
+        { variant: "destructive" },
+      ))
+    )
+      return;
     const current = registry.get(workspaceAtom);
     const tabs = current.tabs.filter((item) => item.id !== tab.id);
     registry.set(workspaceAtom, {
@@ -478,26 +510,53 @@ export default function DatabasePanel({
   const queryFile = async (save: boolean) => {
     if (!tab) return;
     setNotice(null);
+    const confirm = (message: string) =>
+      ensureLocalApi().dialogs.confirm(message, { variant: "destructive" });
     try {
-      if (save)
+      if (save) {
+        const existing = await probeFile({
+          environmentId,
+          input: { cwd: workspaceRoot, relativePath: filePath },
+        })
+          .then((result) => databaseValue(result).contents)
+          .catch(() => null);
+        if (
+          existing !== null &&
+          existing !== tab.sql &&
+          existing !== tab.savedSql &&
+          !(await confirm(
+            `Overwrite ${filePath}?\nThe file has contents this console did not write.`,
+          ))
+        )
+          return;
         databaseValue(
           await projectEnvironment.writeFile.run(registry, {
             environmentId,
             input: { cwd: workspaceRoot, relativePath: filePath, contents: tab.sql },
           }),
         );
-      else {
+        updateTab(tab.id, { savedSql: tab.sql });
+      } else {
+        if (
+          tab.sql.trim() &&
+          tab.sql !== tab.savedSql &&
+          !(await confirm(
+            `Replace ${tab.title} with ${filePath}?\nThe console's unsaved SQL is discarded.`,
+          ))
+        )
+          return;
         const result = databaseValue(
           await readFile({ environmentId, input: { cwd: workspaceRoot, relativePath: filePath } }),
         );
         if (result.truncated) throw new Error("This SQL file is too large to open in the editor.");
-        updateTab(tab.id, { sql: result.contents });
+        updateTab(tab.id, { sql: result.contents, savedSql: result.contents });
       }
       setNotice(save ? `Saved ${filePath}` : `Opened ${filePath}`);
     } catch (error) {
       setNotice(String(error));
     }
   };
+
   const onLoadMore = useStableCallback(() => {
     void more();
   });
@@ -706,7 +765,10 @@ export default function DatabasePanel({
                 )}
                 <span className="truncate">{item.title}</span>
               </button>
-              <DatabaseToolbarButton label={`Close ${item.title}`} onClick={() => closeTab(item)}>
+              <DatabaseToolbarButton
+                label={`Close ${item.title}`}
+                onClick={() => void closeTab(item)}
+              >
                 <XIcon />
               </DatabaseToolbarButton>
             </div>
