@@ -237,9 +237,13 @@ export interface DatabaseWorkspaceTab {
   savedSql?: string;
   sessionId?: import("@t3tools/contracts").DatabaseSessionId | undefined;
   queryId?: import("@t3tools/contracts").DatabaseQueryId | undefined;
-  result?: import("@t3tools/contracts").DatabaseExecuteResult;
+  result?: import("@t3tools/contracts").DatabaseExecuteResult | undefined;
   loading: boolean;
   error?: string | undefined;
+  /** Editor offset of the engine's reported error position. */
+  errorAt?: number | undefined;
+  /** Position of the running or failed statement within a multi-statement script. */
+  progress?: { index: number; total: number } | undefined;
   table?: {
     schema: string;
     object: string;

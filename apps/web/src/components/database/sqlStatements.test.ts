@@ -1,5 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
-import { sqlNeedsWriteConfirmation, sqlStatements, sqlWriteRisk } from "./sqlStatements";
+import {
+  sqlNeedsWriteConfirmation,
+  sqlStatementRanges,
+  sqlStatements,
+  sqlWriteRisk,
+} from "./sqlStatements";
 
 describe("SQL editor statements", () => {
   it("keeps quoted semicolons and Postgres dollar quoted blocks intact", () => {
@@ -11,6 +16,13 @@ describe("SQL editor statements", () => {
     const sql = "SELECT 'a;b';\nSELECT 2;";
     expect(sqlStatements(sql, "sqlite", sql.indexOf("2"))).toEqual(["SELECT 2"]);
     expect(sqlStatements(sql, "sqlite")).toEqual(["SELECT 'a;b'", "SELECT 2"]);
+  });
+  it("reports where each statement starts so errors can point into the editor", () => {
+    const sql = "  SELECT 1;\n\n  SELECT bad FROM x;";
+    expect(sqlStatementRanges(sql, "postgres")).toEqual([
+      { text: "SELECT 1", from: 2 },
+      { text: "SELECT bad FROM x", from: sql.indexOf("SELECT bad") },
+    ]);
   });
   it("warns for unfiltered writes even when a string or comment says WHERE", () => {
     expect(sqlNeedsWriteConfirmation("UPDATE users SET note = 'WHERE' -- WHERE id = 1")).toBe(true);

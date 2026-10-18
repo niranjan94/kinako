@@ -1,7 +1,9 @@
 import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, StateEffect, StateField } from "@codemirror/state";
 import {
+  Decoration,
+  type DecorationSet,
   EditorView,
   keymap,
   lineNumbers,
@@ -21,7 +23,7 @@ import { sql, keywordCompletionSource } from "@codemirror/lang-sql";
 import { sqlDialect } from "./sqlDialect";
 import type { DatabaseEngine } from "@t3tools/contracts";
 import { useEffect, useEffectEvent, useImperativeHandle, useMemo, useRef, type Ref } from "react";
-import { sqlStatements } from "./sqlStatements";
+import { sqlStatementRanges, type SqlStatement } from "./sqlStatements";
 import { sqlFunctionCompletion } from "./sqlCompletion";
 
 const sqlHighlightStyle = HighlightStyle.define([
@@ -33,6 +35,23 @@ const sqlHighlightStyle = HighlightStyle.define([
   { tag: tags.typeName, color: "var(--info-foreground)" },
 ]);
 
+const setErrorMark = StateEffect.define<{ from: number; to: number } | null>();
+const errorMark = Decoration.mark({ class: "database-sql-error" });
+const errorMarkField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(marks, transaction) {
+    // An edit makes the server's error position meaningless.
+    let next = transaction.docChanged ? Decoration.none : marks;
+    for (const effect of transaction.effects)
+      if (effect.is(setErrorMark))
+        next = effect.value
+          ? Decoration.set([errorMark.range(effect.value.from, effect.value.to)])
+          : Decoration.none;
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 export type DatabaseSqlEditorHandle = { run: () => void };
 
 export function DatabaseSqlEditor({
@@ -40,6 +59,7 @@ export function DatabaseSqlEditor({
   value,
   engine,
   completionSource,
+  errorAt,
   onChange,
   onRun,
   onCancel,
@@ -48,8 +68,10 @@ export function DatabaseSqlEditor({
   value: string;
   engine: DatabaseEngine;
   completionSource: CompletionSource | undefined;
+  /** Document offset the engine reported for the last failure. */
+  errorAt?: number | undefined;
   onChange: (value: string) => void;
-  onRun: (statements: string[]) => void;
+  onRun: (statements: SqlStatement[]) => void;
   onCancel: () => void;
 }) {
   const parent = useRef<HTMLDivElement>(null);
@@ -76,8 +98,10 @@ export function DatabaseSqlEditor({
     const selection = view.state.selection.main;
     run(
       selection.empty
-        ? sqlStatements(view.state.doc.toString(), engine, selection.head)
-        : sqlStatements(view.state.sliceDoc(selection.from, selection.to), engine),
+        ? sqlStatementRanges(view.state.doc.toString(), engine, selection.head)
+        : sqlStatementRanges(view.state.sliceDoc(selection.from, selection.to), engine).map(
+            (statement) => ({ ...statement, from: statement.from + selection.from }),
+          ),
     );
   });
   useImperativeHandle(ref, () => ({
@@ -102,6 +126,7 @@ export function DatabaseSqlEditor({
               "Ctrl Space for SQL suggestions. Ctrl or Command Enter runs the current statement or selection.",
           }),
           history(),
+          errorMarkField,
           suggestions.current.of(initial().completion),
           syntaxHighlighting(sqlHighlightStyle),
           language.current.of(
@@ -204,6 +229,25 @@ export function DatabaseSqlEditor({
   useEffect(() => {
     editor.current?.dispatch({ effects: suggestions.current.reconfigure(completion) });
   }, [completion]);
+  useEffect(() => {
+    const view = editor.current;
+    if (!view) return;
+    if (errorAt === undefined || errorAt >= view.state.doc.length) {
+      view.dispatch({ effects: setErrorMark.of(null) });
+      return;
+    }
+    const line = view.state.doc.lineAt(errorAt);
+    const word = /^\w+/.exec(line.text.slice(errorAt - line.from))?.[0].length ?? 1;
+    view.dispatch({
+      effects: [
+        setErrorMark.of({
+          from: errorAt,
+          to: Math.max(errorAt + 1, Math.min(line.to, errorAt + word)),
+        }),
+        EditorView.scrollIntoView(errorAt, { y: "nearest" }),
+      ],
+    });
+  }, [errorAt]);
   useEffect(() => {
     const view = editor.current;
     if (view && view.state.doc.toString() !== value)

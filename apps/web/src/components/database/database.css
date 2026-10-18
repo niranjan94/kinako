@@ -37,3 +37,7 @@
   font-variant-numeric: tabular-nums;
   font-size: 10px;
 }
+[data-database-sql-editor] .database-sql-error {
+  text-decoration: wavy underline var(--destructive);
+  text-underline-offset: 3px;
+}
