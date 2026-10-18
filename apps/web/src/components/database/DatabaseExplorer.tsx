@@ -2,6 +2,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { databaseCacheKey } from "@t3tools/client-runtime/state/database";
 import type {
   DatabaseConnection,
+  DatabaseObjectType,
   DatabaseIntrospectScope,
   EnvironmentId,
   ProjectId,
@@ -11,6 +12,7 @@ import {
   ChevronRightIcon,
   Columns3Icon,
   DatabaseIcon,
+  EyeIcon,
   FileKey2Icon,
   FolderIcon,
   KeyRoundIcon,
@@ -20,7 +22,7 @@ import {
   SquareTerminalIcon,
   Table2Icon,
 } from "lucide-react";
-import { memo, useContext, useEffect, useMemo, useState } from "react";
+import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { databaseState } from "../../state/database";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
 import { DatabaseToolbarButton, DatabaseHint } from "./DatabaseToolbarButton";
@@ -32,6 +34,8 @@ function DatabaseNode({
   connection,
   scope,
   label,
+  level,
+  objectType = "table",
   filter,
   onTable,
 }: {
@@ -40,6 +44,8 @@ function DatabaseNode({
   connection: DatabaseConnection;
   scope: DatabaseIntrospectScope;
   label: string;
+  level: number;
+  objectType?: DatabaseObjectType;
   filter: string;
   onTable: (connection: DatabaseConnection, schema: string, object: string) => void;
 }) {
@@ -84,31 +90,37 @@ function DatabaseNode({
       active = false;
     };
   }, [open, metadata, environmentId, input, registry]);
-  const Icon = kind === "schemas" ? DatabaseIcon : kind === "objects" ? FolderIcon : Table2Icon;
+  const Icon =
+    kind === "schemas"
+      ? DatabaseIcon
+      : kind === "objects"
+        ? FolderIcon
+        : objectType === "table"
+          ? Table2Icon
+          : EyeIcon;
+  const description =
+    kind === "schemas"
+      ? `${connection.name} · ${connection.target.engine === "sqlite" ? "SQLite" : "PostgreSQL"}${connection.readOnly ? " · Read-only" : ""}`
+      : kind === "columns" && objectType !== "table"
+        ? `${label} · ${objectType === "view" ? "View" : "Materialized view"}`
+        : label;
   return (
-    <div className="min-w-0" role="treeitem" aria-expanded={open} aria-label={label}>
-      <DatabaseHint
-        label={
-          kind === "schemas"
-            ? `${connection.name} · ${connection.target.engine} · ${connection.level}${connection.readOnly ? " · Read-only" : ""}`
-            : label
-        }
-      >
+    <div className="min-w-0" role="none">
+      <DatabaseHint label={description}>
         <button
           data-database-tree-row
+          role="treeitem"
+          aria-expanded={open}
+          aria-level={level}
+          tabIndex={-1}
           className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs outline-none hover:bg-accent focus:bg-accent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-          aria-label={kind === "columns" ? `Table ${label}` : label}
+          aria-label={label}
           aria-description={
-            kind === "schemas"
-              ? `${connection.name} · ${connection.target.engine} · ${connection.level}${connection.readOnly ? " · Read-only" : ""}`
-              : label
+            kind === "columns" ? `${description}. Press Enter to open its rows.` : description
           }
           onClick={() => setExpanded(!open)}
           onDoubleClick={() => {
-            if (scope.kind === "columns") {
-              setExpanded(true);
-              onTable(connection, scope.schema, scope.object);
-            }
+            if (scope.kind === "columns") onTable(connection, scope.schema, scope.object);
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && scope.kind === "columns") {
@@ -119,7 +131,12 @@ function DatabaseNode({
               setExpanded(true);
             } else if (event.key === "ArrowLeft") {
               event.preventDefault();
-              setExpanded(false);
+              if (open) setExpanded(false);
+              else
+                event.currentTarget.parentElement
+                  ?.closest<HTMLElement>("[role=group]")
+                  ?.parentElement?.querySelector<HTMLElement>("[data-database-tree-row]")
+                  ?.focus();
             }
           }}
         >
@@ -152,6 +169,7 @@ function DatabaseNode({
                 {...{ environmentId, projectId, connection, onTable, filter }}
                 scope={{ kind: "objects", schema: schema.name }}
                 label={schema.name}
+                level={level + 1}
               />
             ))
           ) : metadata.kind === "objects" && scope.kind === "objects" ? (
@@ -168,15 +186,20 @@ function DatabaseNode({
                   {...{ environmentId, projectId, connection, onTable, filter }}
                   scope={{ kind: "columns", schema: scope.schema, object: object.name }}
                   label={object.name}
+                  level={level + 1}
+                  objectType={object.type}
                 />
               ))
           ) : metadata.kind === "columns" ? (
             <>
-              <div className="flex h-7 items-center gap-1.5 text-xs text-muted-foreground">
+              <div
+                className="flex h-7 items-center gap-1.5 text-xs text-muted-foreground"
+                aria-hidden
+              >
                 <Columns3Icon className="size-3.5" />
-                Columns <span className="text-3xs">{metadata.columns.length}</span>
+                Columns <span className="text-2xs">{metadata.columns.length}</span>
               </div>
-              <div className="ml-4">
+              <div className="ml-4" role="none">
                 {metadata.columns.map((column) => {
                   const ColumnIcon = column.primaryKey
                     ? KeyRoundIcon
@@ -186,7 +209,11 @@ function DatabaseNode({
                   return (
                     <div
                       key={column.name}
-                      className="flex h-6 min-w-0 items-center gap-1.5 text-xs"
+                      data-database-tree-row
+                      role="treeitem"
+                      aria-level={level + 1}
+                      tabIndex={-1}
+                      className="flex h-6 min-w-0 items-center gap-1.5 rounded-sm text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                       aria-description={`${column.name} ${column.dataType}${column.nullable ? "" : " NOT NULL"}${column.references ? ` → ${column.references.schema}.${column.references.object}.${column.references.column}` : ""}`}
                     >
                       <ColumnIcon
@@ -208,6 +235,12 @@ function DatabaseNode({
   );
 }
 
+const LEVEL_LABELS = {
+  project: "This project",
+  environment: "This environment",
+  global: "All environments",
+} as const;
+
 export const DatabaseExplorer = memo(function DatabaseExplorer({
   connections,
   environmentId,
@@ -228,17 +261,31 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
   onEdit: (connection: DatabaseConnection) => void;
 }) {
   const canEdit = useAtomValue(databaseState.saveConnection.permissionAtom(environmentId));
+  const tree = useRef<HTMLDivElement>(null);
+  // Roving tabindex: the tree is one tab stop, landing on the last focused row.
+  useEffect(() => {
+    const rows = tree.current?.querySelectorAll<HTMLElement>("[data-database-tree-row]");
+    if (rows?.length && ![...rows].some((row) => row.tabIndex === 0)) rows[0]!.tabIndex = 0;
+  });
   return (
     <div
       className="min-h-0 flex-1 overflow-auto px-1 py-2"
+      ref={tree}
       role="tree"
       aria-label="Database explorer"
+      onFocus={(event) => {
+        if (!event.target.matches("[data-database-tree-row]")) return;
+        for (const row of event.currentTarget.querySelectorAll<HTMLElement>(
+          "[data-database-tree-row]",
+        ))
+          row.tabIndex = row === event.target ? 0 : -1;
+      }}
       onKeyDown={(event) => {
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
         const items = [
-          ...event.currentTarget.querySelectorAll<HTMLButtonElement>("[data-database-tree-row]"),
+          ...event.currentTarget.querySelectorAll<HTMLElement>("[data-database-tree-row]"),
         ];
-        const index = items.indexOf(document.activeElement as HTMLButtonElement);
+        const index = items.indexOf(document.activeElement as HTMLElement);
         if (index < 0) return;
         event.preventDefault();
         const next =
@@ -257,16 +304,17 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
         const items = connections.filter((connection) => connection.level === level);
         if (!items.length) return null;
         return (
-          <section key={level} className="mb-3">
-            <h3 className="px-2 pb-1 text-3xs font-medium tracking-wider text-muted-foreground uppercase">
-              {level}
+          <section key={level} className="mb-3" role="group" aria-label={LEVEL_LABELS[level]}>
+            <h3 className="px-2 pb-1 text-2xs font-medium text-muted-foreground" aria-hidden>
+              {LEVEL_LABELS[level]}
             </h3>
             {items.map((connection) => (
-              <div key={connection.id}>
-                <div className="flex items-start">
-                  <div className="min-w-0 flex-1">
+              <div key={connection.id} role="none">
+                <div className="flex items-start" role="none">
+                  <div className="min-w-0 flex-1" role="none">
                     <DatabaseNode
                       {...{ environmentId, projectId, connection, onTable }}
+                      level={1}
                       scope={{ kind: "schemas" }}
                       filter={filter.toLowerCase()}
                       label={connection.name}

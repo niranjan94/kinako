@@ -35,7 +35,7 @@
   background: var(--muted);
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
+  font-size: 12px;
 }
 [data-database-sql-editor] .database-sql-error {
   text-decoration: wavy underline var(--destructive);
