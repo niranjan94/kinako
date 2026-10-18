@@ -47,6 +47,7 @@ const PREVIEW_FORWARDED_LAYOUT_COMMANDS = [
   "sidebar.toggle",
   "rightPanel.toggle",
   "rightPanel.toggleMaximized",
+  "database.open",
 ] as const;
 
 const isGlobalPullRequests = (ref: ScopedThreadRef) =>
