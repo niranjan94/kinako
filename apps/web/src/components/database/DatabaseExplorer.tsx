@@ -66,7 +66,9 @@ function DatabaseNode({
   );
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const open = expanded || (!!filter && kind !== "columns");
+  // Filtering searches the schemas of connections already loaded; it never opens a new connection.
+  const open =
+    expanded || (!!filter && (kind === "objects" || (kind === "schemas" && metadata !== null)));
   useEffect(() => {
     if (!open || metadata) return;
     let active = true;
@@ -211,11 +213,13 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
   environmentId,
   projectId,
   filter,
+  loading,
   onTable,
   onQuery,
   onEdit,
 }: {
   connections: readonly DatabaseConnection[];
+  loading: boolean;
   environmentId: EnvironmentId;
   projectId: ProjectId;
   filter: string;
@@ -293,7 +297,7 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
       })}
       {!connections.length && (
         <p className="px-3 py-2 text-xs text-muted-foreground">
-          Add a data source to browse its schemas and tables.
+          {loading ? "Loading connections…" : "Add a connection to browse its schemas and tables."}
         </p>
       )}
     </div>

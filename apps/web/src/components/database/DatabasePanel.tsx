@@ -14,7 +14,7 @@ import {
   type ProjectId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { useContext, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
 import { databaseState } from "../../state/database";
 import { projectEnvironment } from "../../state/projects";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
@@ -28,11 +28,15 @@ import { DatabaseExplorer } from "./DatabaseExplorer";
 import { DatabaseGrid } from "./DatabaseGrid";
 import { DatabaseSqlEditor, type DatabaseSqlEditorHandle } from "./DatabaseSqlEditor";
 import { DatabaseSplit } from "./DatabaseSplit";
-import { DatabaseToolbarButton } from "./DatabaseToolbarButton";
-import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "../ui/menu";
+import { DatabaseHint, DatabaseToolbarButton } from "./DatabaseToolbarButton";
+import { Kbd } from "../ui/kbd";
+import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuShortcut } from "../ui/menu";
+import { Spinner } from "../ui/spinner";
+import { formatShortcutLabel } from "../../keybindings";
 import {
   ChevronDownIcon,
   DatabaseIcon,
+  FileCodeIcon,
   FolderOpenIcon,
   PanelRightIcon,
   PlayIcon,
@@ -40,7 +44,6 @@ import {
   RefreshCwIcon,
   SaveIcon,
   SearchIcon,
-  Settings2Icon,
   SquareIcon,
   SquareTerminalIcon,
   Table2Icon,
@@ -52,6 +55,23 @@ import { sqlStatementRanges, sqlWriteRisk, type SqlStatement } from "./sqlStatem
 import { ensureLocalApi } from "../../localApi";
 import { createSqlSchemaCompletion } from "./sqlCompletion";
 import { persistDatabaseWorkspace } from "./databaseConsoleStorage";
+
+const shortcut = (shiftKey: boolean) =>
+  formatShortcutLabel({
+    key: "enter",
+    modKey: true,
+    shiftKey,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+  });
+const RUN_SHORTCUT = shortcut(false);
+const RUN_ALL_SHORTCUT = shortcut(true);
+
+const exportName = (tab: DatabaseWorkspaceTab) =>
+  (tab.table ? `${tab.table.schema}.${tab.table.object}` : tab.title)
+    .replace(/[^\w.-]+/g, "-")
+    .toLowerCase();
 
 const sqlLocation = (sql: string, offset: number) => {
   const before = sql.slice(0, offset).split("\n");
@@ -89,7 +109,6 @@ export default function DatabasePanel({
   const { connections, error, loading, allowed } = useDatabaseConnections(environmentId, projectId);
   const canSave = useAtomValue(databaseState.saveConnection.permissionAtom(environmentId));
   const [editing, setEditing] = useState<DatabaseConnection | "new" | null>(null);
-  const [selectedConnection, setSelectedConnection] = useState<string>("");
   const [explorerOpen, setExplorerOpen] = useState<boolean | null>(null);
   const [compact, setCompact] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
@@ -107,11 +126,11 @@ export default function DatabasePanel({
   const pending = useRef(new Set<string>());
   const paging = useRef(new Set<string>());
   const tab = workspace.tabs.find((tab) => tab.id === workspace.activeId);
-  const selected =
-    connections.find((item) => item.id === selectedConnection) ??
-    connections.find((item) => item.id === tab?.connectionId) ??
-    connections[0];
   const tabConnection = connections.find((item) => item.id === tab?.connectionId);
+  const selected = tabConnection ?? connections[0];
+  const findTable = useRef<HTMLInputElement>(null);
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
+  const panelId = useId();
   const revision = useAtomValue(databaseState.revision(environmentId));
   // Statements can change search_path; their outcomes invalidate the completion source's cache.
   const completionContext = useMemo(
@@ -266,7 +285,6 @@ export default function DatabasePanel({
     }
   };
   const openTable = (connection: DatabaseConnection, schema: string, object: string) => {
-    setSelectedConnection(connection.id);
     const existing = registry
       .get(workspaceAtom)
       .tabs.find(
@@ -588,31 +606,39 @@ export default function DatabasePanel({
     );
   };
   const onNewQuery = useStableCallback((connection: DatabaseConnection) => {
-    setSelectedConnection(connection.id);
     void newQuery(connection);
   });
+  const switchConnection = (connection: DatabaseConnection) => {
+    if (!tab || tab.table || tab.loading || tab.connectionId === connection.id) return;
+    void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
+    updateTab(tab.id, {
+      connectionId: connection.id,
+      sessionId: undefined,
+      queryId: undefined,
+      result: undefined,
+      error: undefined,
+      errorAt: undefined,
+      progress: undefined,
+    });
+  };
+  const activate = (id: string) => {
+    registry.set(workspaceAtom, { ...registry.get(workspaceAtom), activeId: id });
+  };
+  useEffect(() => {
+    if (intent === "table") findTable.current?.focus();
+  }, [intent]);
   const onOrderBy = useStableCallback((orderBy: string) => {
     if (!tab?.table || tab.loading) return;
     updateTab(tab.id, { table: { ...tab.table, orderBy } });
     void loadTable(tab.id);
   });
+  const status = tab?.loading
+    ? tab.progress
+      ? `Running ${tab.progress.index + 1} of ${tab.progress.total}`
+      : "Running"
+    : null;
   const result = tab && (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {!tab.table && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-b bg-muted/30 px-3 text-xs">
-          <Table2Icon className="size-3.5 text-muted-foreground" />
-          <span className="font-medium">Result</span>
-          <span className="ml-auto text-2xs text-muted-foreground" role="status">
-            {tab.loading
-              ? tab.progress
-                ? `Running statement ${tab.progress.index + 1} of ${tab.progress.total}…`
-                : "Running…"
-              : tab.result
-                ? `${tab.result.durationMs} ms`
-                : "Ready"}
-          </span>
-        </div>
-      )}
       {tab.error && (
         <p
           role="alert"
@@ -652,11 +678,14 @@ export default function DatabasePanel({
           )}
         </div>
       ) : tab.result?.kind === "command" ? (
-        <div className="p-4 font-mono text-xs">
+        <div className="p-4 font-mono text-xs" role="status">
           <p>{tab.result.command} completed</p>
-          {tab.result.affectedRows !== null && (
-            <p className="mt-1 text-muted-foreground">{tab.result.affectedRows} affected rows</p>
-          )}
+          <p className="mt-1 text-muted-foreground">
+            {tab.result.affectedRows !== null
+              ? `${tab.result.affectedRows.toLocaleString()} ${tab.result.affectedRows === 1 ? "row" : "rows"} affected · `
+              : ""}
+            {tab.result.durationMs} ms
+          </p>
         </div>
       ) : tab.result?.kind === "rows" ? (
         <DatabaseGrid
@@ -666,12 +695,15 @@ export default function DatabasePanel({
           {...(columnMetadata?.kind === "columns" ? { columnInfo: columnMetadata.columns } : {})}
           hasMore={tab.result.hasMore}
           expires={!tab.table}
+          {...(tab.table ? {} : { durationMs: tab.result.durationMs })}
+          exportName={exportName(tab)}
           loading={tab.loading}
           onLoadMore={onLoadMore}
           {...(tab.table ? { orderBy: tab.table.orderBy, onOrderBy } : {})}
         />
       ) : (
-        <div className="flex flex-1 items-center justify-center px-6 text-xs text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center gap-2 px-6 text-xs text-muted-foreground">
+          {tab.loading && <Spinner size="sm" tone="muted" />}
           {tab.loading
             ? tab.table
               ? "Loading rows…"
@@ -695,10 +727,11 @@ export default function DatabasePanel({
           variant="ghost"
           disabled={tab.loading || !tab.sql.trim()}
           onClick={() => sqlEditor.current?.run()}
-          aria-description="Run statement or selection (Ctrl/⌘ Enter)"
+          aria-keyshortcuts="Control+Enter Meta+Enter"
         >
-          <PlayIcon className="text-success" />
-          Run
+          {tab.loading ? <Spinner /> : <PlayIcon className="text-success" />}
+          {status ?? "Run"}
+          {!tab.loading && <Kbd>{RUN_SHORTCUT}</Kbd>}
         </Button>
         <Menu>
           <MenuTrigger render={<Button size="icon-xs" variant="ghost" aria-label="Run options" />}>
@@ -712,6 +745,7 @@ export default function DatabasePanel({
               }
             >
               Run entire script
+              <MenuShortcut>{RUN_ALL_SHORTCUT}</MenuShortcut>
             </MenuItem>
           </MenuPopup>
         </Menu>
@@ -724,20 +758,45 @@ export default function DatabasePanel({
         </DatabaseToolbarButton>
         <span className="mx-1 h-4 border-l" />
         <DatabaseToolbarButton
-          label="SQL files"
+          label={filesOpen ? "Hide SQL file" : "Open or save a SQL file"}
           onClick={() => setFilesOpen(!filesOpen)}
           aria-pressed={filesOpen}
         >
-          <FolderOpenIcon />
+          <FileCodeIcon />
         </DatabaseToolbarButton>
-        <span
-          className="ml-auto truncate text-2xs text-muted-foreground"
-          aria-description={tabConnection?.name}
-        >
-          {tabConnection?.target.engine === "sqlite" ? "SQLite" : "PostgreSQL"} ·{" "}
-          {tabConnection?.name}
-          {tabConnection?.readOnly ? " · Read-only" : ""}
-        </span>
+        <Menu>
+          <MenuTrigger
+            disabled={tab.loading}
+            render={
+              <Button
+                size="xs"
+                variant="ghost"
+                className="ml-auto min-w-0"
+                aria-label={`Connection: ${tabConnection?.name ?? "unavailable"}. Change connection`}
+              />
+            }
+          >
+            <DatabaseIcon />
+            <span className="truncate">
+              {tabConnection
+                ? `${tabConnection.name}${tabConnection.readOnly ? " · Read-only" : ""}`
+                : "Connection unavailable"}
+            </span>
+            <ChevronDownIcon />
+          </MenuTrigger>
+          <MenuPopup align="end">
+            {connections.map((connection) => (
+              <MenuItem key={connection.id} onClick={() => switchConnection(connection)}>
+                <DatabaseIcon />
+                {connection.name}
+                <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                  {connection.target.engine === "sqlite" ? "SQLite" : "PostgreSQL"}
+                  {connection.readOnly ? " · Read-only" : ""}
+                </span>
+              </MenuItem>
+            ))}
+          </MenuPopup>
+        </Menu>
       </div>
       {filesOpen && (
         <div className="flex shrink-0 items-center gap-1 border-b bg-muted/20 p-1.5">
@@ -745,7 +804,7 @@ export default function DatabasePanel({
             <Input
               size="compact"
               font="mono"
-              aria-label="Query file path"
+              aria-label="SQL file path, relative to the project"
               value={filePath}
               onChange={(event) => updateTab(tab.id, { filePath: event.target.value })}
               onKeyDown={(event) => {
@@ -753,10 +812,13 @@ export default function DatabasePanel({
               }}
             />
           </div>
-          <DatabaseToolbarButton label="Open SQL" onClick={() => void queryFile(false)}>
+          <DatabaseToolbarButton
+            label="Open file into this console"
+            onClick={() => void queryFile(false)}
+          >
             <FolderOpenIcon />
           </DatabaseToolbarButton>
-          <DatabaseToolbarButton label="Save SQL" onClick={() => void queryFile(true)}>
+          <DatabaseToolbarButton label="Save console to file" onClick={() => void queryFile(true)}>
             <SaveIcon />
           </DatabaseToolbarButton>
         </div>
@@ -776,214 +838,107 @@ export default function DatabasePanel({
       </div>
     </div>
   );
-  const content = (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {workspace.tabs.length > 0 && (
-        <div
-          className="relative flex h-8 shrink-0 overflow-x-auto bg-muted/20 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border"
-          role="tablist"
-          aria-label="Database tabs"
-        >
-          {workspace.tabs.map((item) => (
-            <div
-              key={item.id}
-              className={`group relative flex shrink-0 items-center border-r pl-2 pr-1 ${item.id === workspace.activeId ? "bg-background after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary" : "text-muted-foreground"}`}
-            >
-              <button
-                role="tab"
-                aria-selected={item.id === workspace.activeId}
-                aria-description={`${item.title} · ${connections.find((connection) => connection.id === item.connectionId)?.name ?? ""}`}
-                className="flex h-full max-w-48 items-center gap-1.5 px-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                onClick={() => {
-                  setSelectedConnection(item.connectionId);
-                  registry.set(workspaceAtom, { ...workspace, activeId: item.id });
-                }}
-              >
-                {item.table ? (
-                  <Table2Icon className="size-3.5 shrink-0" />
-                ) : (
-                  <SquareTerminalIcon className="size-3.5 shrink-0" />
-                )}
-                <span className="truncate">{item.title}</span>
-              </button>
-              <DatabaseToolbarButton
-                label={`Close ${item.title}`}
-                onClick={() => void closeTab(item)}
-              >
-                <XIcon />
-              </DatabaseToolbarButton>
-            </div>
-          ))}
-        </div>
-      )}
-      {!tab ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-          <DatabaseIcon className="size-8 text-muted-foreground/40" />
-          <div>
-            <h3 className="text-sm font-medium">Database workspace</h3>
-            <p className="mt-1 max-w-64 text-xs leading-relaxed text-muted-foreground">
-              Double-click a table to view data, or open a console to write SQL.
-            </p>
-          </div>
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={!selected || !allowed}
-            onClick={() => selected && void newQuery(selected)}
-          >
-            <SquareTerminalIcon />
-            New query console
-          </Button>
-        </div>
-      ) : tab.table ? (
-        <>
-          <div
-            className="flex h-8 shrink-0 items-center gap-1 border-b px-2"
-            role="toolbar"
-            aria-label="Table actions"
-          >
-            <DatabaseToolbarButton
-              label="Refresh table"
-              disabled={tab.loading}
-              onClick={() => void loadTable(tab.id)}
-            >
-              <RefreshCwIcon />
-            </DatabaseToolbarButton>
-            <span className="truncate text-2xs text-muted-foreground">
-              {tabConnection?.name} / {tab.table.schema}
-            </span>
-          </div>
-          <form
-            className="flex shrink-0 items-center gap-1 border-b px-2 py-1"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void loadTable(tab.id);
-            }}
-          >
-            <div className="min-w-0 flex-1">
-              <Input
-                size="compact"
-                unstyled
-                font="mono"
-                aria-label="WHERE filter"
-                placeholder="WHERE condition"
-                value={tab.table.where}
-                onChange={(event) =>
-                  updateTab(tab.id, { table: { ...tab.table!, where: event.target.value } })
-                }
-              />
-            </div>
-            <div className="min-w-0 flex-1 border-l">
-              <Input
-                size="compact"
-                unstyled
-                font="mono"
-                aria-label="ORDER BY"
-                placeholder="ORDER BY column"
-                value={tab.table.orderBy}
-                onChange={(event) =>
-                  updateTab(tab.id, { table: { ...tab.table!, orderBy: event.target.value } })
-                }
-              />
-            </div>
-            <DatabaseToolbarButton label="Apply filter" type="submit" disabled={tab.loading}>
-              <PlayIcon />
-            </DatabaseToolbarButton>
-          </form>
-          {result}
-        </>
-      ) : (
-        <DatabaseSplit
-          key={tab.id}
-          direction="vertical"
-          label="Resize SQL editor and results"
-          first={editor}
-          second={result}
-          initial={52}
-        />
-      )}
-      {notice && (
-        <p role="status" className="shrink-0 border-t px-3 py-1 text-xs text-muted-foreground">
-          {notice}
-        </p>
-      )}
-    </div>
-  );
-  const explorer = (
-    <aside className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted/15" aria-label="Data sources">
-      <div className="flex h-8 shrink-0 items-center gap-1 border-b px-2">
-        <span className="mr-auto text-xs font-medium">Database</span>
-        <DatabaseToolbarButton
-          label="New database connection"
-          disabled={!canSave}
-          onClick={() => setEditing("new")}
+  const focusTab = (id: string | undefined) => {
+    if (!id) return;
+    activate(id);
+    tabRefs.current.get(id)?.focus();
+  };
+  const newConsole =
+    connections.length > 1 ? (
+      <Menu>
+        <MenuTrigger
+          disabled={!allowed}
+          render={<DatabaseToolbarButton label="New query console" />}
         >
           <PlusIcon />
-        </DatabaseToolbarButton>
-        <DatabaseToolbarButton label="Refresh schema" onClick={refresh}>
-          <RefreshCwIcon />
-        </DatabaseToolbarButton>
-      </div>
-      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1">
-        <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <Input
-          size="compact"
-          unstyled
-          aria-label="Find database table"
-          placeholder="Find table…"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-        />
-      </div>
-      <DatabaseExplorer
-        {...{ connections, environmentId, projectId, filter }}
-        onTable={onOpenTable}
-        onQuery={onNewQuery}
-        onEdit={setEditing}
-      />
-    </aside>
-  );
-  return (
-    <div ref={panel} className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-8 shrink-0 items-center gap-1 border-b bg-muted/20 px-2">
-        <Menu>
-          <MenuTrigger
-            render={<Button size="xs" variant="ghost" aria-label="Select data source" />}
-          >
-            <DatabaseIcon />
-            <span className="max-w-48 truncate">{selected?.name ?? "Data source"}</span>
-            <ChevronDownIcon />
-          </MenuTrigger>
-          <MenuPopup align="start">
-            {connections.map((connection) => (
-              <MenuItem key={connection.id} onClick={() => setSelectedConnection(connection.id)}>
-                <DatabaseIcon />
-                {connection.name}
-                <span className="ml-auto text-xs text-muted-foreground">{connection.level}</span>
-              </MenuItem>
-            ))}
-            <MenuSeparator />
-            <MenuItem disabled={!canSave} onClick={() => setEditing("new")}>
-              <PlusIcon />
-              New data source
+        </MenuTrigger>
+        <MenuPopup align="end">
+          {connections.map((connection) => (
+            <MenuItem key={connection.id} onClick={() => void newQuery(connection)}>
+              <SquareTerminalIcon />
+              {connection.name}
             </MenuItem>
-          </MenuPopup>
-        </Menu>
-        <DatabaseToolbarButton
-          label="New query console"
-          disabled={!selected || !allowed}
-          onClick={() => selected && void newQuery(selected)}
+          ))}
+        </MenuPopup>
+      </Menu>
+    ) : (
+      <DatabaseToolbarButton
+        label="New query console"
+        disabled={!selected || !allowed}
+        onClick={() => selected && void newQuery(selected)}
+      >
+        <PlusIcon />
+      </DatabaseToolbarButton>
+    );
+  const content = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="relative flex h-8 shrink-0 bg-muted/20 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border">
+        <div
+          className="flex min-w-0 flex-1 overflow-x-auto"
+          role="tablist"
+          aria-label="Database tabs"
+          onKeyDown={(event) => {
+            const index = workspace.tabs.findIndex((item) => item.id === workspace.activeId);
+            const next =
+              event.key === "ArrowRight"
+                ? workspace.tabs[(index + 1) % workspace.tabs.length]
+                : event.key === "ArrowLeft"
+                  ? workspace.tabs.at(index - 1)
+                  : event.key === "Home"
+                    ? workspace.tabs[0]
+                    : event.key === "End"
+                      ? workspace.tabs.at(-1)
+                      : undefined;
+            if (!next) return;
+            event.preventDefault();
+            focusTab(next.id);
+          }}
         >
-          <SquareTerminalIcon />
-        </DatabaseToolbarButton>
-        <DatabaseToolbarButton
-          label="Connection properties"
-          disabled={!selected || !canSave}
-          onClick={() => selected && setEditing(selected)}
-        >
-          <Settings2Icon />
-        </DatabaseToolbarButton>
-        <div className="ml-auto">
+          {workspace.tabs.map((item) => {
+            const active = item.id === workspace.activeId;
+            const connection = connections.find((entry) => entry.id === item.connectionId);
+            return (
+              <div
+                key={item.id}
+                className={`group relative flex shrink-0 items-center border-r pl-2 pr-1 ${active ? "bg-background after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary" : "text-muted-foreground"}`}
+              >
+                <DatabaseHint
+                  label={`${item.title}${connection ? ` · ${connection.name}` : ""}${!item.table && item.sql.trim() && item.sql !== item.savedSql ? " · Not saved to a file" : ""}`}
+                >
+                  <button
+                    ref={(element) => {
+                      if (element) tabRefs.current.set(item.id, element);
+                      else tabRefs.current.delete(item.id);
+                    }}
+                    id={`${panelId}-tab-${item.id}`}
+                    role="tab"
+                    aria-selected={active}
+                    aria-controls={`${panelId}-panel`}
+                    tabIndex={active ? 0 : -1}
+                    className="flex h-full max-w-48 items-center gap-1.5 px-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                    onClick={() => activate(item.id)}
+                  >
+                    {item.table ? (
+                      <Table2Icon className="size-3.5 shrink-0" />
+                    ) : (
+                      <SquareTerminalIcon className="size-3.5 shrink-0" />
+                    )}
+                    <span className="truncate">{item.title}</span>
+                  </button>
+                </DatabaseHint>
+                <DatabaseToolbarButton
+                  label={`Close ${item.title}`}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => void closeTab(item)}
+                >
+                  <XIcon />
+                </DatabaseToolbarButton>
+              </div>
+            );
+          })}
+        </div>
+        <div className="relative flex shrink-0 items-center gap-0.5 px-1">
+          {newConsole}
           <DatabaseToolbarButton
             label={showExplorer ? "Hide database explorer" : "Show database explorer"}
             aria-pressed={showExplorer}
@@ -996,13 +951,172 @@ export default function DatabasePanel({
           </DatabaseToolbarButton>
         </div>
       </div>
+      {!tab ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
+          <DatabaseIcon className="size-8 text-muted-foreground/40" />
+          <div>
+            <h3 className="text-sm font-medium">Databases</h3>
+            <p className="mt-1 max-w-64 text-xs leading-relaxed text-muted-foreground">
+              {loading
+                ? "Loading connections…"
+                : connections.length
+                  ? "Double-click a table to view its rows, or open a console to write SQL."
+                  : "Add a connection to a PostgreSQL or SQLite database to browse it here."}
+            </p>
+          </div>
+          {!loading &&
+            (connections.length ? (
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={!selected || !allowed}
+                onClick={() => selected && void newQuery(selected)}
+              >
+                <SquareTerminalIcon />
+                New query console
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={!canSave}
+                onClick={() => setEditing("new")}
+              >
+                <PlusIcon />
+                New connection
+              </Button>
+            ))}
+        </div>
+      ) : (
+        <div
+          id={`${panelId}-panel`}
+          role="tabpanel"
+          aria-labelledby={`${panelId}-tab-${tab.id}`}
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          {tab.table ? (
+            <>
+              <form
+                className="flex h-8 shrink-0 items-center gap-1 border-b px-1"
+                aria-label={`Filter ${tab.title}`}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void loadTable(tab.id);
+                }}
+              >
+                <DatabaseToolbarButton
+                  type="button"
+                  label="Reload rows"
+                  disabled={tab.loading}
+                  onClick={() => void loadTable(tab.id)}
+                >
+                  <RefreshCwIcon />
+                </DatabaseToolbarButton>
+                <div className="min-w-0 flex-1">
+                  <Input
+                    size="compact"
+                    unstyled
+                    font="mono"
+                    aria-label="WHERE condition"
+                    placeholder="WHERE condition"
+                    value={tab.table.where}
+                    onChange={(event) =>
+                      updateTab(tab.id, { table: { ...tab.table!, where: event.target.value } })
+                    }
+                  />
+                </div>
+                <div className="min-w-0 flex-1 border-l">
+                  <Input
+                    size="compact"
+                    unstyled
+                    font="mono"
+                    aria-label="ORDER BY"
+                    placeholder="ORDER BY column"
+                    value={tab.table.orderBy}
+                    onChange={(event) =>
+                      updateTab(tab.id, { table: { ...tab.table!, orderBy: event.target.value } })
+                    }
+                  />
+                </div>
+                <DatabaseToolbarButton
+                  label="Apply filter (Enter)"
+                  type="submit"
+                  disabled={tab.loading}
+                >
+                  <PlayIcon />
+                </DatabaseToolbarButton>
+              </form>
+              {result}
+            </>
+          ) : (
+            <DatabaseSplit
+              key={tab.id}
+              direction="vertical"
+              label="Resize SQL editor and results"
+              first={editor}
+              second={result}
+              initial={52}
+            />
+          )}
+        </div>
+      )}
+      {notice && (
+        <p role="status" className="shrink-0 border-t px-3 py-1 text-xs text-muted-foreground">
+          {notice}
+        </p>
+      )}
+    </div>
+  );
+  const explorer = (
+    <aside className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted/15" aria-label="Connections">
+      <div className="flex h-8 shrink-0 items-center gap-1 border-b px-2">
+        <h2 className="mr-auto text-xs font-medium">Connections</h2>
+        <DatabaseToolbarButton
+          label="New connection"
+          disabled={!canSave}
+          onClick={() => setEditing("new")}
+        >
+          <PlusIcon />
+        </DatabaseToolbarButton>
+        <DatabaseToolbarButton label="Refresh schemas" onClick={refresh}>
+          <RefreshCwIcon />
+        </DatabaseToolbarButton>
+      </div>
+      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1">
+        <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        <Input
+          ref={findTable}
+          size="compact"
+          unstyled
+          aria-label="Find table in loaded connections"
+          placeholder="Find table…"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && filter) {
+              event.stopPropagation();
+              setFilter("");
+            }
+          }}
+        />
+      </div>
+      <DatabaseExplorer
+        {...{ connections, environmentId, projectId, filter, loading }}
+        onTable={onOpenTable}
+        onQuery={onNewQuery}
+        onEdit={setEditing}
+      />
+    </aside>
+  );
+  return (
+    <div ref={panel} className="flex h-full min-h-0 flex-col bg-background">
       {!allowed ? (
         <p className="p-3 text-sm">Database access requires terminal permission.</p>
       ) : (
         <>
-          {(error || loading) && (
-            <p role="status" className="p-2 text-xs">
-              {error ?? "Loading connections…"}
+          {error && (
+            <p role="alert" className="border-b p-2 text-xs text-destructive-foreground">
+              {error}
             </p>
           )}
           <DatabaseSplit

@@ -123,7 +123,7 @@ export function DatabaseSqlEditor({
           EditorView.contentAttributes.of({
             "aria-label": "SQL query",
             "aria-description":
-              "Ctrl Space for SQL suggestions. Ctrl or Command Enter runs the current statement or selection.",
+              "Ctrl Space for SQL suggestions. Ctrl or Command Enter runs the current statement or selection; add Shift to run the whole script.",
           }),
           history(),
           errorMarkField,
@@ -140,6 +140,13 @@ export function DatabaseSqlEditor({
               key: "Mod-Enter",
               run: (view) => {
                 runSelection(view);
+                return true;
+              },
+            },
+            {
+              key: "Shift-Mod-Enter",
+              run: (view) => {
+                run(sqlStatementRanges(view.state.doc.toString(), engine));
                 return true;
               },
             },
