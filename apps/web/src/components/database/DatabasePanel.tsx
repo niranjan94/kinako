@@ -16,6 +16,8 @@ import {
 } from "@t3tools/contracts";
 import { useContext, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
 import { databaseState } from "../../state/database";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { AsyncResult } from "effect/reactivity";
 import { projectEnvironment } from "../../state/projects";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useRightPanelStore } from "../../rightPanelStore";
@@ -73,18 +75,35 @@ const exportName = (tab: DatabaseWorkspaceTab) =>
     .replace(/[^\w.-]+/g, "-")
     .toLowerCase();
 
+// A missing file fails while resolving its real path; any other failure leaves existence unknown.
+const isMissingFile = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  "failure" in error &&
+  error.failure === "operation_failed" &&
+  "operation" in error &&
+  error.operation === "realpath-target";
+
 const sqlLocation = (sql: string, offset: number) => {
   const before = sql.slice(0, offset).split("\n");
   return `Line ${before.length}, column ${(before.at(-1)?.length ?? 0) + 1}`;
 };
 
 const owners = new Map<string, () => void>();
+// Closing the panel keeps tabs, so in-flight work checks this token instead of tab existence.
+const ownership = new Map<string, object>();
+const ownershipToken = (key: string) => {
+  const token = ownership.get(key) ?? {};
+  ownership.set(key, token);
+  return token;
+};
 useRightPanelStore.subscribe((state, previous) => {
   for (const [key, release] of owners) {
     if (
       previous.byThreadKey[key]?.surfaces.some((surface) => surface.kind === "database") &&
       !state.byThreadKey[key]?.surfaces.some((surface) => surface.kind === "database")
     ) {
+      ownership.delete(key);
       release();
       owners.delete(key);
     }
@@ -167,6 +186,8 @@ export default function DatabasePanel({
     });
   };
   const activeTab = (id: string) => registry.get(workspaceAtom).tabs.find((item) => item.id === id);
+  const isLive = (token: object, id: string) =>
+    ownership.get(key) === token && activeTab(id) !== undefined;
   const addTab = (next: DatabaseWorkspaceTab) => {
     const current = registry.get(workspaceAtom);
     registry.set(workspaceAtom, { tabs: [...current.tabs, next], activeId: next.id });
@@ -195,7 +216,11 @@ export default function DatabasePanel({
     persistDatabaseWorkspace(key, registry.get(workspaceAtom));
     return registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(key, next));
   }, [key, registry, workspaceAtom]);
-  const ensureSession = async (tabId: string, connection: DatabaseConnection) => {
+  const ensureSession = async (
+    tabId: string,
+    connection: DatabaseConnection,
+    token = ownershipToken(key),
+  ) => {
     const existing = activeTab(tabId)?.sessionId;
     if (existing) return existing;
     const sessionId = DatabaseSessionId.make(randomUUID());
@@ -206,7 +231,7 @@ export default function DatabasePanel({
         input: { projectId, connectionId: connection.id, sessionId },
       }),
     );
-    if (!activeTab(tabId)) {
+    if (!isLive(token, tabId)) {
       await releaseDatabaseResources(
         databaseState,
         registry,
@@ -325,6 +350,7 @@ export default function DatabasePanel({
       !allowed
     )
       return;
+    const token = ownershipToken(key);
     const risky = tabConnection.readOnly
       ? undefined
       : statements
@@ -347,7 +373,7 @@ export default function DatabasePanel({
         ].join("\n"),
         { variant: "destructive" },
       );
-      if (!confirmed) return;
+      if (!confirmed || !isLive(token, tab.id)) return;
     }
     pending.current.add(tab.id);
     updateTab(tab.id, { loading: true, error: undefined, errorAt: undefined, progress: undefined });
@@ -359,9 +385,10 @@ export default function DatabasePanel({
             input: { projectId, queryId: tab.queryId },
           }),
         );
-      let sessionId = await ensureSession(tab.id, tabConnection);
+      if (!isLive(token, tab.id)) return;
+      let sessionId = await ensureSession(tab.id, tabConnection, token);
       for (const [index, statement] of statements.entries()) {
-        if (!activeTab(tab.id)) break;
+        if (!isLive(token, tab.id)) break;
         const queryId = DatabaseQueryId.make(randomUUID());
         updateTab(tab.id, {
           queryId,
@@ -393,10 +420,10 @@ export default function DatabasePanel({
             throw error;
           // Expiry or connection edits can close an idle session before the client knows.
           updateTab(tab.id, { sessionId: undefined });
-          sessionId = await ensureSession(tab.id, tabConnection);
+          sessionId = await ensureSession(tab.id, tabConnection, token);
           result = await execute();
         }
-        if (!activeTab(tab.id)) {
+        if (!isLive(token, tab.id)) {
           void releaseDatabaseResources(
             databaseState,
             registry,
@@ -421,6 +448,7 @@ export default function DatabasePanel({
           );
       }
     } catch (error) {
+      if (!isLive(token, tab.id)) return;
       updateTab(tab.id, {
         error: databaseErrorMessage(error),
         ...(typeof error === "object" &&
@@ -552,21 +580,29 @@ export default function DatabasePanel({
       ensureLocalApi().dialogs.confirm(message, { variant: "destructive" });
     try {
       if (save) {
-        const existing = await probeFile({
+        const probe = await probeFile({
           environmentId,
           input: { cwd: workspaceRoot, relativePath: filePath },
-        })
-          .then((result) => databaseValue(result).contents)
-          .catch(() => null);
-        if (
-          existing !== null &&
-          existing !== tab.sql &&
-          existing !== tab.savedSql &&
-          !(await confirm(
-            `Overwrite ${filePath}?\nThe file has contents this console did not write.`,
-          ))
-        )
-          return;
+        });
+        const failure = AsyncResult.isSuccess(probe) ? null : squashAtomCommandFailure(probe);
+        if (failure !== null && !isMissingFile(failure)) {
+          if (
+            !(await confirm(
+              `Save to ${filePath} anyway?\nCould not check whether it already exists: ${databaseErrorMessage(failure)}`,
+            ))
+          )
+            return;
+        } else if (AsyncResult.isSuccess(probe)) {
+          const existing = probe.value.contents;
+          if (
+            existing !== tab.sql &&
+            existing !== tab.savedSql &&
+            !(await confirm(
+              `Overwrite ${filePath}?\nThe file has contents this console did not write.`,
+            ))
+          )
+            return;
+        }
         databaseValue(
           await projectEnvironment.writeFile.run(registry, {
             environmentId,
@@ -831,7 +867,7 @@ export default function DatabasePanel({
           engine={tabConnection?.target.engine ?? "postgres"}
           completionSource={completion}
           errorAt={tab.errorAt}
-          onChange={(sql) => updateTab(tab.id, { sql })}
+          onChange={(sql) => updateTab(tab.id, { sql, errorAt: undefined })}
           onRun={(statements) => void run(statements)}
           onCancel={cancel}
         />
