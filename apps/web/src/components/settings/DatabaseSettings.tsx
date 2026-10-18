@@ -7,70 +7,90 @@ import {
 } from "@t3tools/client-runtime/state/database";
 import type { DatabaseConnection, EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useMemo, useState, type ReactNode } from "react";
 import { databaseState } from "../../state/database";
 import { useEnvironments } from "../../state/environments";
 import { DatabaseConnectionDialog } from "../database/DatabaseConnectionDialog";
 import { databaseValue, useDatabaseConnections } from "../database/databaseHooks";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
+import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ensureLocalApi } from "../../localApi";
 
 function ConnectionLoader({
   environmentId,
   projectId,
+  label,
 }: {
   environmentId: EnvironmentId;
   projectId?: ProjectId;
+  label: string;
 }) {
   const { error, allowed } = useDatabaseConnections(environmentId, projectId);
   return error ? (
-    <p role="alert" className="text-sm">
-      {error}
-    </p>
+    <SettingsRow
+      title={`Could not load connections on ${label}`}
+      description={error}
+      role="alert"
+    />
   ) : !allowed ? (
-    <p className="text-sm text-muted-foreground">
-      Database access requires terminal permission on this environment.
-    </p>
+    <SettingsRow
+      title={`No database access on ${label}`}
+      description="Database access requires terminal permission on this environment."
+    />
   ) : null;
 }
 
 function ConnectionRow({
   connection,
   environmentId,
-  suffix,
+  status,
   onEdit,
   onDelete,
+  children,
 }: {
   connection: DatabaseConnection;
   environmentId: EnvironmentId;
-  suffix?: string;
+  status: string;
   onEdit: () => void;
   onDelete: () => void;
+  children?: ReactNode;
 }) {
   const canEdit = useAtomValue(databaseState.saveConnection.permissionAtom(environmentId));
   return (
-    <div className="flex items-center gap-3 border-b py-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {connection.name}{" "}
-          {connection.readOnly && <span className="text-xs text-muted-foreground">Read-only</span>}
-        </p>
-        <p className="truncate text-xs text-muted-foreground">
+    <SettingsRow
+      title={
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{connection.name}</span>
+          {connection.readOnly && (
+            <Badge size="sm" variant="outline">
+              Read-only
+            </Badge>
+          )}
+        </span>
+      }
+      description={
+        <span className="font-mono">
           {connection.target.engine === "sqlite"
             ? connection.target.path
             : `${connection.target.user}@${connection.target.host}:${connection.target.port}/${connection.target.database}`}
-          {suffix ? ` · ${suffix}` : ""}
-        </p>
-      </div>
-      <Button size="sm" variant="outline" disabled={!canEdit} onClick={onEdit}>
-        Edit
-      </Button>
-      <Button size="sm" variant="ghost" disabled={!canEdit} onClick={onDelete}>
-        Delete
-      </Button>
-    </div>
+        </span>
+      }
+      status={status}
+      control={
+        <>
+          <Button size="sm" variant="outline" disabled={!canEdit} onClick={onEdit}>
+            Edit
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!canEdit} onClick={onDelete}>
+            Delete
+          </Button>
+        </>
+      }
+    >
+      {children}
+    </SettingsRow>
   );
 }
 
@@ -144,11 +164,9 @@ export function DatabaseSettings() {
   const [message, setMessage] = useState<string | null>(null);
   const deleted = useDatabaseGlobalDeletes((state) => state.pending);
   const initialLevel =
-    scope.kind === "all"
-      ? "global"
-      : scope.kind === "project" || scope.kind === "checkout"
-        ? "project"
-        : "environment";
+    scope.kind === "project" || scope.kind === "checkout" ? "project" : "environment";
+  const environmentLabel = (id: EnvironmentId) =>
+    environments.find((item) => item.environmentId === id)?.label ?? id;
   const initialEnvironment = target?.environmentId ?? ids[0];
   const remove = async (connection: DatabaseConnection, environmentId: EnvironmentId) => {
     const confirmed = await ensureLocalApi().dialogs.confirm(
@@ -195,104 +213,99 @@ export function DatabaseSettings() {
   };
   return (
     <SettingsPageContainer>
-      <SettingsSection title="Databases">
-        <p className="px-3 text-sm text-muted-foreground">
-          Connect to Postgres and SQLite on your environments. Global connections are copied when
-          you save; offline environments keep their previous copy.
-        </p>
-        <div className="flex items-center gap-2">
+      <SettingsSection
+        id="database-connections"
+        title="Databases"
+        headerAction={
           <Button
+            size="xs"
+            variant="outline"
             disabled={!initialEnvironment}
             onClick={() => initialEnvironment && setEditing({ environmentId: initialEnvironment })}
           >
             New connection
           </Button>
-        </div>
+        }
+      >
         {[...loaders].map(([key, { environmentId, projectId }]) => (
           <ConnectionLoader
             key={key}
             environmentId={environmentId}
+            label={environmentLabel(environmentId)}
             {...(projectId ? { projectId } : {})}
           />
         ))}
-        {message && (
-          <p role="status" className="text-sm">
-            {message}
-          </p>
-        )}
-        <div id="database-connections" className="space-y-5">
-          {(["global", "environment", "project"] as const).map((level) => (
-            <section key={level} className="space-y-2">
-              <h3 className="text-sm font-medium capitalize">{level}</h3>
-              {level === "global"
-                ? coverage.map((entry) => {
-                    const source = entry.copies.find(
-                      (copy) => copy.connection.updatedAt === entry.connection.updatedAt,
-                    )!;
-                    return (
-                      <div key={entry.id}>
-                        <ConnectionRow
-                          connection={entry.connection}
-                          environmentId={source.environmentId}
-                          suffix={`on ${entry.copies.length} of ${environments.length} environments${entry.older.length ? ` · ${entry.older.length} older` : ""}${entry.copies.some((copy) => deleted[entry.id]?.includes(copy.environmentId)) ? " · orphaned copy: delete it here" : ""}`}
-                          onEdit={() =>
-                            setEditing({
-                              environmentId: source.environmentId,
-                              connection: source.connection,
-                            })
-                          }
-                          onDelete={() => void remove(entry.connection, source.environmentId)}
-                        />
-                        <div className="flex flex-wrap gap-2 py-2">
-                          {[...entry.missing, ...entry.older.map((copy) => copy.environmentId)].map(
-                            (id) => (
-                              <Button
-                                key={id}
-                                size="xs"
-                                variant="outline"
-                                disabled={
-                                  environments.find((item) => item.environmentId === id)?.connection
-                                    .phase !== "connected"
-                                }
-                                onClick={() =>
-                                  setEditing({
-                                    environmentId: source.environmentId,
-                                    connection: source.connection,
-                                    copyTo: id,
-                                  })
-                                }
-                              >
-                                Copy to{" "}
-                                {environments.find((item) => item.environmentId === id)?.label ??
-                                  id}
-                              </Button>
-                            ),
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                : copies
-                    .filter((copy) => copy.connection.level === level)
-                    .map((copy) => (
-                      <ConnectionRow
-                        key={`${copy.environmentId}:${copy.connection.id}`}
-                        connection={copy.connection}
-                        environmentId={copy.environmentId}
-                        suffix={
-                          environments.find((item) => item.environmentId === copy.environmentId)
-                            ?.label ?? copy.environmentId
-                        }
-                        onEdit={() => setEditing(copy)}
-                        onDelete={() => void remove(copy.connection, copy.environmentId)}
-                      />
-                    ))}
-              {!(level === "global" ? globalCopies : copies).some(
-                (copy) => copy.connection.level === level,
-              ) && <p className="text-sm text-muted-foreground">No {level} connections.</p>}
-            </section>
+        {message && <SettingsRow title="Some copies remain" description={message} role="status" />}
+        {coverage.map((entry) => {
+          const source = entry.copies.find(
+            (copy) => copy.connection.updatedAt === entry.connection.updatedAt,
+          )!;
+          const stale = [...entry.missing, ...entry.older.map((copy) => copy.environmentId)];
+          const orphaned = entry.copies.some((copy) =>
+            deleted[entry.id]?.includes(copy.environmentId),
+          );
+          return (
+            <ConnectionRow
+              key={entry.id}
+              connection={entry.connection}
+              environmentId={source.environmentId}
+              status={[
+                `All environments · on ${entry.copies.length} of ${environments.length}`,
+                entry.older.length ? `${entry.older.length} out of date` : "",
+                orphaned ? "Deleted elsewhere; delete this copy here" : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              onEdit={() =>
+                setEditing({ environmentId: source.environmentId, connection: source.connection })
+              }
+              onDelete={() => void remove(entry.connection, source.environmentId)}
+            >
+              {stale.length > 0 && (
+                <div className="flex flex-wrap gap-2 pb-2">
+                  {stale.map((id) => (
+                    <Button
+                      key={id}
+                      size="xs"
+                      variant="outline"
+                      disabled={
+                        environments.find((item) => item.environmentId === id)?.connection.phase !==
+                        "connected"
+                      }
+                      onClick={() =>
+                        setEditing({
+                          environmentId: source.environmentId,
+                          connection: source.connection,
+                          copyTo: id,
+                        })
+                      }
+                    >
+                      Copy to {environmentLabel(id)}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </ConnectionRow>
+          );
+        })}
+        {copies
+          .filter((copy) => copy.connection.level !== "global")
+          .map((copy) => (
+            <ConnectionRow
+              key={`${copy.environmentId}:${copy.connection.id}`}
+              connection={copy.connection}
+              environmentId={copy.environmentId}
+              status={`${copy.connection.level === "project" ? "This project" : "Every project"} on ${environmentLabel(copy.environmentId)}`}
+              onEdit={() => setEditing(copy)}
+              onDelete={() => void remove(copy.connection, copy.environmentId)}
+            />
           ))}
-        </div>
+        {coverage.length === 0 && !copies.some((copy) => copy.connection.level !== "global") && (
+          <SettingsRow
+            title="No database connections"
+            description="Add a PostgreSQL or SQLite connection to browse and query it from a thread's Databases panel. Connections open on the environment they are saved to."
+          />
+        )}
       </SettingsSection>
       {editing && (
         <DatabaseConnectionDialog
