@@ -1,8 +1,9 @@
+"use client";
+
 import { databaseState } from "../state/database";
 import { Atom } from "effect/reactivity";
 import { DatabaseIcon } from "lucide-react";
 import { databasePanelIntent } from "./database/databasePanelIntent";
-("use client");
 
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
