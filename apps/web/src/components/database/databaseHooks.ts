@@ -16,6 +16,13 @@ export function databaseValue<A, E>(result: AtomCommandResult<A, E>): A {
   throw error instanceof Error ? error : new Error(String(error));
 }
 
+export function databaseErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error)
+    return String(error.message);
+  return String(error);
+}
+
 export function useDatabaseConnections(environmentId: EnvironmentId, projectId?: ProjectId) {
   const registry = useContext(RegistryContext);
   const input = projectId === undefined ? {} : { projectId };
@@ -37,7 +44,7 @@ export function useDatabaseConnections(environmentId: EnvironmentId, projectId?:
           databaseValue(result);
           setSettled({ key: loadKey, error: null });
         } catch (error) {
-          setSettled({ key: loadKey, error: String(error) });
+          setSettled({ key: loadKey, error: databaseErrorMessage(error) });
         }
       });
     return () => {

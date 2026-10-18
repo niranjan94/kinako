@@ -6,12 +6,14 @@ export function DatabaseSelect<T extends string>({
   onChange,
   label,
   disabled,
+  id,
 }: {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
   label: string;
   disabled?: boolean;
+  id?: string;
 }) {
   return (
     <Select
@@ -22,7 +24,7 @@ export function DatabaseSelect<T extends string>({
       disabled={disabled}
       items={options}
     >
-      <SelectTrigger aria-label={label}>
+      <SelectTrigger id={id} aria-label={label}>
         <SelectValue />
       </SelectTrigger>
       <SelectPopup>

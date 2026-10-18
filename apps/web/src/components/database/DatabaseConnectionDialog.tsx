@@ -15,11 +15,16 @@ import {
   fanOutDatabaseOperation,
 } from "@t3tools/client-runtime/state/database";
 import * as Schema from "effect/Schema";
-import { useContext, useState } from "react";
+import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
+import { useContext, useId, useState } from "react";
 import { databaseState } from "../../state/database";
 import { useEnvironments } from "../../state/environments";
 import { Button } from "../ui/button";
+import { Alert, AlertDescription } from "../ui/alert";
 import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
   Dialog,
   DialogPopup,
@@ -30,7 +35,7 @@ import {
   DialogFooter,
 } from "../ui/dialog";
 import { DatabaseSelect } from "./DatabaseSelect";
-import { databaseValue } from "./databaseHooks";
+import { databaseErrorMessage, databaseValue } from "./databaseHooks";
 
 const decodeDraft = Schema.decodeUnknownSync(DatabaseConnectionDraft);
 
@@ -67,13 +72,16 @@ export function DatabaseConnectionDialog({
     connection?.target.engine === "sqlite" ? connection.target.path : "",
   );
   const [readOnly, setReadOnly] = useState(connection?.readOnly ?? true);
+  // Only an existing stored password has anything to keep or clear.
+  const storedPassword = !copyTo && connection?.hasPassword === true;
   const [passwordAction, setPasswordAction] = useState<"keep" | "replace" | "clear">(
-    copyTo ? "replace" : "keep",
+    storedPassword ? "keep" : "replace",
   );
   const [password, setPassword] = useState("");
   const [globalId] = useState(() => connection?.id ?? DatabaseConnectionId.make(randomUUID()));
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const id = useId();
   const draft = () =>
     decodeDraft({
       ...(connection ? { id: connection.id } : {}),
@@ -87,7 +95,7 @@ export function DatabaseConnectionDialog({
           ? { engine, path }
           : { engine, host, port: Number(port), database, user, sslMode },
       readOnly,
-      ...(passwordAction === "replace"
+      ...(passwordAction === "replace" && (storedPassword || password)
         ? { password }
         : passwordAction === "clear"
           ? { password: null }
@@ -104,10 +112,12 @@ export function DatabaseConnectionDialog({
         }),
       );
       setMessage(
-        result.ok ? `Connected · ${result.serverVersion}` : `Connection failed: ${result.message}`,
+        result.ok
+          ? { tone: "success", text: `Connected (${result.serverVersion})` }
+          : { tone: "error", text: result.message },
       );
     } catch (error) {
-      setMessage(String(error));
+      setMessage({ tone: "error", text: databaseErrorMessage(error) });
     } finally {
       setBusy(false);
     }
@@ -147,7 +157,7 @@ export function DatabaseConnectionDialog({
       const failures = results.flatMap((result, index) =>
         !result.ok
           ? [
-              `${environments.find((item) => item.environmentId === targets[index])?.label ?? targets[index]}: ${String(result.error)}`,
+              `${environments.find((item) => item.environmentId === targets[index])?.label ?? targets[index]}: ${databaseErrorMessage(result.error)}`,
             ]
           : [],
       );
@@ -155,11 +165,13 @@ export function DatabaseConnectionDialog({
       if (level === "global") useDatabaseGlobalDeletes.getState().clear(globalId);
       onClose();
     } catch (error) {
-      setMessage(String(error));
+      setMessage({ tone: "error", text: databaseErrorMessage(error) });
     } finally {
       setBusy(false);
     }
   };
+  const loopback = engine === "postgres" && /^(localhost|127\.|\[?::1\]?$|0\.0\.0\.0$)/i.test(host);
+  const canSubmit = !busy && canSave && name.trim() !== "";
   return (
     <Dialog
       open
@@ -181,144 +193,200 @@ export function DatabaseConnectionDialog({
             this device.
           </DialogDescription>
         </DialogHeader>
-        <DialogPanel>
-          <label className="grid gap-1 text-sm">
-            Name
-            <Input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Level
-            <DatabaseSelect
-              label="Connection level"
-              value={level}
-              disabled={!!copyTo}
-              options={[
-                { value: "global", label: "Global · all reachable environments" },
-                { value: "environment", label: "Environment" },
-                ...(projectId || connection?.projectId
-                  ? [{ value: "project" as const, label: "Project" }]
-                  : []),
-              ]}
-              onChange={setLevel}
-            />
-          </label>
-          <DatabaseSelect
-            label="Database engine"
-            value={engine}
-            options={[
-              { value: "postgres", label: "Postgres" },
-              { value: "sqlite", label: "SQLite" },
-            ]}
-            onChange={setEngine}
-            disabled={!!copyTo}
-          />
-          {engine === "sqlite" ? (
-            <label className="grid gap-1 text-sm">
-              Absolute file path on the environment
-              <Input value={path} onChange={(event) => setPath(event.target.value)} />
-            </label>
-          ) : (
-            <>
-              <div className="grid grid-cols-[1fr_6rem] gap-2">
-                <label className="grid gap-1 text-sm">
-                  Host
-                  <Input value={host} onChange={(event) => setHost(event.target.value)} />
-                </label>
-                <label className="grid gap-1 text-sm">
-                  Port
-                  <Input
-                    type="number"
-                    value={port}
-                    onChange={(event) => setPort(event.target.value)}
-                  />
-                </label>
+        <form
+          className="flex min-h-0 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSubmit) void save();
+          }}
+        >
+          <DialogPanel>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label id={`${id}-engine`}>Engine</Label>
+                <ToggleGroup
+                  aria-labelledby={`${id}-engine`}
+                  className="w-full *:flex-1"
+                  value={[engine]}
+                  disabled={!!copyTo}
+                  onValueChange={(next) => {
+                    const value = next[0];
+                    if (value !== "postgres" && value !== "sqlite") return;
+                    setEngine(value);
+                    if (value === "sqlite" && level === "global") setLevel("environment");
+                  }}
+                >
+                  <Toggle value="postgres">PostgreSQL</Toggle>
+                  <Toggle value="sqlite">SQLite</Toggle>
+                </ToggleGroup>
               </div>
-              <label className="grid gap-1 text-sm">
-                Database
-                <Input value={database} onChange={(event) => setDatabase(event.target.value)} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                User
-                <Input value={user} onChange={(event) => setUser(event.target.value)} />
-              </label>
-              <DatabaseSelect
-                label="TLS mode"
-                value={sslMode}
-                options={["disable", "prefer", "require", "verify-full"].map((value) => ({
-                  value: value as DatabasePostgresSslMode,
-                  label: `TLS: ${value}`,
-                }))}
-                onChange={setSslMode}
-              />
-              <DatabaseSelect
-                label="Password action"
-                value={passwordAction}
-                options={[
-                  {
-                    value: "keep",
-                    label: connection?.hasPassword ? "Keep stored password" : "No stored password",
-                  },
-                  { value: "replace", label: "Set password" },
-                  { value: "clear", label: "Clear password" },
-                ]}
-                onChange={setPasswordAction}
-              />
-              {passwordAction === "replace" && (
-                <label className="grid gap-1 text-sm">
-                  Password
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${id}-name`}>Name</Label>
+                <Input
+                  id={`${id}-name`}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  autoFocus
+                />
+              </div>
+              {engine === "sqlite" ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`${id}-path`}>File path</Label>
                   <Input
-                    type="password"
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    id={`${id}-path`}
+                    font="mono"
+                    placeholder="/absolute/path/to/database.sqlite"
+                    value={path}
+                    onChange={(event) => setPath(event.target.value)}
                   />
-                </label>
+                  <p className="text-xs text-muted-foreground">
+                    An absolute path on the environment, not on this device.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-[1fr_6rem] gap-3">
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <Label htmlFor={`${id}-host`}>Host</Label>
+                      <Input
+                        id={`${id}-host`}
+                        value={host}
+                        onChange={(event) => setHost(event.target.value)}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <Label htmlFor={`${id}-port`}>Port</Label>
+                      <Input
+                        id={`${id}-port`}
+                        type="number"
+                        value={port}
+                        onChange={(event) => setPort(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <Label htmlFor={`${id}-database`}>Database</Label>
+                      <Input
+                        id={`${id}-database`}
+                        value={database}
+                        onChange={(event) => setDatabase(event.target.value)}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <Label htmlFor={`${id}-user`}>User</Label>
+                      <Input
+                        id={`${id}-user`}
+                        autoComplete="off"
+                        value={user}
+                        onChange={(event) => setUser(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`${id}-password`}>Password</Label>
+                    {storedPassword && (
+                      <DatabaseSelect
+                        id={`${id}-password-action`}
+                        label="Stored password"
+                        value={passwordAction}
+                        options={[
+                          { value: "keep", label: "Keep the stored password" },
+                          { value: "replace", label: "Set a new password" },
+                          { value: "clear", label: "Remove the stored password" },
+                        ]}
+                        onChange={setPasswordAction}
+                      />
+                    )}
+                    {passwordAction === "replace" && (
+                      <Input
+                        id={`${id}-password`}
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={storedPassword ? "New password" : "Leave empty for none"}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                      />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`${id}-tls`}>TLS</Label>
+                    <DatabaseSelect
+                      id={`${id}-tls`}
+                      label="TLS"
+                      value={sslMode}
+                      options={[
+                        { value: "disable", label: "Disable" },
+                        { value: "prefer", label: "Prefer (use TLS when the server offers it)" },
+                        { value: "require", label: "Require" },
+                        { value: "verify-full", label: "Require and verify the certificate" },
+                      ]}
+                      onChange={setSslMode}
+                    />
+                  </div>
+                </>
               )}
-            </>
-          )}
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={readOnly}
-              onChange={(event) => setReadOnly(event.target.checked)}
-            />
-            Read-only
-          </label>
-          {level === "global" && engine === "sqlite" && (
-            <p role="alert" className="text-sm">
-              SQLite files are local to an environment. Choose Environment or Project.
-            </p>
-          )}
-          {level === "global" &&
-            engine === "postgres" &&
-            /^(localhost|127\.|\[?::1\]?$|0\.0\.0\.0$)/i.test(host) && (
-              <p role="note" className="text-sm">
-                Loopback points to a different database on each environment. Use a shared database
-                hostname for global connections.
-              </p>
-            )}
-          {message && (
-            <p role="status" className="whitespace-pre-wrap break-words text-sm">
-              {message}
-            </p>
-          )}
-        </DialogPanel>
-        <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="outline" disabled={busy || !canSave} onClick={() => void test()}>
-            Test connection
-          </Button>
-          <Button
-            disabled={
-              busy || !canSave || !name.trim() || (level === "global" && engine === "sqlite")
-            }
-            onClick={() => void save()}
-          >
-            {busy ? "Working…" : "Save"}
-          </Button>
-        </DialogFooter>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${id}-level`}>Available in</Label>
+                <DatabaseSelect
+                  id={`${id}-level`}
+                  label="Available in"
+                  value={level}
+                  disabled={!!copyTo}
+                  options={[
+                    ...(projectId || connection?.projectId
+                      ? [{ value: "project" as const, label: "This project" }]
+                      : []),
+                    { value: "environment", label: "Every project on this environment" },
+                    ...(engine === "postgres"
+                      ? [{ value: "global" as const, label: "Every connected environment" }]
+                      : []),
+                  ]}
+                  onChange={setLevel}
+                />
+                {level === "global" && loopback && (
+                  <p role="note" className="text-xs text-warning-foreground">
+                    {host} points to a different database on each environment. Use a hostname every
+                    environment can reach.
+                  </p>
+                )}
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor={`${id}-read-only`}>Read-only</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Statements that change data are rejected.
+                  </p>
+                </div>
+                <Switch id={`${id}-read-only`} checked={readOnly} onCheckedChange={setReadOnly} />
+              </div>
+              {message && (
+                <Alert variant={message.tone} role={message.tone === "error" ? "alert" : "status"}>
+                  {message.tone === "success" ? <CircleCheckIcon /> : <CircleAlertIcon />}
+                  <AlertDescription className="whitespace-pre-wrap break-words">
+                    {message.text}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          </DialogPanel>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !canSave}
+              onClick={() => void test()}
+            >
+              Test connection
+            </Button>
+            <Button type="submit" disabled={!canSubmit}>
+              {busy ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogPopup>
     </Dialog>
   );
