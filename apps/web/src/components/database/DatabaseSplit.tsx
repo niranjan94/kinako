@@ -36,7 +36,7 @@ export function DatabaseSplit({
         aria-valuemin={20}
         aria-valuemax={80}
         tabIndex={0}
-        className={`relative z-10 shrink-0 touch-none bg-border outline-none hover:bg-ring focus-visible:bg-ring ${vertical ? "h-px cursor-row-resize before:absolute before:-inset-y-1 before:inset-x-0" : "w-px cursor-col-resize before:absolute before:-inset-x-1 before:inset-y-0"}`}
+        className={`relative z-10 shrink-0 touch-none bg-border outline-none hover:bg-ring focus-visible:bg-ring focus-visible:before:bg-ring/40 ${vertical ? "h-px cursor-row-resize before:absolute before:-inset-y-1 before:inset-x-0" : "w-px cursor-col-resize before:absolute before:-inset-x-1 before:inset-y-0"}`}
         onDoubleClick={() => setPercent(initial)}
         onKeyDown={(event) => {
           if (["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(event.key)) {
