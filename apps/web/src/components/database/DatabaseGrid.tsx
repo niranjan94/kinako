@@ -36,6 +36,8 @@ export const DatabaseGrid = memo(function DatabaseGrid({
   columnInfo = EMPTY_COLUMN_INFO,
   hasMore,
   expires = false,
+  durationMs,
+  exportName,
   loading,
   onLoadMore,
   orderBy,
@@ -47,6 +49,8 @@ export const DatabaseGrid = memo(function DatabaseGrid({
   hasMore: boolean;
   /** Unread query rows are discarded by the server after a minute idle. */
   expires?: boolean;
+  durationMs?: number;
+  exportName: string;
   loading: boolean;
   onLoadMore: () => void;
   orderBy?: string;
@@ -193,7 +197,7 @@ export const DatabaseGrid = memo(function DatabaseGrid({
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `database-results.${format}`;
+    link.download = `${exportName || "results"}.${format}`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -263,7 +267,9 @@ export const DatabaseGrid = memo(function DatabaseGrid({
       <div className="flex h-8 shrink-0 items-center gap-1 border-t bg-muted/20 px-2 text-2xs text-muted-foreground">
         <Table2Icon className="mr-1 size-3.5" />
         <span role="status">
-          {rows.length.toLocaleString()} rows{hasMore ? "+" : ""}
+          {rows.length.toLocaleString()} {rows.length === 1 && !hasMore ? "row" : "rows"}
+          {hasMore ? "+" : ""}
+          {durationMs !== undefined ? ` · ${durationMs} ms` : ""}
         </span>
         {hasMore && expires && (
           <span className="ml-2 truncate">· Unread rows expire after 60 seconds idle</span>

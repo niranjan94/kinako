@@ -2014,7 +2014,7 @@ function OpenCommandPaletteDialog(props: {
     const ref = { environmentId: activeThread.environmentId, threadId: activeThread.id };
     for (const [intent, title] of [
       ["explorer", "Database explorer"],
-      ["table", "Open table…"],
+      ["table", "Find database table…"],
       ["query", "New query"],
     ] as const) {
       actionItems.push({
