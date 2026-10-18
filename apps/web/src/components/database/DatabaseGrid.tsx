@@ -19,6 +19,18 @@ import "./database.css";
 
 const EMPTY_COLUMN_INFO: readonly DatabaseColumnInfo[] = [];
 
+const jsonCell = (cell: DatabaseCell | undefined) =>
+  cell === undefined ? null : typeof cell === "object" && cell !== null ? cell.truncated : cell;
+
+const prettyJson = (value: string) => {
+  if (!/^\s*[[{]/.test(value)) return null;
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return null;
+  }
+};
+
 type Row = { id: number; cells: readonly DatabaseCell[] };
 type Position = { row: number; column: number };
 const text = (cell: DatabaseCell | undefined) =>
@@ -185,9 +197,21 @@ export const DatabaseGrid = memo(function DatabaseGrid({
       : "";
   const download = (format: "csv" | "json") => {
     const csv = (value: string) => '"' + value.replaceAll('"', '""') + '"';
+    // Joins can repeat a column name; keep every value in the exported objects.
+    const keys = columns.map((column, index) =>
+      columns.findIndex((other) => other.name === column.name) === index
+        ? column.name
+        : `${column.name}_${index + 1}`,
+    );
     const contents =
       format === "json"
-        ? JSON.stringify({ columns, rows }, null, 2)
+        ? JSON.stringify(
+            rows.map((row) =>
+              Object.fromEntries(keys.map((key, index) => [key, jsonCell(row[index])])),
+            ),
+            null,
+            2,
+          )
         : [
             columns.map((column) => csv(column.name)).join(","),
             ...rows.map((row) => row.map((cell) => csv(text(cell))).join(",")),
@@ -318,15 +342,37 @@ export const DatabaseGrid = memo(function DatabaseGrid({
               <DialogTitle>{viewer.name}</DialogTitle>
             </DialogHeader>
             <DialogPanel>
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs">
-                {text(viewer.value)}
-              </pre>
-              {typeof viewer.value === "object" && viewer.value !== null && (
-                <p className="text-sm">
-                  Showing the first {viewer.value.truncated.length.toLocaleString()} of{" "}
-                  {viewer.value.length.toLocaleString()} characters.
-                </p>
-              )}
+              {(() => {
+                const value = text(viewer.value);
+                const pretty = viewer.value === null ? null : prettyJson(value);
+                return (
+                  <>
+                    <pre
+                      className={`max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-xs ${viewer.value === null ? "italic text-muted-foreground" : ""}`}
+                    >
+                      {pretty ?? value}
+                    </pre>
+                    <div className="flex items-center gap-2 pt-2">
+                      {typeof viewer.value === "object" && viewer.value !== null && (
+                        <p className="mr-auto text-xs text-muted-foreground">
+                          Showing the first {viewer.value.truncated.length.toLocaleString()} of{" "}
+                          {viewer.value.length.toLocaleString()} characters.
+                        </p>
+                      )}
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        className="ml-auto"
+                        disabled={viewer.value === null}
+                        onClick={() => void writeTextToClipboard(value, "cell value")}
+                      >
+                        <CopyIcon />
+                        Copy value
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
             </DialogPanel>
           </DialogPopup>
         </Dialog>
