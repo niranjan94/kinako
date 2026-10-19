@@ -1473,7 +1473,7 @@ describe("buildThreadFeed", () => {
           "message",
         ]);
         expect(rows[2]).toMatchObject({
-          activities: [{ canExpand: true, groupStandIn: { label: "Waited for a T3 thread" } }],
+          activities: [{ canExpand: true, groupStandIn: { label: "Waited for a thread" } }],
         });
         expect(rows[2]).not.toMatchObject({ activities: [{ groupedToolDetail: true }] });
         // The group's own disclosure adds nothing while the call is alone.
@@ -1504,7 +1504,7 @@ describe("buildThreadFeed", () => {
         expect(rows.map((entry) => entry.type)).toEqual(["activity-group"]);
         expect(rows[0]).toMatchObject({
           id: "live-activity-row",
-          activities: [{ live: true, groupStandIn: { label: "Waiting for a T3 thread" } }],
+          activities: [{ live: true, groupStandIn: { label: "Waiting for a thread" } }],
         });
       }
 
@@ -1516,7 +1516,7 @@ describe("buildThreadFeed", () => {
         groupId,
         hiddenCount: 2,
         expanded: true,
-        summary: "Reading a T3 thread",
+        summary: "Reading a thread",
       });
       expect(grouped[1]).toMatchObject({
         activities: [

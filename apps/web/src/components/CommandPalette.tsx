@@ -1723,18 +1723,17 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
-  const activeThreadCliResumeCommand =
-    activeThread === null
-      ? null
-      : resolveThreadCliResumeCommand({
-          nativeThread: activeThread.activeNativeThread,
-          cwd:
-            activeThread.worktreePath ??
-            projectByKey.get(`${activeThread.environmentId}:${activeThread.projectId}`)
-              ?.workspaceRoot ??
-            null,
-          serverConfig: activeThreadServerConfig,
-        });
+  const activeThreadCliResumeCommand = activeThread
+    ? resolveThreadCliResumeCommand({
+        nativeThread: activeThread.activeNativeThread,
+        cwd:
+          activeThread.worktreePath ??
+          projectByKey.get(`${activeThread.environmentId}:${activeThread.projectId}`)
+            ?.workspaceRoot ??
+          null,
+        serverConfig: activeThreadServerConfig,
+      })
+    : null;
   if (activeThreadCliResumeCommand !== null) {
     const command = activeThreadCliResumeCommand;
     actionItems.push({
@@ -1815,7 +1814,7 @@ function OpenCommandPaletteDialog(props: {
     }
   }
 
-  if (activeThread !== null) {
+  if (activeThread) {
     const ref = { environmentId: activeThread.environmentId, threadId: activeThread.id };
     for (const [intent, title] of [
       ["explorer", "Database explorer"],
@@ -1837,7 +1836,7 @@ function OpenCommandPaletteDialog(props: {
     }
   }
 
-  if (activeThread !== null) {
+  if (activeThread) {
     const thread = activeThread;
     actionItems.push({
       kind: "action",
