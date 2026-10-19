@@ -50,7 +50,7 @@ const cachedClient = <A>(key: string, make: () => Promise<A>): Promise<A> => {
 const cacheKey = (...parts: ReadonlyArray<string | number | undefined>) => JSON.stringify(parts);
 
 // The SDK is loaded on first use; most environments never connect through AWS.
-export const awsLoginSources: AwsLoginSources = {
+const awsLoginSources: AwsLoginSources = {
   rdsAuthToken: async (input) => {
     const signer = await cachedClient(
       cacheKey("rds", input.profile, input.region, input.host, input.port, input.user),
