@@ -26,6 +26,7 @@ export function AgentsPage() {
     (thread) =>
       thread.deletedAt === null &&
       thread.archivedAt === null &&
+      thread.isSideChat !== true &&
       (environment === "all" || thread.environmentId === environment) &&
       (project === "all" || `${thread.environmentId}:${thread.projectId}` === project),
   );
