@@ -1,3 +1,5 @@
+import * as DateTime from "effect/DateTime";
+import { hasNewSnoozeWake } from "./threadSettled.ts";
 // @effect-diagnostics globalDate:off -- Tests exercise local calendar snooze boundaries.
 import { ThreadId } from "@t3tools/contracts";
 import { TurnId } from "@t3tools/contracts";
@@ -362,5 +364,17 @@ describe("resolveSnoozePresets", () => {
     ]);
     const tomorrow = new Date(presets.find((preset) => preset.id === "tomorrow")!.snoozedUntil);
     expect(tomorrow.getDay()).toBe(1);
+  });
+});
+
+describe("durable snooze wake transitions", () => {
+  it("ignores old shells and repeated timestamps, but accepts another snooze", () => {
+    const first = DateTime.makeUnsafe("2026-10-19T09:00:00Z");
+    const second = DateTime.add(first, { days: 1 });
+    expect(hasNewSnoozeWake(undefined, undefined)).toBe(false);
+    expect(hasNewSnoozeWake(first, null)).toBe(false);
+    expect(hasNewSnoozeWake(null, first)).toBe(true);
+    expect(hasNewSnoozeWake(first, DateTime.makeUnsafe("2026-10-19T09:00:00.000Z"))).toBe(false);
+    expect(hasNewSnoozeWake(first, second)).toBe(true);
   });
 });

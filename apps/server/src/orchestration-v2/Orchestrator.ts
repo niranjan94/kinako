@@ -455,6 +455,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.auto-settle":
     case "thread.unsettle":
     case "thread.snooze":
+    case "thread.snooze.wake-announce":
     case "thread.unsnooze":
     case "thread.auto-settle.set":
     case "thread.pin":
@@ -8190,7 +8191,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     });
 
   const loadProjectionForCommand = <K extends ProjectionRecordField>(
-    command: OrchestrationV2Command,
+    command: OrchestrationV2ServerCommand,
     fields: ReadonlyArray<K>,
     filter?: ProjectionRecordFilter,
   ) =>
@@ -11818,6 +11819,49 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           }),
         );
       }
+      case "thread.snooze.wake-announce": {
+        const projection = yield* loadProjectionForCommand(command, ["runs", "runtimeRequests"], {
+          turnItemTypes: [],
+        });
+        const thread = projection.thread;
+        const wakeMs = DateTime.toEpochMillis(command.wakeAt);
+        const snoozedAtMs =
+          thread.snoozedAt == null ? null : DateTime.toEpochMillis(thread.snoozedAt);
+        if (
+          thread.deletedAt !== null ||
+          thread.archivedAt !== null ||
+          thread.snoozedUntil == null ||
+          DateTime.toEpochMillis(thread.snoozedUntil) !== wakeMs ||
+          wakeMs > DateTime.toEpochMillis(yield* DateTime.now) ||
+          (thread.snoozeWakeNotifiedAt != null &&
+            DateTime.toEpochMillis(thread.snoozeWakeNotifiedAt) === wakeMs) ||
+          projection.runtimeRequests.some((request) => request.status === "pending") ||
+          (snoozedAtMs !== null &&
+            (projection.runs.some(
+              (run) =>
+                (run.status === "completed" || run.status === "failed") &&
+                run.completedAt !== null &&
+                DateTime.toEpochMillis(run.completedAt) > snoozedAtMs,
+            ) ||
+              projection.runtimeRequests.some(
+                (request) => DateTime.toEpochMillis(request.createdAt) > snoozedAtMs,
+              )))
+        )
+          break;
+        // A clock wake remains derived: retain the snooze fields and ordering
+        // timestamps so announcing cannot resurrect a visited Woke indicator.
+        yield* emit(
+          events,
+          command,
+        )({
+          type: "thread.snooze-woke",
+          threadId: thread.id,
+          providerInstanceId: thread.providerInstanceId,
+          occurredAt: yield* DateTime.now,
+          payload: { ...thread, snoozeWakeNotifiedAt: command.wakeAt },
+        });
+        break;
+      }
       case "thread.archive":
       case "thread.unarchive":
       case "thread.settle":
@@ -12112,6 +12156,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     const plan = yield* dispatchOnce(command).pipe(
       Effect.flatMap((planned) =>
         planned.events.length > 0 ||
+        command.type === "thread.snooze.wake-announce" ||
         command.type === "thread.background-work.settle" ||
         command.type === "thread.stop" ||
         command.type === "subagent.stop"

@@ -242,3 +242,9 @@ Choose **Snooze → Custom…** from a thread's menu to pick a date and time in 
 local time zone, or a duration in minutes, hours, or days. Durations start when
 you confirm; one day means 24 hours. On web and desktop, you can also snooze
 several selected threads together. Choose **Wake thread** to bring a thread back early.
+
+When a snooze ends, connected web and desktop clients notify you according to
+your notification settings. The mobile app shows a foreground notification if
+device notifications are allowed. Opening the notification takes you to the thread.
+Waking early, rescheduling, or archiving the thread cancels the pending reminder.
+If the server was offline, it announces overdue snoozes when it starts again.

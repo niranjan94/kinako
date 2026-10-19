@@ -1,3 +1,4 @@
+import { hasNewSnoozeWake } from "@t3tools/client-runtime/state/thread-settled";
 import {
   type PendingSubagentRequest,
   presentThreadShell,
@@ -150,25 +151,36 @@ function EnvironmentNotifications({
           : (prior?.completion ?? null);
       next.set(thread.id, { raw: rawThread, subagentRequest, attention, completion });
       if (!prior || thread.archivedAt !== null) continue;
-      const kind =
-        attention && attention !== prior.attention
+      const kind = hasNewSnoozeWake(prior.raw.snoozeWakeNotifiedAt, rawThread.snoozeWakeNotifiedAt)
+        ? "wake"
+        : attention && attention !== prior.attention
           ? "input"
           : completion !== null && (prior.completion === null || completion > prior.completion)
             ? "completion"
             : null;
       if (!kind) continue;
       const title =
-        kind === "completion"
-          ? "Thread completed"
-          : status === "approval"
-            ? "Approval needed"
-            : status === "limited"
-              ? "Usage limit reached"
-              : status === "failed"
-                ? "Thread failed"
-                : "Input needed";
+        kind === "wake"
+          ? "Snooze ended"
+          : kind === "completion"
+            ? "Thread completed"
+            : status === "approval"
+              ? "Approval needed"
+              : status === "limited"
+                ? "Usage limit reached"
+                : status === "failed"
+                  ? "Thread failed"
+                  : "Input needed";
+      if (
+        kind === "wake" &&
+        document.visibilityState === "visible" &&
+        document.hasFocus() &&
+        activeEnvironmentId === environmentId &&
+        activeThreadId === thread.id
+      )
+        continue;
       if (hasNotificationSound(mode)) {
-        void playNotificationSound(kind, () =>
+        void playNotificationSound(kind === "wake" ? "completion" : kind, () =>
           hasNotificationSound(getClientSettings().notificationMode),
         );
       }
@@ -179,13 +191,18 @@ function EnvironmentNotifications({
         (activeEnvironmentId !== environmentId || activeThreadId !== thread.id)
       ) {
         const toastId = toastManager.add({
-          type: kind === "completion" ? "success" : status === "failed" ? "error" : "warning",
+          type:
+            kind === "completion" || kind === "wake"
+              ? "success"
+              : status === "failed"
+                ? "error"
+                : "warning",
           title,
           description: thread.title,
           data: {
             hideCopyButton: true,
             leadingIcon:
-              kind === "completion" ? (
+              kind === "completion" || kind === "wake" ? (
                 <CircleCheckIcon aria-hidden className="size-4 text-success-foreground" />
               ) : status === "approval" ? (
                 <ShieldQuestionIcon aria-hidden className="size-4 text-warning-foreground" />
