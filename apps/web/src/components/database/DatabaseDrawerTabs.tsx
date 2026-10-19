@@ -1,6 +1,5 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { DatabaseWorkspace } from "@t3tools/client-runtime/state/database";
 import type { EnvironmentId, ProjectId, ScopedThreadRef } from "@t3tools/contracts";
 import { SquareTerminalIcon, Table2Icon, TerminalSquareIcon, XIcon } from "lucide-react";
 import { useContext, useEffect, type ReactNode } from "react";
@@ -9,15 +8,10 @@ import { DatabaseConsoleView } from "./DatabaseConsoleView";
 import { persistDatabaseWorkspace } from "./databaseConsoleStorage";
 import { DatabaseTableView } from "./DatabaseTableView";
 import { DatabaseHint, DatabaseToolbarButton } from "./DatabaseToolbarButton";
-import { closeDatabaseTab, showDatabaseTab } from "./databaseWorkspace";
+import { closeDatabaseTab, showDatabaseTab, shownDatabaseTabId } from "./databaseWorkspace";
 
 // The nearest owner wins, so focus in database tabs does not enable terminal shortcuts.
 const NOT_TERMINAL = "database";
-
-export const hasDatabaseTabs = (workspace: DatabaseWorkspace) => workspace.tabs.length > 0;
-/** The tab the drawer shows in place of its terminals, if any. */
-export const shownDatabaseTabId = (workspace: DatabaseWorkspace) =>
-  workspace.tabs.some((tab) => tab.id === workspace.activeId) ? workspace.activeId : null;
 
 function DrawerTab({
   active,

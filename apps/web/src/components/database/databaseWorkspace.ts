@@ -1,6 +1,7 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   releaseDatabaseResources,
+  type DatabaseWorkspace,
   type DatabaseWorkspaceTab,
 } from "@t3tools/client-runtime/state/database";
 import {
@@ -24,6 +25,11 @@ export interface DatabaseWorkspaceScope {
   projectId: ProjectId;
   threadRef: ScopedThreadRef;
 }
+
+export const hasDatabaseTabs = (workspace: DatabaseWorkspace) => workspace.tabs.length > 0;
+/** The tab the drawer shows in place of its terminals, if any. */
+export const shownDatabaseTabId = (workspace: DatabaseWorkspace) =>
+  workspace.tabs.some((tab) => tab.id === workspace.activeId) ? workspace.activeId : null;
 
 const workspaceAtom = (threadRef: ScopedThreadRef) =>
   databaseState.workspaces(scopedThreadKey(threadRef));
