@@ -220,8 +220,13 @@ export const layer: Layer.Layer<
     // Read-state events carry the whole thread too, but client reducers apply
     // them without bumping updatedAt. They supersede only each other: a newer
     // visit must not delete the rename that carries the activity timestamp,
-    // while any newer activity-bearing event supersedes both groups.
-    const READ_STATE_THREAD_EVENT_TYPES = ["thread.visited", "thread.marked-unread"];
+    // while any newer activity-bearing event supersedes both groups. Filing a
+    // thread under a group is organization, not activity, so it belongs here.
+    const READ_STATE_THREAD_EVENT_TYPES = [
+      "thread.visited",
+      "thread.marked-unread",
+      "thread.group-set",
+    ];
 
     const supersedableThreadEventTypes = new Set(SUPERSEDABLE_THREAD_EVENT_TYPES);
     const readStateThreadEventTypes = new Set(READ_STATE_THREAD_EVENT_TYPES);

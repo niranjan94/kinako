@@ -21,6 +21,7 @@ import {
   RunId,
   NonNegativeInt,
   ProjectId,
+  ThreadGroupName,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Schema from "effect/Schema";
@@ -33,7 +34,7 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const ThreadOrganizeTool = Tool.make("t3_thread_organize", {
   description:
-    "Pin, snooze, settle, archive, or mark a thread unread. Omit threadId for this thread. snooze requires snoozedUntil. Existing thread lifecycle rules apply. Settling this thread takes effect when your turn completes, returning settlesWhenTurnEnds=true; a turn that fails or is interrupted, or a queued message, leaves it active.",
+    "Pin, snooze, settle, archive, group, or mark a thread unread. Omit threadId for this thread. snooze requires snoozedUntil; group requires group, the name of the sidebar group to file the thread under (threads sharing a name form one group). Existing thread lifecycle rules apply. Settling this thread takes effect when your turn completes, returning settlesWhenTurnEnds=true; a turn that fails or is interrupted, or a queued message, leaves it active.",
   parameters: Schema.Struct({
     threadId: Schema.optional(ThreadId),
     action: Schema.Literals([
@@ -46,8 +47,11 @@ const ThreadOrganizeTool = Tool.make("t3_thread_organize", {
       "archive",
       "unarchive",
       "mark_unread",
+      "group",
+      "ungroup",
     ]),
     snoozedUntil: Schema.optional(IsoDateTime),
+    group: Schema.optional(ThreadGroupName),
   }),
   success: Schema.Union([
     OrchestrationV2DispatchCommandResult,

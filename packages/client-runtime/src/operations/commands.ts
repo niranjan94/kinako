@@ -109,6 +109,10 @@ export interface ReorderActiveThreadInput extends ThreadCommandInput {
   readonly orderKey: string;
 }
 
+export interface SetThreadGroupInput extends ThreadCommandInput {
+  readonly group: string | null;
+}
+
 export interface SnoozeThreadInput extends ThreadCommandInput {
   readonly snoozedUntil: string;
 }
@@ -507,6 +511,17 @@ export const reorderActiveThread = Effect.fn("EnvironmentCommands.reorderActiveT
     commandId: yield* allocateCommandId(input),
     threadId: input.threadId,
     orderKey: input.orderKey,
+  });
+});
+
+export const setThreadGroup = Effect.fn("EnvironmentCommands.setThreadGroup")(function* (
+  input: SetThreadGroupInput,
+) {
+  return yield* dispatch({
+    type: "thread.group.set",
+    commandId: yield* allocateCommandId(input),
+    threadId: input.threadId,
+    group: input.group,
   });
 });
 

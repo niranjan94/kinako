@@ -1868,6 +1868,19 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         orderKey: "a0",
       });
       assert.equal((yield* orchestrator.getThreadProjection(threadId)).thread.activeOrderKey, "a0");
+      const beforeGroupShell = yield* orchestrator.getThreadShell(threadId);
+      yield* TestClock.adjust("1 minute");
+      yield* orchestrator.dispatch({
+        type: "thread.group.set",
+        commandId: CommandId.make("runtime-layer-lifecycle-group"),
+        threadId,
+        group: "Billing",
+      });
+      assert.equal((yield* orchestrator.getThreadProjection(threadId)).thread.group, "Billing");
+      assert.deepEqual(
+        (yield* orchestrator.getThreadShell(threadId))?.updatedAt,
+        beforeGroupShell?.updatedAt,
+      );
 
       const preAutoProjection = yield* orchestrator.getThreadProjection(threadId);
       const staleAutoSettle = yield* orchestrator
@@ -1930,6 +1943,17 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         (thread) => thread.id === threadId,
       );
       assert.deepEqual(activeShell?.unsettledAt, activeProjection.thread.unsettledAt);
+      assert.equal(activeShell?.group, "Billing");
+      yield* orchestrator.dispatch({
+        type: "thread.group.set",
+        commandId: CommandId.make("runtime-layer-lifecycle-ungroup"),
+        threadId,
+        group: null,
+      });
+      assert.isNull(
+        (yield* orchestrator.getShellSnapshot()).threads.find((thread) => thread.id === threadId)
+          ?.group,
+      );
 
       const archive = yield* orchestrator.dispatch({
         type: "thread.archive",

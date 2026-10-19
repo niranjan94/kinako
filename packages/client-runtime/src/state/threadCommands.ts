@@ -43,6 +43,7 @@ import {
   type PinThreadInput,
   type ReorderPinnedThreadInput,
   type ReorderActiveThreadInput,
+  type SetThreadGroupInput,
   type SetThreadAutoSettleInput,
   type SettleThreadInput,
   type SnoozeThreadInput,
@@ -81,6 +82,7 @@ import {
   pinThread,
   reorderPinnedThread,
   reorderActiveThread,
+  setThreadGroup,
   setThreadAutoSettle,
   settleThread,
   snoozeThread,
@@ -129,6 +131,7 @@ export type {
   PinThreadInput,
   ReorderPinnedThreadInput,
   ReorderActiveThreadInput,
+  SetThreadGroupInput,
   SetThreadAutoSettleInput,
   SettleThreadInput,
   SnoozeThreadInput,
@@ -231,6 +234,12 @@ export function createThreadEnvironmentAtoms<R, E>(
     reorderActive: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:reorder-active",
       execute: (input: ReorderActiveThreadInput) => reorderActiveThread(input),
+      scheduler,
+      concurrency,
+    }),
+    setGroup: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:set-group",
+      execute: (input: SetThreadGroupInput) => setThreadGroup(input),
       scheduler,
       concurrency,
     }),
@@ -499,6 +508,10 @@ export function createThreadEnvironmentAtoms<R, E>(
     reorderActive: optimistic.wrap(commands.reorderActive, (thread, input) => ({
       ...thread,
       activeOrderKey: input.orderKey,
+    })),
+    setGroup: optimistic.wrap(commands.setGroup, (thread, input) => ({
+      ...thread,
+      group: input.group,
     })),
   };
 }
