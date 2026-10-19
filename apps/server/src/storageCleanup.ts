@@ -312,12 +312,23 @@ const make = Effect.gen(function* () {
   const threadWorktrees = <
     Thread extends {
       readonly worktreePath: string | null;
+      readonly associatedWorktreePath?: string | null | undefined;
       readonly branch: string | null;
       readonly additionalDirectories?: ReadonlyArray<ThreadAdditionalDirectory> | undefined;
     },
   >(
     thread: Thread,
   ) => [
+    ...(thread.worktreePath === null && thread.associatedWorktreePath != null
+      ? [
+          {
+            thread,
+            worktreePath: path.resolve(thread.associatedWorktreePath),
+            branch: null,
+            repository: null,
+          },
+        ]
+      : []),
     ...(thread.worktreePath === null
       ? []
       : [
@@ -376,6 +387,10 @@ const make = Effect.gen(function* () {
       SELECT DISTINCT json_extract(payload_json, '$.worktreePath') AS "worktreePath"
       FROM orchestration_v2_projection_threads
       WHERE json_extract(payload_json, '$.worktreePath') IS NOT NULL
+      UNION
+      SELECT DISTINCT json_extract(payload_json, '$.associatedWorktreePath') AS "worktreePath"
+      FROM orchestration_v2_projection_threads
+      WHERE json_extract(payload_json, '$.associatedWorktreePath') IS NOT NULL
       UNION
       SELECT DISTINCT json_extract(directory.value, '$.worktreePath') AS "worktreePath"
       FROM orchestration_v2_projection_threads thread,
@@ -748,6 +763,15 @@ const make = Effect.gen(function* () {
       yield* Effect.gen(function* () {
         if (!(yield* fs.exists(worktreePath))) return;
         if (deleted && !settings.worktreeOnDelete) return keep("no rules apply");
+        if (
+          group.some(
+            (member) =>
+              member.thread.worktreePath === null &&
+              member.thread.associatedWorktreePath != null &&
+              pathKey(member.thread.associatedWorktreePath) === pathKey(worktreePath),
+          )
+        )
+          return keep("retained for a thread using the local checkout");
         if (group.length > 1 && ownerOf(group) === undefined)
           return keep(`shared by ${group.length} threads`);
         if (project === undefined || repositoryRoot === undefined)

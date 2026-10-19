@@ -1,4 +1,7 @@
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { requestThreadWorkspaceMove } from "./ThreadWorkspaceMoveDialog";
+import { useAtomValue } from "@effect/atom-react";
+import { vcsEnvironment } from "../state/vcs";
 import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { ComposerContextLabel } from "./ComposerContextLabel";
@@ -61,6 +64,7 @@ import {
   Menu,
   MenuGroup,
   MenuGroupLabel,
+  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
@@ -195,6 +199,7 @@ function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string)
 }
 
 interface RunContextSelectorProps {
+  onMoveWorkspace?: (() => void) | undefined;
   displayMode?: "toolbar" | "panel";
   workspaceRoot?: string;
   forceNewWorktree: boolean;
@@ -220,6 +225,7 @@ interface RunContextSelectorProps {
 }
 
 const RunContextSelector = memo(function RunContextSelector({
+  onMoveWorkspace,
   displayMode = "toolbar",
   workspaceRoot,
   forceNewWorktree,
@@ -326,6 +332,20 @@ const RunContextSelector = memo(function RunContextSelector({
   );
 
   if (isLocked) {
+    if (onMoveWorkspace && !forceNewWorktree) {
+      return (
+        <ComposerControl
+          size="xs"
+          onClick={onMoveWorkspace}
+          onContextMenu={handleContextMenu}
+          aria-label={activeWorktreePath ? "Move to local" : "Move to worktree"}
+          data-composer-context-control
+        >
+          {triggerContent}
+          <ChevronDownIcon className="size-3 shrink-0 opacity-50" />
+        </ComposerControl>
+      );
+    }
     return (
       <span
         className={cn(
@@ -426,6 +446,11 @@ const RunContextSelector = memo(function RunContextSelector({
         ) : null}
         <MenuGroup>
           <MenuGroupLabel>Workspace</MenuGroupLabel>
+          {onMoveWorkspace && envModeLocked && !forceNewWorktree ? (
+            <MenuItem onClick={onMoveWorkspace}>
+              {activeWorktreePath ? "Move to local…" : "Move to worktree…"}
+            </MenuItem>
+          ) : null}
           <MenuRadioGroup
             value={effectiveEnvMode}
             onValueChange={(value) => {
@@ -700,6 +725,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     draftId ? store.getDraftSession(draftId) : store.getDraftThreadByRef(threadRef),
   );
   const serverThread = useQuietThreadShell(threadRef);
+  const canMoveWorkspace = useAtomValue(vcsEnvironment.moveThread.permissionAtom(environmentId));
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const activeProjectRef = serverThread
     ? scopeProjectRef(serverThread.environmentId, serverThread.projectId)
@@ -805,6 +831,11 @@ export const BranchToolbar = memo(function BranchToolbar({
             effectiveEnvMode={effectiveEnvMode}
             activeWorktreePath={activeWorktreePath}
             onEnvModeChange={onEnvModeChange}
+            onMoveWorkspace={
+              serverThread && canMoveWorkspace
+                ? () => requestThreadWorkspaceMove(threadRef)
+                : undefined
+            }
             previousWorktreeLabel={previousWorktreeLabel}
             previousWorktreeBranch={previousWorktreeSeed?.branch ?? null}
             onUsePreviousWorktree={onUsePreviousWorktree}
@@ -869,6 +900,11 @@ export const BranchToolbar = memo(function BranchToolbar({
             effectiveEnvMode={effectiveEnvMode}
             activeWorktreePath={activeWorktreePath}
             onEnvModeChange={onEnvModeChange}
+            onMoveWorkspace={
+              serverThread && canMoveWorkspace
+                ? () => requestThreadWorkspaceMove(threadRef)
+                : undefined
+            }
             previousWorktreeLabel={previousWorktreeLabel}
             previousWorktreeBranch={previousWorktreeSeed?.branch ?? null}
             onUsePreviousWorktree={onUsePreviousWorktree}
@@ -913,6 +949,11 @@ export const BranchToolbar = memo(function BranchToolbar({
               effectiveEnvMode={effectiveEnvMode}
               activeWorktreePath={activeWorktreePath}
               onEnvModeChange={onEnvModeChange}
+              onMoveWorkspace={
+                serverThread && canMoveWorkspace
+                  ? () => requestThreadWorkspaceMove(threadRef)
+                  : undefined
+              }
               previousWorktreeLabel={previousWorktreeLabel}
               previousWorktreeBranch={previousWorktreeSeed?.branch ?? null}
               onUsePreviousWorktree={onUsePreviousWorktree}

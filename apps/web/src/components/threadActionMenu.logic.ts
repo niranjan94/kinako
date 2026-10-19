@@ -20,6 +20,7 @@ export type ThreadActionMenuId =
   | "group:remove"
   | `group:set:${string}`
   | "rename"
+  | "move-workspace"
   | "regenerate-title"
   | "mark-unread"
   | "copy"
@@ -69,6 +70,8 @@ export function buildDraftActionMenuItems(options: {
 }
 
 export interface ThreadActionMenuState {
+  readonly worktreePath?: string | null;
+  readonly canMoveWorkspace?: boolean;
   readonly canOperate: boolean;
   readonly branch: string | null;
   /** Shell command that resumes the thread in its provider's CLI, when the provider supports it. */
@@ -117,6 +120,16 @@ export function buildThreadActionMenuItems(
   state: ThreadActionMenuState,
 ): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
   const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
+    ...(state.canMoveWorkspace
+      ? [
+          {
+            id: "move-workspace" as const,
+            label: state.worktreePath ? "Move to local…" : "Move to worktree…",
+            icon: "folder-git-2",
+            disabled: !state.canOperate || state.isRunning,
+          },
+        ]
+      : []),
     ...(state.branch
       ? [
           {

@@ -1,4 +1,4 @@
-import { ComposerSelectControl } from "./chat/ComposerControl";
+import { ComposerControl, ComposerSelectControl } from "./chat/ComposerControl";
 import { ComposerContextLabel } from "./ComposerContextLabel";
 import { FolderGit2Icon, FolderGitIcon, FolderIcon } from "lucide-react";
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
@@ -27,6 +27,7 @@ import { primaryServerKeybindingsAtom } from "../state/server";
 const PREVIOUS_WORKTREE_SELECT_VALUE = "previous-worktree";
 
 interface BranchToolbarEnvModeSelectorProps {
+  onMoveWorkspace?: (() => void) | undefined;
   forceNewWorktree?: boolean;
   envLocked: boolean;
   effectiveEnvMode: EnvMode;
@@ -38,6 +39,7 @@ interface BranchToolbarEnvModeSelectorProps {
 }
 
 export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSelector({
+  onMoveWorkspace,
   forceNewWorktree = false,
   envLocked,
   effectiveEnvMode,
@@ -71,6 +73,25 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   };
 
   if (envLocked || forceNewWorktree) {
+    if (onMoveWorkspace && !forceNewWorktree) {
+      return (
+        <ComposerControl
+          size="xs"
+          onClick={onMoveWorkspace}
+          aria-label={activeWorktreePath ? "Move to local" : "Move to worktree"}
+          data-composer-context-control
+        >
+          {activeWorktreePath ? (
+            <FolderGitIcon className="size-3" />
+          ) : (
+            <FolderIcon className="size-3" />
+          )}
+          <ComposerContextLabel>
+            {activeWorktreePath ? "Move to local…" : "Move to worktree…"}
+          </ComposerContextLabel>
+        </ComposerControl>
+      );
+    }
     const lockedRow = (
       <span
         className="inline-flex h-7 min-w-0 items-center gap-1 border border-transparent px-1.75 font-normal text-muted-foreground/70 text-xs sm:h-6"

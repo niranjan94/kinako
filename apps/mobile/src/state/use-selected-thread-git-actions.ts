@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useMemo } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
 
 import { EnvironmentProject, EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
@@ -11,7 +11,9 @@ import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   EnvironmentAuthorizationError,
+  ThreadWorkspaceError,
   type GitRunStackedActionResult,
+  type VcsMoveThreadInput,
 } from "@t3tools/contracts";
 import {
   dedupeRemoteBranchesWithLocalMatches,
@@ -39,7 +41,10 @@ export function useSelectedThreadGitActions() {
   const refreshStatus = useAtomCommand(vcsEnvironment.refreshStatus, { reportFailure: false });
   const switchRef = useAtomCommand(vcsEnvironment.switchRef, { reportFailure: false });
   const createRef = useAtomCommand(vcsEnvironment.createRef, { reportFailure: false });
-  const createWorktree = useAtomCommand(vcsEnvironment.createWorktree, { reportFailure: false });
+  const moveThread = useAtomCommand(vcsEnvironment.moveThread, { reportFailure: false });
+  const pendingWorkspaceMove = useRef<{ environmentId: string; input: VcsMoveThreadInput } | null>(
+    null,
+  );
   const pull = useAtomCommand(vcsEnvironment.pull, { reportFailure: false });
   const { selectedThread, selectedThreadProject, selectedEnvironmentRuntime } =
     useThreadSelection();
@@ -317,38 +322,59 @@ export function useSelectedThreadGitActions() {
     ],
   );
 
-  const onCreateSelectedThreadWorktree = useCallback(
-    async (nextWorktree: { readonly baseBranch: string; readonly newBranch: string }) => {
-      return runSelectedThreadGitMutation(
+  const onMoveSelectedThreadWorkspace = useCallback(
+    async (target: VcsMoveThreadInput["target"]) =>
+      runSelectedThreadGitMutation(
         "create_worktree",
-        "Creating worktree",
-        async ({ thread, project }) => {
-          const result = await createWorktree({
-            environmentId: thread.environmentId,
-            input: {
-              cwd: project.workspaceRoot,
-              refName: nextWorktree.baseBranch,
-              newRefName: sanitizeFeatureBranchName(nextWorktree.newBranch),
-              path: null,
-            },
-          });
-          if (AsyncResult.isFailure(result)) {
-            return result;
-          }
-          const syncResult = await syncSelectedThreadBranchState({
-            thread,
-            cwd: result.value.worktree.path,
-            nextThreadState: {
-              branch: result.value.worktree.refName,
-              worktreePath: result.value.worktree.path,
-            },
-          });
-          return AsyncResult.isFailure(syncResult) ? AsyncResult.failure(syncResult.cause) : result;
+        "Moving workspace",
+        async ({ thread }) => {
+          const pending = pendingWorkspaceMove.current;
+          const input =
+            pending?.environmentId === thread.environmentId && pending.input.threadId === thread.id
+              ? pending.input
+              : {
+                  threadId: thread.id,
+                  expectedWorktreePath: thread.worktreePath,
+                  target,
+                };
+          pendingWorkspaceMove.current = { environmentId: thread.environmentId, input };
+          const result = await moveThread({ environmentId: thread.environmentId, input });
+          if (
+            AsyncResult.isFailure(result) &&
+            Cause.squash(result.cause) instanceof ThreadWorkspaceError
+          )
+            pendingWorkspaceMove.current = null;
+          if (AsyncResult.isSuccess(result) && !result.value.cleanupPending)
+            pendingWorkspaceMove.current = null;
+          if (AsyncResult.isSuccess(result) && result.value.cleanupPending)
+            showGitActionResult({
+              type: "error",
+              title: "Workspace moved; source changes retained",
+              description:
+                "Source cleanup could not finish. Both copies of your changes are preserved.",
+            });
+          else if (AsyncResult.isSuccess(result) && result.value.setupScript.status === "failed")
+            showGitActionResult({
+              type: "error",
+              title: "Workspace moved; setup script failed",
+              description: result.value.setupScript.detail,
+            });
+          return result;
         },
         { changesThreadBranch: true },
-      );
-    },
-    [createWorktree, runSelectedThreadGitMutation, syncSelectedThreadBranchState],
+      ),
+    [moveThread, runSelectedThreadGitMutation],
+  );
+
+  const onCreateSelectedThreadWorktree = useCallback(
+    async (nextWorktree: { readonly baseBranch: string; readonly newBranch: string }) =>
+      onMoveSelectedThreadWorkspace({
+        worktree: {
+          branch: sanitizeFeatureBranchName(nextWorktree.newBranch),
+          baseRef: nextWorktree.baseBranch,
+        },
+      }),
+    [onMoveSelectedThreadWorkspace],
   );
 
   const onPullSelectedThreadBranch = useCallback(async () => {
@@ -439,6 +465,7 @@ export function useSelectedThreadGitActions() {
     onCheckoutSelectedThreadBranch,
     onCreateSelectedThreadBranch,
     onCreateSelectedThreadWorktree,
+    onMoveSelectedThreadWorkspace,
     onPullSelectedThreadBranch,
     onRunSelectedThreadGitAction,
   };

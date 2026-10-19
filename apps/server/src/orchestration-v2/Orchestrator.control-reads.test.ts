@@ -1038,3 +1038,135 @@ it.effect("replays a thread.create receipt without changing the thread", () =>
     assert.equal(yield* orchestrator.getThreadEventSequence(threadId), original.sequence);
   }).pipe(Effect.provide(layerTest)),
 );
+
+it.effect(
+  "moving an idle workspace detaches sessions, invalidates native resume and records a notice",
+  () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const threadId = ThreadId.make("thread:workspace-move");
+      const now = yield* DateTime.now;
+      const providerThreadId = ProviderThreadId.make("provider-thread:workspace-move");
+      const providerSessionId = ProviderSessionId.make("session:workspace-move");
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("workspace-move:create"),
+        threadId,
+        projectId: ProjectId.make("project:workspace-move"),
+        title: "Workspace move",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: "feature/move",
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      yield* projections.apply({
+        id: EventId.make("workspace-move:session"),
+        type: "provider-session.attached",
+        threadId,
+        occurredAt: now,
+        payload: {
+          id: providerSessionId,
+          driver: adapter.driver,
+          providerInstanceId: instanceId,
+          status: "ready",
+          cwd: "/repo",
+          model: null,
+          capabilities: CodexProviderCapabilitiesV2,
+          createdAt: now,
+          updatedAt: now,
+          lastError: null,
+        },
+      });
+      yield* projections.apply({
+        id: EventId.make("workspace-move:provider-thread"),
+        type: "provider-thread.updated",
+        threadId,
+        occurredAt: now,
+        payload: {
+          id: providerThreadId,
+          driver: adapter.driver,
+          providerInstanceId: instanceId,
+          providerSessionId,
+          appThreadId: threadId,
+          ownerNodeId: null,
+          nativeThreadRef: {
+            driver: adapter.driver,
+            nativeId: "old-native-thread",
+            strength: "strong",
+          },
+          nativeConversationHeadRef: null,
+          status: "idle",
+          firstRunOrdinal: 1,
+          lastRunOrdinal: 1,
+          handoffIds: [],
+          forkedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("workspace-move:bind"),
+        threadId,
+        expectedWorktreePath: null,
+        worktreePath: "/repo-worktree",
+        associatedWorktreePath: "/repo-worktree",
+        requireIdle: true,
+      });
+      const projection = yield* projections.getThreadProjection(threadId);
+      assert.equal(projection.thread.worktreePath, "/repo-worktree");
+      assert.equal(
+        projection.providerThreads.find((t) => t.id === providerThreadId)?.nativeThreadRef,
+        null,
+      );
+      assert.equal(projection.providerSessions.filter((s) => s.status === "ready").length, 0);
+      assert.ok(
+        projection.turnItems.some(
+          (item) => item.type === "system_notice" && item.message.includes("Workspace moved"),
+        ),
+      );
+      const stale = yield* Effect.result(
+        orchestrator.dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("workspace-move:stale"),
+          threadId,
+          expectedWorktreePath: null,
+          worktreePath: "/another-worktree",
+          requireIdle: true,
+        }),
+      );
+      assert.equal(stale._tag, "Failure");
+      yield* orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("workspace-move:return"),
+        threadId,
+        expectedWorktreePath: "/repo-worktree",
+        worktreePath: null,
+        branch: "main",
+        requireIdle: true,
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("workspace-move:branch"),
+        threadId,
+        branch: "another-local-branch",
+      });
+      assert.equal(
+        (yield* projections.getThread(threadId)).associatedWorktreePath,
+        "/repo-worktree",
+      );
+      assert.equal(
+        (yield* projections.getThreadWorktreePaths()).find((entry) => entry.threadId === threadId)
+          ?.worktreePath,
+        "/repo-worktree",
+      );
+      assert.equal(
+        (yield* projections.getThreadShell(threadId))?.associatedWorktreePath,
+        "/repo-worktree",
+      );
+    }).pipe(Effect.provide(layerTest)),
+);

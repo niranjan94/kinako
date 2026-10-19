@@ -15,6 +15,16 @@ if that project exists there. Otherwise it selects an environment that has it.
 
 To continue a Claude Code or Codex session you started in a terminal, search the command palette for **Import CLI session**. See [Claude](./providers-claude.md#bring-a-claude-code-session-into-kinako) and [Codex](./providers-codex.md#bring-a-codex-cli-session-into-kinako).
 
+### Move an existing thread
+
+When the thread is idle, choose **Move to worktree…** or **Move to local…** from
+its workspace details, sidebar menu, or command palette. On mobile, open
+**Branches & worktrees**. The conversation and uncommitted changes move together.
+You can create a branch or use the branch of an existing worktree at the same
+commit. After moving to local, **Use associated worktree** returns to the retained
+worktree. See [workspace moves](./source-control.md#move-between-checkouts) for
+destination requirements and file handling.
+
 ### Start without a project
 
 A thread does not need a project. To start one without a project, click **or

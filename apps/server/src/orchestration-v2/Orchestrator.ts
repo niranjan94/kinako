@@ -62,7 +62,7 @@ import {
   RuntimeMode,
   ThreadLinkedPullRequest,
   ThreadId,
-  type TurnItemId,
+  TurnItemId,
 } from "@t3tools/contracts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import {
@@ -2644,6 +2644,23 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: `Thread ${command.threadId} branch changed before the metadata update could be applied.`,
       });
     }
+    if (command.type === "thread.metadata.update" && command.requireIdle === true) {
+      const records = yield* projectionStore
+        .getThreadRecords(command.threadId, ["runs"])
+        .pipe(mapDispatchError(command));
+      if (
+        thread.archivedAt !== null ||
+        records.runs.some((run) =>
+          ["queued", "preparing", "starting", "running", "waiting"].includes(run.status),
+        )
+      ) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: "The thread must be idle and unarchived before moving its workspace.",
+        });
+      }
+    }
     if (command.type === "thread.metadata.update" && command.expectedEmpty === true) {
       const records = yield* projectionStore
         .getThreadRecords(command.threadId, ["runs"])
@@ -3106,6 +3123,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 : {}),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
+            ...(command.associatedWorktreePath === undefined
+              ? {}
+              : { associatedWorktreePath: command.associatedWorktreePath }),
             ...(command.additionalDirectories === undefined
               ? {}
               : { additionalDirectories: command.additionalDirectories }),
@@ -3446,6 +3466,68 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       payload: updatedThread,
     });
 
+    if (
+      command.type === "thread.metadata.update" &&
+      command.requireIdle === true &&
+      command.worktreePath !== undefined &&
+      command.worktreePath !== thread.worktreePath
+    ) {
+      const { providerThreads } = yield* projectionStore
+        .getThreadRecords(thread.id, ["providerThreads"])
+        .pipe(mapDispatchError(command));
+      for (const providerThread of providerThreads) {
+        yield* emit(
+          events,
+          command,
+        )({
+          type: "provider-thread.updated",
+          threadId: thread.id,
+          driver: providerThread.driver,
+          providerInstanceId: providerThread.providerInstanceId,
+          occurredAt: now,
+          payload: {
+            ...providerThread,
+            providerSessionId: null,
+            nativeThreadRef: null,
+            nativeConversationHeadRef: null,
+            nativeMetadata: null,
+            contextUsage: null,
+            status: "not_loaded",
+            updatedAt: now,
+          },
+        });
+      }
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "turn-item.updated",
+        threadId: thread.id,
+        providerInstanceId: updatedThread.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          type: "system_notice",
+          id: TurnItemId.make(`workspace-move:${command.commandId}`),
+          threadId: thread.id,
+          runId: null,
+          nodeId: null,
+          providerThreadId: null,
+          providerTurnId: null,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: yield* nextTurnItemOrdinal({ thread }),
+          status: "completed",
+          title: null,
+          startedAt: now,
+          completedAt: now,
+          updatedAt: now,
+          message:
+            command.worktreePath === null
+              ? "Workspace moved to local."
+              : `Workspace moved to ${command.worktreePath}.`,
+        },
+      });
+    }
     if (command.type === "thread.metadata.update" && command.regenerateTitle === true) {
       yield* Ref.update(effects, (existing) => [
         ...existing,

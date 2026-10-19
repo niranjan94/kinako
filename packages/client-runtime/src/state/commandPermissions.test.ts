@@ -60,6 +60,35 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect(
+    "workspace moves require both Git write and thread operation grants on the destination",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const registry = yield* setup;
+          const move = createCommandPermissions(runtime, WS_METHODS.vcsMoveThread);
+          for (const scopes of [
+            [],
+            [AuthSourceControlWriteScope],
+            [AuthOrchestrationOperateScope],
+            [AuthSourceControlWriteScope, AuthOrchestrationOperateScope],
+          ]) {
+            registry.set(
+              sessions(env),
+              AsyncResult.success({ ...grant(false), scopes, permissions: scopes }),
+            );
+            expect(registry.get(move.permissionAtom(env))).toBe(scopes.length === 2);
+            if (scopes.length === 2) yield* move.authorize(registry, env);
+            else
+              expect((yield* move.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+                "EnvironmentAuthorizationError",
+              );
+          }
+          registry.set(sessions(other), AsyncResult.success(grant(false)));
+          expect(registry.get(move.permissionAtom(other))).toBe(false);
+        }),
+      ),
+  );
   it.effect("checks database grants on the destination for availability and execution", () =>
     Effect.scoped(
       Effect.gen(function* () {

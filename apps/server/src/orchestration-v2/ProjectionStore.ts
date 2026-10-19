@@ -1514,6 +1514,9 @@ export function threadShellFromProjection(
     interactionMode: projection.thread.interactionMode,
     branch: projection.thread.branch,
     worktreePath: projection.thread.worktreePath,
+    ...(projection.thread.associatedWorktreePath === undefined
+      ? {}
+      : { associatedWorktreePath: projection.thread.associatedWorktreePath }),
     ...(projection.thread.additionalDirectories === undefined
       ? {}
       : { additionalDirectories: projection.thread.additionalDirectories }),
@@ -1803,6 +1806,9 @@ function shellFromState(input: {
     interactionMode: input.state.thread.interactionMode,
     branch: input.state.thread.branch,
     worktreePath: input.state.thread.worktreePath,
+    ...(input.state.thread.associatedWorktreePath === undefined
+      ? {}
+      : { associatedWorktreePath: input.state.thread.associatedWorktreePath }),
     ...(input.state.thread.additionalDirectories === undefined
       ? {}
       : { additionalDirectories: input.state.thread.additionalDirectories }),
@@ -5820,6 +5826,13 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           AND json_extract(payload_json, '$.archivedAt') IS NULL
           AND json_extract(payload_json, '$.worktreePath') IS NOT NULL
         UNION ALL
+        SELECT thread_id, json_extract(payload_json, '$.associatedWorktreePath') AS worktree_path
+        FROM orchestration_v2_projection_threads
+        WHERE deleted_at IS NULL
+          AND json_extract(payload_json, '$.archivedAt') IS NULL
+          AND json_extract(payload_json, '$.worktreePath') IS NULL
+          AND json_extract(payload_json, '$.associatedWorktreePath') IS NOT NULL
+        UNION ALL
         SELECT thread.thread_id, json_extract(directory.value, '$.worktreePath') AS worktree_path
         FROM orchestration_v2_projection_threads AS thread,
           json_each(thread.payload_json, '$.additionalDirectories') AS directory
@@ -6332,6 +6345,7 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
               thread.deletedAt === null && thread.archivedAt === null
                 ? [
                     thread.worktreePath,
+                    thread.worktreePath === null ? (thread.associatedWorktreePath ?? null) : null,
                     ...(thread.additionalDirectories ?? []).map(
                       (directory) => directory.worktreePath,
                     ),

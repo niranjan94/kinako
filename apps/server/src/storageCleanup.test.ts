@@ -498,6 +498,27 @@ const runCleanupTest = <A, E>(
 ) => effect.pipe(Effect.provide(cleanupTestLayer), Effect.scoped);
 
 describe("subagent worktree ownership", () => {
+  it.effect("retains an associated worktree while the thread uses the local checkout", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW_MS);
+      const fixture = yield* cleanupFixture();
+      fixture.setThreads([
+        shell({ worktreePath: null, associatedWorktreePath: fixture.worktree, branch: "main" }),
+        shell({
+          id: ThreadId.make("other-owner"),
+          worktreePath: fixture.worktree,
+          branch: "feature",
+        }),
+      ]);
+      const report = yield* fixture.service.runNow;
+      expect(yield* fixture.fs.exists(fixture.worktree)).toBe(true);
+      expect(
+        report.entries.some(
+          (entry) => entry.path === fixture.worktree && entry.outcome === "removed",
+        ),
+      ).toBe(false);
+    }).pipe(Effect.scoped, Effect.provide(cleanupTestLayer)),
+  );
   it.effect.each([
     "idle",
     "grandchild",
