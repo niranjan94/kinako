@@ -9,7 +9,7 @@ import {
 const connectionId = DatabaseConnectionId.make("connection");
 
 describe("database console storage", () => {
-  it("restores SQL and table filters without sessions or results", () => {
+  it("restores SQL and table filters without sessions or results, activating a console", () => {
     persistDatabaseWorkspace("thread-a", {
       activeId: "table",
       tabs: [
@@ -43,7 +43,7 @@ describe("database console storage", () => {
     });
     flushDatabaseWorkspaces();
     expect(restoreDatabaseWorkspace("thread-a")).toEqual({
-      activeId: "table",
+      activeId: "console",
       tabs: [
         {
           id: "console",

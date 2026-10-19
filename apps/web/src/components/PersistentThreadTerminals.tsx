@@ -5,10 +5,12 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { useAtomValue } from "@effect/atom-react";
+import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
+import type { DatabaseWorkspace } from "@t3tools/client-runtime/state/database";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
-import { memo, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
 import type { TerminalContextSelection } from "../lib/terminalContext";
@@ -18,10 +20,18 @@ import {
   useRightPanelStore,
   type RightPanelSurface,
 } from "../rightPanelStore";
+import { databaseState } from "../state/database";
 import { useProject, useQuietThreadShell } from "../state/entities";
 import { useEnvironmentScope } from "../state/session";
 import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { DatabaseDrawerTabs } from "./database/DatabaseDrawerTabs";
+import { showDatabaseDrawerTable, useDatabaseDrawerTable } from "./database/databaseDrawerStore";
+import {
+  DatabaseTableView,
+  hasDatabaseTableTabs,
+  isDatabaseTableTab,
+} from "./database/DatabaseTableView";
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 
@@ -117,6 +127,17 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     selectThreadTerminalUiState(state.terminalUiStateByThreadKey, threadRef),
   );
   const visible = active && terminalUiState.terminalOpen;
+  const threadKey = scopedThreadKey(threadRef);
+  const databaseWorkspace = databaseState.workspaces(threadKey);
+  // Boolean selectors keep SQL console edits from re-rendering the terminal drawer.
+  const hasDatabaseTables = useAtomValue(databaseWorkspace, hasDatabaseTableTabs);
+  const requestedTableId = useDatabaseDrawerTable((state) => state.byThread[threadKey]);
+  const isShownTable = useCallback(
+    (workspace: DatabaseWorkspace) =>
+      workspace.tabs.some((tab) => tab.id === requestedTableId && isDatabaseTableTab(tab)),
+    [requestedTableId],
+  );
+  const shownTableId = useAtomValue(databaseWorkspace, isShownTable) ? requestedTableId : undefined;
   const knownTerminalSessions = useKnownTerminalSessions({
     environmentId: threadRef.environmentId,
     threadId,
@@ -212,6 +233,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
       location: { cwd, worktreePath: effectiveWorktreePath },
     });
     if (!launched) return;
+    showDatabaseDrawerTable(threadKey, null);
     bumpFocusRequestId();
     void launched.result;
   };
@@ -287,6 +309,21 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
           onAddTerminalContext={handleAddTerminalContext}
           terminalLabelsById={terminalLabelsById}
           terminalLaunchLocationsById={terminalLaunchLocationsById}
+          header={
+            hasDatabaseTables ? (
+              <DatabaseDrawerTabs threadKey={threadKey} shownId={shownTableId ?? null} />
+            ) : undefined
+          }
+          view={
+            shownTableId ? (
+              <DatabaseTableView
+                environmentId={threadRef.environmentId}
+                projectId={project.id}
+                threadKey={threadKey}
+                tabId={shownTableId}
+              />
+            ) : undefined
+          }
         />
       </div>
     </div>
