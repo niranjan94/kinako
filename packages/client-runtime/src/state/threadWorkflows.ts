@@ -39,6 +39,18 @@ export function resolveActiveThreadRun(projection: Pick<Projection, "runs">): Ru
   return projection.runs.findLast((run) => ACTIVE_RUN_STATUSES.has(run.status)) ?? null;
 }
 
+export function resolveLatestForkableRun(projection: Pick<Projection, "runs">): Run | null {
+  return projection.runs.reduce<Run | null>((latest, run) => {
+    const finished =
+      run.status === "completed" ||
+      run.status === "waiting" ||
+      run.status === "failed" ||
+      run.status === "interrupted" ||
+      run.status === "cancelled";
+    return finished && (latest === null || run.ordinal > latest.ordinal) ? run : latest;
+  }, null);
+}
+
 /**
  * A successfully finished provider turn remains in `waiting` while its
  * checkpoint is captured. Keep that newest turn available for merge-back

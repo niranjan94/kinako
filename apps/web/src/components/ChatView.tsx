@@ -33,6 +33,7 @@ import { RightPanelSurfaceContent } from "./chat/RightPanelSurfaceContent";
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import { usePendingThreadRequests } from "./chat/usePendingThreadRequests";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { resolveLatestForkableRun } from "@t3tools/client-runtime/state/thread-workflows";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import {
   latestExecutedRun,
@@ -183,6 +184,7 @@ import {
   collapseExpandedComposerCursor,
   composerRequiresModifier,
   parseStandaloneComposerSlashCommand,
+  parseBtwComposerQuestion,
 } from "../composer-logic";
 import {
   derivePhase,
@@ -3921,6 +3923,7 @@ export default function ChatView(props: ChatViewProps) {
     branch?: string;
     runtimeMode: RuntimeMode;
     interactionMode: ProviderInteractionMode;
+    forceModes?: boolean;
   }): Promise<AtomCommandResult<void, unknown>> => {
     if (!serverThread) {
       return AsyncResult.success(undefined);
@@ -3948,7 +3951,7 @@ export default function ChatView(props: ChatViewProps) {
       }
     }
 
-    if (input.runtimeMode !== serverThread.runtimeMode) {
+    if (input.forceModes || input.runtimeMode !== serverThread.runtimeMode) {
       result = mapAtomCommandResult(
         await setThreadRuntimeMode({
           environmentId,
@@ -3965,7 +3968,7 @@ export default function ChatView(props: ChatViewProps) {
       }
     }
 
-    if (input.interactionMode !== serverThread.interactionMode) {
+    if (input.forceModes || input.interactionMode !== serverThread.interactionMode) {
       result = mapAtomCommandResult(
         await setThreadInteractionMode({
           environmentId,
@@ -5997,9 +6000,10 @@ export default function ChatView(props: ChatViewProps) {
     });
   };
 
-  const onForkFromRun = async (input: {
+  const createForkFromRun = async (input: {
     readonly sourceThreadId: ThreadId;
     readonly runId: RunId;
+    readonly title?: string;
   }) => {
     if (!activeThread || activeEnvironmentUnavailable) return;
     const targetThreadId = newThreadId();
@@ -6010,7 +6014,7 @@ export default function ChatView(props: ChatViewProps) {
         sourceThreadId: input.sourceThreadId,
         targetThreadId,
         runId: input.runId,
-        title: `${activeThread.title} fork`,
+        title: input.title ?? `${activeThread.title} fork`,
       },
     });
     if (result._tag === "Failure") {
@@ -6031,6 +6035,14 @@ export default function ChatView(props: ChatViewProps) {
       );
       return;
     }
+    return targetThreadRef;
+  };
+  const onForkFromRun = async (input: {
+    readonly sourceThreadId: ThreadId;
+    readonly runId: RunId;
+  }) => {
+    const targetThreadRef = await createForkFromRun(input);
+    if (!targetThreadRef) return;
     await navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(targetThreadRef),
@@ -6196,6 +6208,121 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
     const sendCtx = composerRef.current?.getSendContext();
+    const btwQuestion = directAnnotation
+      ? null
+      : parseBtwComposerQuestion(
+          promptRef.current,
+          queuedRunEdit.isEditing
+            ? "queued-message"
+            : activePendingProgress && sendCtx?.answeringPendingUserInput !== false
+              ? "pending-user-input"
+              : "provider-turn",
+        );
+    if (btwQuestion !== null) {
+      if (!btwQuestion || composerHasNonPromptContent || !serverProjection) {
+        setThreadError(
+          activeThread.id,
+          "Use /btw followed by a text question, without attachments.",
+        );
+        return;
+      }
+      const sourceRun = resolveLatestForkableRun(serverProjection);
+      if (!sourceRun) {
+        setThreadError(activeThread.id, "Finish a turn before asking a side question.");
+        return;
+      }
+      if (!sendCtx?.providerAvailable) return;
+      const outgoingQuestion = formatOutgoingPrompt({
+        provider: sendCtx.selectedProvider,
+        model: sendCtx.selectedModel,
+        models: sendCtx.selectedProviderModels,
+        effort: sendCtx.selectedPromptEffort,
+        text: btwQuestion,
+      });
+      if (composerRef.current?.validateProviderInput(outgoingQuestion) === false) return;
+      // Reserve the tab during the user gesture; opening after the fork RPC is blocked by browsers.
+      const sideTab = isElectron ? null : window.open("", "_blank");
+      if (sideTab) sideTab.opener = null;
+      const originalPrompt = promptRef.current;
+      let openedSideThread = false;
+      sendInFlightRef.current = true;
+      setThreadError(activeThread.id, null);
+      const sendSideQuestion = async () => {
+        try {
+          const target = await createForkFromRun({
+            sourceThreadId: activeThread.id,
+            runId: sourceRun.id,
+            title: `Btw: ${truncate(btwQuestion)}`,
+          });
+          if (!target) return;
+          // A fork copies persisted modes, which another client may change during creation.
+          const settingsResult = await persistThreadSettingsForNextTurn({
+            threadId: target.threadId,
+            createdAt: new Date().toISOString(),
+            runtimeMode,
+            interactionMode: sendCtx.interactionMode,
+            forceModes: true,
+          });
+          const result =
+            settingsResult._tag === "Failure"
+              ? settingsResult
+              : await startThreadTurn({
+                  environmentId,
+                  input: {
+                    threadId: target.threadId,
+                    message: {
+                      messageId: newMessageId(),
+                      role: "user",
+                      text: outgoingQuestion,
+                      attachments: [],
+                    },
+                    modelSelection: sendCtx.selectedModelSelection,
+                    runtimeMode,
+                    interactionMode: sendCtx.interactionMode,
+                    dispatchMode: "start",
+                  },
+                });
+          if (result._tag === "Failure") {
+            const error = squashAtomCommandFailure(result);
+            setThreadError(
+              activeThread.id,
+              error instanceof Error ? error.message : "Failed to send the side question.",
+            );
+            return;
+          }
+          // Keep any text typed while the fork was being created.
+          if (
+            useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.prompt ===
+            originalPrompt
+          ) {
+            setComposerDraftPrompt(composerDraftTarget, "");
+            if (currentRouteThreadKeyRef.current === routeThreadKey) {
+              promptRef.current = "";
+              composerRef.current?.resetCursorState();
+            }
+          }
+          if (sideTab && !sideTab.closed) {
+            sideTab.location.href = `/${encodeURIComponent(target.environmentId)}/${encodeURIComponent(target.threadId)}`;
+            openedSideThread = true;
+          } else if (currentRouteThreadKeyRef.current === routeThreadKey) {
+            await navigate({
+              to: "/$environmentId/$threadId",
+              params: buildThreadRouteParams(target),
+            });
+          }
+        } catch (error) {
+          setThreadError(
+            activeThread.id,
+            error instanceof Error ? error.message : "Failed to open the side question.",
+          );
+        }
+      };
+      await sendSideQuestion().finally(() => {
+        sendInFlightRef.current = false;
+        if (sideTab && !sideTab.closed && !openedSideThread) sideTab.close();
+      });
+      return;
+    }
     if (activePendingProgress && sendCtx?.answeringPendingUserInput !== false) {
       if (directAnnotation) {
         notifyDirectAnnotationAttached();
