@@ -33,6 +33,7 @@ import {
   type OrchestrationV2AppThread,
   type OrchestrationV2ContextHandoff,
   type OrchestrationV2ConversationSummaryDirection,
+  type OrchestrationV2ConversationSummaryRollback,
   type OrchestrationV2ContextSourcePoint,
   type OrchestrationV2ContextTransfer,
   type OrchestrationV2ContextTransferResolution,
@@ -10058,14 +10059,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         .getThread(command.threadId)
         .pipe(mapDispatchError(command));
       if (thread.deletedAt !== null) return;
+      const now = yield* DateTime.now;
       if (thread.rollbackRequestId !== command.requestId) {
+        // A newer rollback owns the failure banner, but this summary's rewind still never happened.
+        if (command.summary !== undefined) {
+          return yield* withdrawConversationSummary(command, command.summary, events, now);
+        }
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
           cause: `Rollback ${command.requestId} is no longer the thread's current rollback.`,
         });
       }
-      const now = yield* DateTime.now;
       yield* emit(
         events,
         command,
@@ -10080,6 +10085,51 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           updatedAt: now,
         },
       });
+      if (command.summary !== undefined) {
+        yield* withdrawConversationSummary(command, command.summary, events, now);
+      }
+    });
+
+  /**
+   * Retires a `from_here` summary whose rollback failed: the provider still
+   * holds the covered turns, so delivering the summary would duplicate them.
+   */
+  const withdrawConversationSummary = (
+    command: Extract<OrchestrationV2InternalCommand, { readonly type: "checkpoint.rollback.fail" }>,
+    summary: OrchestrationV2ConversationSummaryRollback,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    now: DateTime.Utc,
+  ) =>
+    Effect.gen(function* () {
+      const records = yield* projectionStore
+        .getThreadRecords(command.threadId, ["contextHandoffs", "turnItems"], {
+          turnItemTypes: ["compaction"],
+        })
+        .pipe(mapDispatchError(command));
+      const emitEvent = emit(events, command);
+      const handoff = records.contextHandoffs.find(
+        (candidate) => candidate.id === summary.handoffId,
+      );
+      if (handoff !== undefined && handoff.status === "ready") {
+        yield* emitEvent({
+          type: "context-handoff.updated",
+          threadId: command.threadId,
+          providerInstanceId: records.thread.providerInstanceId,
+          occurredAt: now,
+          payload: { ...handoff, status: "failed", updatedAt: now },
+        });
+      }
+      const marker = records.turnItems.find((item) => item.id === summary.markerItemId);
+      if (marker !== undefined && marker.status !== "failed") {
+        yield* emitEvent({
+          type: "turn-item.updated",
+          threadId: command.threadId,
+          ...(marker.runId === null ? {} : { runId: marker.runId }),
+          providerInstanceId: records.thread.providerInstanceId,
+          occurredAt: now,
+          payload: { ...marker, status: "failed", updatedAt: now },
+        });
+      }
     });
 
   /**
@@ -10441,6 +10491,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               type: "provider-thread.rollback",
               restoreFiles: false,
               keepCheckpoints: true,
+              summary: { handoffId: handoff.id, markerItemId: markerId },
               providerThreadId: providerThread.id,
               checkpointId: rollbackTarget.checkpoint.id,
               scopeId: rollbackTarget.scope.id,

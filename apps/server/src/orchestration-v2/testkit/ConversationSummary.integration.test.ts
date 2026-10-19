@@ -46,6 +46,9 @@ const PROMPTS = {
   5: "Anything left to do?",
 } as const;
 
+/** How the fake provider rewinds: in place, on a new thread at thread start as Claude does, or never. */
+type RollbackMode = "in_place" | "reset_at_thread_start" | "fail";
+
 interface CapturedTurn {
   readonly providerThreadId: ProviderThreadId;
   readonly nativeThreadId: string | null;
@@ -56,6 +59,7 @@ function makeAdapter(input: {
   readonly capabilities: OrchestrationV2ProviderCapabilities;
   readonly turns: Ref.Ref<ReadonlyArray<CapturedTurn>>;
   readonly rollbacks: Ref.Ref<number>;
+  readonly rollbackMode: RollbackMode;
 }): ProviderAdapter.ProviderAdapterV2["Service"] {
   const unimplemented = (detail: string) =>
     Effect.fail(new ProviderAdapter.ProviderAdapterProtocolError({ driver: DRIVER, detail }));
@@ -190,10 +194,34 @@ function makeAdapter(input: {
           interruptTurn: () => Effect.void,
           respondToRuntimeRequest: () => Effect.void,
           readThreadSnapshot: () => unimplemented("readThreadSnapshot is unused"),
-          rollbackThread: ({ providerThread }) =>
-            Ref.update(input.rollbacks, (count) => count + 1).pipe(
-              Effect.as({ providerThread, providerTurns: [], messages: [], runtimeRequests: [] }),
-            ),
+          rollbackThread: ({ providerThread, target }) =>
+            Effect.gen(function* () {
+              const count = yield* Ref.updateAndGet(input.rollbacks, (value) => value + 1);
+              if (input.rollbackMode === "fail") {
+                return yield* new ProviderAdapter.ProviderAdapterRollbackThreadError({
+                  driver: DRIVER,
+                  providerThreadId: providerThread.id,
+                  cause: "The provider rejected the rewind.",
+                });
+              }
+              if (input.rollbackMode === "in_place" || target.type !== "thread_start") {
+                return { providerThread, providerTurns: [], messages: [], runtimeRequests: [] };
+              }
+              const nativeThreadId = `${sessionInput.providerSessionId}:reset:${count}`;
+              return {
+                providerThread: {
+                  ...providerThread,
+                  id: ProviderThreadId.make(`provider-thread:${nativeThreadId}`),
+                  nativeThreadRef: { driver: DRIVER, nativeId: nativeThreadId, strength: "strong" },
+                  nativeConversationHeadRef: null,
+                  firstRunOrdinal: null,
+                  lastRunOrdinal: null,
+                },
+                providerTurns: [],
+                messages: [],
+                runtimeRequests: [],
+              };
+            }),
           forkThread: () => unimplemented("forkThread is unused"),
         };
         return runtime;
@@ -240,6 +268,7 @@ const runWithHarness = <A, E>(
   options: {
     readonly capabilities?: OrchestrationV2ProviderCapabilities;
     readonly failGeneration?: boolean;
+    readonly rollbackMode?: RollbackMode;
   },
   body: (
     harness: Harness,
@@ -258,6 +287,7 @@ const runWithHarness = <A, E>(
           capabilities: options.capabilities ?? ClaudeProviderCapabilitiesV2,
           turns: harness.turns,
           rollbacks: harness.rollbacks,
+          rollbackMode: options.rollbackMode ?? "in_place",
         }),
       ]);
       return yield* body(harness).pipe(
@@ -555,6 +585,77 @@ describe("orchestration v2 conversation summary", () => {
         assert.equal(yield* Ref.get(harness.rollbacks), 0);
         assert.isUndefined(yield* marker);
         assert.isAbove((yield* Ref.get(harness.summaryRequests)).length, 0);
+      }),
+    ),
+  );
+
+  it.live("delivers a summary from the first message when the rewind starts a new thread", () =>
+    runWithHarness(
+      "summary-from-thread-start",
+      { rollbackMode: "reset_at_thread_start" },
+      (harness) =>
+        Effect.gen(function* () {
+          yield* createThread;
+          yield* send(1);
+          yield* send(2);
+          const before = yield* projection;
+          yield* summarize(1, "from_here");
+          yield* awaitMarker;
+          yield* awaitStoredEvent(
+            (event) =>
+              event.type === "run.updated" &&
+              event.payload.ordinal === 2 &&
+              event.payload.status === "rolled_back",
+          );
+
+          const rewound = yield* projection;
+          assert.notEqual(
+            rewound.thread.activeProviderThreadId,
+            before.thread.activeProviderThreadId,
+          );
+          const handoff = rewound.contextHandoffs.find(
+            (candidate) => candidate.deliverOnNextTurn === true,
+          );
+          assert.equal(handoff?.toProviderThreadId, rewound.thread.activeProviderThreadId);
+
+          yield* send(3);
+          const turn = (yield* Ref.get(harness.turns)).at(-1);
+          assert.equal(turn?.providerThreadId, rewound.thread.activeProviderThreadId);
+          assert.include(turn?.text ?? "", SUMMARY);
+          assert.include(turn?.text ?? "", PROMPTS[3]);
+        }),
+    ),
+  );
+
+  it.live("withdraws a summary from a message when the rewind fails for good", () =>
+    runWithHarness("summary-rollback-failure", { rollbackMode: "fail" }, (harness) =>
+      Effect.gen(function* () {
+        yield* createThread;
+        yield* send(1);
+        yield* send(2);
+        yield* send(3);
+        yield* summarize(2, "from_here");
+        yield* awaitStoredEvent(
+          (event) =>
+            event.type === "thread.metadata-updated" &&
+            event.payload.rollbackFailure !== null &&
+            event.payload.rollbackFailure !== undefined,
+        );
+
+        const current = yield* projection;
+        assert.isTrue(current.runs.every((run) => run.status === "completed"));
+        assert.isAbove(yield* Ref.get(harness.rollbacks), 0);
+        assert.equal((yield* marker)?.status, "failed");
+        assert.isTrue(
+          current.contextHandoffs
+            .filter((handoff) => handoff.strategy === "manual_context")
+            .every((handoff) => handoff.status === "failed"),
+        );
+
+        yield* send(4);
+        const turn = (yield* Ref.get(harness.turns)).at(-1);
+        assert.include(turn?.text ?? "", PROMPTS[4]);
+        assert.notInclude(turn?.text ?? "", SUMMARY);
       }),
     ),
   );
