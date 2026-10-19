@@ -35,6 +35,7 @@ function recordEffect(action: string) {
 }
 
 vi.mock("../components/CustomSnoozeDialog", () => ({ requestCustomSnooze: vi.fn() }));
+vi.mock("../components/ThreadGroupDialog", () => ({ resolveThreadGroupChoice: vi.fn() }));
 vi.mock("react", () => ({
   useCallback: (callback: unknown) => callback,
   useMemo: (factory: () => unknown) => factory(),
@@ -48,11 +49,13 @@ vi.mock("../state/session", () => ({
 }));
 vi.mock("../state/entities", () => ({
   readEnvironmentSupportsAutoSettleOptOut: () => true,
+  readEnvironmentSupportsGrouping: () => true,
   readEnvironmentSupportsPinning: () => true,
   readEnvironmentSupportsSettlement: () => true,
   readEnvironmentSupportsSnooze: () => true,
   readEnvironmentSupportsTitleRegeneration: () => true,
   readThreadCliResumeCommand: () => null,
+  readThreadShells: () => [],
   readThreadShell: () => ({
     id: "thread",
     environmentId: "secondary",
@@ -133,6 +136,7 @@ vi.mock("./useThreadActions", () => ({
         "unsnoozeThread",
         "pinThread",
         "confirmAndUnpinThread",
+        "setThreadGroup",
         "archiveThread",
         "deleteThread",
       ].map((action) => [
