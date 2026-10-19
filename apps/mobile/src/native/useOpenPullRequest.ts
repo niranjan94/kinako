@@ -1,4 +1,4 @@
-import { useNavigation, useRoute, StackActions } from "@react-navigation/native";
+import { CommonActions, useNavigation, useRoute, StackActions } from "@react-navigation/native";
 import { nativePullRequestDestination } from "../lib/pullRequestNavigation";
 import { useCallback } from "react";
 import { Platform } from "react-native";
@@ -16,12 +16,12 @@ export function useNavigateToPullRequest(options?: { readonly replace?: boolean 
   const replace = options?.replace;
   return useCallback(
     async (url: string, context: PullRequestContext | null) => {
-      const params = nativePullRequestDestination(url, context);
-      if (!params) return tryOpenExternalUrl(url, "pull-request");
-      if (Platform.OS === "android")
-        resetAndroidWorkspace(navigation, { name: "PullRequest", params });
-      else if (replace) navigation.dispatch(StackActions.replace("PullRequest", params));
-      else navigation.navigate("PullRequest", params);
+      const destination = nativePullRequestDestination(url, context);
+      if (!destination) return tryOpenExternalUrl(url, "pull-request");
+      if (Platform.OS === "android") resetAndroidWorkspace(navigation, destination);
+      else if (replace)
+        navigation.dispatch(StackActions.replace(destination.name, destination.params));
+      else navigation.dispatch(CommonActions.navigate(destination));
       return true;
     },
     [navigation, replace],

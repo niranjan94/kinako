@@ -779,7 +779,7 @@ function PullRequestLinksOpenInAppSetting() {
   return (
     <SettingsRow
       {...searchableSetting("pull-request-links-open-in-app")}
-      description={`Clicking a pull request link opens it in ${APP_BASE_NAME}. Turn off to open pull request links like any other link, on GitHub or your git host.`}
+      description={`Clicking a pull request or GitHub issue link opens it in ${APP_BASE_NAME}. Turn off to open these links like any other link, on GitHub or your git host.`}
       resetAction={
         openInApp ? null : (
           <SettingResetButton
