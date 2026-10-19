@@ -431,7 +431,6 @@ import {
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
-import { SideQuestionToggle } from "./chat/SideQuestionToggle";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
 import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
@@ -7953,19 +7952,7 @@ export default function ChatView(props: ChatViewProps) {
       }}
     />
   ) : null;
-  const sideQuestionAvailable =
-    isServerThread && canOperateThread && serverConfig?.environment.capabilities.sideChats === true;
   const panelToggleControlProps = {
-    ...(sideQuestionAvailable && activeThreadRef
-      ? {
-          sideQuestionControl: (
-            <SideQuestionToggle
-              threadRef={activeThreadRef}
-              open={rightPanelOpen && activeRightPanelSurface?.kind === "side-chat"}
-            />
-          ),
-        }
-      : {}),
     terminalAvailable: activeProject !== null,
     terminalOpen: terminalUiState.terminalOpen,
     terminalShortcutLabel: shortcutLabelForCommand(keybindings, "terminal.toggle"),
@@ -7995,7 +7982,6 @@ export default function ChatView(props: ChatViewProps) {
         {...panelToggleControlProps}
         showTerminalControl={false}
         showRightPanelControl={false}
-        showSideQuestionControl={false}
       />
     </div>
   );
@@ -8086,7 +8072,6 @@ export default function ChatView(props: ChatViewProps) {
             onOpenThread={onOpenRelatedThreadStable}
             rightPanelOpen={inlineRightPanelOwnsTitleBar}
             onNewThreadInProject={handleNewThreadInActiveProjectStable}
-            sideQuestionAvailable={sideQuestionAvailable}
             {...(activeDraftLogicalProjectKey
               ? { onOpenProjectSettings: handleOpenDraftProjectSettingsStable }
               : {})}
