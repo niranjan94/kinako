@@ -11,6 +11,8 @@ import {
   ProviderTurnId,
   RunAttemptId,
   RunId,
+  SIDE_CHAT_INTERACTION_MODE,
+  SIDE_CHAT_RUNTIME_MODE,
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
@@ -265,7 +267,19 @@ it.effect("persists a side chat and promotes it without changing its parent", ()
       createdBy: "user",
       creationSource: "web",
     });
-    assert.isTrue((yield* orchestrator.getThreadProjection(targetThreadId)).thread.isSideChat);
+    const side = (yield* orchestrator.getThreadProjection(targetThreadId)).thread;
+    assert.isTrue(side.isSideChat);
+    assert.equal(side.runtimeMode, SIDE_CHAT_RUNTIME_MODE);
+    assert.equal(side.interactionMode, SIDE_CHAT_INTERACTION_MODE);
+    const escalation = yield* orchestrator
+      .dispatch({
+        type: "thread.runtime-mode.set",
+        commandId: CommandId.make("side-chat-escalate"),
+        threadId: targetThreadId,
+        runtimeMode: "full-access",
+      })
+      .pipe(Effect.flip);
+    assert.equal(escalation._tag, "OrchestratorDispatchError");
     assert.isTrue((yield* orchestrator.getThreadShell(targetThreadId))?.isSideChat);
     yield* orchestrator.dispatch({
       type: "thread.metadata.update",
@@ -275,6 +289,16 @@ it.effect("persists a side chat and promotes it without changing its parent", ()
     });
     const promoted = yield* orchestrator.getThreadProjection(targetThreadId);
     assert.isFalse(promoted.thread.isSideChat);
+    yield* orchestrator.dispatch({
+      type: "thread.runtime-mode.set",
+      commandId: CommandId.make("side-chat-promoted-mode"),
+      threadId: targetThreadId,
+      runtimeMode: "full-access",
+    });
+    assert.equal(
+      (yield* orchestrator.getThreadProjection(targetThreadId)).thread.runtimeMode,
+      "full-access",
+    );
     assert.isFalse((yield* orchestrator.getThreadShell(targetThreadId))?.isSideChat);
     assert.equal(promoted.thread.lineage.parentThreadId, sourceThreadId);
     assert.deepEqual(promoted.runs, []);

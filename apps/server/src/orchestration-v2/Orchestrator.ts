@@ -2556,6 +2556,16 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       });
     }
     if (
+      thread.isSideChat === true &&
+      (command.type === "thread.runtime-mode.set" || command.type === "thread.interaction-mode.set")
+    ) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Side chat ${command.threadId} stays read-only until it becomes a thread.`,
+      });
+    }
+    if (
       command.type === "thread.pull-request.watch" &&
       command.watching &&
       isProviderNativeSubagentThread(thread)
