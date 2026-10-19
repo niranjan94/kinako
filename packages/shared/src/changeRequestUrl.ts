@@ -18,7 +18,7 @@ function isHostOf(hostname: string, apex: string, label?: string): boolean {
   return label !== undefined && hostname.split(".").includes(label);
 }
 
-export function parseChangeRequestUrl(targetUrl: string): ChangeRequestLink | null {
+function parseWebUrl(targetUrl: string): { url: URL; host: string } | null {
   let url: URL;
   try {
     url = new URL(targetUrl);
@@ -26,7 +26,13 @@ export function parseChangeRequestUrl(targetUrl: string): ChangeRequestLink | nu
     return null;
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-  const host = url.hostname.toLowerCase();
+  return { url, host: url.hostname.toLowerCase() };
+}
+
+export function parseChangeRequestUrl(targetUrl: string): ChangeRequestLink | null {
+  const web = parseWebUrl(targetUrl);
+  if (web === null) return null;
+  const { url, host } = web;
 
   if (host === "git.cafe" || host === "staging.git.cafe") {
     const match = /^\/([^/]+\/[^/]+)\/pulls\/(\d+)(?:\/|$)/u.exec(url.pathname);
@@ -52,6 +58,13 @@ export function parseChangeRequestUrl(targetUrl: string): ChangeRequestLink | nu
     return claim(host, match);
   }
   return null;
+}
+
+/** Only GitHub reads issues, so other hosts' issue URLs stay external links. */
+export function parseIssueUrl(targetUrl: string): ChangeRequestLink | null {
+  const web = parseWebUrl(targetUrl);
+  if (web === null || !isHostOf(web.host, "github.com", "github")) return null;
+  return claim(web.host, /^\/([^/]+\/[^/]+)\/issues\/(\d+)(?:\/|$)/u.exec(web.url.pathname));
 }
 
 function claim(host: string, match: RegExpExecArray | null): ChangeRequestLink | null {

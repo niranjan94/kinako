@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   changeRequestUrlFor,
   parseChangeRequestUrl,
+  parseIssueUrl,
   pullRequestCandidateUrlFromReferenceAutolink,
   siblingPullRequestUrl,
 } from "./changeRequestUrl.ts";
@@ -94,6 +95,31 @@ describe("parseChangeRequestUrl", () => {
       "not a url",
     ]) {
       expect(parseChangeRequestUrl(link), link).toBeNull();
+    }
+  });
+});
+
+describe("parseIssueUrl", () => {
+  it("reads a GitHub issue, including on an Enterprise host", () => {
+    expect(parseIssueUrl("https://github.com/T3tools/T3code/issues/42#issuecomment-1")).toEqual({
+      host: "github.com",
+      repository: "t3tools/t3code",
+      number: 42,
+    });
+    expect(parseIssueUrl("https://github.example.com/org/repo/issues/7")?.repository).toBe(
+      "org/repo",
+    );
+  });
+
+  it("leaves pull requests and other hosts' issues alone", () => {
+    for (const link of [
+      "https://github.com/t3tools/t3code/pull/42",
+      "https://github.com/t3tools/t3code/issues",
+      "https://github.com/t3tools/t3code/issues/0",
+      "https://gitlab.com/t3tools/t3code/-/issues/12",
+      "https://example.com/org/repo/issues/12",
+    ]) {
+      expect(parseIssueUrl(link), link).toBeNull();
     }
   });
 });

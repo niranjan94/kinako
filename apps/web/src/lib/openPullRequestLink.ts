@@ -4,7 +4,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { type MouseEvent } from "react";
 
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { parseChangeRequestUrl, type ChangeRequestLink } from "@t3tools/shared/changeRequestUrl";
+import {
+  parseChangeRequestUrl,
+  parseIssueUrl,
+  type ChangeRequestLink,
+} from "@t3tools/shared/changeRequestUrl";
 import { sourceControlRepositorySelector } from "@t3tools/shared/sourceControl";
 
 import { useOpenLink } from "../browser/useOpenLink";
@@ -126,7 +130,9 @@ export function useOpenChangeRequestLink(
     const serverConfigs = appAtomRegistry.get(environmentServerConfigsAtom);
     const resolvedThreadRef = targetThreadRef ?? threadRef;
     const resolvedPanelRef = panelRef ?? resolvedThreadRef;
-    const parsed = parseChangeRequestUrl(targetUrl);
+    const pullRequest = parseChangeRequestUrl(targetUrl);
+    const issue = pullRequest === null ? parseIssueUrl(targetUrl) : null;
+    const parsed = pullRequest ?? issue;
     if (parsed === null) return false;
     const reads = (environmentId: string) =>
       serverConfigs.get(environmentId as EnvironmentId)?.environment.capabilities.pullRequests ===
@@ -159,10 +165,12 @@ export function useOpenChangeRequestLink(
           )
         : undefined);
     if (project === undefined || !reads(project.environmentId)) return false;
-    const repository =
-      serverConfigs.get(project.environmentId)?.environment.capabilities.threadPullRequests === true
-        ? parsed.repository
-        : (sourceControlRepositorySelector(project.repositoryIdentity) ?? parsed.repository);
+    const readsAnyRepository =
+      serverConfigs.get(project.environmentId)?.environment.capabilities.threadPullRequests ===
+      true;
+    const repository = readsAnyRepository
+      ? parsed.repository
+      : (sourceControlRepositorySelector(project.repositoryIdentity) ?? parsed.repository);
     event.preventDefault();
     event.stopPropagation();
     if (resolvedPanelRef) {
@@ -172,13 +180,11 @@ export function useOpenChangeRequestLink(
           ? {}
           : { environmentId: project.environmentId }),
         projectId: project.id,
-        ...(serverConfigs.get(project.environmentId)?.environment.capabilities
-          .threadPullRequests === true
-          ? { host: parsed.authority ?? parsed.host }
-          : {}),
+        ...(readsAnyRepository || issue !== null ? { host: parsed.authority ?? parsed.host } : {}),
         repository,
         url: targetUrl,
         number: parsed.number,
+        ...(issue === null ? {} : { item: "issue" as const }),
       });
       if (!resolvedThreadRef) {
         void navigate({
@@ -192,6 +198,7 @@ export function useOpenChangeRequestLink(
             selectedHost: parsed.authority ?? parsed.host,
             selectedProjectId: project.id,
             selectedEnvironmentId: project.environmentId,
+            selectedKind: issue === null ? undefined : "issue",
           }),
           replace: true,
         });
@@ -208,6 +215,7 @@ export function useOpenChangeRequestLink(
         selectedHost: parsed.authority ?? parsed.host,
         selectedProjectId: project.id,
         selectedEnvironmentId: project.environmentId,
+        selectedKind: issue === null ? undefined : "issue",
       },
     });
     return true;
