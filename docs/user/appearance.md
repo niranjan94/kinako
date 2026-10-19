@@ -29,6 +29,10 @@ The controls retreat as the composer docks after you send the first message.
 Turn on **Composer context** to keep those controls visible after the thread starts. This preference
 applies to the web and desktop clients.
 
+## Density
+
+On web and desktop, set **Density** in **Settings → Appearance** to **Compact** or **Spacious** to tighten or loosen the padding around sidebar rows, settings rows, the chat column, and the composer. Density only changes spacing; use the font size settings to change text size. Like other appearance preferences, it is saved separately on each device or browser.
+
 ## Motion
 
 The main sidebar, right panel, and terminal drawer open and close immediately by default. Move the

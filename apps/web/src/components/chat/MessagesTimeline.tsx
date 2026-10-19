@@ -999,6 +999,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     null,
   );
   const chatWidth = useClientSettings((settings) => settings.chatWidth);
+  const uiDensity = useClientSettings((settings) => settings.uiDensity);
   const {
     target: readyCitationRequest,
     positioning: citationPositioning,
@@ -1233,8 +1234,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       cancelAnimationFrame(frame);
       stopObserving();
     };
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Rows and chat width resize the content without resizing the viewport.
-  }, [timelineViewportElement, rows.length, reportContentOverflow, chatWidth]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Rows, chat width, and density resize the content without resizing the viewport.
+  }, [timelineViewportElement, rows.length, reportContentOverflow, chatWidth, uiDensity]);
 
   const sharedState: TimelineRowSharedState = {
     citationRequest: readyCitationRequest,

@@ -384,6 +384,23 @@ describe("ClientSettings chat width", () => {
   });
 });
 
+describe("ClientSettings UI density", () => {
+  it("keeps the comfortable density for existing settings without a saved density", () => {
+    expect(decodeClientSettings({}).uiDensity).toBe("comfortable");
+  });
+
+  it.each(["compact", "comfortable", "spacious"])("round-trips the %s density", (uiDensity) => {
+    const settings = decodeClientSettings({ uiDensity });
+    expect(encodeClientSettings(settings).uiDensity).toBe(uiDensity);
+    expect(decodeClientSettingsPatch({ uiDensity }).uiDensity).toBe(uiDensity);
+  });
+
+  it("rejects unsupported densities", () => {
+    expect(() => decodeClientSettings({ uiDensity: "cozy" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ uiDensity: "cozy" })).toThrow();
+  });
+});
+
 describe("ClientSettings load balancing", () => {
   it("requires opt-in when settings are new or omit load balancing", () => {
     expect(decodeClientSettings({}).loadBalancingEnabled).toBe(false);

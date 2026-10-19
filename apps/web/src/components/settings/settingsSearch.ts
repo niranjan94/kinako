@@ -265,6 +265,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["wide full width column layout messages composer monitor"],
   },
   {
+    id: "ui-density",
+    title: "Density",
+    to: "/settings/appearance",
+    searchTerms: ["compact comfortable spacious spacing padding rows tight roomy"],
+  },
+  {
     id: "panel-animations",
     title: "Panel animations",
     to: "/settings/appearance",

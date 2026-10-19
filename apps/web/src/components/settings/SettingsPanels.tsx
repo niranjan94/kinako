@@ -47,6 +47,7 @@ import {
   MIN_TERMINAL_FONT_SIZE,
   type QuitConfirmationMode,
   SidebarProjectSortOrder,
+  UiDensity,
 } from "@t3tools/contracts/settings";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import { createModelSelection } from "@t3tools/shared/model";
@@ -200,6 +201,7 @@ const SIDEBAR_PROJECT_SORT_ORDER_LABELS: Record<SidebarProjectSortOrder, string>
   manual: "Manual",
 };
 const isSidebarProjectSortOrder = Schema.is(SidebarProjectSortOrder);
+const isUiDensity = Schema.is(UiDensity);
 
 const TIMESTAMP_FORMAT_LABELS = {
   locale: "System default",
@@ -211,6 +213,12 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   comfortable: "Comfortable",
   wide: "Wide",
   full: "Full",
+};
+
+const UI_DENSITY_LABELS: Record<UiDensity, string> = {
+  compact: "Compact",
+  comfortable: "Comfortable",
+  spacious: "Spacious",
 };
 
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
@@ -550,6 +558,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? ["Diff colors"]
       : []),
     ...(settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ? ["Chat width"] : []),
+    ...(settings.uiDensity !== DEFAULT_UNIFIED_SETTINGS.uiDensity ? ["Density"] : []),
     ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
       ? ["Panel animations"]
       : []),
@@ -726,6 +735,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
+      uiDensity: DEFAULT_UNIFIED_SETTINGS.uiDensity,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
@@ -1379,6 +1389,38 @@ export function AppearanceSettingsPanel() {
                   <SelectItem value="comfortable">Comfortable (default)</SelectItem>
                   <SelectItem value="wide">Wide</SelectItem>
                   <SelectItem value="full">Full</SelectItem>
+                </SelectPopup>
+              </Select>
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("ui-density")}
+          description="Set how much padding sits around sidebar rows, settings, the chat column, and the composer."
+          resetAction={
+            settings.uiDensity !== DEFAULT_UNIFIED_SETTINGS.uiDensity ? (
+              <SettingResetButton
+                label="density"
+                onClick={() => updateSettings({ uiDensity: DEFAULT_UNIFIED_SETTINGS.uiDensity })}
+              />
+            ) : null
+          }
+          control={
+            <div className="w-full sm:w-40">
+              <Select
+                value={settings.uiDensity}
+                onValueChange={(value) => {
+                  if (isUiDensity(value)) updateSettings({ uiDensity: value });
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Density">
+                  <SelectValue>{UI_DENSITY_LABELS[settings.uiDensity]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="compact">Compact</SelectItem>
+                  <SelectItem value="comfortable">Comfortable (default)</SelectItem>
+                  <SelectItem value="spacious">Spacious</SelectItem>
                 </SelectPopup>
               </Select>
             </div>

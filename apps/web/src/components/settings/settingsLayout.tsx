@@ -425,7 +425,9 @@ export function SettingsRow({
       data-slot="settings-row"
       className={cn(
         "@container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground",
-        children ? "pt-3 pb-1" : "py-3",
+        children
+          ? "pt-(--density-settings-row-inset-y) pb-1"
+          : "py-(--density-settings-row-inset-y)",
         className,
       )}
     >
