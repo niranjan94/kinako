@@ -28,6 +28,7 @@ import {
   type InterruptThreadTurnInput,
   type MarkThreadUnreadInput,
   type ForkThreadFromRunInput,
+  type AskSideQuestionInput,
   type MergeThreadBackInput,
   type PromoteQueuedRunInput,
   type ReorderQueuedRunInput,
@@ -64,6 +65,7 @@ import {
   editQueuedRun,
   interruptThreadTurn,
   forkThreadFromRun,
+  askSideQuestion,
   markThreadUnread,
   mergeThreadBack,
   promoteQueuedRun,
@@ -115,6 +117,7 @@ export type {
   InterruptThreadTurnInput,
   MarkThreadUnreadInput,
   ForkThreadFromRunInput,
+  AskSideQuestionInput,
   MergeThreadBackInput,
   PromoteQueuedRunInput,
   ReorderQueuedRunInput,
@@ -352,6 +355,15 @@ export function createThreadEnvironmentAtoms<R, E>(
       concurrency: {
         mode: "serial",
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.sourceThreadId]),
+      },
+    }),
+    askSideQuestion: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:ask-side-question",
+      execute: (input: AskSideQuestionInput) => askSideQuestion(input),
+      scheduler,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.parentThreadId]),
       },
     }),
     mergeBack: createEnvironmentCommand(runtime, {

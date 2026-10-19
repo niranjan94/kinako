@@ -236,6 +236,18 @@ export interface ForkThreadFromRunInput extends CommandMetadata {
   readonly title?: string;
 }
 
+export interface AskSideQuestionInput extends CommandMetadata {
+  readonly parentThreadId: ThreadId;
+  readonly sideThreadId: ThreadId;
+  /** Present to start a new side chat; omitted to follow up in an existing one. */
+  readonly fork?: { readonly runId: RunId; readonly title: string };
+  readonly message: {
+    readonly messageId: MessageId;
+    readonly text: string;
+    readonly context?: import("@t3tools/contracts").OrchestrationMessageContext;
+  };
+}
+
 export interface MergeThreadBackInput extends CommandMetadata {
   readonly sourceThreadId: ThreadId;
   readonly targetThreadId: ThreadId;
@@ -1015,6 +1027,36 @@ export const forkThreadFromRun = Effect.fn("EnvironmentCommands.forkThreadFromRu
     targetThreadId: input.targetThreadId,
     sourcePoint: { type: "run", runId: input.runId },
     ...(input.title === undefined ? {} : { title: input.title }),
+  });
+});
+
+export const askSideQuestion = Effect.fn("EnvironmentCommands.askSideQuestion")(function* (
+  input: AskSideQuestionInput,
+) {
+  const commandId = yield* allocateCommandId(input);
+  const creationSource = input.creationSource ?? "web";
+  if (input.fork !== undefined) {
+    yield* forkThreadFromRun({
+      commandId: CommandId.make(`${commandId}:fork`),
+      creationSource,
+      sourceThreadId: input.parentThreadId,
+      targetThreadId: input.sideThreadId,
+      runId: input.fork.runId,
+      title: input.fork.title,
+      isSideChat: true,
+    });
+  }
+  return yield* dispatch({
+    type: "message.dispatch",
+    commandId: CommandId.make(`${commandId}:ask`),
+    createdBy: "user",
+    creationSource,
+    threadId: input.sideThreadId,
+    messageId: input.message.messageId,
+    text: input.message.text,
+    ...(input.message.context === undefined ? {} : { context: input.message.context }),
+    attachments: [],
+    dispatchMode: { type: "start_immediately" },
   });
 });
 

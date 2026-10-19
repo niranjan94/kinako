@@ -183,6 +183,7 @@ import {
   collapseExpandedComposerCursor,
   composerRequiresModifier,
   parseStandaloneComposerSlashCommand,
+  parseBtwComposerQuestion,
 } from "../composer-logic";
 import {
   derivePhase,
@@ -431,6 +432,8 @@ import {
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { SideQuestionCard } from "./chat/SideQuestionCard";
+import { useSideQuestionActions } from "./chat/useSideQuestion";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
 import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
@@ -980,6 +983,7 @@ export default function ChatView(props: ChatViewProps) {
       currentRouteThreadKeyRef.current = null;
     };
   }, [routeThreadKey]);
+  const sideQuestions = useSideQuestionActions();
   const createThread = useOrchestrationCommand(threadEnvironment.create, { reportFailure: false });
   const deleteThread = useOrchestrationCommand(threadEnvironment.delete, { reportFailure: false });
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
@@ -6119,6 +6123,53 @@ export default function ChatView(props: ChatViewProps) {
     });
   };
 
+  const onSideQuestion = async (question: string) => {
+    if (!activeThread || !activeThreadRef || !serverProjection) return;
+    if (serverConfig?.environment.capabilities.sideChats !== true) {
+      setThreadError(activeThread.id, "Update this environment to ask side questions.");
+      return;
+    }
+    if (composerHasNonPromptContent) {
+      setThreadError(activeThread.id, "Side questions accept text only.");
+      return;
+    }
+    const originalPrompt = promptRef.current;
+    const threadId = activeThread.id;
+    sendInFlightRef.current = true;
+    setThreadError(threadId, null);
+    await (
+      question
+        ? sideQuestions.ask(activeThreadRef, serverProjection, question).then(() => true)
+        : sideQuestions.reopen(activeThreadRef)
+    )
+      .then((handled) => {
+        if (!handled) {
+          setThreadError(threadId, "Type a question after /btw.");
+          return;
+        }
+        // Keep anything typed while the request was in flight.
+        if (
+          useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.prompt !==
+          originalPrompt
+        )
+          return;
+        setComposerDraftPrompt(composerDraftTarget, "");
+        if (currentRouteThreadKeyRef.current === routeThreadKey) {
+          promptRef.current = "";
+          composerRef.current?.resetCursorState();
+        }
+      })
+      .catch((error: unknown) => {
+        setThreadError(
+          threadId,
+          error instanceof Error ? error.message : "Failed to ask the side question.",
+        );
+      })
+      .finally(() => {
+        sendInFlightRef.current = false;
+      });
+  };
+
   const onSend = async (
     e?: { preventDefault: () => void },
     dispatchMode: ComposerDispatchMode = "auto",
@@ -6196,6 +6247,20 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
     const sendCtx = composerRef.current?.getSendContext();
+    const btwQuestion = directAnnotation
+      ? null
+      : parseBtwComposerQuestion(
+          promptRef.current,
+          queuedRunEdit.isEditing
+            ? "queued-message"
+            : activePendingProgress && sendCtx?.answeringPendingUserInput !== false
+              ? "pending-user-input"
+              : "provider-turn",
+        );
+    if (btwQuestion !== null) {
+      await onSideQuestion(btwQuestion);
+      return;
+    }
     if (activePendingProgress && sendCtx?.answeringPendingUserInput !== false) {
       if (directAnnotation) {
         notifyDirectAnnotationAttached();
@@ -7728,6 +7793,12 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
+  const sideQuestionsAvailable =
+    isServerThread && canOperateThread && serverConfig?.environment.capabilities.sideChats === true;
+  const sideQuestionControl =
+    sideQuestionsAvailable && activeThreadRef ? (
+      <SideQuestionCard parentRef={activeThreadRef} workspaceRoot={activeWorkspaceRoot} />
+    ) : null;
   const queuedRunsControl =
     isServerThread && activeThread ? (
       <QueuedRunsControl
@@ -8417,6 +8488,7 @@ export default function ChatView(props: ChatViewProps) {
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
+                              sideQuestionControl={sideQuestionControl}
                               bannerItems={composerBannerItems}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}

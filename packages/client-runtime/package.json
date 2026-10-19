@@ -327,6 +327,10 @@
       "types": "./src/state/threadRequests.ts",
       "default": "./src/state/threadRequests.ts"
     },
+    "./state/side-chats": {
+      "types": "./src/state/sideChats.ts",
+      "default": "./src/state/sideChats.ts"
+    },
     "./state/thread-workflows": {
       "types": "./src/state/threadWorkflows.ts",
       "default": "./src/state/threadWorkflows.ts"

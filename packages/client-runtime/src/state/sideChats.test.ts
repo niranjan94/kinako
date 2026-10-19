@@ -5,10 +5,10 @@ import {
   TurnItemId,
   type OrchestrationV2ProjectedTurnItem,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeThreadRef } from "../environment/index.ts";
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
-import { findSideChatThreadId, sideChatMessages } from "./sideChat.logic";
+import { findLatestSideChat, sideChatMessages } from "./sideChats.ts";
 
 const parent = scopeThreadRef(EnvironmentId.make("local"), ThreadId.make("parent"));
 const sideId = ThreadId.make("side");
@@ -30,7 +30,7 @@ describe("side chat selection", () => {
   it("reopens the most recent side chat for the exact conversation and environment", () => {
     const newer = { ...side, id: ThreadId.make("newer"), createdAt: "2026-10-20T00:00:00Z" };
     expect(
-      findSideChatThreadId(
+      findLatestSideChat(
         [
           side,
           newer,
@@ -42,13 +42,13 @@ describe("side chat selection", () => {
           },
         ],
         parent,
-      ),
+      )?.id,
     ).toBe(newer.id);
   });
 
   it("does not reopen promoted, archived, or deleted chats", () => {
     expect(
-      findSideChatThreadId(
+      findLatestSideChat(
         [
           { ...side, isSideChat: false },
           { ...side, archivedAt: "2026-10-20T00:00:00Z" },
@@ -60,7 +60,7 @@ describe("side chat selection", () => {
   });
 });
 
-it("shows only side-chat messages, keeping inherited history out of the compact panel", () => {
+it("shows only side-chat messages, keeping inherited history out of the answer", () => {
   const itemId = TurnItemId.make("answer");
   const answer: OrchestrationV2ProjectedTurnItem = {
     position: 1,
