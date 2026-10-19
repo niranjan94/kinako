@@ -10,7 +10,7 @@ import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/enviro
 import type { DatabaseWorkspace } from "@t3tools/client-runtime/state/database";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
 import type { TerminalContextSelection } from "../lib/terminalContext";
@@ -132,11 +132,8 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   // Boolean selectors keep SQL console edits from re-rendering the terminal drawer.
   const hasDatabaseTables = useAtomValue(databaseWorkspace, hasDatabaseTableTabs);
   const requestedTableId = useDatabaseDrawerTable((state) => state.byThread[threadKey]);
-  const isShownTable = useCallback(
-    (workspace: DatabaseWorkspace) =>
-      workspace.tabs.some((tab) => tab.id === requestedTableId && isDatabaseTableTab(tab)),
-    [requestedTableId],
-  );
+  const isShownTable = (workspace: DatabaseWorkspace) =>
+    workspace.tabs.some((tab) => tab.id === requestedTableId && isDatabaseTableTab(tab));
   const shownTableId = useAtomValue(databaseWorkspace, isShownTable) ? requestedTableId : undefined;
   const knownTerminalSessions = useKnownTerminalSessions({
     environmentId: threadRef.environmentId,
