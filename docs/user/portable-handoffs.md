@@ -3,15 +3,6 @@
 T3 Code transfers conversation context when you switch providers, continue through a portable
 restart, or use a fork that the provider cannot resume itself.
 
-In web or desktop, use the **Ask a side question** icon in the conversation toolbar to ask about
-its ongoing work. Side chats stay out of the thread list, and closing the panel keeps the conversation for
-next time. **Make a thread** promotes a side chat to the thread list. **Join conversation** makes
-its context available to the main agent on its next turn through merge-back.
-
-A side chat starts with the latest finished turn and attaches the main conversation for reference.
-It accepts text questions and requires at least one finished turn. Each side chat uses the model
-and modes saved on the main conversation when it starts.
-
 Short conversations transfer intact. For longer conversations, T3 Code favors recent requests and
 answers, the original request, and relevant activity such as command outcomes. Selected messages
 keep their full text, order, and user or assistant role, including partial work from failed or
