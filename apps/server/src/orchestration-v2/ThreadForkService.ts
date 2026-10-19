@@ -8,6 +8,8 @@ import {
   OrchestrationV2ProviderThread,
   OrchestrationV2Run,
   OrchestrationV2ThreadProjection,
+  SIDE_CHAT_INTERACTION_MODE,
+  SIDE_CHAT_RUNTIME_MODE,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -85,6 +87,12 @@ export const layer: Layer.Layer<ThreadForkServiceV2> = Layer.succeed(
         const targetThread: OrchestrationV2AppThread = {
           ...input.sourceProjection.thread,
           isSideChat: input.isSideChat === true,
+          ...(input.isSideChat === true
+            ? {
+                runtimeMode: SIDE_CHAT_RUNTIME_MODE,
+                interactionMode: SIDE_CHAT_INTERACTION_MODE,
+              }
+            : {}),
           // PR context follows the conversation; watching remains the source thread's responsibility.
           pullRequests: input.sourceProjection.thread.pullRequests?.map(
             ({ watch: _watch, ...link }) => link,
