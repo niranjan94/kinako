@@ -16,8 +16,7 @@ import { DatabaseToolbarButton } from "./DatabaseToolbarButton";
 import { databaseErrorMessage, databaseValue } from "./databaseHooks";
 
 type TableTab = DatabaseWorkspaceTab & { table: NonNullable<DatabaseWorkspaceTab["table"]> };
-export const isDatabaseTableTab = (tab: DatabaseWorkspaceTab): tab is TableTab =>
-  tab.table !== undefined;
+const isDatabaseTableTab = (tab: DatabaseWorkspaceTab): tab is TableTab => tab.table !== undefined;
 
 // Tab ids are unique across threads, and loads must not overlap even if the view remounts.
 const pending = new Set<string>();
