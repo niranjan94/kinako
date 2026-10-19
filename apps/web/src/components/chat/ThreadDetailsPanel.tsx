@@ -21,6 +21,12 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { ContextWindowMeter } from "./ContextWindowMeter";
+import {
+  type ContextWindowSnapshot,
+  formatContextWindowTokens,
+  formatContextWindowPercentage,
+} from "@t3tools/client-runtime/context-window";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -32,6 +38,7 @@ export interface ThreadDetailsPanelProps extends Pick<
   environmentId: EnvironmentId;
   threadId: ThreadId;
   draftId?: DraftId;
+  contextWindow?: ContextWindowSnapshot | null;
   activeProjectName: string | undefined;
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
   preferredScriptId: string | null;
@@ -111,6 +118,21 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             showHeading={false}
           >
             <div className="flex flex-col">
+              {props.contextWindow ? (
+                <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                  <ContextWindowMeter usage={props.contextWindow} />
+                  <span className="flex-1">Context usage</span>
+                  <span className="tabular-nums">
+                    {props.contextWindow.usedPercentage !== null
+                      ? `${formatContextWindowPercentage(props.contextWindow.usedPercentage)} · `
+                      : ""}
+                    {formatContextWindowTokens(props.contextWindow.usedTokens)}
+                    {props.contextWindow.maxTokens != null
+                      ? ` / ${formatContextWindowTokens(props.contextWindow.maxTokens)}`
+                      : " tokens"}
+                  </span>
+                </div>
+              ) : null}
               {density === "full" ? (
                 <BranchToolbar
                   layout="panel"

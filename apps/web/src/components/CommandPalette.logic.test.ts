@@ -256,6 +256,21 @@ describe("reduceCommandPaletteUiState", () => {
     });
   });
 
+  it("keeps the chosen machine when opening add project from a draft", () => {
+    const environmentId = EnvironmentId.make("remote");
+    const state = reduceCommandPaletteUiState(closedState, {
+      _tag: "OpenAddProject",
+      environmentId,
+    });
+    expect(state.openIntent).toEqual({ kind: "add-project", environmentId });
+    expect(
+      reduceCommandPaletteUiState(state, { _tag: "SetOpen", open: false }).openIntent,
+    ).toBeNull();
+    expect(reduceCommandPaletteUiState(state, { _tag: "OpenAddProject" }).openIntent).toEqual({
+      kind: "add-project",
+    });
+  });
+
   it("preserves the mode on close and resets it on open", () => {
     const filesOpen = reduceCommandPaletteUiState(closedState, {
       _tag: "ToggleMode",

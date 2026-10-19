@@ -128,6 +128,14 @@ export function DraftHeroHeadline({
     ({ targetProject }) =>
       !isScratchProject(targetProject, scratchWorkspaceRootFor(targetProject.environmentId)),
   );
+  const recentEntries = sortLogicalProjectsForSidebar(
+    menuEntries.map((entry) => entry.group),
+    threads,
+    "updated_at",
+  )
+    .filter((group) => group.projectKey !== activeProjectKey)
+    .slice(0, 4)
+    .map((group) => projectEntryByKey.get(group.projectKey)!);
   const activeProject =
     activeProjectRef === null
       ? null
@@ -163,7 +171,7 @@ export function DraftHeroHeadline({
   const latestTargetRef = useRef({ draftId, activeProjectKey, scratchTargetEnvironmentId });
   useEffect(() => {
     latestTargetRef.current = { draftId, activeProjectKey, scratchTargetEnvironmentId };
-  }, [activeProjectKey, scratchTargetEnvironmentId, draftId]);
+  }, [activeProjectKey, scratchTargetEnvironmentId, draftId, latestTargetRef]);
   // An empty draft instead opens the chosen project's own draft, like starting a new thread there:
   // moving it would replace that draft and strand whatever it holds, such as the browser tabs of
   // the no-project draft.
@@ -365,7 +373,28 @@ export function DraftHeroHeadline({
           <>Add a project to start</>
         )}
       </h1>
-      {}
+      {recentEntries.length > 0 ? (
+        <nav
+          aria-label="Recent projects"
+          className="mt-4 flex max-w-full flex-wrap justify-center gap-3"
+        >
+          {recentEntries.map(({ group, targetProject }) => (
+            <InlineButton
+              key={group.projectKey}
+              tone="muted"
+              className="pointer-events-auto max-w-40"
+              disabled={!draftId}
+              onClick={() => selectProject(targetProject, group.projectKey)}
+              title={group.displayName}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <ProjectFavicon project={group} className="size-3.5 shrink-0" />
+                <span className="truncate">{group.displayName}</span>
+              </span>
+            </InlineButton>
+          ))}
+        </nav>
+      ) : null}
       {scratchWorkspaceRoot === null ? null : (
         <p className="mt-2 flex h-6 w-full items-center justify-center text-sm">
           {isScratchDraft ? projectSelector : orStartWithoutProject}
