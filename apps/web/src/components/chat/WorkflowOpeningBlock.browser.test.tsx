@@ -2,10 +2,11 @@ import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRunt
 import { EnvironmentId } from "@t3tools/contracts";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vite-plus/test";
 
 import "~/index.css";
 
+import { getSyntaxHighlighterPromise } from "../../lib/syntaxHighlighting";
 import { AppAtomRegistryProvider } from "../../rpc/atomRegistry";
 import { MarkdownFindContext } from "./markdownFindContext";
 import { useThreadFindHighlights } from "./threadFindHighlights";
@@ -54,6 +55,9 @@ function Find(props: { readonly container: HTMLElement | null; readonly query: s
 
 let root: Root;
 let host: HTMLElement;
+
+// The WASM highlighter cold-starts slower than waitFor's budget on small CI runners.
+beforeAll(() => getSyntaxHighlighterPromise("javascript"));
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
