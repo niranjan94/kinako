@@ -1,3 +1,4 @@
+import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
@@ -218,7 +219,7 @@ import {
 } from "../types";
 import { useTheme } from "../hooks/useTheme";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
-import { isCommandPaletteOpen } from "../commandPaletteBus";
+import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { settleAndAdvance } from "../settleAndAdvance";
 import { subscribeSnapShotComposerFocus } from "../lib/desktopSnapShot";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -1969,8 +1970,30 @@ export default function ChatView(props: ChatViewProps) {
     activeProject,
     activeProjectIsScratch && draftId !== null,
   );
-  const hasMultipleEnvironments = logicalProjectEnvironments.length > 1;
-  const canAutoBalanceEnvironments = hasMultipleEnvironments && !activeProjectIsScratch;
+  const selectableEnvironments =
+    draftId && !activeProjectIsScratch
+      ? [
+          ...logicalProjectEnvironments,
+          ...environments
+            .filter(
+              (environment) =>
+                environment.connection.phase === "connected" &&
+                !logicalProjectEnvironments.some(
+                  (option) => option.environmentId === environment.environmentId,
+                ),
+            )
+            .map((environment) => ({
+              environmentId: environment.environmentId,
+              projectId: null,
+              label: `${environment.label} · Add project…`,
+              isPrimary: environment.environmentId === primaryEnvironmentId,
+              machine: resolveEnvironmentMachineKind(environment.serverConfig),
+            })),
+        ]
+      : logicalProjectEnvironments;
+  const hasMultipleEnvironments = selectableEnvironments.length > 1;
+  const canAutoBalanceEnvironments =
+    logicalProjectEnvironments.length > 1 && !activeProjectIsScratch;
   const activeEnvironmentOption =
     logicalProjectEnvironments.find(
       (environment) => environment.environmentId === activeThread?.environmentId,
@@ -3160,10 +3183,12 @@ export default function ChatView(props: ChatViewProps) {
     if (envLocked || !draftId || sendInFlightRef.current) return;
     const originalDraft = getDraftSession(draftId);
     if (!originalDraft || originalDraft.promotedTo) return;
-    const target = logicalProjectEnvironments.find(
-      (env) => env.environmentId === nextEnvironmentId,
-    );
+    const target = selectableEnvironments.find((env) => env.environmentId === nextEnvironmentId);
     if (!target) return;
+    if (target.projectId === null && !activeProjectIsScratch) {
+      openCommandPalette({ open: "add-project", environmentId: nextEnvironmentId });
+      return;
+    }
     const request = { environmentId: target.environmentId, scope: environmentChangeScope };
     environmentChangeRef.current = request;
     setBusyEnvironmentChange(null);
@@ -5576,10 +5601,8 @@ export default function ChatView(props: ChatViewProps) {
         if (envLocked || !draftId || !hasMultipleEnvironments) return false;
         if (event.repeat) return;
         const currentId = readPendingEnvironmentChange()?.environmentId ?? environmentId;
-        const index = logicalProjectEnvironments.findIndex(
-          (env) => env.environmentId === currentId,
-        );
-        const next = logicalProjectEnvironments[(index + 1) % logicalProjectEnvironments.length];
+        const index = selectableEnvironments.findIndex((env) => env.environmentId === currentId);
+        const next = selectableEnvironments[(index + 1) % selectableEnvironments.length];
         if (next) onEnvironmentChangeStable(next.environmentId);
       },
       "composer.branch": ({ event }) => {
@@ -8564,7 +8587,7 @@ export default function ChatView(props: ChatViewProps) {
                                     ? onAutoEnvironmentStable
                                     : undefined
                                 }
-                                availableEnvironments={logicalProjectEnvironments}
+                                availableEnvironments={selectableEnvironments}
                                 composerControlsHostRef={setRestingComposerControlsHost}
                                 contextStripVisible={showComposerContextStrip}
                               />
@@ -8604,6 +8627,7 @@ export default function ChatView(props: ChatViewProps) {
             />
 
             <ThreadDetailsPanel
+              contextWindow={activeContextWindow}
               anchor={threadPanelPopoverAnchorRef}
               handle={threadPanelPopoverHandle}
               onPresentationChange={setThreadPanelPresentation}
@@ -8623,7 +8647,7 @@ export default function ChatView(props: ChatViewProps) {
               isGitRepo={isGitRepo}
               envLocked={envLocked}
               additionalDirectoriesSupported={additionalDirectoriesSupported}
-              availableEnvironments={logicalProjectEnvironments}
+              availableEnvironments={selectableEnvironments}
               autoEnvironmentLabel={autoEnvironmentLabel}
               onAutoEnvironment={
                 draftId &&

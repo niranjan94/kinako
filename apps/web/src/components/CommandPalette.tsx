@@ -504,7 +504,11 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   });
   const setOpen = (open: boolean) => dispatch({ _tag: "SetOpen", open });
   const toggleMode = (mode: SearchOverlayMode) => dispatch({ _tag: "ToggleMode", mode });
-  const openAddProject = () => dispatch({ _tag: "OpenAddProject" });
+  const openAddProject = (environmentId?: EnvironmentId) =>
+    dispatch({
+      _tag: "OpenAddProject",
+      ...(environmentId ? { environmentId } : {}),
+    });
   const openNewThreadIn = () => dispatch({ _tag: "OpenNewThreadIn" });
   const clearOpenIntent = () => dispatch({ _tag: "ClearOpenIntent" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -618,7 +622,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
         if (detail.open === "new-thread-in") {
           openNewThreadIn();
         } else if (detail.open === "add-project") {
-          openAddProject();
+          openAddProject(detail.environmentId);
         } else if (detail.query !== undefined) {
           dispatch({
             _tag: "OpenSearch",
@@ -2056,7 +2060,8 @@ function OpenCommandPaletteDialog(props: {
         return;
       case "add-project":
         clearOpenIntent();
-        openAddProjectFlow();
+        if (intent.environmentId) startAddProjectSourceSelection(intent.environmentId);
+        else openAddProjectFlow();
         return;
       case "new-thread-in":
         clearOpenIntent();

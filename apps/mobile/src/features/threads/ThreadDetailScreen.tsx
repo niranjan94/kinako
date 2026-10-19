@@ -3,6 +3,7 @@ import { AsyncResult } from "effect/reactivity";
 import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
 import { useChildThreadInputs, useThreadReportedModelSelection } from "../../state/entities";
+import { ComposerTasks } from "./ComposerTasks";
 import { UsageLimitRecoveryCard } from "./UsageLimitRecoveryCard";
 import { useNavigation } from "@react-navigation/native";
 import type { WorktreeSetupCardProps } from "./worktree-setup-card";
@@ -1171,6 +1172,13 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
                   }}
                 />
                 <View className="w-full self-center" style={{ maxWidth: contentMaxWidth }}>
+                  {props.activeThreadBusy && props.activityRun && props.selectedThreadDetailRef ? (
+                    <ComposerTasks
+                      key={`${selectedThreadKey}:${props.activityRun.runId}`}
+                      target={props.selectedThreadDetailRef}
+                      runId={props.activityRun.runId}
+                    />
+                  ) : null}
                   {props.queuedRunEdit !== null ? (
                     <Animated.View
                       className="shrink-0"
