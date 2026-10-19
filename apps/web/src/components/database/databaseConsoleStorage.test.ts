@@ -9,7 +9,7 @@ import {
 const connectionId = DatabaseConnectionId.make("connection");
 
 describe("database console storage", () => {
-  it("restores SQL and table filters without sessions or results, activating a console", () => {
+  it("restores SQL and table filters without sessions or results", () => {
     persistDatabaseWorkspace("thread-a", {
       activeId: "table",
       tabs: [
@@ -43,7 +43,7 @@ describe("database console storage", () => {
     });
     flushDatabaseWorkspaces();
     expect(restoreDatabaseWorkspace("thread-a")).toEqual({
-      activeId: "console",
+      activeId: "table",
       tabs: [
         {
           id: "console",
@@ -70,6 +70,15 @@ describe("database console storage", () => {
         },
       ],
     });
+  });
+
+  it("restores the terminal view when no tab was shown", () => {
+    persistDatabaseWorkspace("thread-c", {
+      activeId: null,
+      tabs: [{ id: "console", connectionId, title: "Console 1", sql: "", loading: false }],
+    });
+    flushDatabaseWorkspaces();
+    expect(restoreDatabaseWorkspace("thread-c")?.activeId).toBeNull();
   });
 
   it("forgets a thread once its last tab closes", () => {

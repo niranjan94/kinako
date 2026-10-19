@@ -5,12 +5,11 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
-import type { DatabaseWorkspace } from "@t3tools/client-runtime/state/database";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
-import { memo, useEffect, useState } from "react";
+import { memo, useContext, useEffect, useState } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
 import type { TerminalContextSelection } from "../lib/terminalContext";
@@ -25,13 +24,13 @@ import { useProject, useQuietThreadShell } from "../state/entities";
 import { useEnvironmentScope } from "../state/session";
 import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { DatabaseDrawerTabs } from "./database/DatabaseDrawerTabs";
-import { showDatabaseDrawerTable, useDatabaseDrawerTable } from "./database/databaseDrawerStore";
 import {
-  DatabaseTableView,
-  hasDatabaseTableTabs,
-  isDatabaseTableTab,
-} from "./database/DatabaseTableView";
+  DatabaseDrawerTabs,
+  DatabaseDrawerView,
+  hasDatabaseTabs,
+  shownDatabaseTabId,
+} from "./database/DatabaseDrawerTabs";
+import { showDatabaseTab } from "./database/databaseWorkspace";
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 
@@ -128,13 +127,11 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   );
   const visible = active && terminalUiState.terminalOpen;
   const threadKey = scopedThreadKey(threadRef);
+  const registry = useContext(RegistryContext);
   const databaseWorkspace = databaseState.workspaces(threadKey);
-  // Boolean selectors keep SQL console edits from re-rendering the terminal drawer.
-  const hasDatabaseTables = useAtomValue(databaseWorkspace, hasDatabaseTableTabs);
-  const requestedTableId = useDatabaseDrawerTable((state) => state.byThread[threadKey]);
-  const isShownTable = (workspace: DatabaseWorkspace) =>
-    workspace.tabs.some((tab) => tab.id === requestedTableId && isDatabaseTableTab(tab));
-  const shownTableId = useAtomValue(databaseWorkspace, isShownTable) ? requestedTableId : undefined;
+  // Narrow selectors keep SQL console edits from re-rendering the terminal drawer.
+  const hasDatabaseTabsOpen = useAtomValue(databaseWorkspace, hasDatabaseTabs);
+  const shownDatabaseId = useAtomValue(databaseWorkspace, shownDatabaseTabId);
   const knownTerminalSessions = useKnownTerminalSessions({
     environmentId: threadRef.environmentId,
     threadId,
@@ -230,7 +227,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
       location: { cwd, worktreePath: effectiveWorktreePath },
     });
     if (!launched) return;
-    showDatabaseDrawerTable(threadKey, null);
+    showDatabaseTab(registry, threadRef, null);
     bumpFocusRequestId();
     void launched.result;
   };
@@ -307,17 +304,22 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
           terminalLabelsById={terminalLabelsById}
           terminalLaunchLocationsById={terminalLaunchLocationsById}
           header={
-            hasDatabaseTables ? (
-              <DatabaseDrawerTabs threadKey={threadKey} shownId={shownTableId ?? null} />
+            hasDatabaseTabsOpen ? (
+              <DatabaseDrawerTabs
+                environmentId={threadRef.environmentId}
+                projectId={project.id}
+                threadRef={threadRef}
+              />
             ) : undefined
           }
           view={
-            shownTableId ? (
-              <DatabaseTableView
+            shownDatabaseId ? (
+              <DatabaseDrawerView
                 environmentId={threadRef.environmentId}
                 projectId={project.id}
-                threadKey={threadKey}
-                tabId={shownTableId}
+                threadRef={threadRef}
+                tabId={shownDatabaseId}
+                workspaceRoot={project.workspaceRoot}
               />
             ) : undefined
           }

@@ -113,7 +113,6 @@ export function RightPanelSurfaceContent(props: {
             environmentId={props.environmentId}
             projectId={props.databaseProject.id}
             threadRef={threadRef}
-            workspaceRoot={props.databaseProject.workspaceRoot}
           />
         </Suspense>
       ) : null;
