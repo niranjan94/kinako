@@ -13,7 +13,7 @@ import {
 import { resolveShortcutCommand, type ShortcutEventLike } from "./keybindings";
 
 export type ComposerTriggerKind = "path" | "pull-request" | "slash-command" | "skill";
-export type ComposerSlashCommand = "model" | "plan" | "default";
+export type ComposerSlashCommand = "model" | "plan" | "default" | "btw";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
 
 export interface ComposerTrigger {
@@ -327,9 +327,7 @@ export function composerStateAtPromptEnd(
   };
 }
 
-export function parseStandaloneComposerSlashCommand(
-  text: string,
-): Exclude<ComposerSlashCommand, "model"> | null {
+export function parseStandaloneComposerSlashCommand(text: string): "plan" | "default" | null {
   const match = /^\/(plan|default)\s*$/i.exec(text.trim());
   if (!match) {
     return null;
@@ -337,6 +335,15 @@ export function parseStandaloneComposerSlashCommand(
   const command = match[1]?.toLowerCase();
   if (command === "plan") return "plan";
   return "default";
+}
+
+export function parseBtwComposerQuestion(
+  text: string,
+  submissionTarget: "provider-turn" | "pending-user-input" | "queued-message" = "provider-turn",
+): string | null {
+  if (submissionTarget !== "provider-turn") return null;
+  const match = /^\/btw(?:\s+([\s\S]*))?$/i.exec(text.trim());
+  return match === null ? null : (match[1]?.trim() ?? "");
 }
 
 export function replaceTextRange(

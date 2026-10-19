@@ -6,6 +6,7 @@ import {
   canForkProjectedAssistantItem,
   deriveThreadQueueWorkflowState,
   resolveLatestMergeBackRun,
+  resolveLatestForkableRun,
   threadSupportsProviderHandoff,
 } from "./threadWorkflows.ts";
 
@@ -31,6 +32,35 @@ const capabilities = (input?: {
   }) as never;
 
 describe("thread workflows", () => {
+  it("forks the latest finished run while newer work is running or queued", () => {
+    const runs = [
+      { id: "old", ordinal: 1, status: "completed" },
+      { id: "running", ordinal: 4, status: "running" },
+      { id: "finished", ordinal: 3, status: "waiting" },
+      { id: "rolled-back", ordinal: 5, status: "rolled_back" },
+      { id: "queued", ordinal: 6, status: "queued" },
+    ] as unknown as OrchestrationV2ThreadProjection["runs"];
+    expect(resolveLatestForkableRun({ runs })?.id).toBe("finished");
+  });
+
+  it.each(["completed", "waiting", "failed", "interrupted", "cancelled"] as const)(
+    "allows a %s source run",
+    (status) => {
+      const runs = [
+        { id: "source", ordinal: 1, status },
+      ] as unknown as OrchestrationV2ThreadProjection["runs"];
+      expect(resolveLatestForkableRun({ runs })?.id).toBe("source");
+    },
+  );
+
+  it("has no fork point during the first turn", () => {
+    expect(resolveLatestForkableRun({ runs: [] })).toBeNull();
+    const runs = [
+      { ordinal: 1, status: "running" },
+    ] as unknown as OrchestrationV2ThreadProjection["runs"];
+    expect(resolveLatestForkableRun({ runs })).toBeNull();
+  });
+
   it("allows a completed thread to switch providers after its session detaches", () => {
     const projection = {
       thread: {

@@ -3,6 +3,12 @@
 T3 Code transfers conversation context when you switch providers, continue through a portable
 restart, or use a fork that the provider cannot resume itself.
 
+In the web or desktop composer, send `/btw <question>` to ask in a separate fork while the main
+thread keeps working. The fork starts at the latest finished turn; it does not include the current
+in-progress turn. Side questions currently accept text only and need at least one finished turn.
+Web opens the fork in a new browser tab. Desktop, or a browser blocking popups, opens it in the
+current view. You can return to the main thread from the sidebar and merge the fork back later.
+
 Short conversations transfer intact. For longer conversations, T3 Code favors recent requests and
 answers, the original request, and relevant activity such as command outcomes. Selected messages
 keep their full text, order, and user or assistant role, including partial work from failed or
