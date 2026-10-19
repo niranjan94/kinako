@@ -212,6 +212,23 @@ layer("DatabaseService", (it) => {
       });
       assert.isFalse(cleared.hasPassword);
 
+      yield* database.saveConnection({
+        level: "environment",
+        id: saved.id,
+        name: "production",
+        target,
+        readOnly: true,
+        password: "hunter2",
+      });
+      const switchedToAws = yield* database.saveConnection({
+        level: "environment",
+        id: saved.id,
+        name: "production",
+        target: { ...target, auth: { kind: "aws-iam", region: "ap-southeast-1" } },
+        readOnly: true,
+      });
+      assert.isFalse(switchedToAws.hasPassword, "AWS sign-in drops a stored password");
+
       yield* database.deleteConnection({ id: saved.id });
       yield* database.deleteConnection({ id: saved.id });
       const { connections } = yield* database.listConnections();

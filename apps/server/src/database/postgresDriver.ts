@@ -10,6 +10,7 @@ import {
   type DatabasePage,
   type DatabaseSession,
 } from "./databaseDriver.ts";
+import { resolvePostgresLogin, type PostgresLogin } from "./postgresLogin.ts";
 
 const BOOL_OID = 16;
 const NUMBER_OIDS = new Set([21, 23, 26, 700, 701]); // int2, int4, oid, float4, float8
@@ -65,15 +66,15 @@ function engineError(cause: unknown, cancelled = false): DatabaseEngineError {
 
 async function connect(
   target: DatabasePostgresTarget,
-  password: string | null,
+  login: PostgresLogin,
   ssl: pg.ClientConfig["ssl"],
 ): Promise<pg.Client> {
   const client = new pg.Client({
-    host: target.host,
-    port: target.port,
+    host: login.host,
+    port: login.port,
     database: target.database,
-    user: target.user,
-    ...(password === null ? {} : { password }),
+    user: login.user,
+    ...(login.password === null ? {} : { password: login.password }),
     ssl,
     connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
     application_name: FORK_DISPLAY_NAME,
@@ -92,14 +93,14 @@ async function connect(
 
 async function connectWithSslMode(
   target: DatabasePostgresTarget,
-  password: string | null,
+  login: PostgresLogin,
 ): Promise<pg.Client> {
   try {
-    return await connect(target, password, sslOptions(target.sslMode));
+    return await connect(target, login, sslOptions(target.sslMode));
   } catch (cause) {
     // "prefer" is libpq's default: try TLS, fall back to plain when the server has none.
     if (target.sslMode === "prefer" && /does not support SSL/i.test(String(cause))) {
-      return connect(target, password, false);
+      return connect(target, login, false);
     }
     throw cause;
   }
@@ -217,7 +218,10 @@ export async function openPostgresSession(
   password: string | null,
   readOnly: boolean,
 ): Promise<DatabaseSession> {
-  const client = await connectWithSslMode(target, password).catch((cause) => {
+  const login = await resolvePostgresLogin(target, password).catch((cause) => {
+    throw engineError(cause);
+  });
+  const client = await connectWithSslMode(target, login).catch((cause) => {
     throw engineError(cause);
   });
   let cancelled = false;
@@ -300,7 +304,12 @@ export async function openPostgresSession(
       cancelled = true;
       const pid = (client as { readonly processID?: unknown }).processID;
       if (typeof pid !== "number") return;
-      const canceller = await connectWithSslMode(target, password);
+      // The cancel must reach the session's server as its role, even if a rotated secret now
+      // names another; only a fresh password for that same login is taken, since IAM tokens expire.
+      const fresh = await resolvePostgresLogin(target, password).catch(() => login);
+      const sameLogin =
+        fresh.host === login.host && fresh.port === login.port && fresh.user === login.user;
+      const canceller = await connectWithSslMode(target, sameLogin ? fresh : login);
       try {
         await canceller.query("SELECT pg_cancel_backend($1)", [pid]);
       } finally {
