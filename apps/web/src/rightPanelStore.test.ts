@@ -29,19 +29,6 @@ beforeEach(() => {
   });
 });
 
-it("reopens the same side-chat panel without replacing other surfaces", () => {
-  const store = useRightPanelStore.getState();
-  store.open(refA, "files");
-  store.open(refA, "side-chat");
-  store.open(refA, "side-chat");
-  const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-  expect(state.surfaces.map((surface) => surface.id)).toEqual(["files", "side-chat"]);
-  expect(state.activeSurfaceId).toBe("side-chat");
-  store.closeSurface(refA, "side-chat");
-  store.open(refA, "side-chat");
-  expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("side-chat");
-});
-
 describe("rightPanelStore", () => {
   it("records single and bulk tab closes, newest first", () => {
     const store = useRightPanelStore.getState();

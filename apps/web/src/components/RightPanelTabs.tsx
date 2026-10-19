@@ -36,7 +36,6 @@ import {
   Globe2,
   Plus,
   TerminalSquare,
-  MessagesSquare,
 } from "lucide-react";
 import { Volume2, VolumeOff } from "lucide";
 import {
@@ -568,8 +567,6 @@ function surfaceTitle(
   switch (surface.kind) {
     case "diff":
       return "Diff";
-    case "side-chat":
-      return "Side chat";
     case "database":
       return "Databases";
     case "files":
@@ -654,8 +651,6 @@ function SurfaceIcon({
       return <PreviewFavicon capturedUrl={previewCapturedUrl} url={previewUrl} />;
     case "diff":
       return <FileDiff className="size-3 shrink-0" />;
-    case "side-chat":
-      return <MessagesSquare className="size-3 shrink-0" />;
     case "database":
       return <DatabaseIcon className="size-3 shrink-0" />;
     case "files":
