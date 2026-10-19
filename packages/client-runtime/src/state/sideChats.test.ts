@@ -8,7 +8,7 @@ import {
 import { scopeThreadRef } from "../environment/index.ts";
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
-import { findLatestSideChat, sideChatMessages } from "./sideChats.ts";
+import { findLatestSideChat, parseBtwComposerQuestion, sideChatMessages } from "./sideChats.ts";
 
 const parent = scopeThreadRef(EnvironmentId.make("local"), ThreadId.make("parent"));
 const sideId = ThreadId.make("side");
@@ -96,4 +96,29 @@ it("shows only side-chat messages, keeping inherited history out of the answer",
   };
   expect(sideChatMessages([inherited, answer], sideId)).toEqual([answer.item]);
   expect(sideChatMessages([inherited, answer], null)).toEqual([]);
+});
+
+describe("parseBtwComposerQuestion", () => {
+  it("extracts a side question including multiple lines", () => {
+    expect(parseBtwComposerQuestion(" /BTW why?\nAnd what next? ")).toBe("why?\nAnd what next?");
+  });
+
+  it("recognizes a bare command so it cannot steer the main turn", () => {
+    expect(parseBtwComposerQuestion("/btw")).toBe("");
+    expect(parseBtwComposerQuestion("/btw   ")).toBe("");
+  });
+
+  it.each(["queued-message", "pending-user-input"] as const)(
+    "preserves literal text when submitting %s",
+    (target) => {
+      expect(parseBtwComposerQuestion("/btw explain this", target)).toBeNull();
+    },
+  );
+
+  it.each(["/btwhatever question", "please /btw question", "explain /btw", "/btw: question"])(
+    "leaves ordinary prompt text alone: %s",
+    (text) => {
+      expect(parseBtwComposerQuestion(text)).toBeNull();
+    },
+  );
 });

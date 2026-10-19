@@ -10,6 +10,21 @@ type SideChatThread = Pick<
   "id" | "environmentId" | "isSideChat" | "archivedAt" | "deletedAt" | "lineage" | "createdAt"
 >;
 
+export type SideQuestionSubmissionTarget =
+  | "provider-turn"
+  | "pending-user-input"
+  | "queued-message";
+
+/** The question after `/btw`, `""` for a bare `/btw`, or null when the draft is not a side question. */
+export function parseBtwComposerQuestion(
+  text: string,
+  submissionTarget: SideQuestionSubmissionTarget = "provider-turn",
+): string | null {
+  if (submissionTarget !== "provider-turn") return null;
+  const match = /^\/btw(?:\s+([\s\S]*))?$/i.exec(text.trim());
+  return match === null ? null : (match[1]?.trim() ?? "");
+}
+
 export function findLatestSideChat<Thread extends SideChatThread>(
   threads: ReadonlyArray<Thread>,
   parent: ScopedThreadRef,

@@ -183,8 +183,8 @@ import {
   collapseExpandedComposerCursor,
   composerRequiresModifier,
   parseStandaloneComposerSlashCommand,
-  parseBtwComposerQuestion,
 } from "../composer-logic";
+import { parseBtwComposerQuestion } from "@t3tools/client-runtime/state/side-chats";
 import {
   derivePhase,
   selectHandoffImageResources,
@@ -2100,7 +2100,7 @@ export default function ChatView(props: ChatViewProps) {
   const startSideQuestionDraft = () => {
     if (!sideQuestionsAvailable) return false;
     const current = promptRef.current.trim();
-    if (!/^\/btw\b/i.test(current)) {
+    if (parseBtwComposerQuestion(current) === null) {
       const next = current ? `/btw ${current}` : "/btw ";
       promptRef.current = next;
       setComposerDraftPrompt(composerDraftTarget, next);
@@ -6147,7 +6147,11 @@ export default function ChatView(props: ChatViewProps) {
   };
 
   const onSideQuestion = async (question: string) => {
-    if (!activeThread || !activeThreadRef || !serverProjection) return;
+    if (!activeThread) return;
+    if (!isServerThread || !activeThreadRef || !serverProjection) {
+      setThreadError(activeThread.id, "Finish a turn before asking a side question.");
+      return;
+    }
     if (serverConfig?.environment.capabilities.sideChats !== true) {
       setThreadError(activeThread.id, "Update this environment to ask side questions.");
       return;
@@ -8510,6 +8514,7 @@ export default function ChatView(props: ChatViewProps) {
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
                               sideQuestionControl={sideQuestionControl}
+                              offersSideQuestions={sideQuestionsAvailable}
                               bannerItems={composerBannerItems}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
