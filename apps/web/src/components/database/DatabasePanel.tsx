@@ -8,6 +8,9 @@ import type {
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../../rightPanelLayout";
+import { useRightPanelStore } from "../../rightPanelStore";
 import { databaseState } from "../../state/database";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -39,7 +42,17 @@ export default function DatabasePanel({
   const [filter, setFilter] = useState("");
   const findTable = useRef<HTMLInputElement>(null);
   const scope = { registry, environmentId, projectId, threadRef };
-  const selected = connections[0];
+  const activeConnectionId = useAtomValue(
+    workspaceAtom,
+    (workspace) => workspace.tabs.find((tab) => tab.id === workspace.activeId)?.connectionId,
+  );
+  const selected =
+    connections.find((connection) => connection.id === activeConnectionId) ?? connections[0];
+  // In the sheet layout the explorer covers the bottom drawer the new tab opens in.
+  const sheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const revealDrawer = () => {
+    if (sheet) useRightPanelStore.getState().close(threadRef);
+  };
   useEffect(() => {
     persistDatabaseWorkspace(key, registry.get(workspaceAtom));
     return registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(key, next));
@@ -47,12 +60,14 @@ export default function DatabasePanel({
   const newQuery = (connection: DatabaseConnection) => {
     databasePanelIntent.consume(threadRef);
     void newDatabaseConsole(scope, connection);
+    revealDrawer();
   };
   const onNewQuery = useStableCallback(newQuery);
   const onOpenTable = useStableCallback(
     (connection: DatabaseConnection, schema: string, object: string) => {
       databasePanelIntent.consume(threadRef);
       openDatabaseTable(scope, connection, schema, object);
+      revealDrawer();
     },
   );
   const intent = useDatabasePanelIntent((state) => state.byThread[key]);

@@ -557,6 +557,8 @@ interface TerminalUiStateStoreState {
   terminalUiStateByThreadKey: Record<string, ThreadTerminalUiState>;
   suppressedTerminalIdsByThreadKey: Record<string, string[]>;
   setTerminalOpen: (threadRef: ScopedThreadRef, open: boolean) => void;
+  /** Opens the drawer for a non-terminal view without placing a terminal in it. */
+  revealTerminalDrawer: (threadRef: ScopedThreadRef) => void;
   setTerminalHeight: (threadRef: ScopedThreadRef, height: number) => void;
   splitTerminal: (threadRef: ScopedThreadRef, terminalId: string) => void;
   splitTerminalVertical: (threadRef: ScopedThreadRef, terminalId: string) => void;
@@ -630,6 +632,11 @@ export const useTerminalUiStateStore = create<TerminalUiStateStoreState>()(
               : undefined,
           );
         },
+        revealTerminalDrawer: (threadRef) =>
+          updateTerminal(threadRef, (state) => {
+            const normalized = normalizeThreadTerminalUiState(state);
+            return normalized.terminalOpen ? normalized : { ...normalized, terminalOpen: true };
+          }),
         setTerminalHeight: (threadRef, height) =>
           updateTerminal(threadRef, (state) => setThreadTerminalHeight(state, height)),
         splitTerminal: (threadRef, terminalId) =>

@@ -11,6 +11,9 @@ import { DatabaseTableView } from "./DatabaseTableView";
 import { DatabaseHint, DatabaseToolbarButton } from "./DatabaseToolbarButton";
 import { closeDatabaseTab, showDatabaseTab } from "./databaseWorkspace";
 
+// The nearest owner wins, so focus in database tabs does not enable terminal shortcuts.
+const NOT_TERMINAL = "database";
+
 export const hasDatabaseTabs = (workspace: DatabaseWorkspace) => workspace.tabs.length > 0;
 /** The tab the drawer shows in place of its terminals, if any. */
 export const shownDatabaseTabId = (workspace: DatabaseWorkspace) =>
@@ -76,6 +79,7 @@ export function DatabaseDrawerTabs({
     <div
       role="tablist"
       aria-label="Bottom panel"
+      data-terminal-owner={NOT_TERMINAL}
       className="relative flex h-8 shrink-0 overflow-x-auto bg-muted/20 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border"
     >
       <DrawerTab
@@ -130,20 +134,24 @@ export function DatabaseDrawerView({
   const isTable = useAtomValue(databaseState.workspaces(threadKey), (workspace) =>
     workspace.tabs.some((tab) => tab.id === tabId && tab.table !== undefined),
   );
-  return isTable ? (
-    <DatabaseTableView
-      environmentId={environmentId}
-      projectId={projectId}
-      threadKey={threadKey}
-      tabId={tabId}
-    />
-  ) : (
-    <DatabaseConsoleView
-      environmentId={environmentId}
-      projectId={projectId}
-      threadRef={threadRef}
-      tabId={tabId}
-      workspaceRoot={workspaceRoot}
-    />
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-terminal-owner={NOT_TERMINAL}>
+      {isTable ? (
+        <DatabaseTableView
+          environmentId={environmentId}
+          projectId={projectId}
+          threadKey={threadKey}
+          tabId={tabId}
+        />
+      ) : (
+        <DatabaseConsoleView
+          environmentId={environmentId}
+          projectId={projectId}
+          threadRef={threadRef}
+          tabId={tabId}
+          workspaceRoot={workspaceRoot}
+        />
+      )}
+    </div>
   );
 }

@@ -178,6 +178,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   const storeNewTerminal = useTerminalUiStateStore((state) => state.newTerminal);
   const storeSetActiveTerminal = useTerminalUiStateStore((state) => state.setActiveTerminal);
   const storeCloseTerminal = useTerminalUiStateStore((state) => state.closeTerminal);
+  const storeRevealTerminalDrawer = useTerminalUiStateStore((state) => state.revealTerminalDrawer);
   const reconcileTerminalIds = useTerminalUiStateStore((state) => state.reconcileTerminalIds);
 
   useEffect(() => {
@@ -250,6 +251,8 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     if (!terminalActions.canWrite()) return;
     terminalActions.closeTerminalSession(terminalId);
     storeCloseTerminal(threadRef, terminalId);
+    // Closing the last terminal would otherwise hide the database tabs sharing the drawer.
+    if (hasDatabaseTabsOpen) storeRevealTerminalDrawer(threadRef);
     bumpFocusRequestId();
   });
 
