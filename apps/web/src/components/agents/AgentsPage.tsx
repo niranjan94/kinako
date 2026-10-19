@@ -19,7 +19,7 @@ export function AgentsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [environment, setEnvironment] = useState("all");
-  const [scope, setScope] = useState("recent");
+  const [scope, setScope] = useState("active");
   const [project, setProject] = useState("all");
   const query = search.trim().toLowerCase();
   const candidates = threads.filter(
@@ -61,11 +61,13 @@ export function AgentsPage() {
           .includes(query),
     );
   const agents =
-    scope === "all"
-      ? roster
-      : roster.filter(
-          (agent, index) => (agent.state !== "idle" && agent.state !== "offline") || index < 20,
-        );
+    scope === "active"
+      ? roster.filter((agent) => agent.state === "working" || agent.state === "waiting")
+      : scope === "all"
+        ? roster
+        : roster.filter(
+            (agent, index) => (agent.state !== "idle" && agent.state !== "offline") || index < 20,
+          );
   const openThread = (thread: EnvironmentThreadShell) => {
     void navigate({
       to: "/$environmentId/$threadId",
@@ -140,11 +142,18 @@ export function AgentsPage() {
           </Select>
         </div>
         <div className="min-w-0 sm:w-44">
-          <Select value={scope} onValueChange={(value) => setScope(value ?? "recent")}>
+          <Select value={scope} onValueChange={(value) => setScope(value ?? "active")}>
             <SelectTrigger size="sm" aria-label="Threads to show">
-              <SelectValue>{scope === "all" ? "All threads" : "Active + recent"}</SelectValue>
+              <SelectValue>
+                {scope === "active"
+                  ? "Active threads"
+                  : scope === "all"
+                    ? "All threads"
+                    : "Active + recent"}
+              </SelectValue>
             </SelectTrigger>
             <SelectPopup>
+              <SelectItem value="active">Active threads</SelectItem>
               <SelectItem value="recent">Active + recent</SelectItem>
               <SelectItem value="all">All threads</SelectItem>
             </SelectPopup>
