@@ -340,6 +340,36 @@ export const layer: Layer.Layer<
               },
             }),
           );
+          // Claude rewinds to thread start on a new provider thread; summaries
+          // waiting for the next turn must follow it or they are never delivered.
+          if (snapshot.providerThread.id !== providerThread.id) {
+            // Read under the lock: the rewind can take long enough for a handoff to change.
+            const { contextHandoffs } = yield* projections.getThreadRecords(input.threadId, [
+              "contextHandoffs",
+            ]);
+            for (const handoff of contextHandoffs) {
+              if (
+                handoff.status !== "ready" ||
+                handoff.deliverOnNextTurn !== true ||
+                handoff.toProviderThreadId !== providerThread.id
+              ) {
+                continue;
+              }
+              events.push(
+                yield* makeEvent({
+                  type: "context-handoff.updated",
+                  threadId: input.threadId,
+                  providerInstanceId: providerThread.providerInstanceId,
+                  occurredAt: now,
+                  payload: {
+                    ...handoff,
+                    toProviderThreadId: snapshot.providerThread.id,
+                    updatedAt: now,
+                  },
+                }),
+              );
+            }
+          }
           for (const staleCheckpoint of staleCheckpoints) {
             events.push(
               yield* makeEvent({

@@ -404,7 +404,8 @@ export const layerExecutor: Layer.Layer<
                     }),
                 ),
               );
-          case "provider-thread.rollback":
+          case "provider-thread.rollback": {
+            const { summary } = effect.request;
             return checkpointRollback
               .execute({
                 threadId: effect.threadId,
@@ -429,6 +430,7 @@ export const layerExecutor: Layer.Layer<
                           threadId: effect.threadId,
                           requestId: effect.commandId,
                           message: CheckpointRollbackService.ROLLBACK_FAILED_MESSAGE,
+                          ...(summary === undefined ? {} : { summary }),
                         })
                         .pipe(
                           Effect.catchCause((recordCause) =>
@@ -448,6 +450,7 @@ export const layerExecutor: Layer.Layer<
                     }),
                 ),
               );
+          }
           case "checkpoint.capture":
             return runFinalization
               .finalize({

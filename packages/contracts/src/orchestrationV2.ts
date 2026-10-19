@@ -361,6 +361,14 @@ export const OrchestrationV2ConversationSummaryDirection = Schema.Literals([
 export type OrchestrationV2ConversationSummaryDirection =
   typeof OrchestrationV2ConversationSummaryDirection.Type;
 
+/** The handoff and marker a `from_here` summary applies once its rollback succeeds. */
+export const OrchestrationV2ConversationSummaryRollback = Schema.Struct({
+  handoffId: ContextHandoffId,
+  markerItemId: TurnItemId,
+});
+export type OrchestrationV2ConversationSummaryRollback =
+  typeof OrchestrationV2ConversationSummaryRollback.Type;
+
 const OrchestrationV2ThreadSummarizeFields = {
   requestId: CommandId,
   messageId: MessageId,
@@ -3133,6 +3141,7 @@ const OrchestrationV2InternalCommand = Schema.Union([
     threadId: ThreadId,
     requestId: CommandId,
     message: TrimmedNonEmptyString,
+    summary: Schema.optional(OrchestrationV2ConversationSummaryRollback),
   }),
   /** Applies the summary generated for summarize request `requestId`. */
   Schema.Struct({

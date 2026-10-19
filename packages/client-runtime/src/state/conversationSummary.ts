@@ -4,6 +4,7 @@ import type {
   OrchestrationV2ConversationSummaryDirection,
   OrchestrationV2Run,
   OrchestrationV2ThreadProjection,
+  OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
 
 const SUMMARIZABLE_RUN_STATUSES: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
@@ -99,6 +100,11 @@ type SummaryOutcomeProjection = Pick<
   OrchestrationV2ThreadProjection,
   "thread" | "messages" | "runs" | "turnItems"
 >;
+
+/** A summary marker the server withdrew because its rewind failed, so the summary never applied. */
+export function isWithdrawnConversationSummary(item: OrchestrationV2TurnItem): boolean {
+  return item.type === "compaction" && item.range !== undefined && item.status === "failed";
+}
 
 export function conversationSummaryMarkerIds(
   projection: Pick<OrchestrationV2ThreadProjection, "turnItems"> | null | undefined,
