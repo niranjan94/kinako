@@ -162,8 +162,8 @@ it.each(["direct", "gnome-extension", "kde"] as const)(
       mode: backend === "direct" ? "direct" : "portal",
       linuxBackend: backend === "direct" ? undefined : backend,
       shortcutRegistered: true,
-      shortcutLabel: backend === "direct" ? undefined : "Press <Shift><Control>2",
-      shortcutMessage: backend === "direct" ? null : "Desktop shortcut: Press <Shift><Control>2",
+      shortcutLabel: backend === "direct" ? undefined : "Press <Shift><Control>3",
+      shortcutMessage: backend === "direct" ? null : "Desktop shortcut: Press <Shift><Control>3",
     };
     await mount();
     if (backend !== "direct") {

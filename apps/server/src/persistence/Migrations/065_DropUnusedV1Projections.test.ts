@@ -7,18 +7,18 @@ import { runMigrations } from "../Migrations.ts";
 
 const layer = it.layer(NodeSqliteClient.layer({ filename: ":memory:" }));
 
-layer("063_DropUnusedV1Projections", (it) => {
+layer("065_DropUnusedV1Projections", (it) => {
   it.effect("drops V1 projections nothing reads and keeps the transcript import sources", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations({ toMigrationInclusive: 62 });
+      yield* runMigrations({ toMigrationInclusive: 64 });
       yield* sql`
         INSERT INTO projection_thread_messages
           (message_id, thread_id, role, text, is_streaming, created_at, updated_at)
         VALUES ('message-1', 'thread-1', 'user', 'hello', 0, '2026-01-01', '2026-01-01')
       `;
 
-      yield* runMigrations({ toMigrationInclusive: 63 });
+      yield* runMigrations({ toMigrationInclusive: 65 });
 
       const rows = yield* sql<{ readonly name: string }>`
         SELECT name FROM sqlite_master WHERE type = 'table'

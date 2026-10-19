@@ -11783,7 +11783,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
-  it.effect("marks a workflow coordinator's script prompt and leaves a subagent brief plain", () =>
+  it.effect("marks a subagent brief started beside a workflow as not a script", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const harness = yield* makeWorkflowHarness;
@@ -11853,12 +11853,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                 : undefined,
           };
         };
-        assert.deepEqual(subagentPrompt(WORKFLOW_TASK_ID), {
-          text: script,
-          messageMark: true,
-          itemMark: true,
-        });
-        // A brief is marked as not a script, so its text is never read as one.
+        // The coordinator's script stays off its thread; a brief is marked as not a script, so its
+        // text is never read as one.
         assert.deepEqual(subagentPrompt("task-plain-auditor"), {
           text: "Audit the last five commits.",
           messageMark: false,
