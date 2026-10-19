@@ -243,6 +243,7 @@ export const make = Effect.gen(function* () {
       projectProviderInstanceOverrides: true,
       threadSnooze: true,
       threadSnoozeWakeNotifications: true,
+      sideChats: true,
       environmentThemes: true,
       usageLimitSources: true,
       usagePriceOverrides: true,

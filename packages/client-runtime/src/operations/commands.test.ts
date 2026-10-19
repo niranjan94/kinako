@@ -807,6 +807,34 @@ describe("V2 environment commands", () => {
     }).pipe(Effect.provide(layerTestCrypto)),
   );
 
+  it.effect("creates a side chat and promotes it without requiring another metadata change", () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationV2Command[] = [];
+      const supervisor = yield* makeSupervisor({ commands, projects: [] });
+      const provide = Effect.provideService(
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        supervisor,
+      );
+      const targetThreadId = ThreadId.make("side-chat");
+      yield* forkThreadFromRun({
+        commandId: CommandId.make("side-chat-fork"),
+        sourceThreadId: v2ThreadId,
+        targetThreadId,
+        runId: RunId.make("finished"),
+        isSideChat: true,
+      }).pipe(provide);
+      yield* updateThreadMetadata({
+        commandId: CommandId.make("promote-side-chat"),
+        threadId: targetThreadId,
+        isSideChat: false,
+      }).pipe(provide);
+      expect(commands).toMatchObject([
+        { type: "thread.fork", targetThreadId, isSideChat: true },
+        { type: "thread.metadata.update", threadId: targetThreadId, isSideChat: false },
+      ]);
+    }).pipe(Effect.provide(layerTestCrypto)),
+  );
+
   it.effect("retains provider-switch shaping for servers without command context support", () =>
     Effect.gen(function* () {
       const commands: OrchestrationV2Command[] = [];

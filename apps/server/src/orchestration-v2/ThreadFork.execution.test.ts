@@ -203,6 +203,85 @@ it.effect("a persisted fork leaves PR watching with its parent until explicitly 
   }).pipe(Effect.provide(forkCases[0]!.layer)),
 );
 
+it.effect("persists a side chat and promotes it without changing its parent", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const eventSink = yield* EventSink.EventSinkV2;
+    const now = yield* DateTime.now;
+    const { instanceId, modelSelection } = forkCases[0]!;
+    const sourceThreadId = ThreadId.make("side-chat-source");
+    const targetThreadId = ThreadId.make("side-chat-target");
+    const sourceRunId = RunId.make("side-chat-source-run");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("side-chat-parent"),
+      threadId: sourceThreadId,
+      projectId: ProjectId.make("side-chat-project"),
+      title: "Main conversation",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* eventSink.write({
+      events: [
+        {
+          id: EventId.make("side-chat-run-created"),
+          type: "run.created",
+          threadId: sourceThreadId,
+          runId: sourceRunId,
+          occurredAt: now,
+          payload: {
+            id: sourceRunId,
+            threadId: sourceThreadId,
+            ordinal: 1,
+            providerInstanceId: instanceId,
+            modelSelection,
+            providerThreadId: null,
+            userMessageId: MessageId.make("side-chat-message"),
+            rootNodeId: null,
+            activeAttemptId: null,
+            status: "completed",
+            requestedAt: now,
+            startedAt: now,
+            completedAt: now,
+            checkpointId: null,
+            contextHandoffId: null,
+          },
+        },
+      ],
+    });
+    const before = yield* orchestrator.getThreadShell(sourceThreadId);
+    yield* orchestrator.dispatch({
+      type: "thread.fork",
+      commandId: CommandId.make("side-chat-fork"),
+      sourceThreadId,
+      targetThreadId,
+      sourcePoint: { type: "run", runId: sourceRunId },
+      isSideChat: true,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    assert.isTrue((yield* orchestrator.getThreadProjection(targetThreadId)).thread.isSideChat);
+    assert.isTrue((yield* orchestrator.getThreadShell(targetThreadId))?.isSideChat);
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("side-chat-promote"),
+      threadId: targetThreadId,
+      isSideChat: false,
+    });
+    const promoted = yield* orchestrator.getThreadProjection(targetThreadId);
+    assert.isFalse(promoted.thread.isSideChat);
+    assert.isFalse((yield* orchestrator.getThreadShell(targetThreadId))?.isSideChat);
+    assert.equal(promoted.thread.lineage.parentThreadId, sourceThreadId);
+    assert.deepEqual(promoted.runs, []);
+    assert.deepEqual(yield* orchestrator.getThreadShell(sourceThreadId), before);
+  }).pipe(Effect.provide(forkCases[0]!.layer)),
+);
+
 it.effect.each(forkCases)(
   "bounds $driver context when continuing a fork of a $status run",
   ({ driver, status, instanceId, modelSelection, layer }) =>

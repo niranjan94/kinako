@@ -58,6 +58,7 @@ export interface ThreadForkServiceV2Shape {
     readonly transferId: ContextTransferId;
     readonly targetThreadId: ThreadId;
     readonly title?: string;
+    readonly isSideChat?: boolean;
     readonly createdBy: OrchestrationV2Actor;
     readonly creationSource: OrchestrationV2CreationSource;
     readonly createdAt: DateTime.Utc;
@@ -83,6 +84,7 @@ export const layer: Layer.Layer<ThreadForkServiceV2> = Layer.succeed(
         }
         const targetThread: OrchestrationV2AppThread = {
           ...input.sourceProjection.thread,
+          isSideChat: input.isSideChat === true,
           // PR context follows the conversation; watching remains the source thread's responsibility.
           pullRequests: input.sourceProjection.thread.pullRequests?.map(
             ({ watch: _watch, ...link }) => link,
