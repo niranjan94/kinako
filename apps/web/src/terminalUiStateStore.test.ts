@@ -37,6 +37,16 @@ describe("terminalUiStateStore actions", () => {
     });
   });
 
+  it("reveals the drawer without placing a terminal", () => {
+    useTerminalUiStateStore.getState().revealTerminalDrawer(THREAD_REF);
+    const terminalUiState = selectThreadTerminalUiState(
+      useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
+      THREAD_REF,
+    );
+    expect(terminalUiState.terminalOpen).toBe(true);
+    expect(terminalUiState.terminalIds).toEqual([]);
+  });
+
   it("opens and splits terminals into the active group", () => {
     const store = useTerminalUiStateStore.getState();
     store.setTerminalOpen(THREAD_REF, true);

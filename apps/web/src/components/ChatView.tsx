@@ -545,6 +545,8 @@ import { RightPanelSheet } from "./RightPanelSheet";
 import { previewEnvironment } from "../state/preview";
 import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { databaseState } from "../state/database";
+import { showDatabaseTab } from "./database/databaseWorkspace";
 import { fileAttachmentCapabilityBlockReason } from "./chat/composerAttachmentFiles";
 import { assetEnvironment } from "../state/assets";
 import { readEnvironmentScope, readPreparedConnection } from "../state/session";
@@ -3341,6 +3343,7 @@ export default function ChatView(props: ChatViewProps) {
           : storeSplitTerminal(activeThreadRef, terminalId),
     });
     if (!launched) return;
+    showDatabaseTab(appAtomRegistry, activeThreadRef, null);
     setTerminalFocusRequestId((value) => value + 1);
     void launched.result;
   };
@@ -3351,6 +3354,7 @@ export default function ChatView(props: ChatViewProps) {
       place: (terminalId) => storeNewTerminal(activeThreadRef, terminalId),
     });
     if (!launched) return;
+    showDatabaseTab(appAtomRegistry, activeThreadRef, null);
     setTerminalFocusRequestId((value) => value + 1);
     void launched.result;
   };
@@ -3359,6 +3363,9 @@ export default function ChatView(props: ChatViewProps) {
     if (!hasTerminalWriteAccess() || !activeThreadRef) return;
     terminalActions.closeTerminalSession(terminalId);
     storeCloseTerminal(activeThreadRef, terminalId);
+    // Closing the last terminal would otherwise hide the database tabs sharing the drawer.
+    if (appAtomRegistry.get(databaseState.workspaces(scopedThreadKey(activeThreadRef))).tabs.length)
+      useTerminalUiStateStore.getState().revealTerminalDrawer(activeThreadRef);
     setTerminalFocusRequestId((value) => value + 1);
   };
   const runProjectScript = async (
@@ -3421,6 +3428,7 @@ export default function ChatView(props: ChatViewProps) {
       ...(options?.env ? { extraEnv: options.env } : {}),
     });
     if (!launched) return;
+    showDatabaseTab(appAtomRegistry, activeThreadRef, null);
     const targetTerminalId = launched.terminalId;
     const openResult = await launched.result;
     if (openResult._tag === "Failure") {

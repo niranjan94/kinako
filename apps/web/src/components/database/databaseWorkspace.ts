@@ -58,7 +58,7 @@ export function showDatabaseTab(
   const atom = workspaceAtom(threadRef);
   const workspace = registry.get(atom);
   if (workspace.activeId !== id) registry.set(atom, { ...workspace, activeId: id });
-  if (id !== null) useTerminalUiStateStore.getState().setTerminalOpen(threadRef, true);
+  if (id !== null) useTerminalUiStateStore.getState().revealTerminalDrawer(threadRef);
 }
 
 function addDatabaseTab(scope: DatabaseWorkspaceScope, tab: DatabaseWorkspaceTab) {
