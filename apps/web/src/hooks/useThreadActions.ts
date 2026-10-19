@@ -39,6 +39,7 @@ import {
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsPinReorder,
   readEnvironmentSupportsActiveReorder,
+  readEnvironmentSupportsGrouping,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentSupportsVisitedTracking,
@@ -169,6 +170,18 @@ export class ThreadActiveReorderUnsupportedError extends Schema.TaggedError<Thre
   }
 }
 
+export class ThreadGroupingUnsupportedError extends Schema.TaggedError<ThreadGroupingUnsupportedError>()(
+  "ThreadGroupingUnsupportedError",
+  {
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  },
+) {
+  override get message(): string {
+    return "Update this environment's server to group threads.";
+  }
+}
+
 export async function requestThreadUnpinConfirmation(input: {
   enabled: boolean;
   title: string;
@@ -278,6 +291,9 @@ export function useThreadActions() {
     reportFailure: false,
   });
   const reorderActiveThreadMutation = useOrchestrationCommand(threadEnvironment.reorderActive, {
+    reportFailure: false,
+  });
+  const setThreadGroupMutation = useOrchestrationCommand(threadEnvironment.setGroup, {
     reportFailure: false,
   });
   const snoozeThreadMutation = useOrchestrationCommand(threadEnvironment.snooze, {
@@ -854,6 +870,23 @@ export function useThreadActions() {
     });
   };
 
+  const setThreadGroup = async (target: ScopedThreadRef, group: string | null) => {
+    if (!readEnvironmentSupportsGrouping(target.environmentId)) {
+      return AsyncResult.failure(
+        Cause.fail(
+          new ThreadGroupingUnsupportedError({
+            environmentId: target.environmentId,
+            threadId: target.threadId,
+          }),
+        ),
+      );
+    }
+    return setThreadGroupMutation({
+      environmentId: target.environmentId,
+      input: { threadId: target.threadId, group },
+    });
+  };
+
   const unsnoozeThread = async (target: ScopedThreadRef) => {
     if (!readEnvironmentSupportsSnooze(target.environmentId)) {
       return AsyncResult.failure(
@@ -954,6 +987,7 @@ export function useThreadActions() {
     confirmAndUnpinThread,
     reorderPinnedThread,
     reorderActiveThread,
+    setThreadGroup,
     markThreadUnread,
     setThreadAutoSettle,
   };

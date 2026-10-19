@@ -1,5 +1,7 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
+import { resolveThreadGroupChoice } from "../components/ThreadGroupDialog";
+import { collectThreadGroups } from "@t3tools/client-runtime/state/thread-groups";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -26,12 +28,14 @@ import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope } from "../state/session";
 import {
   readEnvironmentSupportsAutoSettleOptOut,
+  readEnvironmentSupportsGrouping,
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsSnooze,
   readEnvironmentSupportsTitleRegeneration,
   readThreadCliResumeCommand,
   readThreadShell,
+  readThreadShells,
   useProjects,
 } from "../state/entities";
 import { usePrimaryEnvironmentId } from "../state/environments";
@@ -81,6 +85,7 @@ export function useThreadActionMenu(input: {
     pinThread,
     confirmAndUnpinThread,
     setThreadAutoSettle,
+    setThreadGroup,
     archiveThread,
     deleteThread,
     markThreadUnread,
@@ -133,6 +138,7 @@ export function useThreadActionMenu(input: {
         autoSettleOptOut: readEnvironmentSupportsAutoSettleOptOut(threadRef.environmentId),
         snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
         pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
+        grouping: readEnvironmentSupportsGrouping(threadRef.environmentId),
         titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
       };
       const isRegeneratingTitle = thread.titleRegeneration != null;
@@ -153,6 +159,8 @@ export function useThreadActionMenu(input: {
         canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
         isRegeneratingTitle,
         isRunning: !threadRuntimeCanArchive(thread.runtime),
+        group: thread.group,
+        groups: collectThreadGroups(readThreadShells()),
         supports,
         snoozePresets,
       });
@@ -178,6 +186,15 @@ export function useThreadActionMenu(input: {
         const result = await snoozeThread(threadRef, preset.snoozedUntil);
         if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
           failureToast("Failed to snooze thread", squashAtomCommandFailure(result));
+        }
+        return;
+      }
+      if (action.startsWith("group:")) {
+        const group = await resolveThreadGroupChoice(action);
+        if (group === undefined || group === thread.group) return;
+        const result = await setThreadGroup(threadRef, group);
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          failureToast("Failed to move thread", squashAtomCommandFailure(result));
         }
         return;
       }

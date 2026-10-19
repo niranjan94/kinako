@@ -1,8 +1,10 @@
 import { closestCenter, type CollisionDetection, type Modifier } from "@dnd-kit/core";
 import { verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import {
+  isSidebarPlaceholderMarker,
   resolveSidebarDropTarget,
   sidebarListItemId,
+  sidebarMarkerGroup,
   sidebarMarkerId,
   type SidebarListItem,
   type SidebarListMarker,
@@ -153,10 +155,28 @@ export function createSidebarSortingStrategy(input: {
           : (input.activeOrder ?? target.activeOrder);
     const ranks = new Map(order.map((key, index) => [key, index]));
     const rank = ranks.get(active.key) ?? Number.POSITIVE_INFINITY;
+    const ownGroup = active.group ?? null;
+    // Rows dropped in from another section keep their group (see
+    // planSidebarThreadDrop), so preview them there when that group is listed.
+    const bucket =
+      target.section !== "active"
+        ? null
+        : active.section !== "active" &&
+            (ownGroup === null ||
+              items.some(
+                (item) => item.kind === "marker" && sidebarMarkerGroup(item.marker) === ownGroup,
+              ))
+          ? ownGroup
+          : (target.group ?? null);
     const index = group.findIndex(
-      (item) => (ranks.get(item.key) ?? Number.POSITIVE_INFINITY) > rank,
+      (item) =>
+        (item.group ?? null) === bucket && (ranks.get(item.key) ?? Number.POSITIVE_INFINITY) > rank,
     );
-    group.splice(index < 0 ? group.length : index, 0, { ...active, section: target.section });
+    group.splice(index < 0 ? group.length : index, 0, {
+      ...active,
+      section: target.section,
+      group: bucket,
+    });
     const settledOrder = (
       input.settledOrder.length > 0 ? input.settledOrder : groups.settled.map((item) => item.key)
     ).filter((key) => key !== active.key || target.section === "settled");
@@ -170,9 +190,23 @@ export function createSidebarSortingStrategy(input: {
     groups.settled = visible.map((key) => ({ kind: "thread", key, section: "settled" }));
     const projected: SidebarListItem[] = [];
     const marker = (name: SidebarListMarker) => projected.push({ kind: "marker", marker: name });
+    const activeByGroup = new Map<string | null, ThreadItem[]>();
+    for (const row of groups.active) {
+      const rowGroup = row.group ?? null;
+      const rows = activeByGroup.get(rowGroup);
+      if (rows === undefined) activeByGroup.set(rowGroup, [row]);
+      else rows.push(row);
+    }
     const section = (name: "active" | "settled") => {
-      if (groups[name].length > 0) projected.push(...groups[name]);
+      const rows = name === "active" ? (activeByGroup.get(null) ?? []) : groups.settled;
+      if (rows.length > 0) projected.push(...rows);
       else marker(`${name}-placeholder`);
+      if (name !== "active") return;
+      for (const item of items) {
+        const groupName = item.kind === "marker" ? sidebarMarkerGroup(item.marker) : null;
+        if (groupName === null) continue;
+        projected.push(item, ...(activeByGroup.get(groupName) ?? []));
+      }
     };
     marker("pinned-header");
     projected.push(...groups.pinned);
@@ -204,7 +238,7 @@ export function createSidebarSortingStrategy(input: {
       return item.kind === "marker" &&
         (item.marker === "pinned-header" || item.marker === "pinned-divider")
         ? labelHeight
-        : item.kind === "marker" && item.marker.endsWith("placeholder")
+        : item.kind === "marker" && isSidebarPlaceholderMarker(item.marker)
           ? slimHeight
           : moved
             ? fallback

@@ -15,6 +15,10 @@ export type ThreadActionMenuId =
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
+  | "group"
+  | "group:new"
+  | "group:remove"
+  | `group:set:${string}`
   | "rename"
   | "regenerate-title"
   | "mark-unread"
@@ -81,11 +85,15 @@ export interface ThreadActionMenuState {
   readonly isRegeneratingTitle: boolean;
   /** Archive rejects a thread with an attached provider, so disable it here rather than let the action fail. */
   readonly isRunning: boolean;
+  readonly group: string | null;
+  /** Group names already in use, offered as move targets. */
+  readonly groups: ReadonlyArray<string>;
   readonly supports: {
     readonly settlement: boolean;
     readonly autoSettleOptOut: boolean;
     readonly snooze: boolean;
     readonly pinning: boolean;
+    readonly grouping: boolean;
     readonly titleRegeneration: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
@@ -149,6 +157,30 @@ export function buildThreadActionMenuItems(
                   { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
                 ],
               },
+        ]
+      : []),
+    ...(state.supports.grouping
+      ? [
+          {
+            id: "group" as const,
+            label: "Move to group",
+            icon: "folder",
+            children: [
+              ...state.groups.map((group) => ({
+                id: `group:set:${group}` as const,
+                label: group,
+                checked: group === state.group,
+              })),
+              {
+                id: "group:new" as const,
+                label: "New group…",
+                separatorBefore: state.groups.length > 0,
+              },
+              ...(state.group === null
+                ? []
+                : [{ id: "group:remove" as const, label: "Remove from group" }]),
+            ],
+          },
         ]
       : []),
     { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },

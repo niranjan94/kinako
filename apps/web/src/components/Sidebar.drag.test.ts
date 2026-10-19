@@ -8,6 +8,7 @@ import {
 } from "./Sidebar.drag";
 import {
   resolveSidebarDropTarget,
+  sidebarGroupHeaderMarker,
   sidebarListItemId,
   sidebarMarkerId,
   type SidebarListItem,
@@ -650,6 +651,44 @@ describe("sidebar drag projection", () => {
       sidebarMarkerId("settled-placeholder"),
     );
     expect(result.get(sidebarMarkerId("snoozed-header"))).toEqual({ ...stationary, y: -46 });
+  });
+
+  it("keeps group headers in place and previews the row inside the target group", () => {
+    const billing = sidebarGroupHeaderMarker("Billing");
+    const items: SidebarListItem[] = [
+      pinnedHeader,
+      divider,
+      marker("active-placeholder"),
+      thread("a1", "active"),
+      thread("a2", "active"),
+      marker(billing),
+      { kind: "thread", key: "b1", section: "active", group: "Billing" },
+      settledHeader,
+      marker("settled-placeholder"),
+    ];
+    const moved = preview({ items, settledOrder: [], settledExpanded: false }, "a1", "b1");
+    expect(moved.get("a2")?.y).toBe(-84);
+    expect(moved.get(sidebarMarkerId(billing))).toEqual({ ...stationary, y: -84 });
+    expect(moved.get("b1")?.y).toBe(-84);
+  });
+
+  it("previews a row from another section inside its own group, where the drop files it", () => {
+    const items: SidebarListItem[] = [
+      pinnedHeader,
+      { kind: "thread", key: "p", section: "pinned", group: "Infra" },
+      divider,
+      marker("active-placeholder"),
+      marker(sidebarGroupHeaderMarker("Billing")),
+      { kind: "thread", key: "b1", section: "active", group: "Billing" },
+      marker(sidebarGroupHeaderMarker("Infra")),
+      { kind: "thread", key: "i1", section: "active", group: "Infra" },
+      settledHeader,
+      marker("settled-placeholder"),
+    ];
+    const moved = preview({ items, settledOrder: [], settledExpanded: false }, "p", "b1");
+    const infraHeader = moved.get(sidebarMarkerId(sidebarGroupHeaderMarker("Infra")))?.y;
+    expect(infraHeader).toBe(moved.get("b1")?.y);
+    expect(moved.get("i1")!.y - infraHeader!).toBe(83);
   });
 
   it("previews a time-ordered inbox drop at its time slot, above the Working shelf", () => {

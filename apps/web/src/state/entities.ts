@@ -322,6 +322,13 @@ export function readEnvironmentSupportsActiveReorder(environmentId: EnvironmentI
   );
 }
 
+export function readEnvironmentSupportsGrouping(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadGrouping === true
+  );
+}
+
 export function readEnvironmentSupportsSettlement(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
