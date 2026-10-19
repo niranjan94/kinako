@@ -19,6 +19,7 @@ import { resolveServerBackedAppDisplayName } from "../branding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
+import { ThreadGroupDialogHost } from "../components/ThreadGroupDialog";
 import { ImportAgentSessionDialogHost } from "../components/agentSessions/ImportAgentSessionDialog";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
 import { KeybindingsConfigWarning } from "../components/KeybindingsConfigWarning";
@@ -187,6 +188,7 @@ function RootRouteView() {
           <FontAppearanceSync />
           <ProviderAuthCallbackCoordinator />
           <CustomSnoozeDialogHost />
+          <ThreadGroupDialogHost />
           <ImportAgentSessionDialogHost />
           <CommandPalette>
             <AppSidebarLayout>
@@ -243,6 +245,7 @@ function RootRouteView() {
           <ReopenClosedViewShortcut />
           <ConfirmDialogHost />
           <CustomSnoozeDialogHost />
+          <ThreadGroupDialogHost />
           <ImportAgentSessionDialogHost />
           <SlowRpcRequestToastCoordinator />
           <PermissionUpdateNotice />

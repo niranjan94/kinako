@@ -49,6 +49,8 @@ import {
   sortInboxThreadsByReturn,
   resolveSidebarDropTarget,
   planSidebarThreadDrop,
+  sidebarGroupHeaderMarker,
+  sidebarMarkerId,
   sortPinnedThreadsForSidebar,
   sortProjectsForSidebar,
   sortScopedProjectsForSidebar,
@@ -2309,6 +2311,7 @@ describe("Working shelf (beta)", () => {
         section: "active",
         pinnedOrder: [],
         activeOrder: ["a1", "a2", "p1"],
+        group: null,
       });
       expect(resolveSidebarDropVerb("active", "working")).toBeNull();
     });
@@ -2379,6 +2382,125 @@ describe("Working shelf (beta)", () => {
         activeReorderableKeys: new Set(["a2"]),
       });
       expect(above.kind === "move-active" && above.assignments[0]!.orderKey < "m").toBe(true);
+    });
+
+    describe("groups", () => {
+      const groupRow = (key: string, group: string): SidebarListItem => ({
+        kind: "thread",
+        key,
+        section: "active",
+        group,
+      });
+      const grouped: readonly SidebarListItem[] = [
+        marker("pinned-header"),
+        marker("pinned-divider"),
+        marker("active-placeholder"),
+        row("a1", "active"),
+        row("a2", "active"),
+        marker(sidebarGroupHeaderMarker("Billing")),
+        groupRow("b1", "Billing"),
+        groupRow("b2", "Billing"),
+        marker(sidebarGroupHeaderMarker("Infra")),
+        groupRow("i1", "Infra"),
+        marker("settled-header"),
+      ];
+
+      it("files a row under the group whose header precedes the slot", () => {
+        expect(resolveSidebarDropTarget(grouped, "a1", "b1")).toEqual({
+          section: "active",
+          pinnedOrder: [],
+          activeOrder: ["b1", "a1", "b2"],
+          group: "Billing",
+        });
+        expect(resolveSidebarDropTarget(grouped, "i1", "a2")).toMatchObject({
+          activeOrder: ["a1", "i1", "a2"],
+          group: null,
+        });
+        expect(
+          resolveSidebarDropTarget(
+            grouped,
+            "a1",
+            sidebarMarkerId(sidebarGroupHeaderMarker("Infra")),
+          ),
+        ).toMatchObject({ activeOrder: ["a1", "i1"], group: "Infra" });
+        expect(
+          resolveSidebarDropTarget(
+            grouped,
+            "i1",
+            sidebarMarkerId(sidebarGroupHeaderMarker("Billing")),
+          ),
+        ).toMatchObject({ activeOrder: ["i1", "b1", "b2"], group: "Billing" });
+      });
+
+      it("moves between groups even when the inbox is time-ordered", () => {
+        const base = {
+          pinnedOrder: [],
+          pinnedKeysById: new Map(),
+          activeKeysById: new Map(),
+          activeTimeOrdered: true,
+        };
+        expect(
+          planSidebarThreadDrop({
+            ...base,
+            activeKey: "a1",
+            activeSection: "active",
+            activeGroup: null,
+            activeOrder: ["b1", "b2"],
+            target: resolveSidebarDropTarget(grouped, "a1", "b1")!,
+          }),
+        ).toEqual({
+          kind: "move-active",
+          order: null,
+          assignments: [],
+          unpin: false,
+          unsettle: false,
+          unsnooze: false,
+          group: "Billing",
+        });
+        expect(
+          planSidebarThreadDrop({
+            ...base,
+            activeKey: "b1",
+            activeSection: "active",
+            activeGroup: "Billing",
+            activeOrder: ["b1", "b2"],
+            target: resolveSidebarDropTarget(grouped, "b1", "b2")!,
+          }),
+        ).toEqual({ kind: "none" });
+        expect(
+          planSidebarThreadDrop({
+            ...base,
+            activeKey: "p1",
+            activeSection: "pinned",
+            activeGroup: "Infra",
+            activeOrder: ["b1", "b2"],
+            target: {
+              section: "active",
+              pinnedOrder: [],
+              activeOrder: ["b1", "b2", "p1"],
+              group: "Billing",
+            },
+          }),
+        ).toEqual({
+          kind: "move-active",
+          order: null,
+          assignments: [],
+          unpin: true,
+          unsettle: false,
+          unsnooze: false,
+        });
+        expect(
+          planSidebarThreadDrop({
+            ...base,
+            activeKey: "a1",
+            activeSection: "active",
+            activeGroup: null,
+            supportsGrouping: false,
+            activeOrder: ["b1", "b2"],
+            target: resolveSidebarDropTarget(grouped, "a1", "b1")!,
+          }),
+        ).toEqual({ kind: "none" });
+      });
     });
 
     it("only changes lifecycle when the inbox is time-ordered", () => {

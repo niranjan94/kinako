@@ -18,11 +18,14 @@ const baseState: ThreadActionMenuState = {
   canSnoozeNow: true,
   isRegeneratingTitle: false,
   isRunning: false,
+  group: null,
+  groups: [],
   supports: {
     settlement: true,
     autoSettleOptOut: true,
     snooze: true,
     pinning: true,
+    grouping: true,
     titleRegeneration: true,
   },
   snoozePresets: [
@@ -56,6 +59,7 @@ describe("buildThreadActionMenuItems", () => {
             "unpin",
             "unsettle",
             "unsnooze",
+            "group",
             "rename",
             "regenerate-title",
             "auto-settle",
@@ -66,6 +70,7 @@ describe("buildThreadActionMenuItems", () => {
             "pin",
             "settle",
             "snooze",
+            "group",
             "rename",
             "regenerate-title",
             "auto-settle",
@@ -101,6 +106,7 @@ describe("buildThreadActionMenuItems", () => {
           autoSettleOptOut: false,
           snooze: false,
           pinning: false,
+          grouping: false,
           titleRegeneration: false,
         },
       }),
@@ -187,6 +193,19 @@ describe("buildThreadActionMenuItems", () => {
     expect(snooze?.children?.map((child) => child.id)).toEqual(["snooze:hour", "snooze:custom"]);
   });
 
+  it("offers existing groups, a new group, and the way back out", () => {
+    const children = (state: ThreadActionMenuState) =>
+      buildThreadActionMenuItems(state).find((item) => item.id === "group")?.children ?? [];
+    expect(children(baseState).map((child) => child.id)).toEqual(["group:new"]);
+    const grouped = children({ ...baseState, group: "Billing", groups: ["Billing", "Infra"] });
+    expect(grouped.map((child) => [child.id, child.checked])).toEqual([
+      ["group:set:Billing", true],
+      ["group:set:Infra", false],
+      ["group:new", undefined],
+      ["group:remove", undefined],
+    ]);
+  });
+
   it("disables title regeneration while one is in flight", () => {
     const item = buildThreadActionMenuItems({ ...baseState, isRegeneratingTitle: true }).find(
       (candidate) => candidate.id === "regenerate-title",
@@ -217,6 +236,7 @@ describe("buildThreadActionMenuItems", () => {
           autoSettleOptOut: false,
           snooze: false,
           pinning: false,
+          grouping: false,
           titleRegeneration: false,
         },
       }),

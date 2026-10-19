@@ -11,6 +11,7 @@ import {
 } from "./chat/threadContextDrag";
 import { discardComposerDraft } from "../lib/discardComposerDraft";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
+import { requestThreadGroupName, resolveThreadGroupChoice } from "./ThreadGroupDialog";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { useAtomValue } from "@effect/atom-react";
@@ -43,6 +44,10 @@ import {
   resolveSettledThreadTimestamp,
   sortSettledThreads,
 } from "@t3tools/client-runtime/state/thread-sort";
+import {
+  collectThreadGroups,
+  partitionThreadsByGroup,
+} from "@t3tools/client-runtime/state/thread-groups";
 import {
   threadSearchMatchKey,
   type EnvironmentThreadSearchMatch,
@@ -200,6 +205,7 @@ import {
   firstValidTimestampMs,
   hasUnseenCompletion,
   isSidebarNestedLinkClick,
+  isSidebarPlaceholderMarker,
   isSidebarThreadWorking,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
@@ -219,7 +225,9 @@ import {
   shouldNavigateAfterThreadPark,
   shouldRecedeSidebarThread,
   resolveWorkingStartedAt,
+  sidebarGroupHeaderMarker,
   sidebarListItemId,
+  sidebarMarkerGroup,
   sidebarMarkerId,
   sidebarThreadKeyAtY,
   sortInboxThreadsByReturn,
@@ -367,6 +375,9 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
+const COLLAPSED_GROUPS_KEY = "t3code:sidebar:collapsed-groups";
+const NO_COLLAPSED_GROUPS: readonly string[] = [];
+const CollapsedGroupsSchema = Schema.Array(Schema.String);
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -379,6 +390,9 @@ type SidebarOptimisticDrop = {
   readonly order: readonly string[] | null;
   readonly keysAtDrop: ReadonlyMap<string, string | null>;
   readonly assignedKeys: ReadonlyMap<string, string>;
+  /** The Active group the drop lands in, for orders and the move between groups. */
+  readonly bucket: string | null;
+  readonly group: string | null | undefined;
 };
 
 interface SidebarThreadPartitionInput {
@@ -478,6 +492,11 @@ function useSidebarThreads(input: {
     false,
     Schema.Boolean,
   );
+  const [collapsedGroups, setCollapsedGroups] = useLocalStorage(
+    COLLAPSED_GROUPS_KEY,
+    NO_COLLAPSED_GROUPS,
+    CollapsedGroupsSchema,
+  );
   // The settled tail restarts whenever the project scope changes.
   const [settledTail, setSettledTail] = useState({
     scopeKey: projectScopeKey,
@@ -522,9 +541,29 @@ function useSidebarThreads(input: {
   const visibleWorkingThreads = workingShelfExpanded
     ? workingThreads
     : routeThreadOnly(workingThreads, routeThreadKey);
+  const activeBuckets = partitionThreadsByGroup(activeThreads);
+  const activeGroups = activeBuckets.groups.map(({ group, threads: groupThreads }) => {
+    const expanded = !collapsedGroups.includes(group);
+    return {
+      group,
+      threads: groupThreads,
+      expanded,
+      visibleThreads: expanded ? groupThreads : routeThreadOnly(groupThreads, routeThreadKey),
+    };
+  });
+  const visibleActiveThreads = [
+    ...activeBuckets.ungrouped,
+    ...activeGroups.flatMap((entry) => entry.visibleThreads),
+  ];
+  const activeKeysByGroup = new Map<string | null, string[]>([
+    [null, activeBuckets.ungrouped.map(threadShellKey)],
+    ...activeGroups.map(
+      (entry) => [entry.group, entry.visibleThreads.map(threadShellKey)] as const,
+    ),
+  ]);
   const orderedThreads = [
     ...pinnedThreads,
-    ...activeThreads,
+    ...visibleActiveThreads,
     ...visibleWorkingThreads,
     ...visibleSnoozedThreads,
     ...renderedSettledThreads,
@@ -563,6 +602,16 @@ function useSidebarThreads(input: {
     toggleSnoozedShelf: () => setSnoozedShelfExpanded((value) => !value),
     workingShelfExpanded,
     toggleWorkingShelf: () => setWorkingShelfExpanded((value) => !value),
+    ungroupedActiveThreads: activeBuckets.ungrouped,
+    activeGroups,
+    toggleGroup: (group: string) =>
+      setCollapsedGroups((current) =>
+        current.includes(group) ? current.filter((name) => name !== group) : [...current, group],
+      ),
+    renameCollapsedGroup: (from: string, to: string) =>
+      setCollapsedGroups((current) =>
+        current.includes(from) ? [...current.filter((name) => name !== from), to] : current,
+      ),
     renderedSettledThreads,
     visibleSnoozedThreads,
     visibleWorkingThreads,
@@ -572,7 +621,8 @@ function useSidebarThreads(input: {
     snoozedThreadKeys: new Set(snoozedThreads.map(threadShellKey)),
     sectionByThreadKey,
     pinnedKeys: pinnedThreads.map(threadShellKey),
-    activeKeys: activeThreads.map(threadShellKey),
+    activeKeys: visibleActiveThreads.map(threadShellKey),
+    activeKeysByGroup,
     pinnedKeysById: new Map(
       threads.map((thread) => [threadShellKey(thread), thread.pinOrderKey ?? null] as const),
     ),
@@ -612,15 +662,19 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
         optimisticDrop.occurredAt,
         optimisticDrop.assignedKeys.get(threadKey),
       );
+      const regrouped =
+        optimisticDrop.group === undefined
+          ? projected
+          : { ...projected, group: optimisticDrop.group };
       (optimisticDrop.section === "pinned"
         ? pinned
         : optimisticDrop.section === "settled"
           ? settled
-          : inbox(projected)
+          : inbox(regrouped)
       ).push(
         optimisticDrop.clearsSnooze
-          ? projected
-          : { ...projected, snoozedAt: thread.snoozedAt, snoozedUntil: thread.snoozedUntil },
+          ? regrouped
+          : { ...regrouped, snoozedAt: thread.snoozedAt, snoozedUntil: thread.snoozedUntil },
       );
     } else {
       const section = resolveSidebarThreadSection({
@@ -706,6 +760,9 @@ function isOptimisticDropReleased(input: {
   ) {
     return true;
   }
+  if (optimisticDrop.group !== undefined && (thread.group ?? null) !== optimisticDrop.group) {
+    return false;
+  }
   if (optimisticDrop.order === null) {
     // Settle also emits unpin/unsnooze events. Wait for the entire move
     // before releasing the projected fields and sort timestamps.
@@ -720,7 +777,12 @@ function isOptimisticDropReleased(input: {
   }
   if (canonicalSection !== optimisticDrop.section) return false;
   if (optimisticDrop.clearsSnooze && thread.snoozedUntil != null) return false;
-  const destinationKeys = optimisticDrop.section === "pinned" ? pinnedKeys : activeKeys;
+  const destinationKeys =
+    optimisticDrop.section === "pinned"
+      ? pinnedKeys
+      : activeKeys.filter(
+          (key) => (canonicalByKey.get(key)?.group ?? null) === optimisticDrop.bucket,
+        );
   const canonicalDestination = destinationKeys.flatMap((key) => {
     const canonical = canonicalByKey.get(key);
     return canonical === undefined ? [] : [canonical];
@@ -1182,7 +1244,7 @@ function SortableSidebarMarker(props: {
       className={cn("list-none", props.className)}
       style={{
         transform: CSS.Translate.toString(transform),
-        transition: props.marker.endsWith("-placeholder") ? "none" : transition,
+        transition: isSidebarPlaceholderMarker(props.marker) ? "none" : transition,
         visibility: transform?.scaleY === 0 ? "hidden" : undefined,
       }}
     >
@@ -1288,6 +1350,39 @@ function SidebarSectionHeader(props: {
         data-testid={`sidebar-${shelf}-shelf-toggle`}
       >
         {props.label}
+      </CollapsibleSectionHeader>
+    </SortableSidebarMarker>
+  );
+}
+
+function SidebarGroupHeader(props: {
+  group: string;
+  count: number;
+  expanded: boolean;
+  dragging: boolean;
+  isDropTarget: boolean;
+  onToggle: (group: string) => void;
+  onContextMenu: (group: string, position: { x: number; y: number }) => void;
+}) {
+  return (
+    <SortableSidebarMarker
+      marker={sidebarGroupHeaderMarker(props.group)}
+      data-testid="sidebar-group-header"
+      className="mx-0.5 h-8"
+    >
+      <CollapsibleSectionHeader
+        onClick={() => props.onToggle(props.group)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          props.onContextMenu(props.group, { x: event.clientX, y: event.clientY });
+        }}
+        expanded={props.expanded}
+        tone={props.isDropTarget ? "accent" : props.dragging ? "emphasized" : "muted"}
+      >
+        <span className="flex items-center gap-1.5">
+          <FolderIcon aria-hidden className="size-3" />
+          {props.expanded ? props.group : `${props.group} (${props.count})`}
+        </span>
       </CollapsibleSectionHeader>
     </SortableSidebarMarker>
   );
@@ -2721,6 +2816,7 @@ export default function Sidebar() {
     setThreadAutoSettle,
     reorderPinnedThread,
     reorderActiveThread,
+    setThreadGroup,
     markThreadUnread,
     archiveThread,
     deleteThread,
@@ -2849,6 +2945,7 @@ export default function Sidebar() {
     readonly occurredAt: string;
     readonly activationY: number | null;
     readonly targetSection: SidebarSection | null;
+    readonly targetGroup?: string | null;
     readonly contextDrag: boolean;
   } | null>(null);
   const dragSensorRef = useRef<SidebarPointerSensor | null>(null);
@@ -3004,6 +3101,10 @@ export default function Sidebar() {
     toggleSnoozedShelf,
     workingShelfExpanded,
     toggleWorkingShelf,
+    ungroupedActiveThreads,
+    activeGroups,
+    toggleGroup,
+    renameCollapsedGroup,
     renderedSettledThreads,
     visibleSnoozedThreads,
     visibleWorkingThreads,
@@ -3014,6 +3115,7 @@ export default function Sidebar() {
     sectionByThreadKey,
     pinnedKeys,
     activeKeys,
+    activeKeysByGroup,
     pinnedKeysById,
     activeKeysById,
   } = useSidebarThreads({
@@ -3338,6 +3440,7 @@ export default function Sidebar() {
   // Working rows can supply chat context, but never preview sidebar movement.
   const isContextDrag = dragState?.contextDrag === true || dragState?.activeSection === "working";
   const dragTargetSection = isContextDrag ? null : (dragState?.targetSection ?? null);
+  const dragTargetGroup = dragTargetSection === "active" ? (dragState?.targetGroup ?? null) : null;
   const finishThreadDrag = (started: boolean) => {
     dragSensorRef.current = null;
     contextDragKeyRef.current = null;
@@ -3542,6 +3645,7 @@ export default function Sidebar() {
         event.activatorEvent instanceof PointerEvent ? event.activatorEvent.clientY : null,
     });
   };
+  const activeGroupByName = new Map(activeGroups.map((entry) => [entry.group, entry] as const));
   const sidebarListItemsFresh = ((): readonly SidebarListItem[] => {
     const rowsOf = (
       list: readonly EnvironmentThreadShell[],
@@ -3549,7 +3653,7 @@ export default function Sidebar() {
     ): SidebarListItem[] =>
       list.map((thread) => {
         const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-        return { kind: "thread", key, section };
+        return { kind: "thread", key, section, group: thread.group ?? null };
       });
     if (
       pinnedThreads.length +
@@ -3565,9 +3669,12 @@ export default function Sidebar() {
     const pinnedRows = rowsOf(pinnedThreads, "pinned");
     items.push(...pinnedRows);
     items.push({ kind: "marker", marker: "pinned-divider" });
-    const activeRows = rowsOf(activeThreads, "active");
     items.push({ kind: "marker", marker: "active-placeholder" });
-    items.push(...activeRows);
+    items.push(...rowsOf(ungroupedActiveThreads, "active"));
+    for (const entry of activeGroups) {
+      items.push({ kind: "marker", marker: sidebarGroupHeaderMarker(entry.group) });
+      items.push(...rowsOf(entry.visibleThreads, "active"));
+    }
     if (workingThreads.length > 0) {
       items.push({ kind: "marker", marker: "working-header" });
       items.push(...rowsOf(visibleWorkingThreads, "working"));
@@ -3630,7 +3737,11 @@ export default function Sidebar() {
     setDragState((current) =>
       current === null || current.activeKey !== String(event.active.id)
         ? current
-        : { ...current, targetSection: target?.section ?? null },
+        : {
+            ...current,
+            targetSection: target?.section ?? null,
+            targetGroup: target?.group ?? null,
+          },
     );
   };
   const sortableIds = sidebarListItems.map(sidebarListItemId);
@@ -3675,6 +3786,10 @@ export default function Sidebar() {
             activeSection: draggedFromSection,
             activePinned: source.pinnedAt != null,
             activeSettled: source.settledOverride === "settled",
+            activeGroup: source.group ?? null,
+            supportsGrouping:
+              serverConfigs.get(source.environmentId)?.environment.capabilities.threadGrouping ===
+              true,
             supportsSettlement:
               serverConfigs.get(source.environmentId)?.environment.capabilities.threadSettlement ===
               true,
@@ -3682,7 +3797,7 @@ export default function Sidebar() {
             pinnedOrder: pinnedKeys,
             pinnedKeysById,
             reorderableKeys: draggableThreadKeys,
-            activeOrder: activeKeys,
+            activeOrder: activeKeysByGroup.get(target.group ?? null) ?? [],
             activeKeysById,
             activeReorderableKeys: activeReorderableThreadKeys,
             activeTimeOrdered: workingShelfEnabled,
@@ -3710,6 +3825,10 @@ export default function Sidebar() {
       activeSection,
       activePinned: activeThread.pinnedAt != null,
       activeSettled: activeThread.settledOverride === "settled",
+      activeGroup: activeThread.group ?? null,
+      supportsGrouping:
+        serverConfigs.get(activeThread.environmentId)?.environment.capabilities.threadGrouping ===
+        true,
       supportsSettlement:
         serverConfigs.get(activeThread.environmentId)?.environment.capabilities.threadSettlement ===
         true,
@@ -3717,7 +3836,7 @@ export default function Sidebar() {
       pinnedOrder: pinnedKeys,
       pinnedKeysById,
       reorderableKeys: draggableThreadKeys,
-      activeOrder: activeKeys,
+      activeOrder: activeKeysByGroup.get(target.group ?? null) ?? [],
       activeKeysById,
       activeReorderableKeys: activeReorderableThreadKeys,
       activeTimeOrdered: workingShelfEnabled,
@@ -3754,6 +3873,8 @@ export default function Sidebar() {
       order: plan.kind === "settle" ? null : plan.order,
       keysAtDrop: target.section === "active" ? activeKeysById : pinnedKeysById,
       assignedKeys: new Map(assignments.map(({ id, orderKey }) => [id, orderKey])),
+      bucket: target.group ?? null,
+      group: plan.kind === "move-active" ? plan.group : undefined,
     };
     setOptimisticDrop(drop);
     void (async () => {
@@ -3804,6 +3925,11 @@ export default function Sidebar() {
           )
             return;
           if (plan.unsnooze && !(await run(unsnoozeThread(threadRef), "Failed to wake thread")))
+            return;
+          if (
+            plan.group !== undefined &&
+            !(await run(setThreadGroup(threadRef, plan.group), "Failed to move thread"))
+          )
             return;
           break;
         case "pin":
@@ -3889,6 +4015,29 @@ export default function Sidebar() {
     })();
   };
 
+  const moveThreadsToGroup = async (
+    targets: readonly EnvironmentThreadShell[],
+    group: string | null,
+  ) => {
+    const results = await Promise.all(
+      targets.map((thread) =>
+        setThreadGroup(scopeThreadRef(thread.environmentId, thread.id), group),
+      ),
+    );
+    for (const result of results) {
+      if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) continue;
+      const error = squashAtomCommandFailure(result);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: targets.length === 1 ? "Failed to move thread" : "Failed to move threads",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+      return;
+    }
+  };
+
   const handleMultiSelectContextMenu = useStableCallback(
     async (position: { x: number; y: number }) => {
       const api = readLocalApi();
@@ -3933,6 +4082,11 @@ export default function Sidebar() {
         pinnedCount: pinnedSelectedThreads.length,
       });
       const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
+      const canGroupSelection = selectedThreads.every(
+        (thread) =>
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadGrouping === true,
+      );
+      const existingGroups = collectThreadGroups(threads);
       const clicked = await settlePromise(() =>
         api.contextMenu.show(
           [
@@ -3962,6 +4116,29 @@ export default function Sidebar() {
                         separatorBefore: true,
                         disabled: !canOperateThreads(selectedThreads),
                       },
+                    ],
+                  },
+                ]
+              : []),
+            ...(canGroupSelection
+              ? [
+                  {
+                    id: "group",
+                    label: `Move to group (${count})`,
+                    disabled: !canOperateThreads(selectedThreads),
+                    children: [
+                      ...existingGroups.map((group) => ({
+                        id: `group:set:${group}`,
+                        label: group,
+                      })),
+                      {
+                        id: "group:new",
+                        label: "New group…",
+                        separatorBefore: existingGroups.length > 0,
+                      },
+                      ...(selectedThreads.some((thread) => thread.group != null)
+                        ? [{ id: "group:remove", label: "Remove from group" }]
+                        : []),
                     ],
                   },
                 ]
@@ -4003,6 +4180,16 @@ export default function Sidebar() {
               : selectedThreads;
       if (clicked.value === "settle" && actionTargets.length === 0) return;
       if (clicked.value !== "mark-unread" && !checkThreadOperations(actionTargets)) return;
+      if (clicked.value.startsWith("group:")) {
+        const group = await resolveThreadGroupChoice(clicked.value);
+        if (group === undefined) return;
+        clearSelection();
+        await moveThreadsToGroup(
+          selectedThreads.filter((thread) => (thread.group ?? null) !== group),
+          group,
+        );
+        return;
+      }
       if (clicked.value?.startsWith("snooze:")) {
         const preset =
           clicked.value === "snooze:custom"
@@ -4191,6 +4378,38 @@ export default function Sidebar() {
     },
   );
 
+  const handleGroupContextMenu = useStableCallback(
+    (group: string, position: { x: number; y: number }) => {
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) return;
+        const members = threads.filter(
+          (thread) => thread.group === group && thread.archivedAt === null,
+        );
+        const canOperate = canOperateThreads(members);
+        const clicked = await settlePromise(() =>
+          api.contextMenu.show(
+            [
+              { id: "rename", label: "Rename group…", icon: "pencil", disabled: !canOperate },
+              { id: "ungroup", label: "Ungroup threads", icon: "folder", disabled: !canOperate },
+            ],
+            position,
+          ),
+        );
+        if (clicked._tag === "Failure" || clicked.value === null) return;
+        if (!checkThreadOperations(members)) return;
+        if (clicked.value === "ungroup") {
+          await moveThreadsToGroup(members, null);
+          return;
+        }
+        const name = await requestThreadGroupName(group);
+        if (name === null || name === group) return;
+        renameCollapsedGroup(group, name);
+        await moveThreadsToGroup(members, name);
+      })();
+    },
+  );
+
   const handleThreadContextMenu = useStableCallback(
     (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
       void (async () => {
@@ -4216,6 +4435,8 @@ export default function Sidebar() {
           serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSnooze === true;
         const supportsPinning =
           serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPinning === true;
+        const supportsGrouping =
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadGrouping === true;
         const supportsAutoSettleOptOut =
           serverConfigs.get(thread.environmentId)?.environment.capabilities
             .threadAutoSettleOptOut === true;
@@ -4257,11 +4478,14 @@ export default function Sidebar() {
               canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
               isRegeneratingTitle,
               isRunning: !threadRuntimeCanArchive(thread.runtime),
+              group: thread.group ?? null,
+              groups: collectThreadGroups(threads),
               supports: {
                 settlement: supportsSettlement,
                 autoSettleOptOut: supportsAutoSettleOptOut,
                 snooze: supportsSnooze,
                 pinning: supportsPinning,
+                grouping: supportsGrouping,
                 titleRegeneration: supportsTitleRegeneration,
               },
               snoozePresets,
@@ -4277,6 +4501,13 @@ export default function Sidebar() {
               ? await requestCustomSnooze()
               : snoozePresets.find((candidate) => `snooze:${candidate.id}` === clicked.value);
           if (preset) attemptSnooze(threadRef, preset);
+          return;
+        }
+        if (clicked.value.startsWith("group:")) {
+          const group = await resolveThreadGroupChoice(clicked.value);
+          if (group !== undefined && group !== (thread.group ?? null)) {
+            await moveThreadsToGroup([thread], group);
+          }
           return;
         }
         switch (clicked.value) {
@@ -4936,6 +5167,28 @@ export default function Sidebar() {
                           items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
                           continue;
                         }
+                        const groupName = sidebarMarkerGroup(item.marker);
+                        const groupEntry =
+                          groupName === null ? undefined : activeGroupByName.get(groupName);
+                        if (groupEntry !== undefined) {
+                          items.push(
+                            <SidebarGroupHeader
+                              key={item.marker}
+                              group={groupEntry.group}
+                              count={groupEntry.threads.length}
+                              expanded={groupEntry.expanded}
+                              dragging={from !== null}
+                              isDropTarget={
+                                from === "active" &&
+                                dragTargetSection === "active" &&
+                                dragTargetGroup === groupEntry.group
+                              }
+                              onToggle={toggleGroup}
+                              onContextMenu={handleGroupContextMenu}
+                            />,
+                          );
+                          continue;
+                        }
                         switch (item.marker) {
                           case "pinned-header":
                             items.push(
@@ -4967,13 +5220,17 @@ export default function Sidebar() {
                                 label="Active"
                                 showHint={
                                   from !== null &&
-                                  (activeThreads.length === 0 ||
+                                  (ungroupedActiveThreads.length === 0 ||
                                     (from === "active" &&
-                                      activeThreads.length === 1 &&
+                                      ungroupedActiveThreads.length === 1 &&
+                                      dragState?.activeKey ===
+                                        threadShellKey(ungroupedActiveThreads[0]!) &&
                                       dragTargetSection !== null &&
-                                      dragTargetSection !== "active"))
+                                      (dragTargetSection !== "active" || dragTargetGroup !== null)))
                                 }
-                                isDropTarget={dragTargetSection === "active"}
+                                isDropTarget={
+                                  dragTargetSection === "active" && dragTargetGroup === null
+                                }
                               />,
                             );
                             break;
