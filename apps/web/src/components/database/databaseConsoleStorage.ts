@@ -119,10 +119,12 @@ const storedTab = (tab: DatabaseWorkspaceTab): typeof StoredTab.Type => ({
 export function restoreDatabaseWorkspace(key: string): DatabaseWorkspace | null {
   const stored = readJson(itemKey(key), isStoredWorkspace);
   if (!stored?.tabs.length) return null;
+  // Only consoles are activated in the panel; table tabs open in the bottom drawer.
+  const consoles = stored.tabs.filter((tab) => !tab.table);
   return {
-    activeId: stored.tabs.some((tab) => tab.id === stored.activeId)
+    activeId: consoles.some((tab) => tab.id === stored.activeId)
       ? stored.activeId
-      : (stored.tabs[0]?.id ?? null),
+      : (consoles[0]?.id ?? null),
     tabs: stored.tabs.map(({ table, ...tab }) => ({
       ...tab,
       loading: false,

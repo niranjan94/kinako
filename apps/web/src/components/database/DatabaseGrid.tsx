@@ -217,7 +217,7 @@ export const DatabaseGrid = memo(function DatabaseGrid({
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${exportName || "results"}.${format}`;
+    link.download = `${exportName.replace(/[^\w.-]+/g, "-").toLowerCase() || "results"}.${format}`;
     link.click();
     URL.revokeObjectURL(url);
   };

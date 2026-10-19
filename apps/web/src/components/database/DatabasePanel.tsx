@@ -1,7 +1,6 @@
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
-  databaseCacheKey,
   releaseDatabaseResources,
   type DatabaseWorkspaceTab,
 } from "@t3tools/client-runtime/state/database";
@@ -21,6 +20,7 @@ import { AsyncResult } from "effect/reactivity";
 import { projectEnvironment } from "../../state/projects";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { useRightPanelStore } from "../../rightPanelStore";
+import { useTerminalUiStateStore } from "../../terminalUiStateStore";
 import { randomUUID } from "../../lib/utils";
 import { observeResize } from "../../lib/observeResize";
 import { Button } from "../ui/button";
@@ -48,7 +48,6 @@ import {
   SearchIcon,
   SquareIcon,
   SquareTerminalIcon,
-  Table2Icon,
   XIcon,
 } from "lucide-react";
 import { databaseErrorMessage, databaseValue, useDatabaseConnections } from "./databaseHooks";
@@ -57,6 +56,7 @@ import { sqlStatementRanges, sqlWriteRisk, type SqlStatement } from "./sqlStatem
 import { ensureLocalApi } from "../../localApi";
 import { createSqlSchemaCompletion } from "./sqlCompletion";
 import { persistDatabaseWorkspace } from "./databaseConsoleStorage";
+import { showDatabaseDrawerTable } from "./databaseDrawerStore";
 
 const shortcut = (shiftKey: boolean) =>
   formatShortcutLabel({
@@ -69,11 +69,6 @@ const shortcut = (shiftKey: boolean) =>
   });
 const RUN_SHORTCUT = shortcut(false);
 const RUN_ALL_SHORTCUT = shortcut(true);
-
-const exportName = (tab: DatabaseWorkspaceTab) =>
-  (tab.table ? `${tab.table.schema}.${tab.table.object}` : tab.title)
-    .replace(/[^\w.-]+/g, "-")
-    .toLowerCase();
 
 const sqlLocation = (sql: string, offset: number) => {
   const before = sql.slice(0, offset).split("\n");
@@ -135,7 +130,9 @@ export default function DatabasePanel({
   const [notice, setNotice] = useState<string | null>(null);
   const pending = useRef(new Set<string>());
   const paging = useRef(new Set<string>());
-  const tab = workspace.tabs.find((tab) => tab.id === workspace.activeId);
+  // Table tabs share the workspace but open in the bottom drawer.
+  const consoles = workspace.tabs.filter((item) => !item.table);
+  const tab = consoles.find((item) => item.id === workspace.activeId);
   const tabConnection = connections.find((item) => item.id === tab?.connectionId);
   const selected = tabConnection ?? connections[0];
   const findTable = useRef<HTMLInputElement>(null);
@@ -192,13 +189,17 @@ export default function DatabasePanel({
     // Closing the panel ends sessions, but reopening it should bring the SQL back.
     registry.set(workspaceAtom, {
       ...current,
-      tabs: current.tabs.map(
-        ({ sessionId: _session, queryId: _query, result: _result, error: _error, ...tab }) => ({
-          ...tab,
-          loading: false,
-          ...(tab.table ? { table: { ...tab.table, offset: 0, after: null } } : {}),
-        }),
-      ),
+      tabs: current.tabs.map((tab) => {
+        if (tab.table) return tab;
+        const {
+          sessionId: _session,
+          queryId: _query,
+          result: _result,
+          error: _error,
+          ...rest
+        } = tab;
+        return { ...rest, loading: false };
+      }),
     });
   });
   useEffect(() => {
@@ -258,91 +259,47 @@ export default function DatabasePanel({
       });
     });
   };
-  const loadTable = async (tabId: string, more = false) => {
-    const current = activeTab(tabId);
-    if (!current?.table || pending.current.has(tabId)) return;
-    const token = ownershipToken(key);
-    pending.current.add(tabId);
-    updateTab(tabId, { loading: true, error: undefined });
-    const table = current.table;
-    return await (async () => {
-      const result = databaseValue(
-        await databaseState.browseTable.run(registry, {
-          environmentId,
-          input: {
-            projectId,
-            connectionId: current.connectionId,
-            schema: table.schema,
-            object: table.object,
-            where: table.where,
-            orderBy: table.orderBy,
-            offset: more ? table.offset : 0,
-            ...(more && table.after ? { after: table.after } : {}),
-          },
-        }),
-      );
-      if (!isLive(token, tabId)) return;
-      const oldRows = more && current.result?.kind === "rows" ? current.result.rows : [];
-      updateTab(tabId, {
-        result: {
-          kind: "rows",
-          columns: result.columns,
-          rows: [...oldRows, ...result.rows],
-          hasMore: result.hasMore,
-          durationMs: 0,
-        },
-        table: { ...table, offset: result.nextOffset, after: result.nextAfter },
-        loading: false,
-      });
-    })()
-      .catch(async (error: unknown) => {
-        if (!isLive(token, tabId)) return;
-        updateTab(tabId, {
-          loading: false,
-          error: databaseErrorMessage(error),
-          // Rows from the previous filter would read as the answer to the failed one.
-          ...(more ? {} : { result: undefined }),
-        });
-      })
-      .finally(() => {
-        pending.current.delete(tabId);
-      });
-  };
   const openTable = (connection: DatabaseConnection, schema: string, object: string) => {
-    const existing = registry
-      .get(workspaceAtom)
-      .tabs.find(
-        (item) =>
-          item.connectionId === connection.id &&
-          item.table?.schema === schema &&
-          item.table.object === object,
-      );
-    if ((panel.current?.clientWidth ?? 0) < 760) setExplorerOpen(false);
     databasePanelIntent.consume(threadRef);
-    if (existing) {
-      registry.set(workspaceAtom, { ...registry.get(workspaceAtom), activeId: existing.id });
-      return;
+    const current = registry.get(workspaceAtom);
+    const existing = current.tabs.find(
+      (item) =>
+        item.connectionId === connection.id &&
+        item.table?.schema === schema &&
+        item.table.object === object,
+    );
+    const id = existing?.id ?? randomUUID();
+    if (!existing) {
+      registry.set(workspaceAtom, {
+        ...current,
+        tabs: [
+          ...current.tabs,
+          {
+            id,
+            connectionId: connection.id,
+            title: `${schema}.${object}`,
+            sql: "",
+            loading: false,
+            table: { schema, object, where: "", orderBy: "", offset: 0, after: null },
+          },
+        ],
+      });
+      void databaseState.introspect.run(registry, {
+        environmentId,
+        input: {
+          projectId,
+          connectionId: connection.id,
+          scope: { kind: "columns", schema, object },
+        },
+      });
     }
-    const next: DatabaseWorkspaceTab = {
-      id: randomUUID(),
-      connectionId: connection.id,
-      title: `${schema}.${object}`,
-      sql: "",
-      loading: false,
-      table: { schema, object, where: "", orderBy: "", offset: 0, after: null },
-    };
-    addTab(next);
-    void loadTable(next.id);
-    void databaseState.introspect.run(registry, {
-      environmentId,
-      input: { projectId, connectionId: connection.id, scope: { kind: "columns", schema, object } },
-    });
+    showDatabaseDrawerTable(key, id);
+    useTerminalUiStateStore.getState().setTerminalOpen(threadRef, true);
   };
   const run = async (statements: SqlStatement[]) => {
     if (
       !tab ||
       !tabConnection ||
-      tab.table ||
       tab.loading ||
       pending.current.has(tab.id) ||
       !statements.length ||
@@ -477,10 +434,6 @@ export default function DatabasePanel({
   };
   const more = async () => {
     if (!tab || tab.loading || tab.result?.kind !== "rows" || !tab.result.hasMore) return;
-    if (tab.table) {
-      await loadTable(tab.id, true);
-      return;
-    }
     if (!tab.queryId || pending.current.has(tab.id)) return;
     const token = ownershipToken(key);
     pending.current.add(tab.id);
@@ -534,7 +487,6 @@ export default function DatabasePanel({
   };
   const closeTab = async (tab: DatabaseWorkspaceTab) => {
     if (
-      !tab.table &&
       tab.sql.trim() &&
       tab.sql !== tab.savedSql &&
       !(await ensureLocalApi().dialogs.confirm(
@@ -547,7 +499,10 @@ export default function DatabasePanel({
     const tabs = current.tabs.filter((item) => item.id !== tab.id);
     registry.set(workspaceAtom, {
       tabs,
-      activeId: current.activeId === tab.id ? (tabs.at(-1)?.id ?? null) : current.activeId,
+      activeId:
+        current.activeId === tab.id
+          ? (tabs.findLast((item) => !item.table)?.id ?? null)
+          : current.activeId,
     });
     void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
   };
@@ -556,29 +511,12 @@ export default function DatabasePanel({
     databasePanelIntent.consume(threadRef);
     if (intent === "query" && selected) void newQuery(selected);
   });
-  const reloadTable = useEffectEvent((id: string) => void loadTable(id));
-  const restoredTable =
-    allowed && !loading && tab?.table && !tab.result && !tab.loading && !tab.error ? tab.id : null;
-  useEffect(() => {
-    if (restoredTable) reloadTable(restoredTable);
-  }, [restoredTable]);
   const showExplorer =
     (explorerOpen ?? (!compact || !tab)) || intent === "table" || intent === "explorer";
   const readyForQuery = selected !== undefined;
   useEffect(() => {
     if (intent === "query" && readyForQuery) handleIntent(intent);
   }, [intent, readyForQuery]);
-  const columnInput = tab?.table
-    ? {
-        projectId,
-        connectionId: tab.connectionId,
-        scope: { kind: "columns" as const, schema: tab.table.schema, object: tab.table.object },
-        revision: registry.get(databaseState.revision(environmentId)),
-      }
-    : {};
-  const columnMetadata = useAtomValue(
-    databaseState.metadata(databaseCacheKey(environmentId, columnInput)),
-  );
   const filePath = tab?.filePath ?? "query.sql";
   const queryFile = async (save: boolean) => {
     if (!tab) return;
@@ -642,7 +580,7 @@ export default function DatabasePanel({
     void newQuery(connection);
   });
   const switchConnection = (connection: DatabaseConnection) => {
-    if (!tab || tab.table || tab.loading || tab.connectionId === connection.id) return;
+    if (!tab || tab.loading || tab.connectionId === connection.id) return;
     void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
     updateTab(tab.id, {
       connectionId: connection.id,
@@ -660,11 +598,6 @@ export default function DatabasePanel({
   useEffect(() => {
     if (intent === "table") findTable.current?.focus();
   }, [intent]);
-  const onOrderBy = useStableCallback((orderBy: string) => {
-    if (!tab?.table || tab.loading) return;
-    updateTab(tab.id, { table: { ...tab.table, orderBy } });
-    void loadTable(tab.id);
-  });
   const status = tab?.loading
     ? tab.progress
       ? `Running ${tab.progress.index + 1} of ${tab.progress.total}`
@@ -722,33 +655,25 @@ export default function DatabasePanel({
         </div>
       ) : tab.result?.kind === "rows" ? (
         <DatabaseGrid
-          key={`${tab.id}:${tab.queryId ?? "table"}`}
+          key={`${tab.id}:${tab.queryId ?? ""}`}
           columns={tab.result.columns}
           rows={tab.result.rows}
-          {...(columnMetadata?.kind === "columns" ? { columnInfo: columnMetadata.columns } : {})}
           hasMore={tab.result.hasMore}
-          expires={!tab.table}
-          {...(tab.table ? {} : { durationMs: tab.result.durationMs })}
-          exportName={exportName(tab)}
+          expires
+          durationMs={tab.result.durationMs}
+          exportName={tab.title}
           loading={tab.loading}
           onLoadMore={onLoadMore}
-          {...(tab.table ? { orderBy: tab.table.orderBy, onOrderBy } : {})}
         />
       ) : (
         <div className="flex flex-1 items-center justify-center gap-2 px-6 text-xs text-muted-foreground">
           {tab.loading && <Spinner size="sm" tone="muted" />}
-          {tab.loading
-            ? tab.table
-              ? "Loading rows…"
-              : "Executing query…"
-            : tab.table
-              ? "Fix the filter and apply it again."
-              : "Run a query to see results here."}
+          {tab.loading ? "Executing query…" : "Run a query to see results here."}
         </div>
       )}
     </div>
   );
-  const editor = tab && !tab.table && (
+  const editor = tab && (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
         className="flex h-9 shrink-0 items-center gap-1 border-b px-2"
@@ -911,23 +836,23 @@ export default function DatabasePanel({
           role="tablist"
           aria-label="Database tabs"
           onKeyDown={(event) => {
-            const index = workspace.tabs.findIndex((item) => item.id === workspace.activeId);
+            const index = consoles.findIndex((item) => item.id === workspace.activeId);
             const next =
               event.key === "ArrowRight"
-                ? workspace.tabs[(index + 1) % workspace.tabs.length]
+                ? consoles[(index + 1) % consoles.length]
                 : event.key === "ArrowLeft"
-                  ? workspace.tabs.at(index - 1)
+                  ? consoles.at(index - 1)
                   : event.key === "Home"
-                    ? workspace.tabs[0]
+                    ? consoles[0]
                     : event.key === "End"
-                      ? workspace.tabs.at(-1)
+                      ? consoles.at(-1)
                       : undefined;
             if (!next) return;
             event.preventDefault();
             focusTab(next.id);
           }}
         >
-          {workspace.tabs.map((item) => {
+          {consoles.map((item) => {
             const active = item.id === workspace.activeId;
             const connection = connections.find((entry) => entry.id === item.connectionId);
             return (
@@ -936,7 +861,7 @@ export default function DatabasePanel({
                 className={`group relative flex shrink-0 items-center border-r pl-2 pr-1 ${active ? "bg-background after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary" : "text-muted-foreground"}`}
               >
                 <DatabaseHint
-                  label={`${item.title}${connection ? ` · ${connection.name}` : ""}${!item.table && item.sql.trim() && item.sql !== item.savedSql ? " · Not saved to a file" : ""}`}
+                  label={`${item.title}${connection ? ` · ${connection.name}` : ""}${item.sql.trim() && item.sql !== item.savedSql ? " · Not saved to a file" : ""}`}
                 >
                   <button
                     ref={(element) => {
@@ -951,11 +876,7 @@ export default function DatabasePanel({
                     className="flex h-full max-w-48 items-center gap-1.5 px-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                     onClick={() => activate(item.id)}
                   >
-                    {item.table ? (
-                      <Table2Icon className="size-3.5 shrink-0" />
-                    ) : (
-                      <SquareTerminalIcon className="size-3.5 shrink-0" />
-                    )}
+                    <SquareTerminalIcon className="size-3.5 shrink-0" />
                     <span className="truncate">{item.title}</span>
                   </button>
                 </DatabaseHint>
@@ -993,7 +914,7 @@ export default function DatabasePanel({
               {loading
                 ? "Loading connections…"
                 : connections.length
-                  ? "Double-click a table to view its rows, or open a console to write SQL."
+                  ? "Double-click a table to view its rows in the bottom panel, or open a console to write SQL."
                   : "Add a connection to a PostgreSQL or SQLite database to browse it here."}
             </p>
           </div>
@@ -1027,70 +948,14 @@ export default function DatabasePanel({
           aria-labelledby={`${panelId}-tab-${tab.id}`}
           className="flex min-h-0 min-w-0 flex-1 flex-col"
         >
-          {tab.table ? (
-            <>
-              <form
-                className="flex h-8 shrink-0 items-center gap-1 border-b px-1"
-                aria-label={`Filter ${tab.title}`}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void loadTable(tab.id);
-                }}
-              >
-                <DatabaseToolbarButton
-                  type="button"
-                  label="Reload rows"
-                  disabled={tab.loading}
-                  onClick={() => void loadTable(tab.id)}
-                >
-                  <RefreshCwIcon />
-                </DatabaseToolbarButton>
-                <div className="min-w-0 flex-1">
-                  <Input
-                    size="compact"
-                    unstyled
-                    font="mono"
-                    aria-label="WHERE condition"
-                    placeholder="WHERE condition"
-                    value={tab.table.where}
-                    onChange={(event) =>
-                      updateTab(tab.id, { table: { ...tab.table!, where: event.target.value } })
-                    }
-                  />
-                </div>
-                <div className="min-w-0 flex-1 border-l">
-                  <Input
-                    size="compact"
-                    unstyled
-                    font="mono"
-                    aria-label="ORDER BY"
-                    placeholder="ORDER BY column"
-                    value={tab.table.orderBy}
-                    onChange={(event) =>
-                      updateTab(tab.id, { table: { ...tab.table!, orderBy: event.target.value } })
-                    }
-                  />
-                </div>
-                <DatabaseToolbarButton
-                  label="Apply filter (Enter)"
-                  type="submit"
-                  disabled={tab.loading}
-                >
-                  <PlayIcon />
-                </DatabaseToolbarButton>
-              </form>
-              {result}
-            </>
-          ) : (
-            <DatabaseSplit
-              key={tab.id}
-              direction="vertical"
-              label="Resize SQL editor and results"
-              first={editor}
-              second={result}
-              initial={52}
-            />
-          )}
+          <DatabaseSplit
+            key={tab.id}
+            direction="vertical"
+            label="Resize SQL editor and results"
+            first={editor}
+            second={result}
+            initial={52}
+          />
         </div>
       )}
       {notice && (
