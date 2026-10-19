@@ -123,7 +123,10 @@ layer("066_CanonicalizeThreadPullRequestLinks", (it) => {
           'user', ${v1Payload}, '{}', 1)
       `;
 
-      assert.deepEqual(yield* runMigrations(), [[66, "CanonicalizeThreadPullRequestLinks"]]);
+      assert.deepEqual(yield* runMigrations(), [
+        [66, "CanonicalizeThreadPullRequestLinks"],
+        [67, "SnoozeWakeIndex"],
+      ]);
       assert.deepEqual(yield* runMigrations(), []);
       const rows = yield* sql<{ readonly thread_id: string; readonly payload_json: string }>`
         SELECT thread_id, payload_json FROM orchestration_v2_projection_threads
