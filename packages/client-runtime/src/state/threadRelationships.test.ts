@@ -47,6 +47,29 @@ describe("thread relationships", () => {
     ).toBe(childStatus);
   });
 
+  it("keeps hidden side chats and their transfers out of the lineage", () => {
+    const parent = ThreadId.make("parent");
+    const side = ThreadId.make("side");
+    const graph = deriveThreadRelationshipGraph({
+      threads: [
+        { id: parent, status: "completed", lineage: { parentThreadId: null } },
+        {
+          id: side,
+          status: "completed",
+          isSideChat: true,
+          lineage: { parentThreadId: parent, relationshipToParent: "fork" },
+        },
+      ] as never,
+      projection: {
+        thread: { id: parent },
+        subagents: [],
+        contextTransfers: [{ sourceThreadId: side, targetThreadId: parent, status: "completed" }],
+      } as never,
+    });
+    expect(graph.nodes.has(side)).toBe(false);
+    expect(graph.edges).toEqual([]);
+  });
+
   it("does not label a missing parent with its child's running status", () => {
     const parent = ThreadId.make("missing-parent");
     const child = ThreadId.make("child");

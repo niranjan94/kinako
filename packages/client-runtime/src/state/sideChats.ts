@@ -1,4 +1,4 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import type { EnvironmentThreadShell } from "./shell.ts";
 import type {
   OrchestrationV2ProjectedTurnItem,
   ScopedThreadRef,
@@ -10,11 +10,11 @@ type SideChatThread = Pick<
   "id" | "environmentId" | "isSideChat" | "archivedAt" | "deletedAt" | "lineage" | "createdAt"
 >;
 
-export function findSideChatThreadId(
-  threads: ReadonlyArray<SideChatThread>,
+export function findLatestSideChat<Thread extends SideChatThread>(
+  threads: ReadonlyArray<Thread>,
   parent: ScopedThreadRef,
-): ThreadId | null {
-  let latest: SideChatThread | undefined;
+): Thread | null {
+  let latest: Thread | undefined;
   for (const thread of threads) {
     if (
       thread.environmentId !== parent.environmentId ||
@@ -26,7 +26,7 @@ export function findSideChatThreadId(
       continue;
     if (!latest || thread.createdAt > latest.createdAt) latest = thread;
   }
-  return latest?.id ?? null;
+  return latest ?? null;
 }
 
 export function sideChatMessages(

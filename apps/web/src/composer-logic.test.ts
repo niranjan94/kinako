@@ -23,6 +23,7 @@ import {
   formatAssistantCitationForComposer,
   isCollapsedCursorAdjacentToInlineToken,
   parseStandaloneComposerSlashCommand,
+  parseBtwComposerQuestion,
   replaceTextRange,
 } from "./composer-logic";
 import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
@@ -883,6 +884,29 @@ describe("isCollapsedCursorAdjacentToInlineToken", () => {
     expect(isCollapsedCursorAdjacentToInlineToken(text, tokenEnd, "left")).toBe(true);
     expect(isCollapsedCursorAdjacentToInlineToken(text, tokenStart, "right")).toBe(true);
   });
+});
+
+describe("parseBtwComposerQuestion", () => {
+  it.each(["queued-message", "pending-user-input"] as const)(
+    "preserves literal text when submitting %s",
+    (target) => {
+      expect(parseBtwComposerQuestion("/btw explain this", target)).toBeNull();
+    },
+  );
+  it("extracts a side question including multiple lines", () => {
+    expect(parseBtwComposerQuestion(" /BTW why?\nAnd what next? ")).toBe("why?\nAnd what next?");
+  });
+
+  it("recognizes an empty command so it cannot steer the main turn", () => {
+    expect(parseBtwComposerQuestion("/btw ")).toBe("");
+  });
+
+  it.each(["/btwhatever question", "please /btw question", "explain /btw", "/btw: question"])(
+    "leaves ordinary prompt text alone: %s",
+    (text) => {
+      expect(parseBtwComposerQuestion(text)).toBeNull();
+    },
+  );
 });
 
 describe("parseStandaloneComposerSlashCommand", () => {

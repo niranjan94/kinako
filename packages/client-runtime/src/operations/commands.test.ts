@@ -40,6 +40,7 @@ import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import { v2Now, v2Projection, v2ThreadId } from "../state/orchestrationV2TestFixtures.ts";
 import {
   archiveThread,
+  askSideQuestion,
   cancelQueuedRun,
   createProject,
   dismissThreadUserInput,
@@ -804,6 +805,49 @@ describe("V2 environment commands", () => {
         },
       ]);
       expect(projectionRequests).toEqual([]);
+    }).pipe(Effect.provide(layerTestCrypto)),
+  );
+
+  it.effect("asks a side question in a new side chat, then follows up without forking again", () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationV2Command[] = [];
+      const supervisor = yield* makeSupervisor({ commands, projects: [] });
+      const provide = Effect.provideService(
+        EnvironmentSupervisor.EnvironmentSupervisor,
+        supervisor,
+      );
+      const sideThreadId = ThreadId.make("side-question");
+      yield* askSideQuestion({
+        commandId: CommandId.make("ask"),
+        parentThreadId: v2ThreadId,
+        sideThreadId,
+        fork: { runId: RunId.make("finished"), title: "Why?" },
+        message: { messageId: MessageId.make("why"), text: "Why?" },
+      }).pipe(provide);
+      yield* askSideQuestion({
+        commandId: CommandId.make("follow-up"),
+        parentThreadId: v2ThreadId,
+        sideThreadId,
+        message: { messageId: MessageId.make("how"), text: "How?" },
+      }).pipe(provide);
+      expect(commands).toMatchObject([
+        {
+          type: "thread.fork",
+          commandId: "ask:fork",
+          sourceThreadId: v2ThreadId,
+          targetThreadId: sideThreadId,
+          sourcePoint: { type: "run", runId: "finished" },
+          isSideChat: true,
+        },
+        {
+          type: "message.dispatch",
+          commandId: "ask:ask",
+          threadId: sideThreadId,
+          text: "Why?",
+          dispatchMode: { type: "start_immediately" },
+        },
+        { type: "message.dispatch", commandId: "follow-up:ask", threadId: sideThreadId },
+      ]);
     }).pipe(Effect.provide(layerTestCrypto)),
   );
 

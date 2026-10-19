@@ -50,7 +50,12 @@ export function deriveThreadRelationshipGraph(input: {
   readonly projection: OrchestrationV2ThreadProjection | null;
 }): ThreadRelationshipGraph {
   const threadsById = new Map<ThreadId, OrchestrationV2ThreadShell>();
+  const sideChatIds = new Set<ThreadId>();
   for (const thread of input.threads) {
+    if (thread.isSideChat === true) {
+      sideChatIds.add(thread.id);
+      continue;
+    }
     // Callers order shells from most to least authoritative. In particular,
     // live shells precede archived snapshots, which may still contain a stale
     // copy during archive refresh.
@@ -69,6 +74,7 @@ export function deriveThreadRelationshipGraph(input: {
     }
   };
   const addEdge = (edge: ThreadRelationshipEdge) => {
+    if (sideChatIds.has(edge.sourceThreadId) || sideChatIds.has(edge.targetThreadId)) return;
     ensureNode(edge.sourceThreadId);
     ensureNode(edge.targetThreadId);
     edgesByKey.set(
