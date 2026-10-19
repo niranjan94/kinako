@@ -286,6 +286,11 @@ function ContrastAppearanceSync() {
     document.documentElement.dataset.chatWidth = chatWidth;
   }, [chatWidth]);
 
+  const uiDensity = useClientSettings((settings) => settings.uiDensity);
+  useEffect(() => {
+    document.documentElement.dataset.uiDensity = uiDensity;
+  }, [uiDensity]);
+
   useEffect(() => {
     applyAppearanceContrast(document.documentElement, appearanceContrast);
   }, [appearanceContrast]);

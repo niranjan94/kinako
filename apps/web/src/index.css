@@ -127,6 +127,19 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --workspace-titlebar-control-gap: 0.75rem;
   --workspace-titlebar-scroll-fade-height: 1.5rem;
   --chat-content-max-width: 46rem;
+  /* Spacing multiplier for the density setting. Consumers scale padding and row
+     heights by it; type size stays with the font size settings. */
+  --ui-density: 1;
+  /* Horizontal padding beside the chat column, shared by the timeline, the
+     composer lane, and ChatCanvas's width probe so they stay aligned. */
+  --chat-gutter: calc(0.75rem * var(--ui-density));
+  --density-composer-inset-top: calc(0.875rem * var(--ui-density));
+  --density-composer-inset-bottom: calc(0.75rem * var(--ui-density));
+  --density-settings-row-inset-y: calc(0.75rem * var(--ui-density));
+  --density-sidebar-row-inset-y: calc(0.5rem * var(--ui-density));
+  /* Card rows hold a fixed 3.875rem of content; only their padding scales. */
+  --density-sidebar-card-height: calc(3.875rem + 2 * var(--density-sidebar-row-inset-y));
+  --density-sidebar-slim-row-height: calc(2.25rem * var(--ui-density));
   --thread-details-panel-width: 17.5rem;
   /* The prompt on phones: iOS zooms into any input under 16px on focus. */
   --font-size-prompt-touch: max(var(--font-size-prompt, 1rem), 16px);
@@ -138,6 +151,9 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 
   @variant sm {
     --workspace-gutter: 1.25rem;
+    --chat-gutter: calc(3rem * var(--ui-density));
+    --density-composer-inset-top: calc(1rem * var(--ui-density));
+    --density-composer-inset-bottom: calc(1rem * var(--ui-density));
   }
 
   @variant dark {
@@ -2107,6 +2123,14 @@ code {
   --chat-content-max-width: 100%;
 }
 
+:root[data-ui-density="compact"] {
+  --ui-density: 0.75;
+}
+
+:root[data-ui-density="spacious"] {
+  --ui-density: 1.25;
+}
+
 :root[data-diff-color-scheme="blue-orange"] {
   --diff-addition: light-dark(var(--color-blue-600), var(--color-blue-400));
   --diff-deletion: light-dark(var(--color-orange-600), var(--color-orange-400));
@@ -2347,39 +2371,23 @@ code {
 @layer components {
   .chat-composer-lane {
     padding-inline-start: calc(
-      env(safe-area-inset-left) + 0.75rem + var(--chat-lane-inset-start, 0px)
+      env(safe-area-inset-left) + var(--chat-gutter) + var(--chat-lane-inset-start, 0px)
     );
     padding-inline-end: calc(
-      env(safe-area-inset-right) + 0.75rem + var(--chat-lane-inset-end, 0px)
+      env(safe-area-inset-right) + var(--chat-gutter) + var(--chat-lane-inset-end, 0px)
     );
   }
   [data-chat-canvas] .messages-timeline-scroll {
     padding-inline-start: calc(
-      0.75rem + var(--chat-lane-inset-start, 0px) - var(--chat-timeline-gutter, 0px)
+      var(--chat-gutter) + var(--chat-lane-inset-start, 0px) - var(--chat-timeline-gutter, 0px)
     );
     padding-inline-end: calc(
-      0.75rem + var(--chat-lane-inset-end, 0px) - var(--chat-timeline-gutter, 0px)
+      var(--chat-gutter) + var(--chat-lane-inset-end, 0px) - var(--chat-timeline-gutter, 0px)
     );
   }
   .chat-scroll-to-bottom,
   .chat-banner-lane {
     inset-inline-start: var(--chat-lane-inset-start, 0px);
     inset-inline-end: var(--chat-lane-inset-end, 0px);
-  }
-  @media (min-width: 640px) {
-    .chat-composer-lane {
-      padding-inline-start: calc(
-        env(safe-area-inset-left) + 3rem + var(--chat-lane-inset-start, 0px)
-      );
-      padding-inline-end: calc(env(safe-area-inset-right) + 3rem + var(--chat-lane-inset-end, 0px));
-    }
-    [data-chat-canvas] .messages-timeline-scroll {
-      padding-inline-start: calc(
-        3rem + var(--chat-lane-inset-start, 0px) - var(--chat-timeline-gutter, 0px)
-      );
-      padding-inline-end: calc(
-        3rem + var(--chat-lane-inset-end, 0px) - var(--chat-timeline-gutter, 0px)
-      );
-    }
   }
 }
