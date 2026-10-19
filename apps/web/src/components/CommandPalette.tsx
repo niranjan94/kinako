@@ -75,6 +75,7 @@ import {
   FolderPlusIcon,
   ImportIcon,
   MessageSquareDashedIcon,
+  MessageCircleQuestionMarkIcon,
   LinkIcon,
   MessageSquareIcon,
   MonitorIcon,
@@ -87,6 +88,7 @@ import {
   SunIcon,
   TextSearchIcon,
 } from "lucide-react";
+import { requestSideQuestionStart } from "./chat/sideQuestionActionBus";
 import { requestThreadFindOpen } from "./chat/threadFindActionBus";
 import {
   useDeferredValue,
@@ -1672,6 +1674,20 @@ function OpenCommandPaletteDialog(props: {
       shortcutCommand: "chat.find",
       run: async () => {
         requestThreadFindOpen();
+      },
+    });
+  }
+
+  if (activeThreadId && activeThreadServerConfig?.environment.capabilities.sideChats === true) {
+    actionItems.push({
+      kind: "action",
+      value: "ask-side-question",
+      title: "Ask a side question",
+      searchTerms: ["btw", "side", "question", "ask", "aside"],
+      icon: <MessageCircleQuestionMarkIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "thread.sideQuestion",
+      run: async () => {
+        requestSideQuestionStart();
       },
     });
   }
