@@ -1,68 +1,77 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
-import { Table2Icon, TerminalSquareIcon, XIcon } from "lucide-react";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import type { DatabaseWorkspace } from "@t3tools/client-runtime/state/database";
+import type { EnvironmentId, ProjectId, ScopedThreadRef } from "@t3tools/contracts";
+import { SquareTerminalIcon, Table2Icon, TerminalSquareIcon, XIcon } from "lucide-react";
 import { useContext, useEffect, type ReactNode } from "react";
 import { databaseState } from "../../state/database";
+import { DatabaseConsoleView } from "./DatabaseConsoleView";
 import { persistDatabaseWorkspace } from "./databaseConsoleStorage";
-import { showDatabaseDrawerTable } from "./databaseDrawerStore";
-import { isDatabaseTableTab } from "./DatabaseTableView";
-import { DatabaseToolbarButton } from "./DatabaseToolbarButton";
+import { DatabaseTableView } from "./DatabaseTableView";
+import { DatabaseHint, DatabaseToolbarButton } from "./DatabaseToolbarButton";
+import { closeDatabaseTab, showDatabaseTab } from "./databaseWorkspace";
+
+export const hasDatabaseTabs = (workspace: DatabaseWorkspace) => workspace.tabs.length > 0;
+/** The tab the drawer shows in place of its terminals, if any. */
+export const shownDatabaseTabId = (workspace: DatabaseWorkspace) =>
+  workspace.tabs.some((tab) => tab.id === workspace.activeId) ? workspace.activeId : null;
 
 function DrawerTab({
   active,
   icon,
   label,
+  hint,
   onSelect,
   children,
 }: {
   active: boolean;
   icon: ReactNode;
   label: string;
+  hint?: string;
   onSelect: () => void;
   children?: ReactNode;
 }) {
+  const button = (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className="flex h-full max-w-48 items-center gap-1.5 px-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+      onClick={onSelect}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
+  );
   return (
     <div
       className={`relative flex shrink-0 items-center border-r pl-2 pr-1 ${active ? "bg-background after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary" : "text-muted-foreground"}`}
     >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={active}
-        className="flex h-full max-w-48 items-center gap-1.5 px-1.5 text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-        onClick={onSelect}
-      >
-        {icon}
-        <span className="truncate">{label}</span>
-      </button>
+      {hint ? <DatabaseHint label={hint}>{button}</DatabaseHint> : button}
       {children}
     </div>
   );
 }
 
 export function DatabaseDrawerTabs({
-  threadKey,
-  shownId,
+  environmentId,
+  projectId,
+  threadRef,
 }: {
-  threadKey: string;
-  shownId: string | null;
+  environmentId: EnvironmentId;
+  projectId: ProjectId;
+  threadRef: ScopedThreadRef;
 }) {
   const registry = useContext(RegistryContext);
+  const threadKey = scopedThreadKey(threadRef);
   const workspaceAtom = databaseState.workspaces(threadKey);
-  const tables = useAtomValue(workspaceAtom).tabs.filter(isDatabaseTableTab);
+  const workspace = useAtomValue(workspaceAtom);
+  const shownId = shownDatabaseTabId(workspace);
   useEffect(
     () => registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(threadKey, next)),
     [registry, threadKey, workspaceAtom],
   );
-  const close = (id: string) => {
-    const workspace = registry.get(workspaceAtom);
-    registry.set(workspaceAtom, {
-      ...workspace,
-      tabs: workspace.tabs.filter((item) => item.id !== id),
-    });
-    if (id !== shownId) return;
-    const index = tables.findIndex((item) => item.id === id);
-    showDatabaseDrawerTable(threadKey, (tables[index + 1] ?? tables[index - 1])?.id ?? null);
-  };
+  const scope = { registry, environmentId, projectId, threadRef };
   return (
     <div
       role="tablist"
@@ -73,21 +82,68 @@ export function DatabaseDrawerTabs({
         active={shownId === null}
         icon={<TerminalSquareIcon className="size-3.5 shrink-0" />}
         label="Terminal"
-        onSelect={() => showDatabaseDrawerTable(threadKey, null)}
+        onSelect={() => showDatabaseTab(registry, threadRef, null)}
       />
-      {tables.map((tab) => (
+      {workspace.tabs.map((tab) => (
         <DrawerTab
           key={tab.id}
           active={tab.id === shownId}
-          icon={<Table2Icon className="size-3.5 shrink-0" />}
+          icon={
+            tab.table ? (
+              <Table2Icon className="size-3.5 shrink-0" />
+            ) : (
+              <SquareTerminalIcon className="size-3.5 shrink-0" />
+            )
+          }
           label={tab.title}
-          onSelect={() => showDatabaseDrawerTable(threadKey, tab.id)}
+          {...(!tab.table && tab.sql.trim() && tab.sql !== tab.savedSql
+            ? { hint: `${tab.title} · Not saved to a file` }
+            : {})}
+          onSelect={() => showDatabaseTab(registry, threadRef, tab.id)}
         >
-          <DatabaseToolbarButton label={`Close ${tab.title}`} onClick={() => close(tab.id)}>
+          <DatabaseToolbarButton
+            label={`Close ${tab.title}`}
+            onClick={() => void closeDatabaseTab(scope, tab)}
+          >
             <XIcon />
           </DatabaseToolbarButton>
         </DrawerTab>
       ))}
     </div>
+  );
+}
+
+export function DatabaseDrawerView({
+  environmentId,
+  projectId,
+  threadRef,
+  tabId,
+  workspaceRoot,
+}: {
+  environmentId: EnvironmentId;
+  projectId: ProjectId;
+  threadRef: ScopedThreadRef;
+  tabId: string;
+  workspaceRoot: string;
+}) {
+  const threadKey = scopedThreadKey(threadRef);
+  const isTable = useAtomValue(databaseState.workspaces(threadKey), (workspace) =>
+    workspace.tabs.some((tab) => tab.id === tabId && tab.table !== undefined),
+  );
+  return isTable ? (
+    <DatabaseTableView
+      environmentId={environmentId}
+      projectId={projectId}
+      threadKey={threadKey}
+      tabId={tabId}
+    />
+  ) : (
+    <DatabaseConsoleView
+      environmentId={environmentId}
+      projectId={projectId}
+      threadRef={threadRef}
+      tabId={tabId}
+      workspaceRoot={workspaceRoot}
+    />
   );
 }

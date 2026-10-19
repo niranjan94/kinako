@@ -1,7 +1,6 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   databaseCacheKey,
-  type DatabaseWorkspace,
   type DatabaseWorkspaceTab,
 } from "@t3tools/client-runtime/state/database";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
@@ -19,8 +18,6 @@ import { databaseErrorMessage, databaseValue } from "./databaseHooks";
 type TableTab = DatabaseWorkspaceTab & { table: NonNullable<DatabaseWorkspaceTab["table"]> };
 export const isDatabaseTableTab = (tab: DatabaseWorkspaceTab): tab is TableTab =>
   tab.table !== undefined;
-export const hasDatabaseTableTabs = (workspace: DatabaseWorkspace) =>
-  workspace.tabs.some(isDatabaseTableTab);
 
 // Tab ids are unique across threads, and loads must not overlap even if the view remounts.
 const pending = new Set<string>();
