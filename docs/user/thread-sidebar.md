@@ -250,8 +250,11 @@ finishes; the call's own result shows its status.
 
 On web and desktop, open **Agent office** from the sidebar or search for **Open
 agent office** in the command palette to see your threads as characters in a pixel
-office. Filter by environment or project, or choose **All threads** to include
-older, unarchived threads. Click a character to open its conversation.
+office. By default, only threads that are working or waiting for input appear;
+characters leave when their threads settle. Filter by environment or project,
+choose **Active + recent** to include recent settled threads, or **All threads**
+for all unarchived threads. Idle characters wander in these broader views.
+Click a character to open its conversation.
 
 Use **Layout** to arrange the office and add pets. Layouts, character assignments,
 and office preferences are saved in the current browser or desktop app; use
