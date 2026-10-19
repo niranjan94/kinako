@@ -24,13 +24,8 @@ import { useProject, useQuietThreadShell } from "../state/entities";
 import { useEnvironmentScope } from "../state/session";
 import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import {
-  DatabaseDrawerTabs,
-  DatabaseDrawerView,
-  hasDatabaseTabs,
-  shownDatabaseTabId,
-} from "./database/DatabaseDrawerTabs";
-import { showDatabaseTab } from "./database/databaseWorkspace";
+import { DatabaseDrawerTabs, DatabaseDrawerView } from "./database/DatabaseDrawerTabs";
+import { hasDatabaseTabs, showDatabaseTab, shownDatabaseTabId } from "./database/databaseWorkspace";
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 
@@ -252,7 +247,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     terminalActions.closeTerminalSession(terminalId);
     storeCloseTerminal(threadRef, terminalId);
     // Closing the last terminal would otherwise hide the database tabs sharing the drawer.
-    if (hasDatabaseTabsOpen) storeRevealTerminalDrawer(threadRef);
+    if (hasDatabaseTabsOpen && terminalUiState.terminalOpen) storeRevealTerminalDrawer(threadRef);
     bumpFocusRequestId();
   });
 

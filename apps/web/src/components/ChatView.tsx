@@ -546,7 +546,7 @@ import { previewEnvironment } from "../state/preview";
 import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { databaseState } from "../state/database";
-import { showDatabaseTab } from "./database/databaseWorkspace";
+import { showDatabaseTab, shownDatabaseTabId } from "./database/databaseWorkspace";
 import { fileAttachmentCapabilityBlockReason } from "./chat/composerAttachmentFiles";
 import { assetEnvironment } from "../state/assets";
 import { readEnvironmentScope, readPreparedConnection } from "../state/session";
@@ -3316,6 +3316,16 @@ export default function ChatView(props: ChatViewProps) {
       !hasTerminalWriteAccess()
     )
       return;
+    // A shown database tab needs no terminal, and one placed now would start a hidden shell.
+    if (
+      nextOpen &&
+      shownDatabaseTabId(
+        appAtomRegistry.get(databaseState.workspaces(scopedThreadKey(activeThreadRef))),
+      ) !== null
+    ) {
+      useTerminalUiStateStore.getState().revealTerminalDrawer(activeThreadRef);
+      return;
+    }
     if (nextOpen && hasTerminalWriteAccess() && terminalUiState.terminalIds.length === 0) {
       // Server-created setup terminals exist before this client's drawer mounts.
       // Reuse them before allocating a shell from the still-empty UI state.
@@ -3364,7 +3374,10 @@ export default function ChatView(props: ChatViewProps) {
     terminalActions.closeTerminalSession(terminalId);
     storeCloseTerminal(activeThreadRef, terminalId);
     // Closing the last terminal would otherwise hide the database tabs sharing the drawer.
-    if (appAtomRegistry.get(databaseState.workspaces(scopedThreadKey(activeThreadRef))).tabs.length)
+    if (
+      terminalUiState.terminalOpen &&
+      appAtomRegistry.get(databaseState.workspaces(scopedThreadKey(activeThreadRef))).tabs.length
+    )
       useTerminalUiStateStore.getState().revealTerminalDrawer(activeThreadRef);
     setTerminalFocusRequestId((value) => value + 1);
   };
