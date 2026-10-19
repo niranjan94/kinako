@@ -236,6 +236,17 @@ Expand a tool call in the conversation to see its full command and output.
 Summaries shorten shell wrappers and can still describe the latest call after it
 finishes; the call's own result shows its status.
 
+## Agent office
+
+On web and desktop, open **Agent office** from the sidebar or search for **Open
+agent office** in the command palette to see your threads as characters in a pixel
+office. Filter by environment or project, or choose **All threads** to include
+older, unarchived threads. Click a character to open its conversation.
+
+Use **Layout** to arrange the office and add pets. Layouts, character assignments,
+and office preferences are saved in the current browser or desktop app; use
+**Settings → Export Layout** and **Import Layout** to move a layout between devices.
+
 ## Snooze until later
 
 Choose **Snooze → Custom…** from a thread's menu to pick a date and time in your
