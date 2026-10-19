@@ -141,6 +141,7 @@ export interface ThreadComposerProps {
   readonly selectedThread: EnvironmentThreadShell;
   readonly reportedModelSelection?: ModelSelection | null;
   readonly hasCompactableConversation: boolean;
+  readonly offersSideQuestions?: boolean;
   readonly serverConfig: T3ServerConfig | null;
   readonly queueCount: number;
   readonly activeThreadBusy: boolean;
@@ -462,6 +463,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
         ? undefined
         : props.onUpdateInteractionMode,
     offersUsageLimits: usageLimitsOffered,
+    offersSideQuestions: props.offersSideQuestions === true && queuedEdit === null,
     onUsageLimits:
       usageLimitsOffered && draftAttachments.length === 0 ? openUsageLimits : undefined,
   });

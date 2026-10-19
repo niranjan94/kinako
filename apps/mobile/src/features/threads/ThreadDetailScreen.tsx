@@ -90,7 +90,8 @@ import { useAppearancePreferences } from "../settings/appearance/AppearancePrefe
 import { collectProviderUsageLimits } from "@t3tools/shared/usageLimits";
 import type { ComposerEditorHandle } from "../../components/ComposerEditor";
 import type { StatusTone } from "../../components/StatusPill";
-import { getComposerDraftSnapshot } from "../../state/use-composer-drafts";
+import { getComposerDraftSnapshot, setComposerDraftText } from "../../state/use-composer-drafts";
+import { referencedComposerContext } from "../../lib/composerContext";
 import { RenderErrorBoundary, RenderFailureView } from "../../components/RenderErrorBoundary";
 import {
   ANDROID_READING_MAX_WIDTH,
@@ -107,6 +108,7 @@ import type { QueuedThreadMessage } from "../../state/thread-outbox-model";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import {
   clearThreadComposerError,
+  setThreadComposerError,
   threadComposerErrorsAtom,
 } from "../../state/thread-composer-error";
 import { threadEnvironment } from "../../state/threads";
@@ -124,6 +126,9 @@ import { ComposerErrorNotice } from "./ComposerErrorNotice";
 import { ComposerFeedback } from "./ComposerFeedback";
 import { ComposerUsageLimits } from "./ComposerUsageLimits";
 import { PendingUserInputCard } from "./PendingUserInputCard";
+import { SideQuestionCard } from "./SideQuestionCard";
+import { parseBtwComposerQuestion } from "./sideQuestionCommand";
+import { useSideQuestionActions } from "./useSideQuestion";
 import { ProviderSubagentBar } from "./ProviderSubagentBar";
 import { ThreadCreationFailedCard } from "./ThreadCreationFailedCard";
 import {
@@ -910,8 +915,70 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
     selectedThreadKey,
   ]);
 
+  const sideQuestions = useSideQuestionActions();
+  const sideQuestionsAvailable =
+    props.selectedThreadDetailRef !== null &&
+    props.canOperateThread &&
+    props.serverConfig?.environment.capabilities.sideChats === true;
+  const handleSideQuestion = async (
+    parentRef: ScopedThreadRef,
+    draftKey: string,
+    question: string,
+  ) => {
+    const threadKey = selectedThreadKey;
+    if (props.serverConfig?.environment.capabilities.sideChats !== true) {
+      setThreadComposerError(threadKey, "Update this environment to ask side questions.");
+      return;
+    }
+    const draft = getComposerDraftSnapshot(draftKey);
+    if (
+      draft.attachments.length > 0 ||
+      referencedComposerContext(draft.text, draft.context) !== undefined
+    ) {
+      setThreadComposerError(threadKey, "Side questions accept text only.");
+      return;
+    }
+    clearThreadComposerError(threadKey);
+    await (
+      question
+        ? sideQuestions.ask(parentRef, question).then(() => true)
+        : sideQuestions.reopen(parentRef)
+    )
+      .then((handled) => {
+        if (!handled) {
+          setThreadComposerError(threadKey, "Type a question after /btw.");
+          return;
+        }
+        // Keep anything typed while the request was in flight.
+        if (getComposerDraftSnapshot(draftKey).text === draft.text) {
+          setComposerDraftText(draftKey, "");
+        }
+      })
+      .catch((error: unknown) => {
+        setThreadComposerError(
+          threadKey,
+          error instanceof Error ? error.message : "Failed to ask the side question.",
+        );
+      });
+  };
+
   const handleSendMessage = async (followUp?: ActiveTurnComposerAction) => {
     const targetThreadKey = selectedThreadKey;
+    if (props.selectedThreadDetailRef !== null) {
+      const draftKey = props.composerDraftKey ?? selectedThreadKey;
+      const question = parseBtwComposerQuestion(
+        getComposerDraftSnapshot(draftKey).text,
+        props.queuedRunEdit !== null
+          ? "queued-message"
+          : props.activePendingUserInput !== null
+            ? "pending-user-input"
+            : "provider-turn",
+      );
+      if (question !== null) {
+        await handleSideQuestion(props.selectedThreadDetailRef, draftKey, question);
+        return null;
+      }
+    }
     const hasUserMessage = selectedThreadFeed.some(
       (entry) => entry.type === "message" && entry.message.role === "user",
     );
@@ -1244,6 +1311,9 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
                       />
                     </Animated.View>
                   ) : null}
+                  {sideQuestionsAvailable && props.selectedThreadDetailRef !== null ? (
+                    <SideQuestionCard parentRef={props.selectedThreadDetailRef} />
+                  ) : null}
                   {props.activePendingApproval || props.activePendingUserInput ? (
                     <Animated.View
                       className="shrink-0 gap-3 px-4 pb-3"
@@ -1339,6 +1409,7 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
                           hasCompactableConversation && !props.isCompacting
                         }
                         serverConfig={props.serverConfig}
+                        offersSideQuestions={sideQuestionsAvailable}
                         queueCount={props.selectedThreadQueueCount}
                         activeThreadBusy={props.activeThreadBusy}
                         canStopThread={props.canStopThread}
