@@ -4,6 +4,7 @@ import {
   AuthTerminalOperateScope,
   AuthTerminalReadScope,
   type DesktopBridge,
+  type DesktopServerExposureState,
   type DesktopWslState,
   type ServerDirectEndpoint,
 } from "@t3tools/contracts";
@@ -84,6 +85,20 @@ export function advertisedEndpointsFromDirect(
       return [];
     }
   });
+}
+
+/**
+ * Copy for the Tailscale HTTPS row when no Tailscale endpoint is advertised.
+ * The desktop skips the Tailscale probe until Network access or Tailscale
+ * Serve is on (it can trigger a macOS privacy prompt), so a missing endpoint
+ * then means "not checked", not "not running".
+ */
+export function missingTailscaleEndpointDescription(
+  state: Pick<DesktopServerExposureState, "mode" | "tailscaleServeEnabled"> | null,
+): string {
+  return state && state.mode !== "network-accessible" && !state.tailscaleServeEnabled
+    ? "Turn on Network access to detect Tailscale."
+    : "Start Tailscale to set up HTTPS access through MagicDNS.";
 }
 
 export function isWslSettingsRowVisible(input: {

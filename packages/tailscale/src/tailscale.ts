@@ -9,7 +9,13 @@ import { HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export const DEFAULT_TAILSCALE_SERVE_PORT = FORK_DEFAULT_TAILSCALE_SERVE_PORT;
-export const TAILSCALE_STATUS_TIMEOUT = Duration.millis(1_500);
+/**
+ * Bounds `tailscale status` and `tailscale debug prefs`. Allows the 1.8-2.6 s
+ * `tailscale status` has been measured at when T3 Code spawns it on Windows.
+ * A CLI that never answers takes longer than this to fail, because the kill
+ * that follows the timeout also takes time (`taskkill` on Windows).
+ */
+export const TAILSCALE_STATUS_TIMEOUT = Duration.millis(3_500);
 const TAILSCALE_SERVE_TIMEOUT = Duration.seconds(10);
 const TAILSCALE_PROBE_TIMEOUT = Duration.millis(2_500);
 

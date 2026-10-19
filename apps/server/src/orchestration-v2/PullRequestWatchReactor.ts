@@ -278,6 +278,7 @@ export const make = Effect.gen(function* () {
       readonly notification: OrchestrationV2Notification;
       readonly messageId?: MessageId;
     },
+    endedWatch?: ThreadPullRequestWatch,
   ) =>
     Effect.gen(function* () {
       const uuid = yield* crypto.randomUUIDv4();
@@ -288,6 +289,7 @@ export const make = Effect.gen(function* () {
         ...identityOf(target.link),
         startedAt: target.watch.startedAt,
         watch: next,
+        ...(endedWatch === undefined ? {} : { endedWatch }),
         ...(wake === undefined
           ? {}
           : {
@@ -539,7 +541,7 @@ export const make = Effect.gen(function* () {
             ? undefined
             : yield* record(target, report.next);
         }
-        return yield* record(target, report.exhausted ? null : report.next, {
+        const wake = {
           ...pullRequestWatchMessage({
             number: target.link.number,
             url: target.link.url,
@@ -549,7 +551,13 @@ export const make = Effect.gen(function* () {
             report,
           }),
           messageId: wakeMessageId,
-        }).pipe(
+        };
+        // An ending watch keeps what this pass saw, so watching again starts from it.
+        return yield* (
+          report.exhausted
+            ? record(target, null, wake, report.next)
+            : record(target, report.next, wake)
+        ).pipe(
           Effect.tap(() => woke(target)),
           Effect.tap(() => (report.exhausted ? ended(target, "comment-limit") : Effect.void)),
         );

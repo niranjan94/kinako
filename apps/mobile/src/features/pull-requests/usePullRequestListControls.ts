@@ -1,6 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { useCallback } from "react";
 
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import type { PullRequestListKind } from "../../persistence/mobile-preferences";
@@ -16,40 +15,38 @@ export function usePullRequestListControls() {
   const kind: PullRequestListKind = AsyncResult.isSuccess(preferences)
     ? (preferences.value.pullRequestListKind ?? "pullRequests")
     : "pullRequests";
-  const setKind = useCallback(
-    (next: PullRequestListKind) => savePreferences({ pullRequestListKind: next }),
-    [savePreferences],
-  );
-  const controlsFor = useCallback(
-    (environment: string | null) => saved?.controls[environment ?? ""] ?? DEFAULT_PR_LIST_CONTROLS,
-    [saved],
-  );
-  const setEnvironmentId = useCallback(
-    (next: string | null) =>
-      savePreferences({
-        transform: (current) => ({
-          pullRequestListFilters: {
-            controls: current.pullRequestListFilters?.controls ?? {},
-            environmentId: next,
-          },
-        }),
+  const setKind = (next: PullRequestListKind) => savePreferences({ pullRequestListKind: next });
+  const controlsFor = (environment: string | null) =>
+    saved?.controls[environment ?? ""] ?? DEFAULT_PR_LIST_CONTROLS;
+  const setEnvironmentId = (next: string | null) =>
+    savePreferences({
+      transform: (current) => ({
+        pullRequestListFilters: {
+          controls: current.pullRequestListFilters?.controls ?? {},
+          environmentId: next,
+        },
       }),
-    [savePreferences],
-  );
-  const setControls = useCallback(
-    (environment: string | null, controls: PullRequestListControls) =>
-      savePreferences({
-        transform: (current) => ({
-          pullRequestListFilters: {
-            environmentId: current.pullRequestListFilters?.environmentId ?? null,
-            controls: {
-              ...current.pullRequestListFilters?.controls,
-              [environment ?? ""]: controls,
-            },
-          },
-        }),
+    });
+  const setControls = (environment: string | null, controls: PullRequestListControls) =>
+    savePreferences({
+      transform: (current) => ({
+        pullRequestListFilters: {
+          environmentId: current.pullRequestListFilters?.environmentId ?? null,
+          controls: withEnvironmentControls(
+            current.pullRequestListFilters?.controls,
+            environment ?? "",
+            controls,
+          ),
+        },
       }),
-    [savePreferences],
-  );
+    });
   return { environmentId, kind, setKind, controlsFor, setEnvironmentId, setControls } as const;
+}
+
+function withEnvironmentControls(
+  saved: Readonly<Record<string, PullRequestListControls>> | undefined,
+  environment: string,
+  controls: PullRequestListControls,
+): Record<string, PullRequestListControls> {
+  return { ...saved, [environment]: controls };
 }
