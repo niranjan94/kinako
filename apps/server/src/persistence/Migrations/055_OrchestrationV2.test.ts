@@ -13,7 +13,7 @@ layer("055_OrchestrationV2", (it) => {
     Effect.sync(() => {
       assert.deepStrictEqual(
         migrationEntries.map(([id]) => id),
-        Array.from({ length: 66 }, (_, index) => index + 1),
+        Array.from({ length: 67 }, (_, index) => index + 1),
       );
     }),
   );
@@ -38,6 +38,7 @@ layer("055_OrchestrationV2", (it) => {
         [64, "DatabaseConnections"],
         [65, "DropUnusedV1Projections"],
         [66, "CanonicalizeThreadPullRequestLinks"],
+        [67, "SnoozeWakeIndex"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
 
@@ -70,6 +71,7 @@ layer("055_OrchestrationV2", (it) => {
         { migration_id: 64, name: "DatabaseConnections" },
         { migration_id: 65, name: "DropUnusedV1Projections" },
         { migration_id: 66, name: "CanonicalizeThreadPullRequestLinks" },
+        { migration_id: 67, name: "SnoozeWakeIndex" },
       ]);
 
       const tables = yield* sql<{ readonly name: string }>`
@@ -129,7 +131,8 @@ layer("055_OrchestrationV2", (it) => {
           AND name IN (
             'idx_orchestration_events_application_high_water',
             'orchestration_events_v2_created_threads_idx',
-            'orchestration_v2_projection_turn_items_shell_pending_idx'
+            'orchestration_v2_projection_turn_items_shell_pending_idx',
+            'orchestration_v2_snooze_wake_due_idx'
           )
         ORDER BY name
       `;
@@ -139,6 +142,7 @@ layer("055_OrchestrationV2", (it) => {
           "idx_orchestration_events_application_high_water",
           "orchestration_events_v2_created_threads_idx",
           "orchestration_v2_projection_turn_items_shell_pending_idx",
+          "orchestration_v2_snooze_wake_due_idx",
         ],
       );
     }),
