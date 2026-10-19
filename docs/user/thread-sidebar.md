@@ -126,6 +126,14 @@ device keeps its own choice.
 While this is on, the active list is ordered by when each thread last came back to you, so you
 cannot drag or move threads within it. Your saved order returns when you turn it off.
 
+## Group threads
+
+Open a thread's menu and choose **Move to group** to file it under an existing group or **New group…**. On web and desktop you can also move several selected threads at once, or drag an active thread under a group's header. A thread dragged in from another section, such as **Pinned** or **Settled**, returns to its own group. Groups appear as collapsible headers below your ungrouped active threads. Tap or click a header to collapse it. Each device remembers which groups you collapsed.
+
+A group exists as long as it has threads, and threads with the same group name are listed together, even when they come from different environments. Right-click a group header on web and desktop, or long-press it on mobile, to **Rename group** or **Ungroup threads**. Choose **Remove from group** in a thread's menu to take out one thread.
+
+Grouping only affects active threads. Pinned, working, snoozed, and settled threads stay in their own sections and return to their group when they become active again. Within a group, drag or use **Move up** and **Move down** to change the order. On mobile, threads move between groups only through **Move to group**. Agents can group threads too. Groups need a current server in each environment.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list
