@@ -337,15 +337,6 @@ export function parseStandaloneComposerSlashCommand(text: string): "plan" | "def
   return "default";
 }
 
-export function parseBtwComposerQuestion(
-  text: string,
-  submissionTarget: "provider-turn" | "pending-user-input" | "queued-message" = "provider-turn",
-): string | null {
-  if (submissionTarget !== "provider-turn") return null;
-  const match = /^\/btw(?:\s+([\s\S]*))?$/i.exec(text.trim());
-  return match === null ? null : (match[1]?.trim() ?? "");
-}
-
 export function replaceTextRange(
   text: string,
   rangeStart: number,

@@ -815,7 +815,7 @@ function OpenCommandPaletteDialog(props: {
       );
     }
   };
-  const threads = useThreadShells();
+  const threads = useThreadShells().filter((thread) => thread.isSideChat !== true);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const {
     theme,

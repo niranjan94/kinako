@@ -127,7 +127,7 @@ import { ComposerFeedback } from "./ComposerFeedback";
 import { ComposerUsageLimits } from "./ComposerUsageLimits";
 import { PendingUserInputCard } from "./PendingUserInputCard";
 import { SideQuestionCard } from "./SideQuestionCard";
-import { parseBtwComposerQuestion } from "./sideQuestionCommand";
+import { parseBtwComposerQuestion } from "@t3tools/client-runtime/state/side-chats";
 import { useSideQuestionActions } from "./useSideQuestion";
 import { ProviderSubagentBar } from "./ProviderSubagentBar";
 import { ThreadCreationFailedCard } from "./ThreadCreationFailedCard";

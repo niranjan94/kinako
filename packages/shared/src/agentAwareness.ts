@@ -44,6 +44,7 @@ export interface ProjectThreadAwarenessV2Input {
     OrchestrationV2ThreadShell,
     | "activityRunStatus"
     | "id"
+    | "isSideChat"
     | "lineage"
     | "modelSelection"
     | "pendingBackgroundTasks"
@@ -58,7 +59,7 @@ export function projectThreadAwarenessV2(
   input: ProjectThreadAwarenessV2Input,
 ): AgentAwarenessState | null {
   const { environmentId, project, thread } = input;
-  if (thread.lineage.relationshipToParent === "subagent") return null;
+  if (thread.lineage.relationshipToParent === "subagent" || thread.isSideChat === true) return null;
   const phase = resolveThreadAwarenessPhaseV2(thread);
   if (phase === null) {
     return null;

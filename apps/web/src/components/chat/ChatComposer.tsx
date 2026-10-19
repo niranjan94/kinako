@@ -1488,6 +1488,7 @@ export interface ChatComposerHandle {
 
 export interface ChatComposerProps {
   sideQuestionControl?: ReactNode;
+  offersSideQuestions?: boolean;
   composerDraftTarget: ScopedThreadRef | DraftId;
   environmentId: EnvironmentId;
   canOperateThread: boolean;
@@ -2637,13 +2638,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     }
     if (composerTrigger.kind === "slash-command") {
       const builtInSlashCommandItems = [
-        {
-          id: "slash:btw",
-          type: "slash-command",
-          command: "btw",
-          label: "/btw",
-          description: "Ask a side question without interrupting the agent",
-        },
+        ...(props.offersSideQuestions
+          ? ([
+              {
+                id: "slash:btw",
+                type: "slash-command",
+                command: "btw",
+                label: "/btw",
+                description: "Ask a side question without interrupting the agent",
+              },
+            ] as const)
+          : []),
         {
           id: "slash:model",
           type: "slash-command",

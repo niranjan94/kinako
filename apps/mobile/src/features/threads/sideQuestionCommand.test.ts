@@ -2,28 +2,7 @@ import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { threadComposerContext } from "../../lib/composerContext";
-import { parseBtwComposerQuestion, withParentThreadReference } from "./sideQuestionCommand";
-
-describe("parseBtwComposerQuestion", () => {
-  it("reads the question after /btw", () => {
-    expect(parseBtwComposerQuestion("  /btw  why is this slow?\nsecond line ")).toBe(
-      "why is this slow?\nsecond line",
-    );
-    expect(parseBtwComposerQuestion("/BTW what changed")).toBe("what changed");
-  });
-
-  it("treats a bare /btw as a request to reopen", () => {
-    expect(parseBtwComposerQuestion("/btw")).toBe("");
-    expect(parseBtwComposerQuestion("/btw   ")).toBe("");
-  });
-
-  it("ignores other text and non-turn submissions", () => {
-    expect(parseBtwComposerQuestion("/btwx question")).toBeNull();
-    expect(parseBtwComposerQuestion("please /btw question")).toBeNull();
-    expect(parseBtwComposerQuestion("/btw question", "pending-user-input")).toBeNull();
-    expect(parseBtwComposerQuestion("/btw question", "queued-message")).toBeNull();
-  });
-});
+import { withParentThreadReference } from "./sideQuestionCommand";
 
 describe("withParentThreadReference", () => {
   const parent = threadComposerContext(
