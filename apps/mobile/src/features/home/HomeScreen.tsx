@@ -1,7 +1,6 @@
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import type { ThreadMoveDestination } from "../threads/threadOrder";
-import { computeThreadMoveAvailability } from "../threads/threadOrder";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   type EnvironmentProject,
@@ -57,6 +56,7 @@ import { useQueuedThreadKeys } from "../../state/use-thread-outbox";
 import {
   ThreadListV2PendingRow,
   ThreadListV2Row,
+  ThreadListV2GroupHeader,
   ThreadListV2SettledShelfHeader,
   ThreadListV2ShowMoreRow,
   ThreadListV2SnoozedShelfHeader,
@@ -67,7 +67,7 @@ import { useOpenThreadPullRequests } from "../threads/use-open-thread-pull-reque
 import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
 import {
   buildThreadListV2Items,
-  getThreadListV2OrderedSection,
+  resolveThreadListV2MoveAvailability,
   buildThreadListV2ListItems,
   threadListV2ListItemsAreEqual,
   threadListInboxReturns,
@@ -129,6 +129,10 @@ interface HomeScreenProps {
     direction: ThreadMoveDestination,
   ) => Promise<boolean>;
   readonly onRenameThread: (thread: EnvironmentThreadShell) => void;
+  readonly onSetThreadGroup: (thread: EnvironmentThreadShell, group: string | null) => void;
+  readonly onMoveThreadToNewGroup: (thread: EnvironmentThreadShell) => void;
+  readonly onRenameGroup: (group: string, onRenamed: (name: string) => void) => void;
+  readonly onUngroup: (group: string) => void;
   readonly onRegenerateThreadTitle: (thread: EnvironmentThreadShell) => Promise<boolean>;
   readonly onSelectPendingTask: (pendingTask: PendingNewTask) => void;
   readonly onDeletePendingTask: (pendingTask: PendingNewTask) => void;
@@ -423,6 +427,8 @@ export function HomeScreen(props: HomeScreenProps) {
   const handleSetThreadAutoSettle = props.onSetThreadAutoSettle;
   const handleRegenerateThreadTitle = props.onRegenerateThreadTitle;
   const handleRenameThread = props.onRenameThread;
+  const handleSetThreadGroup = props.onSetThreadGroup;
+  const handleMoveThreadToNewGroup = props.onMoveThreadToNewGroup;
   const handleDeleteThread = props.onDeleteThread;
   const handleUnsettleThread = props.onUnsettleThread;
   const [settledVisibleCount, setSettledVisibleCount] = useState(
@@ -445,6 +451,9 @@ export function HomeScreen(props: HomeScreenProps) {
     toggleSettledShelf,
     toggleSnoozedShelf,
     toggleWorkingShelf,
+    collapsedGroups,
+    toggleGroup,
+    renameCollapsedGroup,
   } = useThreadListV2ShelfPreferences();
   // The list's clock is state: the compiler caches anything computed from it on
   // its other inputs, so a render-time `new Date()` would stop moving. The minute
@@ -467,6 +476,7 @@ export function HomeScreen(props: HomeScreenProps) {
     autoSettleOptOutEnvironmentIds,
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,
+    groupingEnvironmentIds,
     titleRegenerationEnvironmentIds,
   } = listEnvironments;
   const resolveProviderInstance = useThreadRowProviderInstanceResolver(providersByEnvironmentId);
@@ -476,21 +486,16 @@ export function HomeScreen(props: HomeScreenProps) {
   // list construction quadratic, and this list rebuilds on every minute tick.
   const threadMoveAvailability = (() => {
     const sectionAvailability = (section: "pinned" | "active") =>
-      computeThreadMoveAvailability({
-        allThreads: props.threads,
+      resolveThreadListV2MoveAvailability({
+        threads: props.threads,
         section,
         pendingOrder,
+        now,
+        settlementEnvironmentIds,
+        snoozeEnvironmentIds,
+        queuedThreadKeys,
         reorderableEnvironmentIds:
           section === "pinned" ? pinReorderEnvironmentIds : activeReorderEnvironmentIds,
-        ordered: getThreadListV2OrderedSection({
-          threads: props.threads,
-          section,
-          pendingOrder,
-          now,
-          settlementEnvironmentIds,
-          snoozeEnvironmentIds,
-          queuedThreadKeys,
-        }),
       });
     return new Map([
       ...sectionAvailability("pinned"),
@@ -516,6 +521,7 @@ export function HomeScreen(props: HomeScreenProps) {
       inboxReturnAt: threadListInboxReturns.returnedAt,
       snoozedShelfExpanded,
       settledShelfExpanded,
+      collapsedGroups,
       selectedThreadKey,
     });
   })();
@@ -561,6 +567,7 @@ export function HomeScreen(props: HomeScreenProps) {
     snoozeEnvironmentIds,
     queuedThreadKeys,
     moveAvailability: threadMoveAvailability,
+    groups: threadListV2Layout.groups,
     shelfPreferencesLoading: !shelfPreferencesLoaded,
   });
 
@@ -569,6 +576,8 @@ export function HomeScreen(props: HomeScreenProps) {
     if (swipeEnabled) activateVisibleRows(threadListV2Items);
   }, [activateVisibleRows, swipeEnabled, threadListV2Items]);
 
+  const handleRenameGroup = (group: string) =>
+    props.onRenameGroup(group, (name) => renameCollapsedGroup(group, name));
   const renderV2Item = ({ item }: { readonly item: ThreadListV2ListItem }) => {
     if (item.type === "v2-pending") {
       const pendingScopeKey = scopedProjectKey(
@@ -611,6 +620,19 @@ export function HomeScreen(props: HomeScreenProps) {
           disabled={item.disabled}
           expanded={item.expanded}
           onToggle={toggleSnoozedShelf}
+        />
+      );
+    }
+    if (item.type === "v2-group-header") {
+      return (
+        <ThreadListV2GroupHeader
+          group={item.group}
+          count={item.count}
+          disabled={item.disabled}
+          expanded={item.expanded}
+          onToggle={toggleGroup}
+          onRename={handleRenameGroup}
+          onUngroup={props.onUngroup}
         />
       );
     }
@@ -670,6 +692,9 @@ export function HomeScreen(props: HomeScreenProps) {
         onSettleThread={handleSettleThread}
         snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
         pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
+        groupingSupported={groupingEnvironmentIds.has(thread.environmentId)}
+        onSetThreadGroup={handleSetThreadGroup}
+        onMoveThreadToNewGroup={handleMoveThreadToNewGroup}
         autoSettleOptOutSupported={autoSettleOptOutEnvironmentIds.has(thread.environmentId)}
         reorderSupported={
           item.item.pinned

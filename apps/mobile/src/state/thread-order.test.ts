@@ -68,6 +68,33 @@ function fixture() {
 afterEach(() => appAtomRegistry.reset());
 
 describe("shared mobile pending move", () => {
+  it("holds a move within one group while other groups have active threads", () => {
+    const environmentId = EnvironmentId.make("env");
+    const rows = [
+      makeThreadShellFixture({ id: ThreadId.make("loose"), environmentId }),
+      ...["a", "b"].map((id, index) =>
+        makeThreadShellFixture({
+          id: ThreadId.make(id),
+          environmentId,
+          group: "Billing",
+          createdAt: `2026-06-01T0${2 - index}:00:00.000Z`,
+        }),
+      ),
+    ];
+    appAtomRegistry.set(shellsAtom, rows);
+    const move = beginPendingThreadOrder({
+      ...createPendingThreadOrder({
+        section: "active",
+        ordered: rows.slice(1),
+        movedId: "env:b",
+        direction: "up",
+        assignments: [{ id: "env:b", orderKey: "aa" }],
+      }),
+      group: "Billing",
+    });
+    expect(move.isPending()).toBe(true);
+  });
+
   it("blocks another pickup after receipts and clears on final canonical upsert", () => {
     const { start, upsert } = fixture();
     const move = start();

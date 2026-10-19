@@ -97,6 +97,10 @@ export function HomeRouteScreen() {
     renameThread,
     regenerateThreadTitle,
     unsettleThread,
+    setThreadGroup,
+    moveThreadToNewGroup,
+    renameGroup,
+    ungroup,
   } = useThreadListActions();
   const pendingTasks = usePendingNewTasks();
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
@@ -271,6 +275,10 @@ export function HomeRouteScreen() {
           onSetThreadAutoSettle={setThreadAutoSettle}
           onMoveThread={moveThread}
           onRenameThread={renameThread}
+          onSetThreadGroup={setThreadGroup}
+          onMoveThreadToNewGroup={moveThreadToNewGroup}
+          onRenameGroup={renameGroup}
+          onUngroup={ungroup}
           onRegenerateThreadTitle={regenerateThreadTitle}
           onEnvironmentChange={setSelectedEnvironmentId}
           onProjectChange={setSelectedProjectKey}

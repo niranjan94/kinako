@@ -32,6 +32,7 @@ import {
   buildThreadListV2ListItems,
   getThreadListV2OrderedSection,
   isThreadListV2ListItem,
+  resolveThreadListV2MoveAvailability,
   resolveThreadListV2SnoozeMenuSelection,
   resolveThreadListV2SnoozeGateExpiryMs,
   resolveThreadListV2Status,
@@ -413,6 +414,88 @@ describe("getThreadListV2OrderedSection", () => {
         (thread) => thread.id,
       ),
     ).toEqual(["pinned-first", "pinned-later"]);
+  });
+});
+
+describe("thread groups", () => {
+  const threads = [
+    makeThread({ id: ThreadId.make("infra"), title: "Infra", group: "Infra", activeOrderKey: "a" }),
+    makeThread({ id: ThreadId.make("loose"), title: "Loose", activeOrderKey: "b" }),
+    makeThread({
+      id: ThreadId.make("billing-1"),
+      title: "Bill 1",
+      group: "Billing",
+      activeOrderKey: "c",
+    }),
+    makeThread({
+      id: ThreadId.make("billing-2"),
+      title: "Bill 2",
+      group: "Billing",
+      activeOrderKey: "d",
+    }),
+  ];
+
+  it("lists ungrouped threads before each group and filters to one group on request", () => {
+    expect(
+      getThreadListV2OrderedSection({ threads, section: "active", now: NOW }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual(["loose", "billing-1", "billing-2", "infra"]);
+    expect(
+      getThreadListV2OrderedSection({ threads, section: "active", group: "Billing", now: NOW }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual(["billing-1", "billing-2"]);
+    expect(
+      getThreadListV2OrderedSection({ threads, section: "active", group: null, now: NOW }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual(["loose"]);
+  });
+
+  it("offers moves only within each group", () => {
+    const availability = resolveThreadListV2MoveAvailability({
+      threads,
+      section: "active",
+      now: NOW,
+      reorderableEnvironmentIds: new Set([environmentId]),
+    });
+    expect(
+      ["loose", "billing-1", "billing-2", "infra"].map((id) => {
+        const move = availability.get(`${environmentId}:${id}`);
+        return [id, move?.canMoveUp, move?.canMoveDown];
+      }),
+    ).toEqual([
+      ["loose", false, false],
+      ["billing-1", false, true],
+      ["billing-2", true, false],
+      ["infra", false, false],
+    ]);
+  });
+
+  it("puts a header before each group and keeps only the selected row of a collapsed group", () => {
+    const layout = buildThreadListV2Items({
+      threads,
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+      collapsedGroups: ["Billing"],
+      selectedThreadKey: `${environmentId}:billing-2`,
+    });
+    const items = buildThreadListV2ListItems({
+      items: layout.items,
+      groups: layout.groups,
+      pendingTasks: [makePendingTask("draft")],
+    });
+    expect(
+      items.map((item) =>
+        item.type === "v2-thread"
+          ? item.item.thread.id
+          : item.type === "v2-group-header"
+            ? `${item.group}:${item.count}:${item.expanded}`
+            : item.type,
+      ),
+    ).toEqual(["loose", "v2-pending", "Billing:2:false", "billing-2", "Infra:1:true", "infra"]);
   });
 });
 

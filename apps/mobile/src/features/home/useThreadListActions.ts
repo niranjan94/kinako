@@ -1,7 +1,7 @@
 import type { ThreadMoveDestination } from "../threads/threadOrder";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope, THREAD_GROUP_MAX_LENGTH } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Haptics from "expo-haptics";
 import { useRef } from "react";
@@ -51,6 +51,13 @@ function environmentSupportsPinning(environmentId: EnvironmentThreadShell["envir
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
       .threadPinning === true
+  );
+}
+
+function environmentSupportsGrouping(environmentId: EnvironmentThreadShell["environmentId"]) {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .threadGrouping === true
   );
 }
 
@@ -232,6 +239,10 @@ export function useThreadListActions(): {
   ) => Promise<boolean>;
   readonly renameThread: (thread: EnvironmentThreadShell) => void;
   readonly regenerateThreadTitle: (thread: EnvironmentThreadShell) => Promise<boolean>;
+  readonly setThreadGroup: (thread: EnvironmentThreadShell, group: string | null) => void;
+  readonly moveThreadToNewGroup: (thread: EnvironmentThreadShell) => void;
+  readonly renameGroup: (group: string, onRenamed: (name: string) => void) => void;
+  readonly ungroup: (group: string) => void;
 } {
   const executeAction = useThreadActionExecutor();
   const snoozeMutation = useAtomCommand(threadEnvironment.snooze, { reportFailure: false });
@@ -244,6 +255,7 @@ export function useThreadListActions(): {
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
+  const setGroupMutation = useAtomCommand(threadEnvironment.setGroup, { reportFailure: false });
   const snoozeInFlightThreadKeys = useRef(new Set<string>());
   const titleRegenerationInFlightThreadKeys = useRef(new Set<string>());
 
@@ -507,6 +519,67 @@ export function useThreadListActions(): {
     });
   };
 
+  const setGroups = async (threads: readonly EnvironmentThreadShell[], group: string | null) => {
+    const targets = threads.filter((thread) => (thread.group ?? null) !== group);
+    if (targets.some((thread) => !environmentSupportsGrouping(thread.environmentId))) {
+      Dialog.alert(
+        "Could not move thread",
+        "This environment's server does not support thread groups. Update the server to group threads.",
+      );
+      return;
+    }
+    if (
+      targets.some((thread) => !checkThreadOperationPermission(thread, "Could not move thread"))
+    ) {
+      return;
+    }
+    selectionHaptic();
+    const results = await Promise.all(
+      targets.map((thread) =>
+        setGroupMutation({
+          environmentId: thread.environmentId,
+          input: { threadId: thread.id, group },
+        }),
+      ),
+    );
+    const failure = results.find((result) => result._tag === "Failure");
+    if (failure?._tag !== "Failure") return;
+    const error = Cause.squash(failure.cause);
+    Dialog.alert(
+      targets.length === 1 ? "Could not move thread" : "Could not move threads",
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "The group could not be changed.",
+    );
+  };
+  const promptGroupName = (title: string, initialValue: string, onName: (name: string) => void) =>
+    Dialog.prompt({
+      title,
+      initialValue,
+      confirmText: initialValue === "" ? "Create" : "Rename",
+      onConfirm: (value) => {
+        const name = value.trim().slice(0, THREAD_GROUP_MAX_LENGTH);
+        if (name !== "" && name !== initialValue) onName(name);
+      },
+    });
+  const groupMembers = (group: string) =>
+    appAtomRegistry
+      .get(environmentThreadShells.threadShellsAtom)
+      .filter((thread) => thread.archivedAt === null && thread.group === group);
+  const setThreadGroup = (thread: EnvironmentThreadShell, group: string | null) => {
+    void setGroups([thread], group);
+  };
+  const moveThreadToNewGroup = (thread: EnvironmentThreadShell) =>
+    promptGroupName("New group", "", (name) => void setGroups([thread], name));
+  const renameGroup = (group: string, onRenamed: (name: string) => void) =>
+    promptGroupName("Rename group", group, (name) => {
+      onRenamed(name);
+      void setGroups(groupMembers(group), name);
+    });
+  const ungroup = (group: string) => {
+    void setGroups(groupMembers(group), null);
+  };
+
   // Plan against the complete section so filtering does not change a move.
   const reorderPinnedMutation = useAtomCommand(threadEnvironment.reorderPin, {
     reportFailure: false,
@@ -550,9 +623,11 @@ export function useThreadListActions(): {
       );
       return false;
     }
+    const group = section === "active" ? (thread.group ?? null) : undefined;
     const ordered = getThreadListV2OrderedSection({
       threads: shells,
       section,
+      ...(group === undefined ? {} : { group }),
       now: new Date().toISOString(),
       queuedThreadKeys: appAtomRegistry.get(queuedThreadKeysAtom),
       settlementEnvironmentIds: new Set(
@@ -598,15 +673,16 @@ export function useThreadListActions(): {
     appAtomRegistry.set(threadDropBusyAtom, true);
     const pending = crossSection
       ? null
-      : beginPendingThreadOrder(
-          createPendingThreadOrder({
+      : beginPendingThreadOrder({
+          ...createPendingThreadOrder({
             section,
             ordered,
             movedId: scopedThreadKey(thread.environmentId, thread.id),
             direction,
             assignments,
           }),
-        );
+          ...(group === undefined ? {} : { group }),
+        });
     const reorder = section === "pinned" ? reorderPinnedMutation : reorderActiveMutation;
     const moved = await (async () => {
       if (crossSection) {
@@ -679,6 +755,10 @@ export function useThreadListActions(): {
     moveThread,
     renameThread,
     regenerateThreadTitle,
+    setThreadGroup,
+    moveThreadToNewGroup,
+    renameGroup,
+    ungroup,
   };
 }
 

@@ -1,7 +1,6 @@
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import { resolveScratchProjectScopeKey } from "@t3tools/client-runtime/state/project-grouping";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { computeThreadMoveAvailability } from "./threadOrder";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
@@ -59,6 +58,7 @@ import { SidebarNavigationShell } from "./sidebar-navigation-shell";
 import {
   ThreadListV2PendingRow,
   ThreadListV2Row,
+  ThreadListV2GroupHeader,
   ThreadListV2SettledShelfHeader,
   ThreadListV2ShowMoreRow,
   ThreadListV2SnoozedShelfHeader,
@@ -68,7 +68,7 @@ import { useThreadRowProviderInstanceResolver } from "./thread-provider-instance
 import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
 import {
   buildThreadListV2Items,
-  getThreadListV2OrderedSection,
+  resolveThreadListV2MoveAvailability,
   buildThreadListV2ListItems,
   isThreadListV2ListItem,
   threadListV2ListItemsAreEqual,
@@ -152,6 +152,10 @@ function ThreadNavigationSidebarPane(
     moveThread,
     renameThread,
     regenerateThreadTitle,
+    setThreadGroup,
+    moveThreadToNewGroup,
+    renameGroup,
+    ungroup,
   } = useThreadListActions();
   const pendingTasks = usePendingNewTasks();
   const queuedThreadKeys = useQueuedThreadKeys();
@@ -256,6 +260,9 @@ function ThreadNavigationSidebarPane(
     toggleSettledShelf,
     toggleSnoozedShelf,
     toggleWorkingShelf,
+    collapsedGroups,
+    toggleGroup,
+    renameCollapsedGroup,
   } = useThreadListV2ShelfPreferences();
   // The list's clock is state: the compiler caches anything computed from it on
   // its other inputs, so a render-time `new Date()` would stop moving. The minute
@@ -278,6 +285,7 @@ function ThreadNavigationSidebarPane(
     autoSettleOptOutEnvironmentIds,
     pinReorderEnvironmentIds,
     activeReorderEnvironmentIds,
+    groupingEnvironmentIds,
     titleRegenerationEnvironmentIds,
   } = listEnvironments;
   const resolveProviderInstance = useThreadRowProviderInstanceResolver(providersByEnvironmentId);
@@ -287,21 +295,16 @@ function ThreadNavigationSidebarPane(
   // list construction quadratic, and this list rebuilds on every minute tick.
   const threadMoveAvailability = (() => {
     const sectionAvailability = (section: "pinned" | "active") =>
-      computeThreadMoveAvailability({
-        allThreads: threads,
+      resolveThreadListV2MoveAvailability({
+        threads,
         section,
         pendingOrder,
+        now,
+        settlementEnvironmentIds,
+        snoozeEnvironmentIds,
+        queuedThreadKeys,
         reorderableEnvironmentIds:
           section === "pinned" ? pinReorderEnvironmentIds : activeReorderEnvironmentIds,
-        ordered: getThreadListV2OrderedSection({
-          threads,
-          section,
-          pendingOrder,
-          now,
-          settlementEnvironmentIds,
-          snoozeEnvironmentIds,
-          queuedThreadKeys,
-        }),
       });
     return new Map([
       ...sectionAvailability("pinned"),
@@ -327,6 +330,7 @@ function ThreadNavigationSidebarPane(
       inboxReturnAt: threadListInboxReturns.returnedAt,
       snoozedShelfExpanded,
       settledShelfExpanded,
+      collapsedGroups,
       selectedThreadKey: props.selectedThreadKey ?? null,
     });
   })();
@@ -374,6 +378,7 @@ function ThreadNavigationSidebarPane(
       snoozeEnvironmentIds,
       queuedThreadKeys,
       moveAvailability: threadMoveAvailability,
+      groups: threadListV2Layout.groups,
       shelfPreferencesLoading: !shelfPreferencesLoaded,
     });
     if (settledShelfExpanded && threadListV2Layout.hiddenSettledCount > 0) {
@@ -618,6 +623,9 @@ function ThreadNavigationSidebarPane(
             onSettleThread={settleThread}
             snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
             pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
+            groupingSupported={groupingEnvironmentIds.has(thread.environmentId)}
+            onSetThreadGroup={setThreadGroup}
+            onMoveThreadToNewGroup={moveThreadToNewGroup}
             autoSettleOptOutSupported={autoSettleOptOutEnvironmentIds.has(thread.environmentId)}
             reorderSupported={
               item.item.pinned
@@ -656,6 +664,19 @@ function ThreadNavigationSidebarPane(
             disabled={item.disabled}
             expanded={item.expanded}
             onToggle={toggleSnoozedShelf}
+            pane="sidebar"
+          />
+        );
+      case "v2-group-header":
+        return (
+          <ThreadListV2GroupHeader
+            group={item.group}
+            count={item.count}
+            disabled={item.disabled}
+            expanded={item.expanded}
+            onToggle={toggleGroup}
+            onRename={(group) => renameGroup(group, (name) => renameCollapsedGroup(group, name))}
+            onUngroup={ungroup}
             pane="sidebar"
           />
         );
