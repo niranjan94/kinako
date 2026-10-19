@@ -18,6 +18,7 @@ import {
 import { loadRepoEnv } from "../../scripts/lib/public-config";
 import { thirdPartyLicensesPlugin } from "../../scripts/lib/third-party-licenses";
 import { tailwindPlugins } from "./vite/tailwind";
+import { pixelOfficePlugin } from "./vite/pixel-office";
 
 const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
@@ -178,6 +179,7 @@ export default defineConfig(() => {
     assetsInclude: ["**/*.wasm"],
     plugins: [
       devCompressionPlugin(),
+      pixelOfficePlugin(),
       thirdPartyLicensesPlugin({
         bundleName: "web",
         configFile: new URL("../../third-party-licenses.config.json", import.meta.url),
