@@ -434,6 +434,7 @@ import {
 import { ChatHeader } from "./chat/ChatHeader";
 import { SideQuestionCard } from "./chat/SideQuestionCard";
 import { useSideQuestionActions } from "./chat/useSideQuestion";
+import { subscribeSideQuestionStart } from "./chat/sideQuestionActionBus";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
 import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
@@ -2094,6 +2095,24 @@ export default function ChatView(props: ChatViewProps) {
   const serverConfig = activeThread
     ? (activeEnvironment?.serverConfig ?? null)
     : (primaryEnvironment?.serverConfig ?? null);
+  const sideQuestionsAvailable =
+    isServerThread && canOperateThread && serverConfig?.environment.capabilities.sideChats === true;
+  const startSideQuestionDraft = () => {
+    if (!sideQuestionsAvailable) return false;
+    const current = promptRef.current.trim();
+    if (!/^\/btw\b/i.test(current)) {
+      const next = current ? `/btw ${current}` : "/btw ";
+      promptRef.current = next;
+      setComposerDraftPrompt(composerDraftTarget, next);
+    }
+    composerRef.current?.focusAtEnd();
+    return true;
+  };
+  const startSideQuestionDraftStable = useStableCallback(startSideQuestionDraft);
+  useEffect(
+    () => subscribeSideQuestionStart(() => void startSideQuestionDraftStable()),
+    [startSideQuestionDraftStable],
+  );
   const providerEnvironmentId = (activeThread ? activeEnvironment : primaryEnvironment)
     ?.environmentId;
   const providerStatuses =
@@ -5621,6 +5640,10 @@ export default function ChatView(props: ChatViewProps) {
         routeKind !== "draft" &&
         composerRef.current?.isCaretAtStart() === true &&
         queuedRunsControlRef.current?.editLatest(event.repeat) === true,
+      "thread.sideQuestion": ({ event }) => {
+        if (event.repeat) return sideQuestionsAvailable;
+        return startSideQuestionDraft();
+      },
       "thread.stop": ({ event }) => {
         if (!canInterruptRunningThread) return false;
         if (!event.repeat) void onInterruptStable();
@@ -7793,8 +7816,6 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
-  const sideQuestionsAvailable =
-    isServerThread && canOperateThread && serverConfig?.environment.capabilities.sideChats === true;
   const sideQuestionControl =
     sideQuestionsAvailable && activeThreadRef ? (
       <SideQuestionCard parentRef={activeThreadRef} workspaceRoot={activeWorkspaceRoot} />
