@@ -11,6 +11,7 @@ import {
 import { RowPressable } from "../../components/ui/RowPressable";
 import { CustomSnoozeSheet } from "./CustomSnoozeSheet";
 import { appAtomRegistry } from "../../state/atom-registry";
+import { threadGroupNamesAtom } from "../../state/thread-groups";
 import { threadArrangementOpenAtom } from "../../state/thread-order";
 import type { ThreadMoveDestination } from "./threadOrder";
 import type {
@@ -21,6 +22,7 @@ import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state
 import { AuthOrchestrationOperateScope, type EnvironmentMachineKind } from "@t3tools/contracts";
 import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
+import { useAtomValue } from "@effect/atom-react";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
@@ -266,6 +268,46 @@ export const ThreadListV2SettledShelfHeader = memo(function ThreadListV2SettledS
   props: ThreadListV2ShelfHeaderProps,
 ) {
   return <ThreadListV2ShelfHeader {...props} kind="settled" />;
+});
+
+const GROUP_HEADER_MENU_ACTIONS: MenuAction[] = [
+  { id: "rename", title: "Rename group", image: "square.and.pencil" },
+  { id: "ungroup", title: "Ungroup threads", image: "folder" },
+];
+
+export const ThreadListV2GroupHeader = memo(function ThreadListV2GroupHeader(props: {
+  readonly group: string;
+  readonly count: number;
+  readonly expanded: boolean;
+  readonly disabled?: boolean;
+  readonly pane?: "screen" | "sidebar";
+  readonly onToggle: (group: string) => void;
+  readonly onRename: (group: string) => void;
+  readonly onUngroup: (group: string) => void;
+}) {
+  const { group, onRename, onToggle, onUngroup } = props;
+  return (
+    <Menu
+      actions={GROUP_HEADER_MENU_ACTIONS}
+      onPressAction={({ nativeEvent }) => {
+        if (nativeEvent.event === "rename") onRename(group);
+        if (nativeEvent.event === "ungroup") onUngroup(group);
+      }}
+      shouldOpenOnLongPress
+    >
+      <ThreadListV2Section
+        label={props.expanded ? group : `${group} (${props.count})`}
+        pane={props.pane}
+        disclosure={{
+          expanded: props.expanded,
+          disabled: props.disabled === true,
+          onToggle: () => onToggle(group),
+          accessibilityLabel: `${group}, ${props.count} ${props.count === 1 ? "thread" : "threads"}`,
+          accessibilityHint: `${props.expanded ? "Collapses" : "Expands"} the group. Long press to rename or ungroup.`,
+        }}
+      />
+    </Menu>
+  );
 });
 
 export const ThreadListV2ShowMoreRow = memo(function ThreadListV2ShowMoreRow(props: {
@@ -514,6 +556,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly pinningSupported: boolean;
   readonly autoSettleOptOutSupported: boolean;
   readonly titleRegenerationSupported: boolean;
+  readonly groupingSupported?: boolean;
+  readonly onSetThreadGroup?: (thread: EnvironmentThreadShell, group: string | null) => void;
+  readonly onMoveThreadToNewGroup?: (thread: EnvironmentThreadShell) => void;
   readonly reorderSupported?: boolean;
   readonly onMoveThread?: (
     thread: EnvironmentThreadShell,
@@ -547,7 +592,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onUnpinThread,
     onSetThreadAutoSettle,
     onMoveThread,
+    onSetThreadGroup,
+    onMoveThreadToNewGroup,
   } = props;
+  const groupNames = useAtomValue(threadGroupNamesAtom);
   const snoozedRow = props.snoozed === true;
   const pinnedRow = props.pinned === true;
   const serverConfig = useEnvironmentServerConfig(thread.environmentId);
@@ -704,12 +752,35 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               : { id: "pin", title: "Pin", image: "pin" },
           ]
         : []),
+      ...(props.groupingSupported === true
+        ? [
+            {
+              id: "group",
+              title: "Move to group",
+              image: "folder",
+              subactions: [
+                ...groupNames.map((group): MenuAction => ({
+                  id: `group:set:${group}`,
+                  title: group,
+                  state: group === thread.group ? "on" : "off",
+                })),
+                { id: "group:new", title: "New group…" },
+                ...(thread.group == null
+                  ? []
+                  : [{ id: "group:remove", title: "Remove from group" }]),
+              ],
+            } satisfies MenuAction,
+          ]
+        : []),
     ],
     [
+      groupNames,
       props.canMoveDown,
       props.canMoveUp,
+      props.groupingSupported,
       props.reorderSupported,
       props.pinningSupported,
+      thread.group,
       thread.pinnedAt,
       variant,
     ],
@@ -818,6 +889,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "arrange") appAtomRegistry.set(threadArrangementOpenAtom, true);
       if (nativeEvent.event === "move-up") handleMoveUp();
       if (nativeEvent.event === "move-down") handleMoveDown();
+      if (nativeEvent.event === "group:new") onMoveThreadToNewGroup?.(thread);
+      if (nativeEvent.event === "group:remove") onSetThreadGroup?.(thread, null);
+      if (nativeEvent.event.startsWith("group:set:")) {
+        onSetThreadGroup?.(thread, nativeEvent.event.slice("group:set:".length));
+      }
       if (nativeEvent.event === "archive") handleArchive();
       if (nativeEvent.event === "rename") handleRename();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
@@ -848,6 +924,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     },
     [
       onNewThreadOnBranch,
+      onMoveThreadToNewGroup,
+      onSetThreadGroup,
       thread,
       cliResumeCommand,
       handleArchive,

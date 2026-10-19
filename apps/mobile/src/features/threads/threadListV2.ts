@@ -23,18 +23,21 @@ import {
   sortPinnedThreadsByOrderKey,
   sortSettledThreads,
 } from "@t3tools/client-runtime/state/thread-sort";
+import { partitionThreadsByGroup } from "@t3tools/client-runtime/state/thread-groups";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 
 import type { ThreadListProvider } from "../../state/thread-list-environments";
-import type { ThreadMoveAvailability } from "./threadOrder";
 
 import { relativeTime } from "../../lib/time";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 
 import {
   applyPendingThreadOrder,
+  computeThreadMoveAvailability,
+  createThreadMoveAvailabilityIndex,
   reconcilePendingThreadOrder,
   type PendingThreadOrder,
+  type ThreadMoveAvailability,
 } from "./threadOrder";
 
 export { snoozeWakeLabel };
@@ -195,9 +198,23 @@ export function sortThreadsForListV2<
   return sortActiveThreadsByOrderKey(threads);
 }
 
+const inGroup = (thread: EnvironmentThreadShell, group: string | null | undefined) =>
+  group === undefined || (thread.group ?? null) === group;
+
+function groupedActiveOrder<T extends EnvironmentThreadShell>(threads: readonly T[]): T[] {
+  const { ungrouped, groups } = partitionThreadsByGroup(threads);
+  return [...ungrouped, ...groups.flatMap((entry) => entry.threads)];
+}
+
+/**
+ * Active threads come back in display order: ungrouped first, then each group.
+ * Pass `group` (null for ungrouped) to get only that group, which is the unit
+ * moves reorder within.
+ */
 export function getThreadListV2OrderedSection(input: {
   readonly threads: readonly EnvironmentThreadShell[];
   readonly section: "pinned" | "active";
+  readonly group?: string | null;
   readonly pendingOrder?: PendingThreadOrder | null;
   readonly now: string;
   readonly settlementEnvironmentIds?: ReadonlySet<EnvironmentId>;
@@ -221,17 +238,57 @@ export function getThreadListV2OrderedSection(input: {
     ) {
       return false;
     }
+    if (input.section === "active" && !inGroup(thread, input.group)) return false;
     return (thread.pinnedAt != null) === (input.section === "pinned");
   });
   const ordered =
     input.section === "pinned"
       ? sortPinnedThreadsByOrderKey(threads)
       : sortActiveThreadsByOrderKey(threads);
+  const pendingOrder = input.pendingOrder;
   const pending =
-    input.pendingOrder?.section === input.section
-      ? reconcilePendingThreadOrder(input.pendingOrder, ordered)
+    pendingOrder?.section === input.section
+      ? reconcilePendingThreadOrder(
+          pendingOrder,
+          ordered.filter((thread) => inGroup(thread, pendingOrder.group)),
+        )
       : null;
-  return applyPendingThreadOrder(ordered, input.section, pending);
+  const arranged = applyPendingThreadOrder(ordered, input.section, pending);
+  return input.section === "active" && input.group === undefined
+    ? groupedActiveOrder(arranged)
+    : arranged;
+}
+
+/** Up/down availability for a section's cards; Active cards move only within their group. */
+export function resolveThreadListV2MoveAvailability(
+  input: Parameters<typeof getThreadListV2OrderedSection>[0] & {
+    readonly reorderableEnvironmentIds: ReadonlySet<EnvironmentId>;
+  },
+): Map<string, ThreadMoveAvailability> {
+  const ordered = getThreadListV2OrderedSection(input);
+  const index = createThreadMoveAvailabilityIndex({
+    allThreads: input.threads,
+    section: input.section,
+    reorderableEnvironmentIds: input.reorderableEnvironmentIds,
+  });
+  const buckets =
+    input.section === "pinned"
+      ? [ordered]
+      : (() => {
+          const { ungrouped, groups } = partitionThreadsByGroup(ordered);
+          return [ungrouped, ...groups.map((entry) => entry.threads)];
+        })();
+  return new Map(
+    buckets.flatMap((rows) => [
+      ...computeThreadMoveAvailability({
+        ordered: rows,
+        index,
+        section: input.section,
+        pendingOrder: input.pendingOrder ?? null,
+        reorderableEnvironmentIds: input.reorderableEnvironmentIds,
+      }),
+    ]),
+  );
 }
 
 export interface ThreadListV2Item {
@@ -242,8 +299,17 @@ export interface ThreadListV2Item {
   readonly isLast: boolean;
 }
 
+export interface ThreadListV2GroupLayout {
+  readonly group: string;
+  readonly count: number;
+  readonly expanded: boolean;
+  /** Index into `items` where the group's visible rows start. */
+  readonly headerIndex: number;
+}
+
 export interface ThreadListV2Layout {
   readonly items: ThreadListV2Item[];
+  readonly groups: ReadonlyArray<ThreadListV2GroupLayout>;
   readonly hiddenSettledCount: number;
   readonly workingCount: number;
   readonly workingShelfHeaderIndex: number | null;
@@ -305,6 +371,15 @@ export interface ThreadListV2SnoozedShelfListItem {
   readonly disabled: boolean;
 }
 
+export interface ThreadListV2GroupHeaderListItem {
+  readonly type: "v2-group-header";
+  readonly key: string;
+  readonly group: string;
+  readonly count: number;
+  readonly expanded: boolean;
+  readonly disabled: boolean;
+}
+
 export interface ThreadListV2SettledShelfListItem {
   readonly type: "v2-settled-shelf";
   readonly key: "v2-settled-shelf";
@@ -318,6 +393,7 @@ export type ThreadListV2ListItem =
   | ThreadListV2PendingListItem
   | ThreadListV2WorkingShelfListItem
   | ThreadListV2SnoozedShelfListItem
+  | ThreadListV2GroupHeaderListItem
   | ThreadListV2SettledShelfListItem;
 
 export function isThreadListV2ListItem(value: {
@@ -328,6 +404,7 @@ export function isThreadListV2ListItem(value: {
     value.type === "v2-pending" ||
     value.type === "v2-working-shelf" ||
     value.type === "v2-snoozed-shelf" ||
+    value.type === "v2-group-header" ||
     value.type === "v2-settled-shelf"
   );
 }
@@ -380,6 +457,14 @@ export function threadListV2ListItemsAreEqual(
         previous.expanded === item.expanded &&
         previous.disabled === item.disabled
       );
+    case "v2-group-header":
+      return (
+        previous.type === "v2-group-header" &&
+        previous.group === item.group &&
+        previous.count === item.count &&
+        previous.expanded === item.expanded &&
+        previous.disabled === item.disabled
+      );
     case "v2-settled-shelf":
       return (
         previous.type === "v2-settled-shelf" &&
@@ -411,6 +496,7 @@ function resolveThreadListV2ItemTimeLabel(
 export function buildThreadListV2ListItems(input: {
   readonly items: ReadonlyArray<ThreadListV2Item>;
   readonly pendingTasks: ReadonlyArray<PendingNewTask>;
+  readonly groups?: ReadonlyArray<ThreadListV2GroupLayout>;
   readonly workingCount?: number;
   readonly workingShelfExpanded?: boolean;
   readonly workingShelfHeaderIndex?: number | null;
@@ -476,8 +562,25 @@ export function buildThreadListV2ListItems(input: {
   const snoozedEnd = settledShelfHeaderIndex ?? threadItems.length;
   const workingEnd = snoozedShelfHeaderIndex ?? snoozedEnd;
   const activeEnd = workingShelfHeaderIndex ?? workingEnd;
-  const result: ThreadListV2ListItem[] = [...threadItems.slice(0, activeEnd), ...pendingItems];
+  const groups = input.groups ?? [];
   const shelfDisabled = input.shelfPreferencesLoading === true;
+  const result: ThreadListV2ListItem[] = [
+    ...threadItems.slice(0, groups[0]?.headerIndex ?? activeEnd),
+    ...pendingItems,
+  ];
+  for (const [index, entry] of groups.entries()) {
+    result.push({
+      type: "v2-group-header",
+      key: `v2-group:${entry.group}`,
+      group: entry.group,
+      count: entry.count,
+      expanded: entry.expanded,
+      disabled: shelfDisabled,
+    });
+    result.push(
+      ...threadItems.slice(entry.headerIndex, groups[index + 1]?.headerIndex ?? activeEnd),
+    );
+  }
   if (workingShelfHeaderIndex !== null && workingCount > 0) {
     result.push({
       type: "v2-working-shelf",
@@ -563,6 +666,7 @@ export function buildThreadListV2Items(input: {
   readonly settledShelfExpanded?: boolean;
   readonly selectedThreadKey?: string | null;
   readonly queuedThreadKeys?: ReadonlySet<string>;
+  readonly collapsedGroups?: ReadonlyArray<string>;
 }): ThreadListV2Layout {
   const now = input.now;
   const pending =
@@ -573,6 +677,7 @@ export function buildThreadListV2Items(input: {
           getThreadListV2OrderedSection({
             ...input,
             section: input.pendingOrder.section,
+            ...(input.pendingOrder.group === undefined ? {} : { group: input.pendingOrder.group }),
             pendingOrder: null,
           }),
         );
@@ -690,14 +795,25 @@ export function buildThreadListV2Items(input: {
       isLast: false,
     });
   }
-  for (const thread of orderedActive) {
-    items.push({
-      thread,
-      variant: "card",
-      snoozed: false,
-      pinned: false,
-      isLast: false,
+  const activeBuckets = partitionThreadsByGroup(orderedActive);
+  const pushActive = (thread: EnvironmentThreadShell) =>
+    items.push({ thread, variant: "card", snoozed: false, pinned: false, isLast: false });
+  activeBuckets.ungrouped.forEach(pushActive);
+  const groups: ThreadListV2GroupLayout[] = [];
+  for (const entry of activeBuckets.groups) {
+    const expanded = input.collapsedGroups?.includes(entry.group) !== true;
+    groups.push({
+      group: entry.group,
+      count: entry.threads.length,
+      expanded,
+      headerIndex: items.length,
     });
+    (expanded
+      ? entry.threads
+      : entry.threads.filter(
+          (thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey,
+        )
+    ).forEach(pushActive);
   }
   const workingShelfHeaderIndex = orderedWorking.length > 0 ? items.length : null;
   for (const thread of visibleWorking) {
@@ -735,6 +851,7 @@ export function buildThreadListV2Items(input: {
   }
   return {
     items,
+    groups,
     hiddenSettledCount: orderedSettled.length - pagedSettled.length,
     workingCount: orderedWorking.length,
     workingShelfHeaderIndex,

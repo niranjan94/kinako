@@ -58,6 +58,8 @@ export type OrderRow = Pick<
 
 export interface PendingThreadOrder {
   readonly section: "pinned" | "active";
+  /** The Active group being arranged; each group keeps its own order. */
+  readonly group?: string | null;
   readonly orderedIds: readonly string[];
   readonly before: ReadonlyMap<string, { readonly key: string | null; readonly anchor: string }>;
   readonly assignments: ReadonlyMap<string, string>;
@@ -118,9 +120,37 @@ export interface ThreadMoveAvailability {
  * construction stays linear instead of one full planner probe (array copies,
  * hidden-key rescans) per row on the minute-tick rebuild path.
  */
+export interface ThreadMoveAvailabilityIndex {
+  readonly keysById: ReadonlyMap<string, string | null>;
+  readonly writableIds: ReadonlySet<string>;
+  /** How many threads hold each order key, so a subset can derive its reserved keys. */
+  readonly keyHolders: ReadonlyMap<string, number>;
+}
+
+/** Section-wide lookups, built once and shared by every group's availability pass. */
+export function createThreadMoveAvailabilityIndex(input: {
+  readonly allThreads: readonly OrderRow[];
+  readonly section: PendingThreadOrder["section"];
+  readonly reorderableEnvironmentIds: ReadonlySet<EnvironmentId>;
+}): ThreadMoveAvailabilityIndex {
+  const keysById = new Map<string, string | null>();
+  const writableIds = new Set<string>();
+  for (const row of input.allThreads) {
+    const id = rowId(row);
+    keysById.set(id, rowOrder(row, input.section).key);
+    if (input.reorderableEnvironmentIds.has(row.environmentId)) writableIds.add(id);
+  }
+  const keyHolders = new Map<string, number>();
+  keysById.forEach((key) => {
+    if (key != null) keyHolders.set(key, (keyHolders.get(key) ?? 0) + 1);
+  });
+  return { keysById, writableIds, keyHolders };
+}
+
 export function computeThreadMoveAvailability(input: {
   readonly ordered: readonly OrderRow[];
   readonly allThreads?: readonly OrderRow[];
+  readonly index?: ThreadMoveAvailabilityIndex;
   readonly section: PendingThreadOrder["section"];
   readonly reorderableEnvironmentIds: ReadonlySet<EnvironmentId>;
   readonly pendingOrder?: PendingThreadOrder | null;
@@ -139,17 +169,27 @@ export function computeThreadMoveAvailability(input: {
     indexById.set(id, orderedIds.length);
     orderedIds.push(id);
   }
-  const keysById = new Map<string, string | null>();
-  const writableIds = new Set<string>();
-  for (const row of input.allThreads ?? input.ordered) {
-    const id = rowId(row);
-    keysById.set(id, rowOrder(row, input.section).key);
-    if (input.reorderableEnvironmentIds.has(row.environmentId)) writableIds.add(id);
+  const { keysById, writableIds, keyHolders } =
+    input.index ??
+    createThreadMoveAvailabilityIndex({
+      allThreads: input.allThreads ?? input.ordered,
+      section: input.section,
+      reorderableEnvironmentIds: input.reorderableEnvironmentIds,
+    });
+  // A key is reserved when some thread outside `ordered` holds it.
+  const orderedHolders = new Map<string, number>();
+  for (const id of orderedIds) {
+    const key = keysById.get(id);
+    if (key != null) orderedHolders.set(key, (orderedHolders.get(key) ?? 0) + 1);
   }
-  const reservedKeys = new Set<string>();
-  keysById.forEach((key, id) => {
-    if (key != null && !indexById.has(id)) reservedKeys.add(key);
+  let reservedCount = keyHolders.size;
+  orderedHolders.forEach((count, key) => {
+    if (keyHolders.get(key) === count) reservedCount -= 1;
   });
+  const reservedKeys = {
+    size: reservedCount,
+    has: (key: string) => (keyHolders.get(key) ?? 0) > (orderedHolders.get(key) ?? 0),
+  };
   // A swap permutes two rows without changing the multiset, so the assignment
   // set differs from the unswapped baseline at at most those two positions, and
   // mismatch/writability tallies computed once per section answer each row with
