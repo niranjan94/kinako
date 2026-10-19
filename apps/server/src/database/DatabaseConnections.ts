@@ -200,7 +200,11 @@ const make = Effect.gen(function* () {
           read_only = excluded.read_only,
           updated_at = excluded.updated_at
       `.pipe(Effect.mapError(storageFailed));
-      if (draft.password === null) {
+      // AWS methods fetch the login on each connect, so a stored password would only linger.
+      const storesPassword =
+        draft.target.engine !== "postgres" ||
+        (draft.target.auth?.kind ?? "password") === "password";
+      if (draft.password === null || !storesPassword) {
         yield* secrets.remove(passwordSecretName(id)).pipe(Effect.mapError(storageFailed));
       } else if (draft.password !== undefined) {
         yield* secrets

@@ -33,6 +33,37 @@ const Identifier = TrimmedNonEmptyString.check(Schema.isMaxLength(DATABASE_NAME_
 const DatabasePostgresSslMode = Schema.Literals(["disable", "prefer", "require", "verify-full"]);
 export type DatabasePostgresSslMode = typeof DatabasePostgresSslMode.Type;
 
+/** Absent profile and region fall back to the environment's default AWS configuration. */
+const AwsLocation = {
+  profile: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(128))),
+  region: Schema.optionalKey(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(64), Schema.isPattern(/^[a-z0-9-]+$/)),
+  ),
+};
+
+/**
+ * How the server obtains the login. AWS credentials resolve on the environment's machine, so a
+ * profile names an entry in that machine's AWS configuration, not the client's.
+ */
+export const DatabasePostgresAuth = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("password") }),
+  Schema.Struct({ kind: Schema.Literal("aws-iam"), ...AwsLocation }),
+  Schema.Struct({
+    kind: Schema.Literal("aws-secrets-manager"),
+    ...AwsLocation,
+    secretId: TrimmedNonEmptyString.check(Schema.isMaxLength(2048)),
+    /** Connect to the host and port stored in the secret instead of the target's. */
+    useSecretHost: Schema.Boolean,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("aws-parameter-store"),
+    ...AwsLocation,
+    parameterName: TrimmedNonEmptyString.check(Schema.isMaxLength(2048)),
+  }),
+]);
+export type DatabasePostgresAuth = typeof DatabasePostgresAuth.Type;
+export type DatabasePostgresAuthKind = DatabasePostgresAuth["kind"];
+
 export const DatabasePostgresTarget = Schema.Struct({
   engine: Schema.Literal("postgres"),
   host: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
@@ -40,6 +71,8 @@ export const DatabasePostgresTarget = Schema.Struct({
   database: Identifier,
   user: Identifier,
   sslMode: DatabasePostgresSslMode,
+  /** Absent means a password, which is how connections saved before this field authenticate. */
+  auth: Schema.optionalKey(DatabasePostgresAuth),
 });
 export type DatabasePostgresTarget = typeof DatabasePostgresTarget.Type;
 

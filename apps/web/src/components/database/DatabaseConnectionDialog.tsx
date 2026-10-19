@@ -8,6 +8,7 @@ import {
   type DatabaseConnectionLevel,
   type EnvironmentId,
   type ProjectId,
+  type DatabasePostgresAuthKind,
   type DatabasePostgresSslMode,
 } from "@t3tools/contracts";
 import {
@@ -68,6 +69,23 @@ export function DatabaseConnectionDialog({
   const [database, setDatabase] = useState(pg?.database ?? "");
   const [user, setUser] = useState(pg?.user ?? "");
   const [sslMode, setSslMode] = useState<DatabasePostgresSslMode>(pg?.sslMode ?? "prefer");
+  const auth = pg?.auth;
+  const [authKind, setAuthKind] = useState<DatabasePostgresAuthKind>(auth?.kind ?? "password");
+  const [awsProfile, setAwsProfile] = useState(
+    auth && auth.kind !== "password" ? (auth.profile ?? "") : "",
+  );
+  const [awsRegion, setAwsRegion] = useState(
+    auth && auth.kind !== "password" ? (auth.region ?? "") : "",
+  );
+  const [secretId, setSecretId] = useState(
+    auth?.kind === "aws-secrets-manager" ? auth.secretId : "",
+  );
+  const [useSecretHost, setUseSecretHost] = useState(
+    auth?.kind === "aws-secrets-manager" && auth.useSecretHost,
+  );
+  const [parameterName, setParameterName] = useState(
+    auth?.kind === "aws-parameter-store" ? auth.parameterName : "",
+  );
   const [path, setPath] = useState(
     connection?.target.engine === "sqlite" ? connection.target.path : "",
   );
@@ -82,6 +100,23 @@ export function DatabaseConnectionDialog({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const id = useId();
+  const usesPassword = authKind === "password";
+  const awsLocation = () => ({
+    ...(awsProfile.trim() ? { profile: awsProfile } : {}),
+    ...(awsRegion.trim() ? { region: awsRegion } : {}),
+  });
+  const postgresAuth = () => {
+    switch (authKind) {
+      case "password":
+        return {};
+      case "aws-iam":
+        return { auth: { kind: authKind, ...awsLocation() } };
+      case "aws-secrets-manager":
+        return { auth: { kind: authKind, ...awsLocation(), secretId, useSecretHost } };
+      case "aws-parameter-store":
+        return { auth: { kind: authKind, ...awsLocation(), parameterName } };
+    }
+  };
   const draft = () =>
     decodeDraft({
       ...(connection ? { id: connection.id } : {}),
@@ -93,13 +128,15 @@ export function DatabaseConnectionDialog({
       target:
         engine === "sqlite"
           ? { engine, path }
-          : { engine, host, port: Number(port), database, user, sslMode },
+          : { engine, host, port: Number(port), database, user, sslMode, ...postgresAuth() },
       readOnly,
-      ...(passwordAction === "replace" && (storedPassword || password)
-        ? { password }
-        : passwordAction === "clear"
-          ? { password: null }
-          : {}),
+      ...(engine === "postgres" && !usesPassword
+        ? {}
+        : passwordAction === "replace" && (storedPassword || password)
+          ? { password }
+          : passwordAction === "clear"
+            ? { password: null }
+            : {}),
     });
   const test = async () => {
     setBusy(true);
@@ -140,7 +177,12 @@ export function DatabaseConnectionDialog({
           : [environmentId];
       if (targets.length === 0)
         throw new Error("Connect an environment before saving a connection.");
-      if (level === "global" && connection?.hasPassword && passwordAction === "keep") {
+      if (
+        level === "global" &&
+        connection?.hasPassword &&
+        usesPassword &&
+        passwordAction === "keep"
+      ) {
         for (const id of targets) {
           const list = databaseValue(
             await databaseState.listConnections.run(registry, { environmentId: id, input: {} }),
@@ -288,31 +330,121 @@ export function DatabaseConnectionDialog({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-password`}>Password</Label>
-                    {storedPassword && (
-                      <DatabaseSelect
-                        id={`${id}-password-action`}
-                        label="Stored password"
-                        value={passwordAction}
-                        options={[
-                          { value: "keep", label: "Keep the stored password" },
-                          { value: "replace", label: "Set a new password" },
-                          { value: "clear", label: "Remove the stored password" },
-                        ]}
-                        onChange={setPasswordAction}
-                      />
-                    )}
-                    {passwordAction === "replace" && (
-                      <Input
-                        id={`${id}-password`}
-                        type="password"
-                        autoComplete="new-password"
-                        placeholder={storedPassword ? "New password" : "Leave empty for none"}
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                      />
-                    )}
+                    <Label htmlFor={`${id}-auth`}>Authentication</Label>
+                    <DatabaseSelect
+                      id={`${id}-auth`}
+                      label="Authentication"
+                      value={authKind}
+                      options={[
+                        { value: "password", label: "Password" },
+                        { value: "aws-iam", label: "AWS IAM" },
+                        { value: "aws-secrets-manager", label: "AWS Secrets Manager" },
+                        { value: "aws-parameter-store", label: "AWS Parameter Store" },
+                      ]}
+                      onChange={setAuthKind}
+                    />
                   </div>
+                  {usesPassword && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor={`${id}-password`}>Password</Label>
+                      {storedPassword && (
+                        <DatabaseSelect
+                          id={`${id}-password-action`}
+                          label="Stored password"
+                          value={passwordAction}
+                          options={[
+                            { value: "keep", label: "Keep the stored password" },
+                            { value: "replace", label: "Set a new password" },
+                            { value: "clear", label: "Remove the stored password" },
+                          ]}
+                          onChange={setPasswordAction}
+                        />
+                      )}
+                      {passwordAction === "replace" && (
+                        <Input
+                          id={`${id}-password`}
+                          type="password"
+                          autoComplete="new-password"
+                          placeholder={storedPassword ? "New password" : "Leave empty for none"}
+                          value={password}
+                          onChange={(event) => setPassword(event.target.value)}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {!usesPassword && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                          <Label htmlFor={`${id}-aws-profile`}>AWS profile</Label>
+                          <Input
+                            id={`${id}-aws-profile`}
+                            autoComplete="off"
+                            placeholder="Default credentials"
+                            value={awsProfile}
+                            onChange={(event) => setAwsProfile(event.target.value)}
+                          />
+                        </div>
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                          <Label htmlFor={`${id}-aws-region`}>Region</Label>
+                          <Input
+                            id={`${id}-aws-region`}
+                            autoComplete="off"
+                            placeholder="From the profile"
+                            value={awsRegion}
+                            onChange={(event) => setAwsRegion(event.target.value)}
+                          />
+                        </div>
+                      </div>
+                      {authKind === "aws-secrets-manager" && (
+                        <>
+                          <div className="flex flex-col gap-1.5">
+                            <Label htmlFor={`${id}-secret-id`}>Secret name or ARN</Label>
+                            <Input
+                              id={`${id}-secret-id`}
+                              font="mono"
+                              autoComplete="off"
+                              value={secretId}
+                              onChange={(event) => setSecretId(event.target.value)}
+                            />
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex flex-col gap-1">
+                              <Label htmlFor={`${id}-secret-host`}>
+                                Use host and port from the secret
+                              </Label>
+                              <p className="text-xs text-muted-foreground">
+                                Falls back to the host and port above when the secret has none.
+                              </p>
+                            </div>
+                            <Switch
+                              id={`${id}-secret-host`}
+                              checked={useSecretHost}
+                              onCheckedChange={setUseSecretHost}
+                            />
+                          </div>
+                        </>
+                      )}
+                      {authKind === "aws-parameter-store" && (
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor={`${id}-parameter`}>Parameter name</Label>
+                          <Input
+                            id={`${id}-parameter`}
+                            font="mono"
+                            autoComplete="off"
+                            placeholder="/app/database/password"
+                            value={parameterName}
+                            onChange={(event) => setParameterName(event.target.value)}
+                          />
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {authKind === "aws-iam"
+                          ? "Signs a token with the environment's AWS credentials. The user needs the rds_iam role, and RDS requires TLS."
+                          : "Read with the environment's AWS credentials on each connect. A JSON value may supply username, password, host and port; any other value is the password."}
+                      </p>
+                    </>
+                  )}
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor={`${id}-tls`}>TLS</Label>
                     <DatabaseSelect
