@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   visible: "visible",
   live: true,
   completedAt: null as string | null,
+  wakeAt: null as string | null,
   archivedAt: null as string | null,
   input: false,
   approval: false,
@@ -80,6 +81,7 @@ function mockThreadShell() {
     latestRunRequestedAt: SHELL_NOW,
     latestRunStartedAt: SHELL_NOW,
     latestRunCompletedAt: state.completedAt ? DateTime.makeUnsafe(state.completedAt) : undefined,
+    snoozeWakeNotifiedAt: state.wakeAt ? DateTime.makeUnsafe(state.wakeAt) : null,
     archivedAt: state.archivedAt ? DateTime.makeUnsafe(state.archivedAt) : null,
     settledOverride: null,
     settledAt: null,
@@ -171,6 +173,7 @@ beforeEach(() => {
     visible: "visible",
     live: true,
     completedAt: null,
+    wakeAt: null,
     archivedAt: null,
     input: false,
     approval: false,
@@ -358,5 +361,61 @@ describe("thread notifications", () => {
       tag: "env-1:thread-1",
       silent: true,
     });
+  });
+});
+
+describe("snooze reminders", () => {
+  it.each(["off", "notifications", "sound", "notifications-and-sound"] as const)(
+    "respects %s mode and opens the thread",
+    async (mode) => {
+      state.mode = mode;
+      await render();
+      state.wakeAt = "2026-09-13T10:00:00.000Z";
+      await render();
+      await render();
+      expect(state.add).toHaveBeenCalledTimes(1);
+      expect(state.add.mock.calls[0]?.[0].title).toBe("Snooze ended");
+      expect(state.sound).toHaveBeenCalledTimes(
+        mode === "sound" || mode === "notifications-and-sound" ? 1 : 0,
+      );
+      state.add.mock.calls[0]?.[0].actionProps.onClick();
+      expect(state.navigate).toHaveBeenCalledWith({
+        to: "/$environmentId/$threadId",
+        params: { environmentId: "env-1", threadId: "thread-1" },
+      });
+    },
+  );
+  it.each(["off", "notifications", "sound", "notifications-and-sound"] as const)(
+    "respects %s in the background",
+    async (mode) => {
+      state.mode = mode;
+      state.focused = false;
+      await render();
+      state.wakeAt = "2026-09-13T10:00:00.000Z";
+      await render();
+      expect(state.add).not.toHaveBeenCalled();
+      expect(state.notification).toHaveBeenCalledTimes(
+        mode === "notifications" || mode === "notifications-and-sound" ? 1 : 0,
+      );
+    },
+  );
+  it("suppresses the focused thread, including sound", async () => {
+    state.mode = "notifications-and-sound";
+    state.active.threadId = "thread-1";
+    await render();
+    state.wakeAt = "2026-09-13T10:00:00.000Z";
+    await render();
+    expect(state.add).not.toHaveBeenCalled();
+    expect(state.sound).not.toHaveBeenCalled();
+    expect(state.notification).not.toHaveBeenCalled();
+  });
+  it("does not replay a persisted announcement on load or reconnect", async () => {
+    state.wakeAt = "2026-09-13T10:00:00.000Z";
+    await render();
+    state.live = false;
+    await render();
+    state.live = true;
+    await render();
+    expect(state.add).not.toHaveBeenCalled();
   });
 });

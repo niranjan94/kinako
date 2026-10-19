@@ -285,3 +285,10 @@ export function localSnoozeDate(date: Date): string {
 export function localSnoozeTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
+
+export function hasNewSnoozeWake(
+  previous: DateTime.Utc | null | undefined,
+  current: DateTime.Utc | null | undefined,
+): boolean {
+  return current != null && (previous == null || !DateTime.Equivalence(previous, current));
+}

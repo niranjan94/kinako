@@ -70,6 +70,8 @@ import Migration0064 from "./Migrations/064_DatabaseConnections.ts";
 import Migration0065 from "./Migrations/065_DropUnusedV1Projections.ts";
 import Migration0066 from "./Migrations/066_CanonicalizeThreadPullRequestLinks.ts";
 
+import Migration0067 from "./Migrations/067_SnoozeWakeIndex.ts";
+
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
   [2, "OrchestrationCommandReceipts", Migration0002],
@@ -138,6 +140,7 @@ export const migrationEntries = [
   [64, "DatabaseConnections", Migration0064],
   [65, "DropUnusedV1Projections", Migration0065],
   [66, "CanonicalizeThreadPullRequestLinks", Migration0066],
+  [67, "SnoozeWakeIndex", Migration0067],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

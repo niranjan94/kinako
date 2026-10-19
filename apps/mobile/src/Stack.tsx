@@ -1,3 +1,4 @@
+import { SnoozeWakeNotifications } from "./features/agent-awareness/SnoozeWakeNotifications";
 import { ThreadDatabaseRouteScreen } from "./features/database/ThreadDatabaseRouteScreen";
 import { ComponentCatalogScreen } from "./features/development/ComponentCatalogScreen";
 import { PullRequestGuideStopScreen } from "./features/pull-requests/guide/PullRequestGuideScreen";
@@ -627,6 +628,7 @@ function RootStackLayout(props: {
   return (
     <HardwareKeyboardCommandProvider pathname={pathname}>
       <ThreadOutboxDrainWorker />
+      <SnoozeWakeNotifications />
       <ShowcaseCaptureCoordinator pathname={pathname} />
       <ExistingThreadSettingsRouteProvider>
         <AndroidWorkspaceTabsProvider>

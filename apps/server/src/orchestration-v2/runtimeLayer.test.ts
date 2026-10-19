@@ -1,3 +1,6 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as SnoozeWakeReactor from "./SnoozeWakeReactor.ts";
+import * as Scheduler from "../scheduling/Scheduler.ts";
 import { SourceControlProviderKind } from "@t3tools/contracts";
 import { limitRecoveryCommand } from "./UsageLimitRecoveryWorker.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
@@ -6716,3 +6719,268 @@ it.layer(layerQueueResumeDisabledInstanceTest)(
     );
   },
 );
+
+it.layer(layerSharedApplicationDataPlaneTest)("snooze wake announcements", (it) => {
+  it.effect.each([
+    "due",
+    "overdue",
+    "cancelled",
+    "rescheduled",
+    "archived",
+    "deleted",
+    "completed",
+    "failed",
+    "approval",
+    "pending-input",
+  ] as const)("announces only eligible snoozes: %s", (scenario) =>
+    Effect.gen(function* () {
+      const projects = yield* ProjectService.ProjectService;
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const sink = yield* EventSink.EventSinkV2;
+      const store = yield* ProjectionStore.ProjectionStoreV2.pipe(
+        Effect.provide(ProjectionStore.layer),
+      );
+      const projectId = ProjectId.make(`wake-project:${scenario}`);
+      const threadId = ThreadId.make(`wake-thread:${scenario}`);
+      yield* projects.create({
+        commandId: CommandId.make(`wake-project:${scenario}`),
+        projectId,
+        title: "Wake reminders",
+        workspaceRoot: `/tmp/wake-${scenario}`,
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make(`wake-create:${scenario}`),
+        threadId,
+        projectId,
+        title: "Reminder",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const now = yield* DateTime.now;
+      const wakeAt = DateTime.add(now, { seconds: 60 });
+      yield* orchestrator.dispatch({
+        type: "thread.snooze",
+        commandId: CommandId.make(`wake-snooze:${scenario}`),
+        threadId,
+        snoozedUntil: DateTime.formatIso(wakeAt),
+      });
+      const announce = (id: string) =>
+        orchestrator.dispatch({
+          type: "thread.snooze.wake-announce",
+          commandId: CommandId.make(`wake-announce:${scenario}:${id}`),
+          threadId,
+          wakeAt,
+        });
+      assert.lengthOf((yield* announce("before")).storedEvents, 0);
+      assert.lengthOf(yield* store.getSnoozeWakeCandidates(now), 0);
+      yield* TestClock.adjust("1 second");
+      if (scenario === "cancelled")
+        yield* orchestrator.dispatch({
+          type: "thread.unsnooze",
+          commandId: CommandId.make(`wake-cancel:${scenario}`),
+          threadId,
+          reason: "user",
+        });
+      if (scenario === "rescheduled")
+        yield* orchestrator.dispatch({
+          type: "thread.snooze",
+          commandId: CommandId.make(`wake-reschedule:${scenario}`),
+          threadId,
+          snoozedUntil: DateTime.formatIso(DateTime.add(wakeAt, { hours: 1 })),
+        });
+      if (scenario === "archived")
+        yield* orchestrator.dispatch({
+          type: "thread.archive",
+          commandId: CommandId.make(`wake-archive:${scenario}`),
+          threadId,
+        });
+      if (scenario === "deleted")
+        yield* orchestrator.dispatch({
+          type: "thread.delete",
+          commandId: CommandId.make(`wake-delete:${scenario}`),
+          threadId,
+        });
+      if (scenario === "completed" || scenario === "failed") {
+        const snoozedThread = (yield* orchestrator.getThreadProjection(threadId)).thread;
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make(`wake-message:${scenario}`),
+          threadId,
+          messageId: MessageId.make(`wake-message:${scenario}`),
+          text: "Work",
+          attachments: [],
+          modelSelection,
+          dispatchMode: { type: "queue_after_active" },
+          createdBy: "agent",
+          creationSource: "server",
+        });
+        const projection = yield* orchestrator.getThreadProjection(threadId);
+        const run = projection.runs[0]!;
+        yield* sink.commitCommand({
+          commandId: CommandId.make(`wake-complete:${scenario}`),
+          threadId,
+          commandType: "provider-event",
+          acceptedAt: yield* DateTime.now,
+          events: [
+            {
+              id: EventId.make(`wake-restore:${scenario}`),
+              type: "thread.snoozed",
+              threadId,
+              occurredAt: yield* DateTime.now,
+              payload: snoozedThread,
+            },
+            {
+              id: EventId.make(`wake-complete:${scenario}`),
+              type: "run.updated",
+              threadId,
+              runId: run.id,
+              occurredAt: yield* DateTime.now,
+              payload: { ...run, status: scenario, completedAt: yield* DateTime.now },
+            },
+          ],
+          effects: [],
+        });
+      }
+      if (scenario === "approval" || scenario === "pending-input") {
+        const at = yield* DateTime.now;
+        yield* sink.commitCommand({
+          commandId: CommandId.make(`wake-request:${scenario}`),
+          threadId,
+          commandType: "provider-event",
+          acceptedAt: at,
+          events: [
+            {
+              id: EventId.make(`wake-request:${scenario}`),
+              type: "runtime-request.updated",
+              threadId,
+              occurredAt: at,
+              payload: {
+                id: RuntimeRequestId.make(`wake-request:${scenario}`),
+                nodeId: NodeId.make("wake-node"),
+                providerTurnId: null,
+                nativeRequestRef: null,
+                kind: "user_input",
+                status: scenario === "approval" ? "resolved" : "pending",
+                responseCapability: { type: "message" },
+                createdAt: at,
+                resolvedAt: scenario === "approval" ? at : null,
+              },
+            },
+          ],
+          effects: [],
+        });
+      }
+      yield* TestClock.adjust(scenario === "overdue" ? "2 hours" : "59 seconds");
+      const before = (yield* orchestrator.getThreadProjection(threadId)).thread;
+      const result = yield* announce("due");
+      const eligible = scenario === "due" || scenario === "overdue";
+      assert.equal(result.storedEvents.length, eligible ? 1 : 0);
+      const after = (yield* orchestrator.getThreadProjection(threadId)).thread;
+      if (eligible) {
+        assert.equal(result.storedEvents[0]!.event.type, "thread.snooze-woke");
+        assert.deepEqual(after.snoozeWakeNotifiedAt, wakeAt);
+        assert.deepEqual(after.snoozedUntil, before.snoozedUntil);
+        assert.deepEqual(after.snoozedAt, before.snoozedAt);
+        assert.deepEqual(after.updatedAt, before.updatedAt);
+        assert.deepEqual(
+          (yield* orchestrator.getShellSnapshot()).threads.find((thread) => thread.id === threadId)
+            ?.snoozeWakeNotifiedAt,
+          wakeAt,
+        );
+      } else assert.isNull(after.snoozeWakeNotifiedAt ?? null);
+      assert.lengthOf((yield* announce("repeat")).storedEvents, 0);
+      assert.lengthOf(yield* store.getSnoozeWakeCandidates(yield* DateTime.now), 0);
+    }),
+  );
+});
+
+it.layer(layerSharedApplicationDataPlaneTest)("snooze wake scheduler", (it) => {
+  it.effect.each(["on time", "after restart"] as const)(
+    "delivers one persisted announcement %s",
+    (scenario) =>
+      Effect.gen(function* () {
+        const projects = yield* ProjectService.ProjectService;
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const store = yield* ProjectionStore.ProjectionStoreV2.pipe(
+          Effect.provide(ProjectionStore.layer),
+        );
+        const projectId = ProjectId.make(`wake-scheduler:${scenario}`);
+        const threadId = ThreadId.make(`wake-scheduler:${scenario}`);
+        yield* projects.create({
+          commandId: CommandId.make(`wake-scheduler-project:${scenario}`),
+          projectId,
+          title: "Reminders",
+          workspaceRoot: `/tmp/wake-scheduler-${scenario}`,
+        });
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make(`wake-scheduler-create:${scenario}`),
+          threadId,
+          projectId,
+          title: "Reminder",
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdBy: "user",
+          creationSource: "web",
+        });
+        const wakeAt = DateTime.add(yield* DateTime.now, { seconds: 60 });
+        yield* orchestrator.dispatch({
+          type: "thread.snooze",
+          commandId: CommandId.make(`wake-scheduler-snooze:${scenario}`),
+          threadId,
+          snoozedUntil: DateTime.formatIso(wakeAt),
+        });
+        if (scenario === "after restart") yield* TestClock.adjust("2 hours");
+        const receipts = yield* Queue.unbounded<void>();
+        const worker = SnoozeWakeReactor.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              Scheduler.layer,
+              NodeCrypto.layer,
+              Layer.succeed(ProjectionStore.ProjectionStoreV2, store),
+              Layer.succeed(Orchestrator.OrchestratorV2, {
+                ...orchestrator,
+                dispatch: (command) =>
+                  orchestrator
+                    .dispatch(command)
+                    .pipe(
+                      Effect.tap((result) =>
+                        result.storedEvents.length === 0
+                          ? Effect.void
+                          : Queue.offer(receipts, undefined),
+                      ),
+                    ),
+              }),
+            ),
+          ),
+        );
+        yield* Effect.gen(function* () {
+          if (scenario === "on time") {
+            yield* TestClock.adjust("55 seconds");
+            assert.isNull((yield* store.getThread(threadId)).snoozeWakeNotifiedAt ?? null);
+            yield* TestClock.adjust("5 seconds");
+          }
+          yield* Queue.take(receipts);
+          assert.deepEqual((yield* store.getThread(threadId)).snoozeWakeNotifiedAt, wakeAt);
+          yield* TestClock.adjust("10 seconds");
+          assert.equal(yield* Queue.size(receipts), 0);
+        }).pipe(Effect.provide(worker));
+        // Rebuilding only the worker simulates restart against the same persisted state.
+        yield* TestClock.adjust("1 hour");
+        yield* Effect.gen(function* () {
+          yield* TestClock.adjust("10 seconds");
+          assert.equal(yield* Queue.size(receipts), 0);
+          assert.lengthOf(yield* store.getSnoozeWakeCandidates(yield* DateTime.now), 0);
+        }).pipe(Effect.provide(worker));
+      }),
+  );
+});

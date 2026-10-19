@@ -412,6 +412,9 @@ export interface ProjectionStoreV2Shape {
   readonly getThread: (
     threadId: ThreadId,
   ) => Effect.Effect<OrchestrationV2AppThread, ProjectionStoreV2Error>;
+  readonly getSnoozeWakeCandidates: (
+    now: DateTime.Utc,
+  ) => Effect.Effect<ReadonlyArray<OrchestrationV2AppThread>, ProjectionStoreV2Error>;
   readonly getLimitRecoveryCandidates: (options: {
     readonly now: DateTime.Utc;
     readonly autoResume: boolean;
@@ -744,6 +747,7 @@ export function applyToProjection(
     case "thread.unsettled":
     case "thread.snoozed":
     case "thread.unsnoozed":
+    case "thread.snooze-woke":
     case "thread.auto-settle-set":
     case "thread.pinned":
     case "thread.unpinned":
@@ -1582,6 +1586,7 @@ export function threadShellFromProjection(
     unsettledAt: projection.thread.unsettledAt ?? null,
     snoozedUntil: projection.thread.snoozedUntil ?? null,
     snoozedAt: projection.thread.snoozedAt ?? null,
+    snoozeWakeNotifiedAt: projection.thread.snoozeWakeNotifiedAt ?? null,
     pinnedAt: projection.thread.pinnedAt ?? null,
 
     autoSettleDisabledAt: projection.thread.autoSettleDisabledAt ?? null,
@@ -1854,6 +1859,7 @@ function shellFromState(input: {
     unsettledAt: input.state.thread.unsettledAt ?? null,
     snoozedUntil: input.state.thread.snoozedUntil ?? null,
     snoozedAt: input.state.thread.snoozedAt ?? null,
+    snoozeWakeNotifiedAt: input.state.thread.snoozeWakeNotifiedAt ?? null,
     pinnedAt: input.state.thread.pinnedAt ?? null,
 
     autoSettleDisabledAt: input.state.thread.autoSettleDisabledAt ?? null,
@@ -1905,6 +1911,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           case "thread.unsettled":
           case "thread.snoozed":
           case "thread.unsnoozed":
+          case "thread.snooze-woke":
           case "thread.auto-settle-set":
           case "thread.pinned":
           case "thread.unpinned":
@@ -2738,6 +2745,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           event.type !== "thread.unsettled" &&
           event.type !== "thread.snoozed" &&
           event.type !== "thread.unsnoozed" &&
+          event.type !== "thread.snooze-woke" &&
           event.type !== "thread.auto-settle-set" &&
           event.type !== "thread.pinned" &&
           event.type !== "thread.unpinned" &&
@@ -3584,6 +3592,31 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             : new ProjectionStoreReadError({ threadId, cause }),
         ),
       );
+
+    const getSnoozeWakeCandidates = Effect.fn("ProjectionStore.getSnoozeWakeCandidates")(
+      function* (now: DateTime.Utc) {
+        const rows = yield* sql<{ readonly payload_json: string }>`
+        SELECT payload_json FROM orchestration_v2_projection_threads
+        WHERE deleted_at IS NULL
+          AND json_extract(payload_json, '$.archivedAt') IS NULL
+          AND julianday(json_extract(payload_json, '$.snoozedUntil')) <= julianday(${DateTime.formatIso(now)})
+          AND json_extract(payload_json, '$.snoozeWakeNotifiedAt') IS NOT json_extract(payload_json, '$.snoozedUntil')
+          AND NOT EXISTS (
+            SELECT 1 FROM orchestration_v2_projection_runs r
+            WHERE r.thread_id = orchestration_v2_projection_threads.thread_id
+              AND r.status IN ('completed', 'failed')
+              AND julianday(r.completed_at) > julianday(json_extract(orchestration_v2_projection_threads.payload_json, '$.snoozedAt'))
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM orchestration_v2_projection_runtime_requests request
+            WHERE request.thread_id = orchestration_v2_projection_threads.thread_id
+              AND (request.status = 'pending' OR julianday(request.created_at) > julianday(json_extract(orchestration_v2_projection_threads.payload_json, '$.snoozedAt')))
+          )
+      `;
+        return yield* Effect.forEach(rows, (row) => decodeThreadPayload(row.payload_json));
+      },
+      Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
+    );
 
     const getLimitRecoveryCandidates = Effect.fn("ProjectionStore.getLimitRecoveryCandidates")(
       function* (options: Parameters<ProjectionStoreV2Shape["getLimitRecoveryCandidates"]>[0]) {
@@ -6162,6 +6195,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getRuntimeRequest,
       getPlan,
       getProviderControlContext,
+      getSnoozeWakeCandidates,
       getLimitRecoveryCandidates,
       getRecoveryThreadIds,
       getUnreadableThreadIds,
@@ -6333,6 +6367,41 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                 settledAt: thread.settledAt,
                 pullRequests: thread.pullRequests ?? [],
               })),
+          ),
+        ),
+      getSnoozeWakeCandidates: (now) =>
+        Ref.get(replayState).pipe(
+          Effect.map((state) =>
+            [...state.projections.values()]
+              .filter(({ thread, runs, runtimeRequests }) => {
+                const snoozedAtMs =
+                  thread.snoozedAt == null ? null : DateTime.toEpochMillis(thread.snoozedAt);
+                return (
+                  !runs.some(
+                    (run) =>
+                      snoozedAtMs !== null &&
+                      (run.status === "completed" || run.status === "failed") &&
+                      run.completedAt !== null &&
+                      DateTime.toEpochMillis(run.completedAt) > snoozedAtMs,
+                  ) &&
+                  !runtimeRequests.some(
+                    (request) =>
+                      request.status === "pending" ||
+                      (snoozedAtMs !== null &&
+                        DateTime.toEpochMillis(request.createdAt) > snoozedAtMs),
+                  )
+                );
+              })
+              .map(({ thread }) => thread)
+              .filter(
+                (thread) =>
+                  thread.deletedAt === null &&
+                  thread.archivedAt === null &&
+                  thread.snoozedUntil != null &&
+                  DateTime.toEpochMillis(thread.snoozedUntil) <= DateTime.toEpochMillis(now) &&
+                  (thread.snoozeWakeNotifiedAt == null ||
+                    !DateTime.Equivalence(thread.snoozeWakeNotifiedAt, thread.snoozedUntil)),
+              ),
           ),
         ),
       getLimitRecoveryCandidates: (options) =>

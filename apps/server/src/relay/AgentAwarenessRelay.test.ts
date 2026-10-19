@@ -294,6 +294,7 @@ describe("AgentAwarenessRelay", () => {
       "turn-item.updated",
       "provider-turn.updated",
       "thread.visited",
+      "thread.snooze-woke",
       "thread.pinned",
     ] as const) {
       assert.isFalse(AgentAwarenessRelay.shouldPublishAgentAwarenessEvent({ type }));
