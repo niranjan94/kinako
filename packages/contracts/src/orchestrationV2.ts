@@ -377,6 +377,12 @@ const OrchestrationV2ThreadSummarizeFields = {
   failure: Schema.optional(TrimmedNonEmptyString),
 } as const;
 
+export const THREAD_GROUP_MAX_LENGTH = 64;
+export const ThreadGroupName = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(THREAD_GROUP_MAX_LENGTH),
+);
+export type ThreadGroupName = typeof ThreadGroupName.Type;
+
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -425,6 +431,7 @@ export const OrchestrationV2AppThread = Schema.Struct({
   autoSettleDisabledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   activeOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  group: Schema.optional(Schema.NullOr(ThreadGroupName)),
   lastVisitedAt: Schema.NullOr(Schema.DateTimeUtc).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
@@ -1693,6 +1700,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.unpinned",
       "thread.pin-reordered",
       "thread.active-reordered",
+      "thread.group-set",
       "thread.visited",
       "thread.marked-unread",
       "thread.metadata-updated",
@@ -1952,6 +1960,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   autoSettleDisabledAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   pinOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   activeOrderKey: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  group: Schema.optional(Schema.NullOr(ThreadGroupName)),
   lastVisitedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   titleRegeneration: Schema.optional(
     Schema.NullOr(
@@ -2523,6 +2532,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.unpinned",
       "thread.pin-reordered",
       "thread.active-reordered",
+      "thread.group-set",
       "thread.visited",
       "thread.marked-unread",
       "thread.pull-request-synced",
@@ -2758,6 +2768,12 @@ export const OrchestrationV2Command = Schema.Union([
     commandId: CommandId,
     threadId: ThreadId,
     orderKey: TrimmedNonEmptyString,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.group.set"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    group: Schema.NullOr(ThreadGroupName),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.visit"),

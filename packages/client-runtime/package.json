@@ -303,6 +303,10 @@
       "types": "./src/state/threadSort.ts",
       "default": "./src/state/threadSort.ts"
     },
+    "./state/thread-groups": {
+      "types": "./src/state/threadGroups.ts",
+      "default": "./src/state/threadGroups.ts"
+    },
     "./state/thread-inbox": {
       "types": "./src/state/threadInbox.ts",
       "default": "./src/state/threadInbox.ts"

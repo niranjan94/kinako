@@ -761,6 +761,7 @@ export function applyToProjection(
       };
     case "thread.visited":
     case "thread.marked-unread":
+    case "thread.group-set":
       return {
         ...projection,
         thread: event.payload,
@@ -1585,6 +1586,7 @@ export function threadShellFromProjection(
 
     autoSettleDisabledAt: projection.thread.autoSettleDisabledAt ?? null,
     pinOrderKey: projection.thread.pinOrderKey ?? null,
+    group: projection.thread.group ?? null,
     lastVisitedAt: projection.thread.lastVisitedAt,
     titleRegeneration: projection.thread.titleRegeneration ?? null,
     limitRecovery: projection.thread.limitRecovery ?? null,
@@ -1856,6 +1858,7 @@ function shellFromState(input: {
 
     autoSettleDisabledAt: input.state.thread.autoSettleDisabledAt ?? null,
     pinOrderKey: input.state.thread.pinOrderKey ?? null,
+    group: input.state.thread.group ?? null,
     lastVisitedAt: input.state.thread.lastVisitedAt,
     titleRegeneration: input.state.thread.titleRegeneration ?? null,
     limitRecovery: input.state.thread.limitRecovery ?? null,
@@ -1907,6 +1910,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           case "thread.unpinned":
           case "thread.pin-reordered":
           case "thread.active-reordered":
+          case "thread.group-set":
           case "thread.visited":
           case "thread.marked-unread":
           case "thread.metadata-updated":
@@ -2740,6 +2744,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           event.type !== "thread.pin-reordered" &&
           event.type !== "thread.visited" &&
           event.type !== "thread.marked-unread" &&
+          event.type !== "thread.group-set" &&
           event.type !== "thread.metadata-updated" &&
           event.type !== "thread.runtime-mode-updated" &&
           event.type !== "thread.interaction-mode-updated" &&

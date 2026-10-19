@@ -461,6 +461,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.unpin":
     case "thread.pin.reorder":
     case "thread.active.reorder":
+    case "thread.group.set":
     case "thread.visit":
     case "thread.mark-unread":
     case "thread.metadata.update":
@@ -2518,6 +2519,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           | "thread.unpin"
           | "thread.pin.reorder"
           | "thread.active.reorder"
+          | "thread.group.set"
           | "thread.mark-unread"
           | "thread.metadata.update"
           | "thread.pull-request.link"
@@ -2679,6 +2681,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         command.type === "thread.unpin" ||
         command.type === "thread.pin.reorder" ||
         command.type === "thread.active.reorder" ||
+        command.type === "thread.group.set" ||
         command.type === "thread.pull-request.sync") &&
       thread.archivedAt !== null
     ) {
@@ -3058,6 +3061,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             updatedAt: thread.updatedAt,
           };
         }
+        case "thread.group.set":
+          return { ...thread, group: command.group };
         case "thread.mark-unread":
           return { ...thread, lastVisitedAt: markUnreadVisitedAt };
         case "thread.metadata.update": {
@@ -3405,6 +3410,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           return "thread.pin-reordered" as const;
         case "thread.active.reorder":
           return "thread.active-reordered" as const;
+        case "thread.group.set":
+          return "thread.group-set" as const;
         case "thread.mark-unread":
           return "thread.marked-unread" as const;
         case "thread.metadata.update":
@@ -11822,6 +11829,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.unpin":
       case "thread.pin.reorder":
       case "thread.active.reorder":
+      case "thread.group.set":
       case "thread.mark-unread":
       case "thread.metadata.update":
       case "thread.pull-request.link":
