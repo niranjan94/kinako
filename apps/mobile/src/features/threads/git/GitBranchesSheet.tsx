@@ -150,7 +150,7 @@ export function GitBranchesSheet(_props: GitBranchesSheetProps) {
             />
             <SheetActionButton
               icon="square.split.2x1"
-              label="Create worktree"
+              label="Move to new worktree"
               tone="primary"
               disabled={
                 !canChangeThreadBranch ||
@@ -165,9 +165,27 @@ export function GitBranchesSheet(_props: GitBranchesSheetProps) {
                 void gitActions
                   .onCreateSelectedThreadWorktree({ baseBranch, newBranch })
                   .then((result) => {
-                    if (result === null) return;
+                    if (result === null || result.cleanupPending) return;
                     setWorktreeBranchName("");
                     navigation.goBack();
+                  });
+              }}
+            />
+            <Text className="text-foreground-secondary text-sm">
+              Moves the conversation and uncommitted changes. The thread must be idle and the
+              destination clean. Moving to local may detach its HEAD at the worktree's commit.
+            </Text>
+            <SheetActionButton
+              icon="square.split.2x1"
+              label={currentWorktreePath ? "Move to local" : "Move to associated worktree"}
+              disabled={!canChangeThreadBranch || busy}
+              onPress={() => {
+                void gitActions
+                  .onMoveSelectedThreadWorkspace(
+                    currentWorktreePath ? "local" : { worktree: "associated" },
+                  )
+                  .then((result) => {
+                    if (result !== null && !result.cleanupPending) navigation.goBack();
                   });
               }}
             />

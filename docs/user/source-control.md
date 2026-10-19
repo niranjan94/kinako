@@ -10,6 +10,27 @@ rebases, the files Git brought in are left out. A file stays in the list when th
 committed it, or fixed a conflict in it. Use the branch comparison to review everything that changed
 against your base branch. Restore still returns the complete saved workspace.
 
+## Move between checkouts
+
+An idle, unarchived thread can move between the project checkout and a worktree
+without losing its conversation. Tracked edits, staged changes, and non-ignored
+untracked files move with it. Ignored files stay in the source; new worktrees
+still receive files selected by your worktree include rules and can run the
+project's setup script.
+Commit or stash changes in submodules first; workspace moves do not transfer
+edits inside submodules or update their recorded commits.
+
+Commit or stash any changes already in the destination first. Existing worktree
+destinations must be at the source commit. When moving to local, a clean local
+checkout at a different commit switches to detached HEAD at the worktree's
+commit. The worktree and its branch remain available to move back to.
+
+The next message starts the agent in the new folder with the conversation
+restored. Historical checkpoint file restores remain tied to their original
+checkout; rewind without restoring files for turns made before the move.
+If cleanup cannot finish, both copies of your changes are kept. Retry the move
+to finish cleanup before editing either copy further.
+
 ## Connect an account
 
 Install Git and configure authentication on the machine running your T3 Code server. For a remote

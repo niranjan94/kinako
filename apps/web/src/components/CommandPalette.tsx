@@ -1,6 +1,7 @@
 "use client";
 
 import { databaseState } from "../state/database";
+import { requestThreadWorkspaceMove } from "./ThreadWorkspaceMoveDialog";
 import { Atom } from "effect/reactivity";
 import { DatabaseIcon } from "lucide-react";
 import { databasePanelIntent } from "./database/databasePanelIntent";
@@ -1594,6 +1595,17 @@ function OpenCommandPaletteDialog(props: {
 
   const canUseDatabase = useAtomValue(databasePermissionAtom(activeThread?.environmentId ?? null));
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  if (activeThread) {
+    actionItems.push({
+      kind: "action",
+      value: "action:move-workspace",
+      title: activeThread.worktreePath ? "Move to local…" : "Move to worktree…",
+      searchTerms: ["workspace", "move", "worktree", "local"],
+      icon: <FolderGit2Icon className={ITEM_ICON_CLASS} />,
+      run: async () =>
+        requestThreadWorkspaceMove(scopeThreadRef(activeThread.environmentId, activeThread.id)),
+    });
+  }
 
   if (projects.length > 0) {
     const activeProjectTitle =

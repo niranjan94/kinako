@@ -65,6 +65,7 @@ import {
 } from "@t3tools/client-runtime/environment";
 import {
   AuthOrchestrationOperateScope,
+  AuthSourceControlWriteScope,
   type EnvironmentMachineKind,
   type ScopedThreadRef,
   type ThreadId,
@@ -175,6 +176,7 @@ import { environmentPresentations } from "../state/presentation";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { environmentProjects } from "../state/projects";
 import { vcsEnvironment } from "../state/vcs";
+import { requestThreadWorkspaceMove } from "./ThreadWorkspaceMoveDialog";
 import { threadEnvironment } from "../state/threads";
 import { useEnvironmentQuery } from "../state/query";
 import { useThreadSearch } from "../state/queries";
@@ -4464,6 +4466,11 @@ export default function Sidebar() {
                 AuthOrchestrationOperateScope,
               ),
               branch: thread.branch ?? null,
+              worktreePath: thread.worktreePath,
+              canMoveWorkspace: readEnvironmentScope(
+                threadRef.environmentId,
+                AuthSourceControlWriteScope,
+              ),
               cliResumeCommand,
               projectFilter: threadProjectGroup
                 ? {
@@ -4583,6 +4590,9 @@ export default function Sidebar() {
           }
           case "rename":
             startThreadRename(threadRef, thread.title);
+            return;
+          case "move-workspace":
+            requestThreadWorkspaceMove(threadRef);
             return;
           case "regenerate-title": {
             if (isRegeneratingTitle) return;

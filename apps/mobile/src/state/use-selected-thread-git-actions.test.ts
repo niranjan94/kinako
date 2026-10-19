@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
   results: [] as { type: string; description?: string }[],
   afterGitAction: undefined as (() => void) | undefined,
   statusRefreshes: 0,
+  setupFails: false,
 }));
 
 vi.mock("react", () => ({
@@ -27,6 +28,7 @@ vi.mock("react", () => ({
   useMemo: (factory: () => unknown) => factory(),
   useEffect: () => {},
   useEffectEvent: (callback: unknown) => callback,
+  useRef: (current: unknown) => ({ current }),
 }));
 vi.mock("./session", () => ({
   useEnvironmentScope: (environmentId: unknown, scope: string) =>
@@ -91,11 +93,27 @@ vi.mock("./vcs", () => ({
       state.afterGitAction?.();
       return AsyncResult.success({ refName: state.branch });
     },
-    createWorktree: async ({ input }: { input: { newRefName: string } }) => {
-      state.worktrees.push("/repo-worktree");
-      state.afterGitAction?.();
+    moveThread: async ({
+      input,
+    }: {
+      input: { target: "local" | { worktree: "associated" | { branch: string } } };
+    }) => {
+      const branch =
+        input.target === "local" || input.target.worktree === "associated"
+          ? "feature/task"
+          : input.target.worktree.branch;
+      const worktreePath = input.target === "local" ? null : "/repo-worktree";
+      if (worktreePath) state.worktrees.push(worktreePath);
+      state.thread.worktreePath = worktreePath;
+      state.thread.branch = branch;
       return AsyncResult.success({
-        worktree: { path: "/repo-worktree", refName: input.newRefName },
+        branch,
+        worktreePath,
+        conflicts: false,
+        cleanupPending: false,
+        setupScript: state.setupFails
+          ? { status: "failed", detail: "Setup could not start" }
+          : { status: "skipped" },
       });
     },
     pull: async () => AsyncResult.success({ status: "pulled", refName: state.branch }),
@@ -133,6 +151,25 @@ describe("thread Git mutation permissions", () => {
     state.results = [];
     state.afterGitAction = undefined;
     state.statusRefreshes = 0;
+    state.setupFails = false;
+  });
+
+  it("reports setup failure after a successful workspace move", async () => {
+    state.scopes.add(AuthOrchestrationOperateScope);
+    state.setupFails = true;
+    const result = await useSelectedThreadGitActions().onCreateSelectedThreadWorktree({
+      baseBranch: "main",
+      newBranch: "feature/task",
+    });
+    expect(result).not.toBeNull();
+    expect(state.thread.worktreePath).toBe("/repo-worktree");
+    expect(state.results).toEqual([
+      {
+        type: "error",
+        title: "Workspace moved; setup script failed",
+        description: "Setup could not start",
+      },
+    ]);
   });
 
   it.each([false, true])(
@@ -145,7 +182,15 @@ describe("thread Git mutation permissions", () => {
         newBranch: "feature/task",
       });
       expect(result).toEqual(
-        canOperate ? { worktree: { path: "/repo-worktree", refName: "feature/task" } } : null,
+        canOperate
+          ? {
+              branch: "feature/task",
+              worktreePath: "/repo-worktree",
+              conflicts: false,
+              cleanupPending: false,
+              setupScript: { status: "skipped" },
+            }
+          : null,
       );
       expect(state.worktrees).toEqual(canOperate ? ["/repo-worktree"] : []);
       expect(state.thread.worktreePath).toBe(canOperate ? "/repo-worktree" : null);
@@ -194,7 +239,7 @@ describe("thread Git mutation permissions", () => {
     expect(state.metadataRequests).toEqual([]);
   });
 
-  it.each(["create", "checkout", "worktree", "commit"] as const)(
+  it.each(["create", "checkout", "commit"] as const)(
     "does not send thread metadata after task permission is revoked during %s",
     async (operation) => {
       state.scopes.add(AuthOrchestrationOperateScope);
@@ -204,19 +249,11 @@ describe("thread Git mutation permissions", () => {
         expect(await actions.onCreateSelectedThreadBranch("feature")).toBeNull();
       if (operation === "checkout")
         expect(await actions.onCheckoutSelectedThreadBranch("feature")).toBeNull();
-      if (operation === "worktree")
-        expect(
-          await actions.onCreateSelectedThreadWorktree({
-            baseBranch: "main",
-            newBranch: "feature",
-          }),
-        ).toBeNull();
       if (operation === "commit")
         expect(
           await actions.onRunSelectedThreadGitAction({ action: "commit", featureBranch: true }),
         ).toBeNull();
-      if (operation === "worktree") expect(state.worktrees).toEqual(["/repo-worktree"]);
-      else expect(state.branch).toBe("feature");
+      expect(state.branch).toBe("feature");
       expect(state.thread.branch).toBe("main");
       expect(state.thread.worktreePath).toBeNull();
       expect(state.metadataRequests).toEqual([]);
@@ -260,11 +297,17 @@ describe("thread Git mutation permissions", () => {
               });
       expect(result).toEqual(
         operation === "worktree"
-          ? { worktree: { path: "/repo-worktree", refName: "feature/task" } }
+          ? {
+              branch: "feature/task",
+              worktreePath: "/repo-worktree",
+              conflicts: false,
+              cleanupPending: false,
+              setupScript: { status: "skipped" },
+            }
           : { refName: "feature/task" },
       );
       expect(state.thread.branch).toBe("feature/task");
-      expect(state.metadataRequests).toHaveLength(1);
+      expect(state.metadataRequests).toHaveLength(operation === "worktree" ? 0 : 1);
       expect(state.results).toEqual([]);
     },
   );

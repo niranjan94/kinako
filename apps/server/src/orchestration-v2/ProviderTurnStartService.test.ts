@@ -16,6 +16,7 @@ import {
   ProjectId,
   type OrchestrationV2ThreadProjection,
   OrchestrationV2DomainEvent,
+  TurnItemId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -288,6 +289,7 @@ function makeLocalCommandHarness(input: {
   readonly interruptRunBeforeOpenFailure?: boolean;
   readonly writeFailure?: unknown;
   readonly failReadsAfterRunning?: boolean;
+  readonly recreatedNativeContext?: boolean;
 }) {
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
   const threadId = ThreadId.make("thread-native-account-command");
@@ -328,7 +330,7 @@ function makeLocalCommandHarness(input: {
     nativeThreadRef: null,
     nativeConversationHeadRef: null,
     status: "not_loaded",
-    firstRunOrdinal: 2,
+    firstRunOrdinal: input.recreatedNativeContext ? 1 : 2,
     lastRunOrdinal: 2,
     handoffIds: [],
     forkedFrom: null,
@@ -365,8 +367,10 @@ function makeLocalCommandHarness(input: {
               id: RunId.make("previous-native-run"),
               ordinal: 1,
               status: "completed" as const,
-              providerInstanceId: oldInstanceId,
-              providerThreadId: oldProviderThreadId,
+              providerInstanceId: input.recreatedNativeContext ? newInstanceId : oldInstanceId,
+              providerThreadId: input.recreatedNativeContext
+                ? providerThreadId
+                : oldProviderThreadId,
             },
           ]
         : []),
@@ -460,6 +464,36 @@ function makeLocalCommandHarness(input: {
     checkpoints: [],
     updatedAt: now,
   };
+  if (input.recreatedNativeContext) {
+    projection = {
+      ...projection,
+      turnItems: [
+        {
+          id: TurnItemId.make("before-move-message"),
+          type: "user_message",
+          threadId,
+          runId: RunId.make("previous-native-run"),
+          nodeId: null,
+          providerThreadId,
+          providerTurnId: null,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: 1,
+          status: "completed",
+          title: null,
+          startedAt: now,
+          completedAt: now,
+          updatedAt: now,
+          messageId: MessageId.make("before-move-message"),
+          inputIntent: "turn_start",
+          text: "Remember the workspace migration requirements.",
+          attachments: [],
+          createdBy: "user",
+          creationSource: "web",
+        },
+      ],
+    };
+  }
   if ("historyReadFailureAfterFallback" in input) {
     const nativeThreadRef = {
       driver: providerThread.driver,
@@ -511,7 +545,10 @@ function makeLocalCommandHarness(input: {
       ),
     ensureThread: () => Effect.succeed(providerThread),
   };
-  const open = vi.fn(() =>
+  const startTurn = vi.fn<ProviderAdapter.ProviderAdapterV2SessionRuntime["startTurn"]>(
+    () => Effect.void,
+  );
+  const open = vi.fn<ProviderSessionManager.ProviderSessionManagerV2["Service"]["open"]>(() =>
     input.interruptOpen === true
       ? Effect.interrupt
       : "historyReadFailureAfterFallback" in input
@@ -532,7 +569,7 @@ function makeLocalCommandHarness(input: {
                   ),
                 ),
               )
-            : input.failReadsAfterRunning === true
+            : input.recreatedNativeContext
               ? Effect.succeed({
                   driver: providerThread.driver,
                   providerSession: {
@@ -540,23 +577,65 @@ function makeLocalCommandHarness(input: {
                     driver: providerThread.driver,
                     providerInstanceId: newInstanceId,
                     status: "ready",
-                    cwd: "/tmp/native-account-command",
+                    cwd: input.worktreePath ?? "/tmp/native-account-command",
                     model: null,
                     capabilities: CodexProviderCapabilitiesV2,
                     createdAt: now,
                     updatedAt: now,
                     lastError: null,
                   },
-                  ensureThread: () => Effect.succeed(providerThread),
-                } as never)
-              : Effect.die("A local command must not open a native session."),
+                  ensureThread: () =>
+                    Effect.succeed({
+                      ...providerThread,
+                      nativeThreadRef: {
+                        driver: providerThread.driver,
+                        nativeId: "fresh-after-move",
+                        strength: "strong" as const,
+                      },
+                    }),
+                  startTurn,
+                } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime)
+              : input.failReadsAfterRunning === true
+                ? Effect.succeed({
+                    driver: providerThread.driver,
+                    providerSession: {
+                      id: providerSessionId,
+                      driver: providerThread.driver,
+                      providerInstanceId: newInstanceId,
+                      status: "ready",
+                      cwd: "/tmp/native-account-command",
+                      model: null,
+                      capabilities: CodexProviderCapabilitiesV2,
+                      createdAt: now,
+                      updatedAt: now,
+                      lastError: null,
+                    },
+                    ensureThread: () => Effect.succeed(providerThread),
+                  } as never)
+                : Effect.die("A local command must not open a native session."),
   );
   const startRootRun = vi.fn<
     (input: RunExecutionService.RunExecutionServiceV2StartRootRunInput) => Effect.Effect<void>
-  >(() =>
-    input.failReadsAfterRunning === true
-      ? Effect.void
-      : Effect.die("A local command must not start a native turn."),
+  >((execution) =>
+    input.recreatedNativeContext
+      ? execution.session
+          .startTurn({
+            appThread: execution.appThread,
+            threadId,
+            runId,
+            runOrdinal: execution.run.ordinal,
+            providerTurnOrdinal: execution.providerTurnOrdinal,
+            attemptId: execution.attemptId,
+            rootNodeId: execution.rootNode.id,
+            providerThread: execution.providerThread,
+            message: execution.message,
+            modelSelection: execution.modelSelection,
+            runtimePolicy: execution.runtimePolicy,
+          })
+          .pipe(Effect.orDie)
+      : input.failReadsAfterRunning === true
+        ? Effect.void
+        : Effect.die("A local command must not start a native turn."),
   );
   const failReadIfRunning = Effect.suspend(() =>
     input.failReadsAfterRunning === true &&
@@ -622,10 +701,22 @@ function makeLocalCommandHarness(input: {
   const layer = ProviderTurnStart.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
-        Layer.mock(ContextHandoffService.ContextHandoffServiceV2)({
-          prepareProviderHandoff: () => Effect.die("history read must fail first"),
+        input.recreatedNativeContext
+          ? ContextHandoffService.layer.pipe(Layer.provide(IdAllocator.layer))
+          : Layer.mock(ContextHandoffService.ContextHandoffServiceV2)({
+              prepareProviderHandoff: () => Effect.die("history read must fail first"),
+            }),
+        Layer.mock(EventSink.EventSinkV2)({
+          writeIfRunCurrent,
+          write: ({ events: incoming }) =>
+            Effect.sync(() => {
+              for (const event of incoming) {
+                events.push(event);
+                projection = ProjectionStore.applyToProjection(projection, event);
+              }
+              return [];
+            }),
         }),
-        Layer.mock(EventSink.EventSinkV2)({ writeIfRunCurrent }),
         IdAllocator.layer,
         layerWorktreeLocation(input.worktreesDir),
         input.fileSystem === undefined
@@ -652,12 +743,14 @@ function makeLocalCommandHarness(input: {
               ),
             }),
           getTurnStartHistory: () =>
-            Effect.fail(
-              new ProjectionStore.ProjectionStoreReadError({
-                threadId,
-                cause: input.historyReadFailureAfterFallback,
-              }),
-            ),
+            input.recreatedNativeContext
+              ? Effect.succeed(projection.turnItems)
+              : Effect.fail(
+                  new ProjectionStore.ProjectionStoreReadError({
+                    threadId,
+                    cause: input.historyReadFailureAfterFallback,
+                  }),
+                ),
         }),
         Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({ open }),
         Layer.mock(ProviderAuthService.ProviderAuthService)({ tryHandlePromptCommand }),
@@ -679,6 +772,7 @@ function makeLocalCommandHarness(input: {
     open,
     writeIfRunCurrent,
     startRootRun,
+    startTurn,
     tryHandlePromptCommand,
     events,
     oldInstanceId,
@@ -720,12 +814,12 @@ effectIt.effect.each(["cleanup-first", "startup-first"])(
         fileSystem.makeDirectory(worktreePath).pipe(Effect.as({} as never), Effect.orDie),
       );
       const open = harness.open.getMockImplementation()!;
-      harness.open.mockImplementation(() =>
+      harness.open.mockImplementation((openInput) =>
         Effect.gen(function* () {
           expect(yield* fileSystem.exists(worktreePath).pipe(Effect.orDie)).toBe(true);
           yield* Deferred.succeed(openEntered, undefined);
           if (order === "startup-first") yield* Deferred.await(release);
-          return yield* open();
+          return yield* open(openInput);
         }),
       );
       let cleanupEntered = false;
@@ -1154,3 +1248,28 @@ for (const previousMessages of [[], ["/compact", " /COMPACT "]]) {
       }),
   );
 }
+
+effectIt.effect("delivers earlier turns to a fresh native session after a workspace move", () =>
+  Effect.gen(function* () {
+    const harness = makeLocalCommandHarness({
+      text: "Continue in the moved workspace",
+      worktreePath: `${managedWorktreesDir}/project/feature`,
+      previousNativeSession: true,
+      recreatedNativeContext: true,
+    });
+    yield* harness.start;
+    expect(harness.startTurn).toHaveBeenCalledOnce();
+    const turn = harness.startTurn.mock.calls[0]![0];
+    expect(turn.runtimePolicy.cwd).toBe(`${managedWorktreesDir}/project/feature`);
+    expect(turn.providerThread.nativeThreadRef?.nativeId).toBe("fresh-after-move");
+    expect(turn.message.text).toContain("Remember the workspace migration requirements.");
+    expect(turn.message.text).toContain("Continue in the moved workspace");
+    expect(
+      harness.events.some(
+        (event) =>
+          event.type === "context-handoff.updated" &&
+          event.payload.strategy === "full_thread_summary",
+      ),
+    ).toBe(true);
+  }),
+);

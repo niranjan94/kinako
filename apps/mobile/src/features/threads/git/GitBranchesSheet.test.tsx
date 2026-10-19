@@ -60,6 +60,7 @@ vi.mock("../../../state/use-selected-thread-git-actions", () => ({
     canChangeThreadBranch: state.canChangeThreadBranch,
     onCreateSelectedThreadBranch: () => state.result,
     onCreateSelectedThreadWorktree: () => state.result,
+    onMoveSelectedThreadWorkspace: () => state.result,
     onCheckoutSelectedThreadBranch: () => state.result,
   }),
 }));
@@ -123,7 +124,7 @@ describe("branch sheet operation completion", () => {
     control("feature/mobile-thread").onChangeText?.("feature/worktree");
   });
 
-  it.each(["Create & checkout", "Create worktree", "checkout"])(
+  it.each(["Create & checkout", "Move to new worktree", "checkout"])(
     "keeps the sheet and its input when %s cannot complete",
     async (operation) => {
       const result = deferred<null>();
@@ -143,7 +144,7 @@ describe("branch sheet operation completion", () => {
     },
   );
 
-  it.each(["Create & checkout", "Create worktree", "checkout"])(
+  it.each(["Create & checkout", "Move to new worktree", "checkout"])(
     "dismisses after accepted %s completion even if the source grant changes",
     async (operation) => {
       const result = deferred<unknown>();
@@ -153,7 +154,7 @@ describe("branch sheet operation completion", () => {
       const completion = press();
       state.canChangeThreadBranch = false;
       result.resolve(
-        operation === "Create worktree"
+        operation === "Move to new worktree"
           ? { worktree: { path: "/repo-worktree", refName: "feature/worktree" } }
           : { refName: operation === "checkout" ? "main" : "feature/branch" },
       );
@@ -165,7 +166,7 @@ describe("branch sheet operation completion", () => {
         operation === "Create & checkout" ? "" : "feature/branch",
       );
       expect(control("feature/mobile-thread").value).toBe(
-        operation === "Create worktree" ? "" : "feature/worktree",
+        operation === "Move to new worktree" ? "" : "feature/worktree",
       );
     },
   );
