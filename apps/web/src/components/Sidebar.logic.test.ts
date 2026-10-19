@@ -443,7 +443,14 @@ describe("sidebar thread lineage helpers", () => {
 
     expect(
       filterSidebarV2VisibleThreads(
-        [root, subagent, fork, archived, otherProject],
+        [
+          root,
+          subagent,
+          fork,
+          { ...fork, id: ThreadId.make("side-chat"), isSideChat: true },
+          archived,
+          otherProject,
+        ],
         new Set([`${environmentId}:${projectId}`]),
       ).map((thread) => thread.id),
     ).toEqual([parentId, fork.id]);

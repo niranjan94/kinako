@@ -33,6 +33,7 @@ const DevicePanel = lazy(() =>
   import("../device/DevicePanel").then((module) => ({ default: module.DevicePanel })),
 );
 const FilePreviewPanel = lazy(() => import("../files/FilePreviewPanel"));
+const SideChatPanel = lazy(() => import("./SideChatPanel"));
 
 export type RightPanelTerminalProps = Omit<
   PersistentThreadTerminalPanelProps,
@@ -84,6 +85,12 @@ export function RightPanelSurfaceContent(props: {
   const { surface, threadRef, visible } = props;
   if (surface === null) return null;
   switch (surface.kind) {
+    case "side-chat":
+      return (
+        <Suspense fallback={null}>
+          <SideChatPanel parentRef={threadRef} workspaceRoot={props.files.workspaceRoot} />
+        </Suspense>
+      );
     case "preview":
       return (
         <Suspense fallback={null}>

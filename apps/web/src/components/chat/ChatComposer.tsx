@@ -2637,13 +2637,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (composerTrigger.kind === "slash-command") {
       const builtInSlashCommandItems = [
         {
-          id: "slash:btw",
-          type: "slash-command",
-          command: "btw",
-          label: "/btw",
-          description: "Ask a side question in a fork from the last finished turn",
-        },
-        {
           id: "slash:model",
           type: "slash-command",
           command: "model",
@@ -2697,9 +2690,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           (skill.scope ? `${skill.scope} skill` : ""),
       }));
       const visibleProviderSlashCommandItems = providerSlashCommandItems.filter(
-        (item) =>
-          item.command.name !== "btw" &&
-          (item.command.name !== "compact" || compactSlashCommandAvailable),
+        (item) => item.command.name !== "compact" || compactSlashCommandAvailable,
       );
       const slashCommandItems = slashCommandItemsForPromptPosition(
         [...builtInSlashCommandItems, ...visibleProviderSlashCommandItems, ...skillItems],
@@ -3792,16 +3783,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     if (item.type === "slash-command") {
-      if (item.command === "btw") {
-        if (
-          applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "/btw ", {
-            expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
-          })
-        ) {
-          setComposerHighlightedItemId(null);
-        }
-        return;
-      }
       if (item.command === "model") {
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),

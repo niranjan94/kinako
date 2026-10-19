@@ -565,6 +565,7 @@ export function isSidebarSubagentThread(thread: Pick<SidebarThreadSummary, "line
 
 export function filterSidebarV2VisibleThreads<
   T extends Pick<SidebarThreadSummary, "archivedAt" | "lineage"> & {
+    isSideChat?: boolean;
     environmentId: string;
     projectId: string;
   },
@@ -572,6 +573,7 @@ export function filterSidebarV2VisibleThreads<
   return threads.filter(
     (thread) =>
       thread.archivedAt === null &&
+      thread.isSideChat !== true &&
       !isSidebarSubagentThread(thread) &&
       (scopedProjectKeys === null ||
         scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),

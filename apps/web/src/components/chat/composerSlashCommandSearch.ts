@@ -24,11 +24,7 @@ export function slashCommandItemsForPromptPosition(
   if (isAtPromptStart) {
     return [...items];
   }
-  return items.filter(
-    (item) =>
-      item.type !== "provider-slash-command" &&
-      !(item.type === "slash-command" && item.command === "btw"),
-  );
+  return items.filter((item) => item.type !== "provider-slash-command");
 }
 
 function scoreSlashCommandItem(item: SlashSearchItem, query: string): number | null {

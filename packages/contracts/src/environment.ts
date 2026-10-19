@@ -112,6 +112,7 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   projectProviderInstanceOverrides: Schema.optionalKey(Schema.Boolean),
   threadSnooze: Schema.optionalKey(Schema.Boolean),
   threadSnoozeWakeNotifications: Schema.optionalKey(Schema.Boolean),
+  sideChats: Schema.optionalKey(Schema.Boolean),
   /** Absent on servers from
       before environment themes shipped, which never emit the events -- so a
       client reconnecting to one must drop published themes rather than keep

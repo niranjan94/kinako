@@ -3104,6 +3104,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           return {
             ...thread,
             ...(command.title === undefined ? {} : { title: command.title }),
+            ...(command.isSideChat === undefined ? {} : { isSideChat: command.isSideChat }),
             ...(command.limitRecovery === undefined ? {} : { limitRecovery }),
             ...(command.limitRecovery !== undefined &&
             limitRecovery?.snooze === true &&
@@ -3878,6 +3879,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         sourceRun,
         sourceProviderThread,
         canonicalSourcePoint: contextSourcePointForRun(sourceProjection, sourceRun),
+        ...(command.isSideChat === undefined ? {} : { isSideChat: command.isSideChat }),
         transferId,
         targetThreadId: command.targetThreadId,
         ...(command.title === undefined ? {} : { title: command.title }),
