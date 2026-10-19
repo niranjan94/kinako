@@ -24,7 +24,7 @@ function unwrap<A, E>(result: AtomCommandResult<A, E>): void {
   if (result._tag === "Failure") throw squashAtomCommandFailure(result);
 }
 
-export function readOpenSideChat(parentRef: ScopedThreadRef) {
+function readOpenSideChat(parentRef: ScopedThreadRef) {
   const latest = appAtomRegistry.get(latestSideChatAtom(scopedThreadKey(parentRef)));
   return latest !== null && latest.settledOverride !== "settled" ? latest : null;
 }
