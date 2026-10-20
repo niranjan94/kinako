@@ -119,6 +119,10 @@
       "types": "./src/agentSessionImport.ts",
       "default": "./src/agentSessionImport.ts"
     },
+    "./agentSessionHistoryImport": {
+      "types": "./src/agentSessionHistoryImport.ts",
+      "default": "./src/agentSessionHistoryImport.ts"
+    },
     "./providerCliResume": {
       "types": "./src/providerCliResume.ts",
       "default": "./src/providerCliResume.ts"
