@@ -86,6 +86,8 @@ To continue a session you started with `codex` in a terminal, search the command
 
 Close the session in the terminal before importing it. A session updated in the last few minutes is marked as possibly still open. The earlier part of the conversation shows its text only, and turns from before the import cannot be diffed or restored. Sessions started from Kinako or from upstream T3 Code, and Codex sub-agent sessions, are not listed.
 
+To bring in sessions from all your folders at once, search the command palette for **Import CLI history**, choose **Import CLI history** when adding a project, or open a project's settings and choose it under **Terminal sessions**. On mobile, start a new task and choose **Import CLI history**. It lists every folder with Claude Code or Codex sessions on the computer the environment runs on, from the last 30 days or a longer period you choose. Select whole folders, or on desktop and web expand a folder to pick sessions. Folders without a project are added as projects. Sessions import one at a time: **Stop after current** keeps what already finished, and **Retry failed** tries only what failed, showing each failure's reason. Sessions that already have a thread are skipped, so running it again is safe, and sessions that may still be open in a terminal are left out unless you pick them. Folders that no longer exist are not listed.
+
 ## Answer questions while Codex works
 
 Codex can ask a question and keep working. Answer it in the thread's question
