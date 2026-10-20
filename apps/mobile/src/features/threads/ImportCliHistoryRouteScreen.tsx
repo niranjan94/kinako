@@ -205,7 +205,8 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
   const scanState = scanResponse?.requestKey === scanRequestKey ? scanResponse.state : null;
 
   const ensureProject = () => {
-    ensureProjectRef.current ??= createAgentSessionProjectEnsurer({
+    if (ensureProjectRef.current !== null) return ensureProjectRef.current;
+    ensureProjectRef.current = createAgentSessionProjectEnsurer({
       findProjectId: (path) =>
         findProjectByPath(
           appAtomRegistry
@@ -243,54 +244,52 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
     setStopping(false);
     setRunning(true);
     setProgress((current) => current ?? EMPTY_AGENT_SESSION_IMPORT_PROGRESS);
-    try {
-      await runAgentSessionHistoryImport(plan, {
-        nowMs: Date.now,
-        listSessions: async (folder, cursor) => {
-          const result = await listSessions({
-            environmentId,
-            input: {
-              workspaceRoot: folder.path,
-              ...maxAgeInput,
-              ...(cursor === undefined ? {} : { cursor }),
-            },
-          });
-          if (result._tag === "Success") return result.value;
-          throw new Error(
-            isAtomCommandInterrupted(result)
-              ? "Listing sessions was interrupted."
-              : failureMessage(squashAtomCommandFailure(result), "Could not list sessions."),
-          );
-        },
-        ensureProject: ensureProject(),
-        importSession: async (projectId, session) => {
-          const result = await importSession({
-            environmentId,
-            input: {
-              projectId,
-              providerInstanceId: session.providerInstanceId,
-              providerSessionId: session.providerSessionId,
-            },
-          });
-          if (result._tag === "Success") return result.value;
-          throw new Error(
-            isAtomCommandInterrupted(result)
-              ? "The import was interrupted."
-              : failureMessage(squashAtomCommandFailure(result), "Could not import the session."),
-          );
-        },
-        shouldStop: () => stopRef.current,
-        onEvent: (event) =>
-          setProgress((current) =>
-            applyAgentSessionImportEvent(current ?? EMPTY_AGENT_SESSION_IMPORT_PROGRESS, event),
-          ),
-      });
-    } finally {
+    await runAgentSessionHistoryImport(plan, {
+      nowMs: Date.now,
+      listSessions: async (folder, cursor) => {
+        const result = await listSessions({
+          environmentId,
+          input: {
+            workspaceRoot: folder.path,
+            ...maxAgeInput,
+            ...(cursor === undefined ? {} : { cursor }),
+          },
+        });
+        if (result._tag === "Success") return result.value;
+        throw new Error(
+          isAtomCommandInterrupted(result)
+            ? "Listing sessions was interrupted."
+            : failureMessage(squashAtomCommandFailure(result), "Could not list sessions."),
+        );
+      },
+      ensureProject: ensureProject(),
+      importSession: async (projectId, session) => {
+        const result = await importSession({
+          environmentId,
+          input: {
+            projectId,
+            providerInstanceId: session.providerInstanceId,
+            providerSessionId: session.providerSessionId,
+          },
+        });
+        if (result._tag === "Success") return result.value;
+        throw new Error(
+          isAtomCommandInterrupted(result)
+            ? "The import was interrupted."
+            : failureMessage(squashAtomCommandFailure(result), "Could not import the session."),
+        );
+      },
+      shouldStop: () => stopRef.current,
+      onEvent: (event) =>
+        setProgress((current) =>
+          applyAgentSessionImportEvent(current ?? EMPTY_AGENT_SESSION_IMPORT_PROGRESS, event),
+        ),
+    }).finally(() => {
       setRunning(false);
       setStopping(false);
       setSelectedPaths(new Set());
       setScanAttempt((attempt) => attempt + 1);
-    }
+    });
   };
 
   if (serverConfig === null) return <LoadingState label="Loading..." />;

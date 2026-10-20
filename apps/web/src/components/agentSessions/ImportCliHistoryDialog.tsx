@@ -237,7 +237,8 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
     }));
 
   const ensureProject = () => {
-    ensureProjectRef.current ??= createAgentSessionProjectEnsurer({
+    if (ensureProjectRef.current !== null) return ensureProjectRef.current;
+    ensureProjectRef.current = createAgentSessionProjectEnsurer({
       findProjectId: (path) =>
         findProjectByPath(
           readProjects().filter((project) => project.environmentId === environmentId),
@@ -275,48 +276,46 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
     setStopping(false);
     setRunning(true);
     setProgress((current) => current ?? EMPTY_AGENT_SESSION_IMPORT_PROGRESS);
-    try {
-      await runAgentSessionHistoryImport(plan, {
-        nowMs: Date.now,
-        listSessions: (folder, cursor) => fetchFolderSessions(folder.path, cursor),
-        ensureProject: ensureProject(),
-        importSession: async (projectId, session) => {
-          const result = await importSession({
-            environmentId,
-            input: {
-              projectId,
-              providerInstanceId: session.providerInstanceId,
-              providerSessionId: session.providerSessionId,
-            },
-          });
-          if (result._tag === "Success") return result.value;
-          throw new Error(
-            isAtomCommandInterrupted(result)
-              ? "The import was interrupted."
-              : failureMessage(squashAtomCommandFailure(result), "Could not import the session."),
-          );
-        },
-        shouldStop: () => stopRef.current,
-        onEvent: (event) => {
-          if (event.type === "session") {
-            const key = agentSessionKey(event.session);
-            setCurrentKey(event.result.status === "importing" ? key : null);
-            if (event.result.status === "imported" || event.result.status === "already-imported") {
-              markFolderSessionImported(event.folder.path, key, event.result.threadId);
-            }
+    await runAgentSessionHistoryImport(plan, {
+      nowMs: Date.now,
+      listSessions: (folder, cursor) => fetchFolderSessions(folder.path, cursor),
+      ensureProject: ensureProject(),
+      importSession: async (projectId, session) => {
+        const result = await importSession({
+          environmentId,
+          input: {
+            projectId,
+            providerInstanceId: session.providerInstanceId,
+            providerSessionId: session.providerSessionId,
+          },
+        });
+        if (result._tag === "Success") return result.value;
+        throw new Error(
+          isAtomCommandInterrupted(result)
+            ? "The import was interrupted."
+            : failureMessage(squashAtomCommandFailure(result), "Could not import the session."),
+        );
+      },
+      shouldStop: () => stopRef.current,
+      onEvent: (event) => {
+        if (event.type === "session") {
+          const key = agentSessionKey(event.session);
+          setCurrentKey(event.result.status === "importing" ? key : null);
+          if (event.result.status === "imported" || event.result.status === "already-imported") {
+            markFolderSessionImported(event.folder.path, key, event.result.threadId);
           }
-          setProgress((current) =>
-            applyAgentSessionImportEvent(current ?? EMPTY_AGENT_SESSION_IMPORT_PROGRESS, event),
-          );
-        },
-      });
-    } finally {
+        }
+        setProgress((current) =>
+          applyAgentSessionImportEvent(current ?? EMPTY_AGENT_SESSION_IMPORT_PROGRESS, event),
+        );
+      },
+    }).finally(() => {
       setCurrentKey(null);
       setRunning(false);
       setStopping(false);
       setSelection(new Map());
       appAtomRegistry.refresh(scanAtom);
-    }
+    });
   };
 
   const selectedPlan: ReadonlyArray<AgentSessionImportFolder> = [...selection.entries()].flatMap(
