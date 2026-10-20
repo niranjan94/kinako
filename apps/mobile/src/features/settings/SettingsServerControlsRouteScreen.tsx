@@ -6,7 +6,6 @@ import { readEnvironmentScope, useEnvironmentsWithScope } from "../../state/sess
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { AppText as Text } from "../../components/ui/AppText";
 import {
-  EnvironmentId,
   type KeepAwakeMode,
   type ResponseStreamingMode,
   type ServerSettings,
@@ -16,15 +15,13 @@ import {
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   type ProjectScopedServerSettingKey,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
-import { Atom } from "effect/reactivity";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { serverEnvironment } from "../../state/server";
 import { RUNTIME_MODE_CHOICES } from "../threads/thread-settings-options";
 import { SettingsScreen } from "./components/SettingsScreen";
+import { useKeepAwakeFooter } from "./useKeepAwakeFooter";
 import {
   AndroidSettingsEnvironmentFilter,
   SettingsEnvironmentFilterHeader,
@@ -146,39 +143,6 @@ const KEEP_AWAKE_CHOICES: ReadonlyArray<{
   },
   { mode: "always", label: "Always", description: "Stay awake while the server runs." },
 ];
-
-function useKeepAwakeFooter(
-  environmentIds: ReadonlyArray<EnvironmentId>,
-  enabled: boolean,
-): string | undefined {
-  const environmentKey = enabled ? environmentIds.join("\n") : "";
-  const statuses = useAtomValue(
-    useMemo(
-      () =>
-        Atom.make((get) =>
-          environmentKey === ""
-            ? []
-            : environmentKey.split("\n").flatMap((environmentId) => {
-                const result = get(
-                  serverEnvironment.keepAwakeStatus({
-                    environmentId: EnvironmentId.make(environmentId),
-                    input: {},
-                  }),
-                );
-                return result._tag === "Success" ? [result.value] : [];
-              }),
-        ),
-      [environmentKey],
-    ),
-  );
-  const error = statuses.find((status) => status.error !== null)?.error;
-  if (error) return error;
-  const activeCount = statuses.filter((status) => status.active).length;
-  if (activeCount === 0) return undefined;
-  return environmentIds.length === 1
-    ? "Keeping this computer awake now."
-    : `Keeping ${activeCount} of ${environmentIds.length} computers awake now.`;
-}
 
 export function SettingsEnvironmentNewThreadsRouteScreen() {
   return <ServerSettingsDetail page="new-threads" />;
