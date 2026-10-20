@@ -142,14 +142,16 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const get = (id: DatabaseConnectionId, projectId?: ProjectId) =>
-    Effect.gen(function* () {
-      const connection = yield* find(id);
-      if (connection.level === "project" && connection.projectId !== projectId) {
-        return yield* new DatabaseRequestError({ failure: "project-mismatch" });
-      }
-      return { connection, password: yield* readPassword(id) };
-    });
+  const get = Effect.fn("DatabaseConnections.get")(function* (
+    id: DatabaseConnectionId,
+    projectId?: ProjectId,
+  ) {
+    const connection = yield* find(id);
+    if (connection.level === "project" && connection.projectId !== projectId) {
+      return yield* new DatabaseRequestError({ failure: "project-mismatch" });
+    }
+    return { connection, password: yield* readPassword(id) };
+  });
 
   const validateDraft = (draft: DatabaseConnectionDraft) =>
     (draft.level === "global" && draft.target.engine === "sqlite") ||
@@ -169,84 +171,80 @@ const make = Effect.gen(function* () {
           }),
         );
 
-  const save = (draft: DatabaseConnectionDraft) =>
-    Effect.gen(function* () {
-      yield* validateDraft(draft);
-      const now = draft.updatedAt ?? DateTime.formatIso(yield* DateTime.now);
-      const existing = yield* findDraft(draft);
-      const id =
-        existing?.id ??
-        (draft.level === "global" ? draft.id : undefined) ??
-        DatabaseConnectionId.make(
-          yield* crypto.randomUUIDv4().pipe(Effect.mapError(storageFailed)),
-        );
-      yield* sql`
-        INSERT INTO database_connections (id, name, level, project_id, target_json, read_only, created_at, updated_at)
-        VALUES (
-          ${id},
-          ${draft.name},
-          ${draft.level},
-          ${draft.level === "project" ? draft.projectId! : null},
-          ${encodeTarget(draft.target)},
-          ${draft.readOnly ? 1 : 0},
-          ${existing?.createdAt ?? now},
-          ${now}
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          name = excluded.name,
-          level = excluded.level,
-          project_id = excluded.project_id,
-          target_json = excluded.target_json,
-          read_only = excluded.read_only,
-          updated_at = excluded.updated_at
-      `.pipe(Effect.mapError(storageFailed));
-      // AWS methods fetch the login on each connect, so a stored password would only linger.
-      const storesPassword =
-        draft.target.engine !== "postgres" ||
-        (draft.target.auth?.kind ?? "password") === "password";
-      if (draft.password === null || !storesPassword) {
-        yield* secrets.remove(passwordSecretName(id)).pipe(Effect.mapError(storageFailed));
-      } else if (draft.password !== undefined) {
-        yield* secrets
-          .set(passwordSecretName(id), new TextEncoder().encode(draft.password))
-          .pipe(Effect.mapError(storageFailed));
-      }
-      return yield* find(id);
-    });
-
-  const remove = (id: DatabaseConnectionId) =>
-    Effect.gen(function* () {
-      yield* sql`DELETE FROM database_connections WHERE id = ${id}`.pipe(
-        Effect.mapError(storageFailed),
-      );
+  const save = Effect.fn("DatabaseConnections.save")(function* (draft: DatabaseConnectionDraft) {
+    yield* validateDraft(draft);
+    const now = draft.updatedAt ?? DateTime.formatIso(yield* DateTime.now);
+    const existing = yield* findDraft(draft);
+    const id =
+      existing?.id ??
+      (draft.level === "global" ? draft.id : undefined) ??
+      DatabaseConnectionId.make(yield* crypto.randomUUIDv4().pipe(Effect.mapError(storageFailed)));
+    yield* sql`
+      INSERT INTO database_connections (id, name, level, project_id, target_json, read_only, created_at, updated_at)
+      VALUES (
+        ${id},
+        ${draft.name},
+        ${draft.level},
+        ${draft.level === "project" ? draft.projectId! : null},
+        ${encodeTarget(draft.target)},
+        ${draft.readOnly ? 1 : 0},
+        ${existing?.createdAt ?? now},
+        ${now}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        name = excluded.name,
+        level = excluded.level,
+        project_id = excluded.project_id,
+        target_json = excluded.target_json,
+        read_only = excluded.read_only,
+        updated_at = excluded.updated_at
+    `.pipe(Effect.mapError(storageFailed));
+    // AWS methods fetch the login on each connect, so a stored password would only linger.
+    const storesPassword =
+      draft.target.engine !== "postgres" || (draft.target.auth?.kind ?? "password") === "password";
+    if (draft.password === null || !storesPassword) {
       yield* secrets.remove(passwordSecretName(id)).pipe(Effect.mapError(storageFailed));
-    });
+    } else if (draft.password !== undefined) {
+      yield* secrets
+        .set(passwordSecretName(id), new TextEncoder().encode(draft.password))
+        .pipe(Effect.mapError(storageFailed));
+    }
+    return yield* find(id);
+  });
 
-  const resolveDraft = (draft: DatabaseConnectionDraft) =>
-    Effect.gen(function* () {
-      const now = DateTime.formatIso(yield* DateTime.now);
-      yield* validateDraft(draft);
-      const existing = yield* findDraft(draft);
-      const stored =
-        existing === undefined
-          ? undefined
-          : { connection: existing, password: yield* readPassword(existing.id) };
-      const password = draft.password === undefined ? (stored?.password ?? null) : draft.password;
-      return {
-        connection: {
-          id: stored?.connection.id ?? DatabaseConnectionId.make("draft"),
-          name: draft.name,
-          level: draft.level,
-          projectId: draft.level === "project" ? draft.projectId! : null,
-          target: draft.target,
-          readOnly: draft.readOnly,
-          hasPassword: password !== null,
-          createdAt: stored?.connection.createdAt ?? now,
-          updatedAt: now,
-        },
-        password,
-      };
-    });
+  const remove = Effect.fn("DatabaseConnections.remove")(function* (id: DatabaseConnectionId) {
+    yield* sql`DELETE FROM database_connections WHERE id = ${id}`.pipe(
+      Effect.mapError(storageFailed),
+    );
+    yield* secrets.remove(passwordSecretName(id)).pipe(Effect.mapError(storageFailed));
+  });
+
+  const resolveDraft = Effect.fn("DatabaseConnections.resolveDraft")(function* (
+    draft: DatabaseConnectionDraft,
+  ) {
+    const now = DateTime.formatIso(yield* DateTime.now);
+    yield* validateDraft(draft);
+    const existing = yield* findDraft(draft);
+    const stored =
+      existing === undefined
+        ? undefined
+        : { connection: existing, password: yield* readPassword(existing.id) };
+    const password = draft.password === undefined ? (stored?.password ?? null) : draft.password;
+    return {
+      connection: {
+        id: stored?.connection.id ?? DatabaseConnectionId.make("draft"),
+        name: draft.name,
+        level: draft.level,
+        projectId: draft.level === "project" ? draft.projectId! : null,
+        target: draft.target,
+        readOnly: draft.readOnly,
+        hasPassword: password !== null,
+        createdAt: stored?.connection.createdAt ?? now,
+        updatedAt: now,
+      },
+      password,
+    };
+  });
 
   return DatabaseConnections.of({ list, get, save, remove, resolveDraft });
 });

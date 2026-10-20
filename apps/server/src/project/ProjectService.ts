@@ -537,8 +537,8 @@ export const make = Effect.gen(function* () {
 
   // Worktree checkouts link to the repository's gitdir by absolute path, so a
   // moved repository leaves them broken until git rewrites both sides.
-  const repairWorktrees = (projectId: ProjectId, workspaceRoot: string) =>
-    Effect.gen(function* () {
+  const repairWorktrees = Effect.fn("ProjectService.repairWorktrees")(
+    function* (projectId: ProjectId, workspaceRoot: string) {
       const threads = yield* listLiveProjectThreads(projectId);
       const worktreePaths = [
         ...new Set(
@@ -558,11 +558,11 @@ export const make = Effect.gen(function* () {
           stderr: result.stderr,
         });
       }
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Repairing worktrees after a project move failed.", cause),
-      ),
-    );
+    },
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Repairing worktrees after a project move failed.", cause),
+    ),
+  );
 
   const update: ProjectService["Service"]["update"] = Effect.fn("ProjectService.update")(
     function* (input) {

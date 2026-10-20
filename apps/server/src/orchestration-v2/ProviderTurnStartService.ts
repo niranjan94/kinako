@@ -473,12 +473,12 @@ export const layer: Layer.Layer<
       }
       // Storage cleanup removes idle worktrees but keeps their branch and path,
       // so recreate any that are missing before the provider opens them.
-      const recreateMissingWorktree = (
-        worktreePath: string,
-        branch: string,
-        repository: Effect.Effect<string | undefined>,
-      ) =>
-        Effect.gen(function* () {
+      const recreateMissingWorktree = Effect.fn("ProviderTurnStartService.recreateMissingWorktree")(
+        function* (
+          worktreePath: string,
+          branch: string,
+          repository: Effect.Effect<string | undefined>,
+        ) {
           const exists = yield* fileSystem
             .exists(worktreePath)
             .pipe(Effect.orElseSucceed(() => true));
@@ -504,7 +504,8 @@ export const layer: Layer.Layer<
                   }),
             ),
           );
-        });
+        },
+      );
       const { worktreePath, branch } = projection.thread;
       if (worktreePath !== null && branch !== null) {
         yield* recreateMissingWorktree(

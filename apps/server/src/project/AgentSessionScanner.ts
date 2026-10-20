@@ -1583,19 +1583,22 @@ export const make = Effect.gen(function* () {
     const stats = yield* statOption(filePath);
     if (Option.isNone(stats) || stats.value.type !== "File") return [];
     const size = Number(stats.value.size);
-    const readFrom = (file: FileSystem.File, offset: number, length: number) =>
-      Effect.gen(function* () {
-        yield* file.seek(BigInt(offset), "start");
-        const chunks: Array<Uint8Array> = [];
-        let remaining = length;
-        while (remaining > 0) {
-          const next = yield* file.readAlloc(remaining);
-          if (Option.isNone(next) || next.value.byteLength === 0) break;
-          chunks.push(next.value);
-          remaining -= next.value.byteLength;
-        }
-        return Buffer.concat(chunks);
-      });
+    const readFrom = Effect.fnUntraced(function* (
+      file: FileSystem.File,
+      offset: number,
+      length: number,
+    ) {
+      yield* file.seek(BigInt(offset), "start");
+      const chunks: Array<Uint8Array> = [];
+      let remaining = length;
+      while (remaining > 0) {
+        const next = yield* file.readAlloc(remaining);
+        if (Option.isNone(next) || next.value.byteLength === 0) break;
+        chunks.push(next.value);
+        remaining -= next.value.byteLength;
+      }
+      return Buffer.concat(chunks);
+    });
     return yield* Effect.scoped(
       fileSystem.open(filePath, { flag: "r" }).pipe(
         Effect.flatMap((file) =>

@@ -265,101 +265,105 @@ const make = Effect.gen(function* () {
   const listConnections = (input: DatabaseProjectContext = {}) =>
     connections.list(input).pipe(Effect.map((list) => ({ connections: list })));
 
-  const closeEditor = (id: DatabaseSessionId) =>
-    Effect.gen(function* () {
-      const editor = editors.get(id);
-      if (!editor) return;
-      editors.delete(id);
-      editor.closed = true;
-      yield* Effect.forEach(
-        [...queries].filter(([, query]) => query.editor === editor),
-        ([id]) => release(id),
-        { discard: true },
-      );
-      if (editor.session) yield* disconnect(editor.session);
-    });
+  const closeEditor = Effect.fn("DatabaseService.closeEditor")(function* (id: DatabaseSessionId) {
+    const editor = editors.get(id);
+    if (!editor) return;
+    editors.delete(id);
+    editor.closed = true;
+    yield* Effect.forEach(
+      [...queries].filter(([, query]) => query.editor === editor),
+      ([id]) => release(id),
+      { discard: true },
+    );
+    if (editor.session) yield* disconnect(editor.session);
+  });
 
-  const closeSession = (input: DatabaseSessionInput) =>
-    Effect.gen(function* () {
-      const editor = editors.get(input.sessionId);
-      if (!editor) return;
-      yield* assertProject(editor.projectId, input.projectId);
-      yield* closeEditor(input.sessionId);
-    });
+  const closeSession = Effect.fn("DatabaseService.closeSession")(function* (
+    input: DatabaseSessionInput,
+  ) {
+    const editor = editors.get(input.sessionId);
+    if (!editor) return;
+    yield* assertProject(editor.projectId, input.projectId);
+    yield* closeEditor(input.sessionId);
+  });
 
-  const openSession = (input: DatabaseOpenSessionInput) =>
-    Effect.gen(function* () {
-      const credentials = yield* connections.get(input.connectionId, input.projectId);
-      if (editors.has(input.sessionId))
-        return yield* new DatabaseRequestError({ failure: "session-id-in-use" });
-      if (editors.size >= MAX_EDITOR_SESSIONS)
-        return yield* new DatabaseRequestError({ failure: "too-many-open-sessions" });
-      const editor: EditorSession = {
-        lastUsedMs: yield* Clock.currentTimeMillis,
-        connectionId: input.connectionId,
-        projectId: input.projectId,
-        session: undefined,
-        busy: true,
-        closed: false,
-        searchPath: undefined,
-      };
-      editors.set(input.sessionId, editor);
-      yield* connect({
-        ...credentials,
-        connection: {
-          ...credentials.connection,
-          readOnly: credentials.connection.readOnly || input.forceReadOnly === true,
-        },
-      }).pipe(
-        Effect.flatMap((session) =>
-          Effect.gen(function* () {
-            editor.session = session;
-            if (editor.closed) {
-              yield* disconnect(session);
-              return yield* new DatabaseRequestError({ failure: "session-not-found" });
-            }
-            const metadata = yield* Effect.tryPromise({
-              try: () => session.introspect({ kind: "schemas" }),
-              catch: toEngineError,
-            });
-            if (metadata.kind === "schemas") editor.searchPath = metadata.searchPath;
-            editor.busy = false;
-          }),
-        ),
-        Effect.tapError(() => closeEditor(input.sessionId)),
-        Effect.onInterrupt(() => closeEditor(input.sessionId)),
-        Effect.catchTags({
-          DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)),
+  const openSession = Effect.fn("DatabaseService.openSession")(function* (
+    input: DatabaseOpenSessionInput,
+  ) {
+    const credentials = yield* connections.get(input.connectionId, input.projectId);
+    if (editors.has(input.sessionId))
+      return yield* new DatabaseRequestError({ failure: "session-id-in-use" });
+    if (editors.size >= MAX_EDITOR_SESSIONS)
+      return yield* new DatabaseRequestError({ failure: "too-many-open-sessions" });
+    const editor: EditorSession = {
+      lastUsedMs: yield* Clock.currentTimeMillis,
+      connectionId: input.connectionId,
+      projectId: input.projectId,
+      session: undefined,
+      busy: true,
+      closed: false,
+      searchPath: undefined,
+    };
+    editors.set(input.sessionId, editor);
+    yield* connect({
+      ...credentials,
+      connection: {
+        ...credentials.connection,
+        readOnly: credentials.connection.readOnly || input.forceReadOnly === true,
+      },
+    }).pipe(
+      Effect.flatMap((session) =>
+        Effect.gen(function* () {
+          editor.session = session;
+          if (editor.closed) {
+            yield* disconnect(session);
+            return yield* new DatabaseRequestError({ failure: "session-not-found" });
+          }
+          const metadata = yield* Effect.tryPromise({
+            try: () => session.introspect({ kind: "schemas" }),
+            catch: toEngineError,
+          });
+          if (metadata.kind === "schemas") editor.searchPath = metadata.searchPath;
+          editor.busy = false;
         }),
-      );
-    });
+      ),
+      Effect.tapError(() => closeEditor(input.sessionId)),
+      Effect.onInterrupt(() => closeEditor(input.sessionId)),
+      Effect.catchTags({
+        DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)),
+      }),
+    );
+  });
 
-  const closeConnection = (id: DatabaseConnectionId) =>
-    Effect.gen(function* () {
-      yield* Effect.forEach(
-        [...queries].filter(([, query]) => query.connectionId === id),
-        ([id]) => release(id),
-        { discard: true },
-      );
-      yield* Effect.forEach(
-        [...editors].filter(([, editor]) => editor.connectionId === id),
-        ([id]) => closeEditor(id),
-        { discard: true },
-      );
-    });
+  const closeConnection = Effect.fn("DatabaseService.closeConnection")(function* (
+    id: DatabaseConnectionId,
+  ) {
+    yield* Effect.forEach(
+      [...queries].filter(([, query]) => query.connectionId === id),
+      ([id]) => release(id),
+      { discard: true },
+    );
+    yield* Effect.forEach(
+      [...editors].filter(([, editor]) => editor.connectionId === id),
+      ([id]) => closeEditor(id),
+      { discard: true },
+    );
+  });
 
-  const saveConnection = (draft: DatabaseConnectionDraft) =>
-    Effect.gen(function* () {
-      const result = yield* connections.save(draft);
-      yield* closeConnection(result.id);
-      return result;
-    });
+  const saveConnection = Effect.fn("DatabaseService.saveConnection")(function* (
+    draft: DatabaseConnectionDraft,
+  ) {
+    const result = yield* connections.save(draft);
+    yield* closeConnection(result.id);
+    return result;
+  });
 
-  const deleteConnection = (input: DatabaseDeleteConnectionInput) =>
-    Effect.gen(function* () {
-      yield* closeConnection(input.id);
-      yield* connections.remove(input.id);
-    });
+  const deleteConnection = Effect.fn("DatabaseService.deleteConnection")(function* (
+    input: DatabaseDeleteConnectionInput,
+  ) {
+    yield* closeConnection(input.id);
+    yield* connections.remove(input.id);
+  });
 
   const testConnection = (draft: DatabaseConnectionDraft) =>
     connections.resolveDraft(draft).pipe(
@@ -373,8 +377,8 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  const introspect = (input: DatabaseIntrospectInput) =>
-    Effect.gen(function* () {
+  const introspect = Effect.fn("DatabaseService.introspect")(
+    function* (input: DatabaseIntrospectInput) {
       const credentials = yield* connections.get(input.connectionId, input.projectId);
       const editor = input.sessionId ? editors.get(input.sessionId) : undefined;
       if (input.sessionId && (!editor || editor.closed))
@@ -389,12 +393,12 @@ const make = Effect.gen(function* () {
       return result.kind === "schemas" && editor?.searchPath !== undefined
         ? { ...result, searchPath: editor.searchPath }
         : result;
-    }).pipe(
-      Effect.catchTags({ DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)) }),
-    );
+    },
+    Effect.catchTags({ DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)) }),
+  );
 
-  const execute = (input: DatabaseExecuteInput) =>
-    Effect.gen(function* () {
+  const execute = Effect.fn("DatabaseService.execute")(
+    function* (input: DatabaseExecuteInput) {
       if (queries.has(input.queryId))
         return yield* new DatabaseRequestError({ failure: "query-id-in-use" });
       if (queries.size >= MAX_OPEN_QUERIES)
@@ -525,74 +529,77 @@ const make = Effect.gen(function* () {
           }),
         );
       }).pipe(Effect.tapError(() => release(input.queryId)));
-    }).pipe(Effect.onInterrupt(() => release(input.queryId)));
+    },
+    (effect, input) => effect.pipe(Effect.onInterrupt(() => release(input.queryId))),
+  );
 
-  const fetchPage = (input: DatabaseFetchPageInput) =>
-    Effect.gen(function* () {
-      const query = queries.get(input.queryId);
-      if (query?.releasing) {
-        yield* Effect.promise(() => query.releasing!);
-        return yield* new DatabaseRequestError({ failure: "query-not-found" });
+  const fetchPage = Effect.fn("DatabaseService.fetchPage")(function* (
+    input: DatabaseFetchPageInput,
+  ) {
+    const query = queries.get(input.queryId);
+    if (query?.releasing) {
+      yield* Effect.promise(() => query.releasing!);
+      return yield* new DatabaseRequestError({ failure: "query-not-found" });
+    }
+    if (!query?.cursor) return yield* new DatabaseRequestError({ failure: "query-not-found" });
+    yield* assertProject(query.projectId, input.projectId);
+    yield* connections.get(query.connectionId, input.projectId);
+    const cursor = query.cursor;
+    const pageSize = input.pageSize ?? DATABASE_PAGE_SIZE_DEFAULT;
+    query.lastUsedMs = yield* Clock.currentTimeMillis;
+
+    const read = async () => {
+      if (queries.get(input.queryId) !== query || query.releasing)
+        throw new DatabaseEngineError({
+          engineMessage: "This result has closed.",
+          code: null,
+          position: null,
+          cancelled: true,
+        });
+      query.running = true;
+      const rows = query.buffer.splice(0, pageSize);
+      if (rows.length < pageSize && !query.done) {
+        const page = await cursor.read(pageSize - rows.length);
+        rows.push(...page.rows);
+        query.done = page.done;
       }
-      if (!query?.cursor) return yield* new DatabaseRequestError({ failure: "query-not-found" });
-      yield* assertProject(query.projectId, input.projectId);
-      yield* connections.get(query.connectionId, input.projectId);
-      const cursor = query.cursor;
-      const pageSize = input.pageSize ?? DATABASE_PAGE_SIZE_DEFAULT;
-      query.lastUsedMs = yield* Clock.currentTimeMillis;
+      const [kept, rest] = splitByWeight(rows);
+      query.buffer = [...rest, ...query.buffer];
+      query.running = false;
+      return kept;
+    };
+    const next = query.pending.then(read);
+    query.pending = next.catch(() => {});
 
-      const read = async () => {
-        if (queries.get(input.queryId) !== query || query.releasing)
-          throw new DatabaseEngineError({
-            engineMessage: "This result has closed.",
-            code: null,
-            position: null,
-            cancelled: true,
-          });
-        query.running = true;
-        const rows = query.buffer.splice(0, pageSize);
-        if (rows.length < pageSize && !query.done) {
-          const page = await cursor.read(pageSize - rows.length);
-          rows.push(...page.rows);
-          query.done = page.done;
-        }
-        const [kept, rest] = splitByWeight(rows);
-        query.buffer = [...rest, ...query.buffer];
-        query.running = false;
-        return kept;
-      };
-      const next = query.pending.then(read);
-      query.pending = next.catch(() => {});
+    const rows = yield* Effect.tryPromise({ try: () => next, catch: toEngineError }).pipe(
+      Effect.tapError(() => release(input.queryId)),
+      Effect.catchTags({
+        DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)),
+      }),
+    );
+    const hasMore = !query.done || query.buffer.length > 0;
+    if (!hasMore) yield* release(input.queryId);
+    return { rows, hasMore };
+  });
 
-      const rows = yield* Effect.tryPromise({ try: () => next, catch: toEngineError }).pipe(
-        Effect.tapError(() => release(input.queryId)),
-        Effect.catchTags({
-          DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)),
-        }),
-      );
-      const hasMore = !query.done || query.buffer.length > 0;
-      if (!hasMore) yield* release(input.queryId);
-      return { rows, hasMore };
-    });
+  const closeQuery = Effect.fn("DatabaseService.closeQuery")(function* (input: DatabaseQueryInput) {
+    const query = queries.get(input.queryId);
+    if (query) yield* assertProject(query.projectId, input.projectId);
+    yield* release(input.queryId);
+  });
 
-  const closeQuery = (input: DatabaseQueryInput) =>
-    Effect.gen(function* () {
-      const query = queries.get(input.queryId);
-      if (query) yield* assertProject(query.projectId, input.projectId);
-      yield* release(input.queryId);
-    });
-
-  const cancelQuery = (input: DatabaseQueryInput) =>
-    Effect.gen(function* () {
-      const query = queries.get(input.queryId);
-      if (!query) return;
-      yield* assertProject(query.projectId, input.projectId);
-      query.cancelled = true;
-      // A result already sitting open has nothing running to stop; cancelling it closes it.
-      if (query.cursor) return yield* release(input.queryId);
-      const session = query.session;
-      if (session) yield* Effect.promise(() => session.cancel().catch(() => {}));
-    });
+  const cancelQuery = Effect.fn("DatabaseService.cancelQuery")(function* (
+    input: DatabaseQueryInput,
+  ) {
+    const query = queries.get(input.queryId);
+    if (!query) return;
+    yield* assertProject(query.projectId, input.projectId);
+    query.cancelled = true;
+    // A result already sitting open has nothing running to stop; cancelling it closes it.
+    if (query.cursor) return yield* release(input.queryId);
+    const session = query.session;
+    if (session) yield* Effect.promise(() => session.cancel().catch(() => {}));
+  });
 
   const closeIdle = Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -618,118 +625,113 @@ const make = Effect.gen(function* () {
     Effect.forEach([...editors.keys()], closeEditor, { discard: true }),
   );
 
-  const browseTable = (input: DatabaseBrowseTableInput) =>
-    Effect.gen(function* () {
-      const credentials = yield* connections.get(input.connectionId, input.projectId);
-      const pageSize = input.pageSize ?? DATABASE_PAGE_SIZE_DEFAULT;
-      const offset = input.offset ?? 0;
-      return yield* withSession(
-        { ...credentials, connection: { ...credentials.connection, readOnly: true } },
-        async (session) => {
-          const metadata = await session.introspect({
-            kind: "columns",
-            schema: input.schema,
-            object: input.object,
+  const browseTable = Effect.fn("DatabaseService.browseTable")(function* (
+    input: DatabaseBrowseTableInput,
+  ) {
+    const credentials = yield* connections.get(input.connectionId, input.projectId);
+    const pageSize = input.pageSize ?? DATABASE_PAGE_SIZE_DEFAULT;
+    const offset = input.offset ?? 0;
+    return yield* withSession(
+      { ...credentials, connection: { ...credentials.connection, readOnly: true } },
+      async (session) => {
+        const metadata = await session.introspect({
+          kind: "columns",
+          schema: input.schema,
+          object: input.object,
+        });
+        const keys =
+          metadata.kind === "columns"
+            ? metadata.columns.filter((column) => column.primaryKey).map((column) => column.name)
+            : [];
+        const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
+        const literal = (value: string | number | boolean | null) =>
+          value === null
+            ? "NULL"
+            : typeof value === "boolean"
+              ? value
+                ? "TRUE"
+                : "FALSE"
+              : typeof value === "number"
+                ? String(value)
+                : "'" + value.replaceAll("'", "''") + "'";
+        const useKeyset =
+          keys.length > 0 &&
+          !input.orderBy?.trim() &&
+          (!input.after ||
+            (input.after.length === keys.length && input.after.every((value) => value !== null)));
+        const filters = input.where?.trim() ? ["(" + input.where + ")"] : [];
+        if (useKeyset && input.after)
+          filters.push(
+            "(" + keys.map(quote).join(", ") + ") > (" + input.after.map(literal).join(", ") + ")",
+          );
+        const order = input.orderBy?.trim() || (keys.length ? keys.map(quote).join(", ") : "");
+        const sql =
+          "SELECT * FROM " +
+          quote(input.schema) +
+          "." +
+          quote(input.object) +
+          (filters.length ? " WHERE " + filters.join(" AND ") : "") +
+          (order ? " ORDER BY " + order : "") +
+          " LIMIT " +
+          (pageSize + 1) +
+          (useKeyset && input.after ? "" : " OFFSET " + offset);
+        const outcome = await session.execute(sql, pageSize + 1);
+        if (outcome.kind !== "rows")
+          throw new DatabaseEngineError({
+            engineMessage: "The table did not return rows.",
+            code: null,
+            position: null,
+            cancelled: false,
           });
-          const keys =
-            metadata.kind === "columns"
-              ? metadata.columns.filter((column) => column.primaryKey).map((column) => column.name)
-              : [];
-          const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
-          const literal = (value: string | number | boolean | null) =>
-            value === null
-              ? "NULL"
-              : typeof value === "boolean"
-                ? value
-                  ? "TRUE"
-                  : "FALSE"
-                : typeof value === "number"
-                  ? String(value)
-                  : "'" + value.replaceAll("'", "''") + "'";
-          const useKeyset =
-            keys.length > 0 &&
-            !input.orderBy?.trim() &&
-            (!input.after ||
-              (input.after.length === keys.length && input.after.every((value) => value !== null)));
-          const filters = input.where?.trim() ? ["(" + input.where + ")"] : [];
-          if (useKeyset && input.after)
-            filters.push(
-              "(" +
-                keys.map(quote).join(", ") +
-                ") > (" +
-                input.after.map(literal).join(", ") +
-                ")",
-            );
-          const order = input.orderBy?.trim() || (keys.length ? keys.map(quote).join(", ") : "");
-          const sql =
-            "SELECT * FROM " +
-            quote(input.schema) +
-            "." +
-            quote(input.object) +
-            (filters.length ? " WHERE " + filters.join(" AND ") : "") +
-            (order ? " ORDER BY " + order : "") +
-            " LIMIT " +
-            (pageSize + 1) +
-            (useKeyset && input.after ? "" : " OFFSET " + offset);
-          const outcome = await session.execute(sql, pageSize + 1);
-          if (outcome.kind !== "rows")
-            throw new DatabaseEngineError({
-              engineMessage: "The table did not return rows.",
-              code: null,
-              position: null,
-              cancelled: false,
-            });
-          try {
-            const [bounded] = splitByWeight(outcome.firstPage.rows.slice(0, pageSize));
-            const last = bounded.at(-1);
-            const after =
-              useKeyset && last
-                ? keys.map(
-                    (key) =>
-                      last[outcome.cursor.columns.findIndex((column) => column.name === key)] ??
-                      null,
-                  )
-                : null;
-            const nextAfter =
-              after && after.every((value) => value !== null && typeof value !== "object")
-                ? (after as Array<string | number | boolean>)
-                : null;
-            return {
-              columns: outcome.cursor.columns,
-              rows: bounded,
-              hasMore: bounded.length < outcome.firstPage.rows.length || !outcome.firstPage.done,
-              nextOffset: offset + bounded.length,
-              nextAfter,
-            };
-          } finally {
-            await outcome.cursor.close();
-          }
-        },
-      ).pipe(
-        Effect.catchTags({
-          DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)),
-        }),
-      );
-    });
+        try {
+          const [bounded] = splitByWeight(outcome.firstPage.rows.slice(0, pageSize));
+          const last = bounded.at(-1);
+          const after =
+            useKeyset && last
+              ? keys.map(
+                  (key) =>
+                    last[outcome.cursor.columns.findIndex((column) => column.name === key)] ?? null,
+                )
+              : null;
+          const nextAfter =
+            after && after.every((value) => value !== null && typeof value !== "object")
+              ? (after as Array<string | number | boolean>)
+              : null;
+          return {
+            columns: outcome.cursor.columns,
+            rows: bounded,
+            hasMore: bounded.length < outcome.firstPage.rows.length || !outcome.firstPage.done,
+            nextOffset: offset + bounded.length,
+            nextAfter,
+          };
+        } finally {
+          await outcome.cursor.close();
+        }
+      },
+    ).pipe(
+      Effect.catchTags({
+        DatabaseEngineError: (error) => Effect.fail(engineRequestError(error)),
+      }),
+    );
+  });
 
-  const queryReadOnly = (input: DatabaseReadOnlyQueryInput) =>
-    Effect.gen(function* () {
-      const queryId = DatabaseQueryId.make(
-        yield* crypto
-          .randomUUIDv4()
-          .pipe(
-            Effect.mapError(
-              (cause) => new DatabaseRequestError({ failure: "engine-failed", cause }),
-            ),
-          ),
-      );
-      return yield* execute({
-        ...input,
-        queryId,
-        pageSize: Math.max(1, Math.min(input.rowCap ?? 200, 500)),
-        forceReadOnly: true,
-      }).pipe(Effect.ensuring(release(queryId)));
-    });
+  const queryReadOnly = Effect.fn("DatabaseService.queryReadOnly")(function* (
+    input: DatabaseReadOnlyQueryInput,
+  ) {
+    const queryId = DatabaseQueryId.make(
+      yield* crypto
+        .randomUUIDv4()
+        .pipe(
+          Effect.mapError((cause) => new DatabaseRequestError({ failure: "engine-failed", cause })),
+        ),
+    );
+    return yield* execute({
+      ...input,
+      queryId,
+      pageSize: Math.max(1, Math.min(input.rowCap ?? 200, 500)),
+      forceReadOnly: true,
+    }).pipe(Effect.ensuring(release(queryId)));
+  });
 
   return DatabaseService.of({
     queryReadOnly,

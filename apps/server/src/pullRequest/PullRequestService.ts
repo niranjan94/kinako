@@ -3324,129 +3324,130 @@ export const make = Effect.gen(function* () {
    * Issues reuse the change request listing's cursors: one search per host and boundary, split
    * back up by repository so each carries on from a cursor of its own.
    */
-  const listIssuesUncached = (
+  const listIssuesUncached: (
     input: IssueListInput,
-  ): Effect.Effect<IssueListResult, PullRequestError> =>
-    Effect.gen(function* () {
-      const continuation = yield* decodeCursors(input.cursors);
-      const { supported } = yield* listWorkspaceProjects(input);
-      const projects = supported.filter(readsIssues);
-      const selected =
-        continuation === null
-          ? projects
-          : projects.filter(({ cursorKey }) => continuation.has(cursorKey));
-      const limit = input.limit ?? DEFAULT_REPOSITORY_LIST_LIMIT;
-      const cursorOf = (project: SupportedProject): ListCursor | undefined =>
-        continuation?.get(project.cursorKey);
+  ) => Effect.Effect<IssueListResult, PullRequestError> = Effect.fn(
+    "PullRequestService.listIssuesUncached",
+  )(function* (input) {
+    const continuation = yield* decodeCursors(input.cursors);
+    const { supported } = yield* listWorkspaceProjects(input);
+    const projects = supported.filter(readsIssues);
+    const selected =
+      continuation === null
+        ? projects
+        : projects.filter(({ cursorKey }) => continuation.has(cursorKey));
+    const limit = input.limit ?? DEFAULT_REPOSITORY_LIST_LIMIT;
+    const cursorOf = (project: SupportedProject): ListCursor | undefined =>
+      continuation?.get(project.cursorKey);
 
-      const readChunk = (
-        chunk: ReadonlyArray<SupportedProject>,
-      ): Effect.Effect<ReadonlyArray<IssueBatch>, PullRequestProviderError> => {
-        const first = chunk[0]!;
-        const cursor = cursorOf(first);
-        return first.api.listIssues!({
-          cwd: first.project.workspaceRoot,
-          host: first.host,
-          repositories: chunk.map((project) => project.repository),
-          state: input.state,
-          limit,
-          query: input.query,
-          ...(cursor === undefined
-            ? {}
-            : { cursor: { updatedBefore: cursor.updatedBefore, delivered: cursor.delivered } }),
-        }).pipe(
-          observeRead,
-          Effect.map(({ value: page, observedAt }) => {
-            const rows = new Map<string, Array<ProviderIssue>>();
-            for (const item of page.items) {
-              const key = item.repository.trim().toLowerCase();
-              const held = rows.get(key);
-              if (held === undefined) rows.set(key, [item]);
-              else held.push(item);
-            }
-            const boundary = page.items.reduce<string | null>(
-              (oldest, item) =>
-                oldest === null || item.updatedAt < oldest ? item.updatedAt : oldest,
-              null,
-            );
-            return chunk.map((project): IssueBatch => {
-              const fetched = rows.get(project.repository.trim().toLowerCase()) ?? [];
-              const here = cursorOf(project);
-              const items =
-                here === undefined
-                  ? fetched
-                  : fetched.filter(
-                      (item) =>
-                        item.updatedAt !== here.updatedBefore || !here.seenAt.includes(item.number),
-                    );
-              return {
-                key: project.cursorKey,
-                entries: items.map((item) => toIssueEntry(project, item, observedAt)),
-                truncated: page.truncated,
-                nextCursor:
-                  page.truncated && boundary !== null
-                    ? listCursorAt(here, boundary, fetched, items.length)
-                    : null,
-              };
-            });
-          }),
-        );
-      };
-
-      const groups = new Map<string, Array<SupportedProject>>();
-      for (const project of selected) {
-        const key = `${project.host}\n${cursorOf(project)?.updatedBefore ?? ""}`;
-        const group = groups.get(key);
-        if (group === undefined) groups.set(key, [project]);
-        else group.push(project);
-      }
-      const chunks: Array<ReadonlyArray<SupportedProject>> = [];
-      for (const group of groups.values()) {
-        for (let start = 0; start < group.length; start += REPOSITORY_SEARCH_CHUNK) {
-          chunks.push(group.slice(start, start + REPOSITORY_SEARCH_CHUNK));
-        }
-      }
-      const results = yield* Effect.forEach(chunks, (chunk) => Effect.result(readChunk(chunk)), {
-        concurrency: REPOSITORY_CONCURRENCY,
-      });
-
-      const batches: Array<IssueBatch> = [];
-      const errors: Array<PullRequestListProjectError> = [];
-      const failures: Array<PullRequestProviderError> = [];
-      results.forEach((result, index) => {
-        if (Result.isSuccess(result)) {
-          batches.push(...result.success);
-          return;
-        }
-        failures.push(result.failure);
-        // One unreadable host must not blank the page; its repositories are reported instead.
-        for (const project of chunks[index]!) {
-          errors.push({
-            projectId: project.project.id,
-            projectTitle: project.project.title,
-            message: `${project.repository} could not be read.`,
+    const readChunk = (
+      chunk: ReadonlyArray<SupportedProject>,
+    ): Effect.Effect<ReadonlyArray<IssueBatch>, PullRequestProviderError> => {
+      const first = chunk[0]!;
+      const cursor = cursorOf(first);
+      return first.api.listIssues!({
+        cwd: first.project.workspaceRoot,
+        host: first.host,
+        repositories: chunk.map((project) => project.repository),
+        state: input.state,
+        limit,
+        query: input.query,
+        ...(cursor === undefined
+          ? {}
+          : { cursor: { updatedBefore: cursor.updatedBefore, delivered: cursor.delivered } }),
+      }).pipe(
+        observeRead,
+        Effect.map(({ value: page, observedAt }) => {
+          const rows = new Map<string, Array<ProviderIssue>>();
+          for (const item of page.items) {
+            const key = item.repository.trim().toLowerCase();
+            const held = rows.get(key);
+            if (held === undefined) rows.set(key, [item]);
+            else held.push(item);
+          }
+          const boundary = page.items.reduce<string | null>(
+            (oldest, item) =>
+              oldest === null || item.updatedAt < oldest ? item.updatedAt : oldest,
+            null,
+          );
+          return chunk.map((project): IssueBatch => {
+            const fetched = rows.get(project.repository.trim().toLowerCase()) ?? [];
+            const here = cursorOf(project);
+            const items =
+              here === undefined
+                ? fetched
+                : fetched.filter(
+                    (item) =>
+                      item.updatedAt !== here.updatedBefore || !here.seenAt.includes(item.number),
+                  );
+            return {
+              key: project.cursorKey,
+              entries: items.map((item) => toIssueEntry(project, item, observedAt)),
+              truncated: page.truncated,
+              nextCursor:
+                page.truncated && boundary !== null
+                  ? listCursorAt(here, boundary, fetched, items.length)
+                  : null,
+            };
           });
-        }
-      });
-      if (batches.length === 0 && failures.length > 0) {
-        return yield* toPullRequestError("listIssues")(
-          failures.find(isProviderUnusable) ?? failures[0]!,
-        );
-      }
+        }),
+      );
+    };
 
-      const nextCursors: Record<string, string> = {};
-      for (const batch of batches) {
-        if (batch.nextCursor !== null) nextCursors[batch.key] = batch.nextCursor;
+    const groups = new Map<string, Array<SupportedProject>>();
+    for (const project of selected) {
+      const key = `${project.host}\n${cursorOf(project)?.updatedBefore ?? ""}`;
+      const group = groups.get(key);
+      if (group === undefined) groups.set(key, [project]);
+      else group.push(project);
+    }
+    const chunks: Array<ReadonlyArray<SupportedProject>> = [];
+    for (const group of groups.values()) {
+      for (let start = 0; start < group.length; start += REPOSITORY_SEARCH_CHUNK) {
+        chunks.push(group.slice(start, start + REPOSITORY_SEARCH_CHUNK));
       }
-      return {
-        entries: batches
-          .flatMap((batch) => batch.entries)
-          .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-        errors,
-        truncated: batches.some((batch) => batch.truncated),
-        nextCursors,
-      };
+    }
+    const results = yield* Effect.forEach(chunks, (chunk) => Effect.result(readChunk(chunk)), {
+      concurrency: REPOSITORY_CONCURRENCY,
     });
+
+    const batches: Array<IssueBatch> = [];
+    const errors: Array<PullRequestListProjectError> = [];
+    const failures: Array<PullRequestProviderError> = [];
+    results.forEach((result, index) => {
+      if (Result.isSuccess(result)) {
+        batches.push(...result.success);
+        return;
+      }
+      failures.push(result.failure);
+      // One unreadable host must not blank the page; its repositories are reported instead.
+      for (const project of chunks[index]!) {
+        errors.push({
+          projectId: project.project.id,
+          projectTitle: project.project.title,
+          message: `${project.repository} could not be read.`,
+        });
+      }
+    });
+    if (batches.length === 0 && failures.length > 0) {
+      return yield* toPullRequestError("listIssues")(
+        failures.find(isProviderUnusable) ?? failures[0]!,
+      );
+    }
+
+    const nextCursors: Record<string, string> = {};
+    for (const batch of batches) {
+      if (batch.nextCursor !== null) nextCursors[batch.key] = batch.nextCursor;
+    }
+    return {
+      entries: batches
+        .flatMap((batch) => batch.entries)
+        .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+      errors,
+      truncated: batches.some((batch) => batch.truncated),
+      nextCursors,
+    };
+  });
 
   // Keyed by the listing epoch like the change request listing, so a refresh or a turn re-reads.
   const issueListCache = yield* Cache.makeWith(
@@ -3529,8 +3530,8 @@ export const make = Effect.gen(function* () {
   );
   const issueDetail = (input: CredentialRef) => Cache.get(issueDetailCache, refCacheKey(input));
 
-  const commentOnIssue = (input: IssueCommentInput): Effect.Effect<void, PullRequestError> =>
-    Effect.gen(function* () {
+  const commentOnIssue: (input: IssueCommentInput) => Effect.Effect<void, PullRequestError> =
+    Effect.fn("PullRequestService.commentOnIssue")(function* (input) {
       if (input.body.trim().length === 0) {
         return yield* new PullRequestOperationError({
           operation: "issueComment",

@@ -1,3 +1,4 @@
+import { DEFAULT_TAILSCALE_SERVE_PORT } from "@t3tools/tailscale";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -544,7 +545,9 @@ describe("DesktopServerExposure", () => {
                 "http://127.0.0.1:4173/",
                 "http://192.168.1.20:4173/",
                 `http://${address}:4173/`,
-                `https://${dnsName}/`,
+                `http://${dnsName}:4173/`,
+                `http://${dnsName.split(".")[0]}:4173/`,
+                `https://${dnsName}:${DEFAULT_TAILSCALE_SERVE_PORT}/`,
               ],
             );
             assert.equal(statusReads, previousReads + 1);

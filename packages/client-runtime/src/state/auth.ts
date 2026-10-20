@@ -101,28 +101,29 @@ type AuthAccessRequest<A, E, R> = Pick<
 >;
 
 /** Run an access-management request against the current environment with its credentials. */
-const requestAuthAccess = <A, E, R>(input: AuthAccessRequest<A, E, R>) =>
-  Effect.gen(function* () {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
-    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
-    const client = yield* Effect.serviceOption(HttpClient.HttpClient);
-    if (Option.isNone(prepared) || Option.isNone(client)) {
-      return yield* new AuthAccessConnectionNotReadyError({
-        message: "The environment connection is not ready.",
-      });
-    }
-    return yield* executeAuthenticatedEnvironmentHttpRequest({
-      ...input,
-      prepared: prepared.value,
-      signer: yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner),
-      remoteAuthorization: yield* Effect.serviceOption(
-        RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
-      ),
-      group: "auth",
-      method: "POST",
-      timeoutMs: AUTH_ACCESS_REQUEST_TIMEOUT_MS,
-    }).pipe(Effect.provideService(HttpClient.HttpClient, client.value));
-  });
+const requestAuthAccess = Effect.fn("AuthAccess.request")(function* <A, E, R>(
+  input: AuthAccessRequest<A, E, R>,
+) {
+  const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+  const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+  const client = yield* Effect.serviceOption(HttpClient.HttpClient);
+  if (Option.isNone(prepared) || Option.isNone(client)) {
+    return yield* new AuthAccessConnectionNotReadyError({
+      message: "The environment connection is not ready.",
+    });
+  }
+  return yield* executeAuthenticatedEnvironmentHttpRequest({
+    ...input,
+    prepared: prepared.value,
+    signer: yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner),
+    remoteAuthorization: yield* Effect.serviceOption(
+      RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
+    ),
+    group: "auth",
+    method: "POST",
+    timeoutMs: AUTH_ACCESS_REQUEST_TIMEOUT_MS,
+  }).pipe(Effect.provideService(HttpClient.HttpClient, client.value));
+});
 
 export function createAuthEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,

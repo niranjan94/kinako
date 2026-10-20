@@ -2741,34 +2741,33 @@ export const make = Effect.gen(function* () {
       });
     },
 
-    getIssue: (input) =>
-      Effect.gen(function* () {
-        const { owner, name } = parseRepositorySelector(input.repository);
-        const target = { ...input, operation: "getIssue" };
-        const comments: PullRequestComment[] = [];
-        let first: GitHubIssueDetail | null = null;
-        let after: string | null = null;
-        for (let page = 0; page < ISSUE_COMMENT_PAGES; page++) {
-          const read: GitHubIssueDetailPage = yield* client
-            .IssueDetail({ owner, name, number: input.number, after })
-            .pipe(
-              graphql(target),
-              Effect.map((result) => toIssueDetailPage(result, input.repository)),
-              Effect.flatMap(found(target)),
-            );
-          comments.push(...read.comments);
-          after = read.nextCommentsCursor;
-          first ??= {
-            ...read.issue,
-            commentCount: read.commentCount,
-            comments: [],
-            commentsTruncated: false,
-            viewerCanComment: read.viewerCanComment,
-          };
-          if (after === null) break;
-        }
-        return { ...first!, comments, commentsTruncated: after !== null };
-      }),
+    getIssue: Effect.fn("GitHubPullRequestApi.getIssue")(function* (input) {
+      const { owner, name } = parseRepositorySelector(input.repository);
+      const target = { ...input, operation: "getIssue" };
+      const comments: PullRequestComment[] = [];
+      let first: GitHubIssueDetail | null = null;
+      let after: string | null = null;
+      for (let page = 0; page < ISSUE_COMMENT_PAGES; page++) {
+        const read: GitHubIssueDetailPage = yield* client
+          .IssueDetail({ owner, name, number: input.number, after })
+          .pipe(
+            graphql(target),
+            Effect.map((result) => toIssueDetailPage(result, input.repository)),
+            Effect.flatMap(found(target)),
+          );
+        comments.push(...read.comments);
+        after = read.nextCommentsCursor;
+        first ??= {
+          ...read.issue,
+          commentCount: read.commentCount,
+          comments: [],
+          commentsTruncated: false,
+          viewerCanComment: read.viewerCanComment,
+        };
+        if (after === null) break;
+      }
+      return { ...first!, comments, commentsTruncated: after !== null };
+    }),
 
     commentOnIssue: (input) => {
       const { owner, name } = parseRepositorySelector(input.repository);

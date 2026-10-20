@@ -200,25 +200,24 @@ const make = Effect.gen(function* () {
       return Effect.void;
     });
 
-  const onHelperExit = (
+  const onHelperExit = Effect.fn("KeepAwake.onHelperExit")(function* (
     current: NonNullable<typeof hold>,
     exit: Result.Result<ChildProcessSpawner.ExitCode, PlatformError.PlatformError>,
-  ) =>
-    Effect.gen(function* () {
-      // A release closes the scope, which kills the helper; that exit is expected.
-      if (hold !== current) return;
-      hold = null;
-      yield* Scope.close(current.scope, Exit.void);
-      yield* Effect.logWarning("Keep-awake helper exited unexpectedly", {
-        exitCode: exit._tag === "Success" ? exit.success : null,
-      });
-      if (desired()) {
-        const uptimeMillis = (yield* Clock.currentTimeMillis) - current.startedAtMillis;
-        if (uptimeMillis >= Duration.toMillis(HEALTHY_HELPER_UPTIME)) failures = 0;
-        yield* helperFailed("The keep-awake helper stopped unexpectedly.");
-      }
-      yield* publish;
+  ) {
+    // A release closes the scope, which kills the helper; that exit is expected.
+    if (hold !== current) return;
+    hold = null;
+    yield* Scope.close(current.scope, Exit.void);
+    yield* Effect.logWarning("Keep-awake helper exited unexpectedly", {
+      exitCode: exit._tag === "Success" ? exit.success : null,
     });
+    if (desired()) {
+      const uptimeMillis = (yield* Clock.currentTimeMillis) - current.startedAtMillis;
+      if (uptimeMillis >= Duration.toMillis(HEALTHY_HELPER_UPTIME)) failures = 0;
+      yield* helperFailed("The keep-awake helper stopped unexpectedly.");
+    }
+    yield* publish;
+  });
 
   const reconcile = Effect.gen(function* () {
     if (desired()) {
