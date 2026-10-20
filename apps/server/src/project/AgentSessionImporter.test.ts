@@ -29,7 +29,7 @@ it.effect("imports messages once and preserves the provider native resume bindin
   const recorded: Array<unknown> = [];
   let imported = false;
   const scanner = AgentSessionScanner.AgentSessionScanner.of({
-    scan: Effect.die("unused"),
+    scan: () => Effect.die("unused"),
     listSessions: () => Effect.die("unused"),
     readSession: () => Effect.die("unused"),
     recentThreads: () =>
@@ -163,18 +163,21 @@ it.effect("imports one listed session and imports it again after its thread is d
     birthtimeMs: 1,
   };
   const scanner = AgentSessionScanner.AgentSessionScanner.of({
-    scan: Effect.die("unused"),
+    scan: () => Effect.die("unused"),
     recentThreads: () => Stream.die("unused"),
     listSessions: () =>
-      Effect.succeed([
-        {
-          source: "codex",
-          providerInstanceId,
-          providerSessionId,
-          title: "Imported thread",
-          updatedAt: "2026-09-01T10:01:00.000Z",
-        },
-      ]),
+      Effect.succeed({
+        sessions: [
+          {
+            source: "codex",
+            providerInstanceId,
+            providerSessionId,
+            title: "Imported thread",
+            updatedAt: "2026-09-01T10:01:00.000Z",
+          },
+        ],
+        truncated: false,
+      }),
     readSession: (input) =>
       Effect.succeed(
         input.providerSessionId === providerSessionId
@@ -281,5 +284,73 @@ it.effect("imports one listed session and imports it again after its thread is d
     const conflict = yield* Effect.flip(importer.importSession(input));
     expect(conflict._tag).toBe("AgentSessionImportFailedError");
     expect(conflict.message).toContain("already imported into another project");
+  }).pipe(Effect.provide(layerTest));
+});
+
+it.effect("lists a scanned folder's sessions before and after it becomes a project", () => {
+  const listCalls: Array<{ workspaceRoot: string; options: unknown }> = [];
+  let project: { id: ProjectId; workspaceRoot: string } | null = null;
+  const scanner = AgentSessionScanner.AgentSessionScanner.of({
+    scan: () => Effect.die("unused"),
+    recentThreads: () => Stream.die("unused"),
+    readSession: () => Effect.die("unused"),
+    listSessions: (workspaceRoot, options) =>
+      Effect.sync(() => {
+        listCalls.push({ workspaceRoot, options });
+        return {
+          sessions: [
+            {
+              source: "codex" as const,
+              providerInstanceId,
+              providerSessionId,
+              title: "Imported thread",
+              updatedAt: "2026-09-01T10:01:00.000Z",
+            },
+          ],
+          truncated: true,
+        };
+      }),
+  });
+  const layerTest = AgentSessionImporter.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(AgentSessionScanner.AgentSessionScanner, scanner),
+        Layer.mock(ProjectService.ProjectService)({
+          getByWorkspaceRoot: () => Effect.succeed(Option.fromNullOr(project as never)),
+        }),
+        Layer.mock(Orchestrator.OrchestratorV2)({
+          getThreadRecords: (id) =>
+            project !== null && id === threadId
+              ? Effect.succeed({
+                  thread: { id, projectId, historyOrigin: "v1_import", deletedAt: null },
+                } as never)
+              : Effect.fail(new Orchestrator.OrchestratorProjectionError({ threadId: id })),
+        }),
+        Layer.mock(EventSink.EventSinkV2)({}),
+        Layer.mock(ProviderSessionRuntime.ProviderSessionRuntimeRepository)({}),
+        IdAllocator.layer,
+      ),
+    ),
+  );
+
+  return Effect.gen(function* () {
+    const importer = yield* AgentSessionImporter.AgentSessionImporter;
+    const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+
+    const beforeProject = yield* importer.listSessions({
+      workspaceRoot: "/workspace/folder",
+      maxAgeMs,
+    });
+    expect(beforeProject.truncated).toBe(true);
+    expect(beforeProject.sessions.map((session) => session.importedThreadId)).toEqual([null]);
+
+    project = { id: projectId, workspaceRoot: "/workspace/folder" };
+    const afterProject = yield* importer.listSessions({ workspaceRoot: "/workspace/folder" });
+    expect(afterProject.sessions.map((session) => session.importedThreadId)).toEqual([threadId]);
+
+    expect(listCalls).toEqual([
+      { workspaceRoot: "/workspace/folder", options: { maxAgeMs, reuseDiscovery: true } },
+      { workspaceRoot: "/workspace/folder", options: { reuseDiscovery: true } },
+    ]);
   }).pipe(Effect.provide(layerTest));
 });

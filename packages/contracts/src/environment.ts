@@ -151,6 +151,9 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server lists a project's terminal Claude and Codex sessions and imports one on request
       (`agentSessions.list`, `agentSessions.importSession`). */
   agentSessionImport: Schema.optionalKey(Schema.Boolean),
+  /** Server filters `agentSessions.scan` and `agentSessions.list` by age and lists a scanned
+      folder's sessions before it is a project, for importing history across folders. */
+  agentSessionHistoryImport: Schema.optionalKey(Schema.Boolean),
   environmentIcon: Schema.optionalKey(Schema.Boolean),
   desktopAppUpdate: Schema.optionalKey(Schema.Boolean),
   /** Server answers orchestration.subscribeCommandOutput. Absent on older servers,

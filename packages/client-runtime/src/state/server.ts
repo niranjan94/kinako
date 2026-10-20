@@ -1237,12 +1237,25 @@ export function createServerEnvironmentAtoms<R, E>(
           `${environmentId}:${input.instanceId}:${input.elicitationId}`,
       },
     }),
+    scanAgentSessions: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:agent-sessions:scan",
+      tag: WS_METHODS.agentSessionsScan,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.maxAgeMs ?? null]),
+      },
+    }),
     listAgentSessions: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:agent-sessions:list",
       tag: WS_METHODS.agentSessionsList,
       concurrency: {
         mode: "singleFlight",
-        key: ({ environmentId, input }) => `${environmentId}:${input.projectId}`,
+        key: ({ environmentId, input }) =>
+          JSON.stringify([
+            environmentId,
+            "projectId" in input ? input.projectId : input.workspaceRoot,
+            input.maxAgeMs ?? null,
+          ]),
       },
     }),
     importAgentSession: createEnvironmentRpcCommand(runtime, {

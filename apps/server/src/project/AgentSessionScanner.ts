@@ -10,6 +10,7 @@ import {
   type AgentSessionImportSource,
   type AgentSessionProjectCandidate,
   type AgentSessionProjectGit,
+  type AgentSessionScanInput,
   type AgentSessionScanResult,
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
@@ -172,15 +173,24 @@ export type AgentSessionRecentThread =
 export class AgentSessionScanner extends Context.Service<
   AgentSessionScanner,
   {
-    readonly scan: Effect.Effect<AgentSessionScanResult, AgentSessionScanError>;
+    readonly scan: (
+      input?: AgentSessionScanInput,
+    ) => Effect.Effect<AgentSessionScanResult, AgentSessionScanError>;
     readonly recentThreads: (
       workspaceRoot: string,
       completedSources?: ReadonlyArray<AgentSessionImportSource>,
     ) => Stream.Stream<AgentSessionRecentThread, AgentSessionScanError>;
-    /** Sessions started in a terminal from this directory, newest first. */
+    /**
+     * Sessions started in a terminal from this directory, newest first. `reuseDiscovery` lists
+     * from the latest scan's discovery instead of walking the provider homes again.
+     */
     readonly listSessions: (
       workspaceRoot: string,
-    ) => Effect.Effect<ReadonlyArray<AgentSessionSummary>, AgentSessionScanError>;
+      options?: { readonly maxAgeMs?: number; readonly reuseDiscovery?: boolean },
+    ) => Effect.Effect<
+      { readonly sessions: ReadonlyArray<AgentSessionSummary>; readonly truncated: boolean },
+      AgentSessionScanError
+    >;
     /** One terminal session from this directory with its history, if it is still there. */
     readonly readSession: (input: {
       readonly workspaceRoot: string;
@@ -1200,126 +1210,139 @@ export const make = Effect.gen(function* () {
 
   let cachedCandidates: ReadonlyArray<RawCandidate> | null = null;
 
-  const scan: AgentSessionScanner["Service"]["scan"] = Effect.gen(function* () {
-    const { candidates: raw, truncated } = yield* collectCandidates();
-    cachedCandidates = raw;
+  const scan: AgentSessionScanner["Service"]["scan"] = Effect.fn("AgentSessionScanner.scan")(
+    function* (input = {}) {
+      const { candidates: raw, truncated } = yield* collectCandidates();
+      cachedCandidates = raw;
+      const cutoffMs =
+        input.maxAgeMs === undefined
+          ? null
+          : DateTime.toEpochMillis(yield* DateTime.now) - input.maxAgeMs;
 
-    const merged = new Map<
-      string,
-      {
-        path: string;
-        sources: Array<AgentSessionSource>;
-        threadCount: number;
-        lastActiveAtMs: number | null;
-        git: AgentSessionProjectGit | null;
-      }
-    >();
-    const directoryKeys = new Map<string, string>();
-    const gitIdentities = new Map<string, AgentSessionProjectGit | null>();
-
-    for (const candidate of raw) {
-      const expanded = expandHomePath(candidate.cwd.trim(), homeDir);
-      if (!path.isAbsolute(expanded)) continue;
-      const resolved = path.resolve(expanded);
-      if (isExcludedProjectPath(resolved)) continue;
-      let key = directoryKeys.get(resolved);
-      if (key === undefined) {
-        const stats = yield* statOption(resolved);
-        if (Option.isNone(stats) || stats.value.type !== "Directory") {
-          directoryKeys.set(resolved, "");
-          continue;
+      const merged = new Map<
+        string,
+        {
+          path: string;
+          sources: Array<AgentSessionSource>;
+          threadCount: number;
+          lastActiveAtMs: number | null;
+          git: AgentSessionProjectGit | null;
         }
-        const realPath = yield* fileSystem
-          .realPath(resolved)
-          .pipe(Effect.orElseSucceed(() => resolved));
-        // A symlink can point into the worktrees directory even when its own
-        // spelling doesn't; check again with links resolved.
-        if (isExcludedProjectPath(realPath)) {
-          key = "";
-        } else {
-          const gitIdentity = yield* readGitIdentity(resolved);
-          if (gitIdentity._tag === "Worktree") {
+      >();
+      const directoryKeys = new Map<string, string>();
+      const gitIdentities = new Map<string, AgentSessionProjectGit | null>();
+
+      for (const candidate of raw) {
+        const threadCount =
+          cutoffMs === null
+            ? candidate.threadCount
+            : candidate.transcripts.filter(
+                (transcript) => transcript.mtimeMs !== null && transcript.mtimeMs >= cutoffMs,
+              ).length;
+        if (threadCount === 0) continue;
+        const expanded = expandHomePath(candidate.cwd.trim(), homeDir);
+        if (!path.isAbsolute(expanded)) continue;
+        const resolved = path.resolve(expanded);
+        if (isExcludedProjectPath(resolved)) continue;
+        let key = directoryKeys.get(resolved);
+        if (key === undefined) {
+          const stats = yield* statOption(resolved);
+          if (Option.isNone(stats) || stats.value.type !== "Directory") {
+            directoryKeys.set(resolved, "");
+            continue;
+          }
+          const realPath = yield* fileSystem
+            .realPath(resolved)
+            .pipe(Effect.orElseSucceed(() => resolved));
+          // A symlink can point into the worktrees directory even when its own
+          // spelling doesn't; check again with links resolved.
+          if (isExcludedProjectPath(realPath)) {
             key = "";
           } else {
-            key = yield* directoryIdentity(resolved, stats.value);
-            gitIdentities.set(key, gitIdentity._tag === "Repository" ? gitIdentity.git : null);
+            const gitIdentity = yield* readGitIdentity(resolved);
+            if (gitIdentity._tag === "Worktree") {
+              key = "";
+            } else {
+              key = yield* directoryIdentity(resolved, stats.value);
+              gitIdentities.set(key, gitIdentity._tag === "Repository" ? gitIdentity.git : null);
+            }
           }
+          directoryKeys.set(resolved, key);
         }
-        directoryKeys.set(resolved, key);
-      }
-      if (key === "") continue;
+        if (key === "") continue;
 
-      const existing = merged.get(key);
-      if (!existing) {
-        merged.set(key, {
-          path: resolved,
-          sources: [candidate.source],
-          threadCount: candidate.threadCount,
-          lastActiveAtMs: candidate.lastActiveAtMs,
-          git: gitIdentities.get(key) ?? null,
+        const existing = merged.get(key);
+        if (!existing) {
+          merged.set(key, {
+            path: resolved,
+            sources: [candidate.source],
+            threadCount,
+            lastActiveAtMs: candidate.lastActiveAtMs,
+            git: gitIdentities.get(key) ?? null,
+          });
+          continue;
+        }
+        if (!existing.sources.includes(candidate.source)) {
+          existing.sources.push(candidate.source);
+        }
+        existing.threadCount += threadCount;
+        existing.lastActiveAtMs =
+          existing.lastActiveAtMs === null || candidate.lastActiveAtMs === null
+            ? (existing.lastActiveAtMs ?? candidate.lastActiveAtMs)
+            : Math.max(existing.lastActiveAtMs, candidate.lastActiveAtMs);
+      }
+
+      // Resolve persisted roots too. A project and a transcript can name
+      // different symlinks to the same directory.
+      const importedProjects = yield* projectStore
+        .listShells()
+        .pipe(
+          Effect.mapError(
+            (cause) => new AgentSessionScanError({ operation: "read-projects", cause }),
+          ),
+        );
+      const importedProjectsByRoot = new Map<string, (typeof importedProjects)[number]>();
+      for (const project of importedProjects) {
+        const projectRoot = path.resolve(expandHomePath(project.workspaceRoot, homeDir));
+        importedProjectsByRoot.set(normalizeProjectPathForComparison(projectRoot), project);
+        importedProjectsByRoot.set(yield* directoryIdentity(projectRoot), project);
+      }
+
+      const candidates: Array<AgentSessionProjectCandidate> = [];
+      for (const [key, entry] of merged.entries()) {
+        const importedProject =
+          importedProjectsByRoot.get(normalizeProjectPathForComparison(entry.path)) ??
+          importedProjectsByRoot.get(key);
+        const candidatePath = importedProject?.workspaceRoot ?? entry.path;
+        candidates.push({
+          path: candidatePath,
+          title: path.basename(candidatePath) || candidatePath,
+          ...(importedProject === undefined ? {} : { projectId: importedProject.id }),
+          sources: entry.sources,
+          threadCount: entry.threadCount,
+          lastActiveAt:
+            entry.lastActiveAtMs === null
+              ? null
+              : DateTime.formatIso(DateTime.makeUnsafe(entry.lastActiveAtMs)),
+          alreadyImported: importedProject !== undefined,
+          git: entry.git,
         });
-        continue;
       }
-      if (!existing.sources.includes(candidate.source)) {
-        existing.sources.push(candidate.source);
-      }
-      existing.threadCount += candidate.threadCount;
-      existing.lastActiveAtMs =
-        existing.lastActiveAtMs === null || candidate.lastActiveAtMs === null
-          ? (existing.lastActiveAtMs ?? candidate.lastActiveAtMs)
-          : Math.max(existing.lastActiveAtMs, candidate.lastActiveAtMs);
-    }
 
-    // Resolve persisted roots too. A project and a transcript can name
-    // different symlinks to the same directory.
-    const importedProjects = yield* projectStore
-      .listShells()
-      .pipe(
-        Effect.mapError(
-          (cause) => new AgentSessionScanError({ operation: "read-projects", cause }),
-        ),
-      );
-    const importedProjectsByRoot = new Map<string, (typeof importedProjects)[number]>();
-    for (const project of importedProjects) {
-      const projectRoot = path.resolve(expandHomePath(project.workspaceRoot, homeDir));
-      importedProjectsByRoot.set(normalizeProjectPathForComparison(projectRoot), project);
-      importedProjectsByRoot.set(yield* directoryIdentity(projectRoot), project);
-    }
-
-    const candidates: Array<AgentSessionProjectCandidate> = [];
-    for (const [key, entry] of merged.entries()) {
-      const importedProject =
-        importedProjectsByRoot.get(normalizeProjectPathForComparison(entry.path)) ??
-        importedProjectsByRoot.get(key);
-      const candidatePath = importedProject?.workspaceRoot ?? entry.path;
-      candidates.push({
-        path: candidatePath,
-        title: path.basename(candidatePath) || candidatePath,
-        ...(importedProject === undefined ? {} : { projectId: importedProject.id }),
-        sources: entry.sources,
-        threadCount: entry.threadCount,
-        lastActiveAt:
-          entry.lastActiveAtMs === null
-            ? null
-            : DateTime.formatIso(DateTime.makeUnsafe(entry.lastActiveAtMs)),
-        alreadyImported: importedProject !== undefined,
-        git: entry.git,
+      candidates.sort((left, right) => {
+        if (left.lastActiveAt === right.lastActiveAt) return left.path.localeCompare(right.path);
+        if (left.lastActiveAt === null) return 1;
+        if (right.lastActiveAt === null) return -1;
+        return right.lastActiveAt.localeCompare(left.lastActiveAt);
       });
-    }
 
-    candidates.sort((left, right) => {
-      if (left.lastActiveAt === right.lastActiveAt) return left.path.localeCompare(right.path);
-      if (left.lastActiveAt === null) return 1;
-      if (right.lastActiveAt === null) return -1;
-      return right.lastActiveAt.localeCompare(left.lastActiveAt);
-    });
-
-    return {
-      candidates,
-      scannedAt: DateTime.formatIso(yield* DateTime.now),
-      ...(truncated ? { truncated: true } : {}),
-    };
-  });
+      return {
+        candidates,
+        scannedAt: DateTime.formatIso(yield* DateTime.now),
+        ...(truncated ? { truncated: true } : {}),
+      };
+    },
+  );
 
   /** Transcripts whose session ran in this project directory, newest first. */
   const projectTranscripts = Effect.fn("AgentSessionScanner.projectTranscripts")(function* (
@@ -1548,13 +1571,23 @@ export const make = Effect.gen(function* () {
 
   const listSessions: AgentSessionScanner["Service"]["listSessions"] = Effect.fn(
     "AgentSessionScanner.listSessions",
-  )(function* (workspaceRoot) {
-    const { candidates } = yield* collectCandidates();
-    cachedCandidates = candidates;
+  )(function* (workspaceRoot, options = {}) {
+    let candidates = options.reuseDiscovery === true ? cachedCandidates : null;
+    if (candidates === null) {
+      candidates = (yield* collectCandidates()).candidates;
+      cachedCandidates = candidates;
+    }
     const project = yield* projectTranscripts(workspaceRoot, candidates);
-    if (project === null) return [];
+    if (project === null) return { sessions: [], truncated: false };
+    const { maxAgeMs } = options;
+    const eligibleTranscripts =
+      maxAgeMs === undefined
+        ? project.transcripts
+        : project.transcripts.filter(
+            ({ transcript }) => transcript.mtimeMs >= project.nowMs - maxAgeMs,
+          );
     const summaries = yield* Effect.forEach(
-      project.transcripts.slice(0, MAX_SUMMARIZED_TRANSCRIPTS),
+      eligibleTranscripts.slice(0, MAX_SUMMARIZED_TRANSCRIPTS),
       ({ candidate, transcript }) =>
         Effect.gen(function* () {
           const records = yield* readTranscriptEnds(transcript.filePath);
@@ -1582,15 +1615,18 @@ export const make = Effect.gen(function* () {
       { concurrency: 8 },
     );
     const seen = new Set<string>();
-    return summaries
-      .flat()
-      .filter((summary) => {
-        const key = `${summary.providerInstanceId}\0${summary.providerSessionId}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, MAX_LISTED_SESSIONS);
+    const sessions = summaries.flat().filter((summary) => {
+      const key = `${summary.providerInstanceId}\0${summary.providerSessionId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return {
+      sessions: sessions.slice(0, MAX_LISTED_SESSIONS),
+      truncated:
+        sessions.length > MAX_LISTED_SESSIONS ||
+        eligibleTranscripts.length > MAX_SUMMARIZED_TRANSCRIPTS,
+    };
   });
 
   const readSession: AgentSessionScanner["Service"]["readSession"] = Effect.fn(
@@ -1611,7 +1647,7 @@ export const make = Effect.gen(function* () {
       });
       return { project, matches };
     });
-    // The listing that offered this session just refreshed the cache, so a full discovery is
+    // The listing that offered this session ran on the cached discovery, so a full discovery is
     // only needed when the session is newer than it.
     let found = cachedCandidates === null ? null : yield* findMatches(cachedCandidates);
     if (found === null || found.matches.length === 0) {

@@ -396,25 +396,60 @@ const make = Effect.gen(function* () {
     return { generation: MAX_IMPORT_GENERATIONS, liveThreadId: null };
   });
 
+  /** The listed folder, and the project that owns it if there is one yet. */
+  const resolveListTarget = Effect.fn("resolveAgentSessionListTarget")(function* (
+    input: AgentSessionListInput,
+  ) {
+    if ("projectId" in input) {
+      const project = yield* readProject(input.projectId);
+      return { workspaceRoot: project.workspaceRoot, projectId: project.id, fromScan: false };
+    }
+    const project = Option.getOrNull(
+      yield* projects
+        .getByWorkspaceRoot(input.workspaceRoot)
+        .pipe(
+          Effect.mapError(
+            (cause) => new AgentSessionScanError({ operation: "read-projects", cause }),
+          ),
+        ),
+    );
+    return {
+      workspaceRoot: project?.workspaceRoot ?? input.workspaceRoot,
+      projectId: project?.id ?? null,
+      fromScan: true,
+    };
+  });
+
   const listSessions = Effect.fn("listAgentSessions")(function* (input: AgentSessionListInput) {
-    const project = yield* readProject(input.projectId);
-    const summaries = yield* scanner.listSessions(project.workspaceRoot);
+    const target = yield* resolveListTarget(input);
+    const listed = yield* scanner.listSessions(target.workspaceRoot, {
+      ...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
+      reuseDiscovery: target.fromScan,
+    });
+    const { projectId } = target;
     const sessions = yield* Effect.forEach(
-      summaries,
+      listed.sessions,
       (summary) =>
-        resolveImportGeneration(summary, input.projectId).pipe(
-          Effect.map(({ liveThreadId }): AgentSessionListItem => ({
+        Effect.gen(function* () {
+          const liveThreadId =
+            projectId === null
+              ? null
+              : (yield* resolveImportGeneration(summary, projectId)).liveThreadId;
+          return {
             provider: summary.source,
             providerInstanceId: summary.providerInstanceId,
             providerSessionId: summary.providerSessionId,
             title: summary.title,
             updatedAt: summary.updatedAt,
             importedThreadId: liveThreadId,
-          })),
-        ),
+          } satisfies AgentSessionListItem;
+        }),
       { concurrency: 16 },
     );
-    return { sessions } satisfies AgentSessionListResult;
+    return {
+      sessions,
+      ...(listed.truncated ? { truncated: true } : {}),
+    } satisfies AgentSessionListResult;
   });
 
   const importSession = Effect.fn("importAgentSession")(function* (

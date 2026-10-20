@@ -24,7 +24,12 @@ export const AgentSessionImportSource = Schema.Struct({
 });
 export type AgentSessionImportSource = typeof AgentSessionImportSource.Type;
 
-export const AgentSessionScanInput = Schema.Struct({});
+/** How far back to look, in milliseconds before the server's clock. Absent means all time. */
+const AgentSessionMaxAge = Schema.optional(NonNegativeInt);
+
+export const AgentSessionScanInput = Schema.Struct({
+  maxAgeMs: AgentSessionMaxAge,
+});
 export type AgentSessionScanInput = typeof AgentSessionScanInput.Type;
 
 export const AgentSessionProjectGit = Schema.Struct({
@@ -82,9 +87,14 @@ export const AgentSessionImportResult = Schema.Struct({
 });
 export type AgentSessionImportResult = typeof AgentSessionImportResult.Type;
 
-export const AgentSessionListInput = Schema.Struct({
-  projectId: ProjectId,
-});
+/**
+ * A project's sessions, or a folder's before it is a project. Listing by folder reuses the
+ * discovery of the latest scan, since the folder came from one.
+ */
+export const AgentSessionListInput = Schema.Union([
+  Schema.Struct({ projectId: ProjectId, maxAgeMs: AgentSessionMaxAge }),
+  Schema.Struct({ workspaceRoot: TrimmedNonEmptyString, maxAgeMs: AgentSessionMaxAge }),
+]);
 export type AgentSessionListInput = typeof AgentSessionListInput.Type;
 
 /**
@@ -101,8 +111,10 @@ export const AgentSessionListItem = Schema.Struct({
 });
 export type AgentSessionListItem = typeof AgentSessionListItem.Type;
 
+/** `truncated` means older sessions exist past the listing limit. */
 export const AgentSessionListResult = Schema.Struct({
   sessions: Schema.Array(AgentSessionListItem),
+  truncated: Schema.optional(Schema.Boolean),
 });
 export type AgentSessionListResult = typeof AgentSessionListResult.Type;
 
