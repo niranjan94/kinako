@@ -5,6 +5,7 @@ import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
 import { enrichedContextLinkPresentation } from "../../lib/enrichedLinkPresentation";
 import { ThreadContextDivider } from "./thread-context-divider";
 import { ThreadHandoffDivider, ThreadHandoffRow } from "./thread-handoff-row";
+import { TurnRecapCard } from "./TurnRecapCard";
 import {
   ConversationSummaryDivider,
   conversationSummaryItem,
@@ -24,6 +25,7 @@ import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { useViewabilityAmount, type LegendListRef } from "@legendapp/list/react-native";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { HandoffEndpoints } from "@t3tools/client-runtime/handoff";
+import type { TurnRecap } from "@t3tools/client-runtime/state/turn-recap";
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
 import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRuntime";
@@ -301,6 +303,7 @@ export interface ThreadFeedProps {
   readonly workspaceRoot?: string | null;
   readonly feed: ReadonlyArray<ThreadFeedEntry>;
   readonly pendingHandoff?: HandoffEndpoints | null;
+  readonly turnRecap?: TurnRecap | null;
   /** Set when this thread is a workflow's own thread; its run report leads the feed. */
   readonly workflowCoordinator?: OrchestrationV2Subagent | null;
   readonly contentPresentation: ThreadContentPresentation;
@@ -2585,13 +2588,18 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
               </>
             }
             ListFooterComponent={
-              props.pendingHandoff ? (
-                <ThreadHandoffDivider
-                  environmentId={props.environmentId}
-                  endpoints={props.pendingHandoff}
-                  iconColor={iconSubtleColor}
-                  label="Context handoff pending"
-                />
+              props.turnRecap || props.pendingHandoff ? (
+                <>
+                  {props.turnRecap ? <TurnRecapCard recap={props.turnRecap} /> : null}
+                  {props.pendingHandoff ? (
+                    <ThreadHandoffDivider
+                      environmentId={props.environmentId}
+                      endpoints={props.pendingHandoff}
+                      iconColor={iconSubtleColor}
+                      label="Context handoff pending"
+                    />
+                  ) : null}
+                </>
               ) : null
             }
             contentContainerStyle={{

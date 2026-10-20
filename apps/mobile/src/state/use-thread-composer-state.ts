@@ -35,6 +35,7 @@ import {
   type CodexFeedbackSubmission,
 } from "@t3tools/client-runtime/state/threads";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
+import { deriveTurnRecap } from "@t3tools/client-runtime/state/turn-recap";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
 import { composerContextSendBlockReason, reidentifyComposerContext } from "../lib/composerContext";
 import { uuidv4 } from "../lib/uuid";
@@ -105,6 +106,8 @@ import {
 import { setPendingConnectionError } from "../state/use-remote-environment-registry";
 import { clearThreadComposerError, setThreadComposerError } from "./thread-composer-error";
 import {
+  useSelectedThreadCheckpointSummaries,
+  useSelectedThreadPendingRequests,
   useSelectedThreadProjection,
   useSelectedThreadVisibleTurnItems,
 } from "../state/use-thread-detail";
@@ -184,6 +187,8 @@ export function useThreadComposerState() {
     selectedEnvironmentRuntime,
   } = useThreadSelection();
   const selectedThreadProjection = useSelectedThreadProjection();
+  const selectedThreadPendingRequests = useSelectedThreadPendingRequests();
+  const selectedThreadCheckpointSummaries = useSelectedThreadCheckpointSummaries();
   const selectedThreadVisibleTurnItems = useSelectedThreadVisibleTurnItems();
   const acknowledgedMessages = useAtomValue(acknowledgedThreadMessagesAtom);
   const queuedMessagesByThreadKey = useThreadOutboxMessages();
@@ -370,6 +375,20 @@ export function useThreadComposerState() {
     );
   })();
   const runlessWorkActive = runlessWorkStartedAt !== null;
+  const turnRecap = selectedThreadProjection
+    ? deriveTurnRecap({
+        working:
+          activeWorkStartedAt !== null ||
+          selectedThreadQueuedMessages.some(
+            (message) => message.messageId === dispatchingQueuedMessageId,
+          ),
+        latestRun: selectedThreadActivityRun,
+        runtime: selectedThreadRuntime,
+        pendingRequests: selectedThreadPendingRequests,
+        messages: selectedThreadProjection.projection.messages,
+        checkpoints: selectedThreadCheckpointSummaries,
+      })
+    : null;
 
   const providerSubagentStatus = selectedThreadProjection
     ? deriveProviderSubagentStatus(selectedThreadProjection.projection)
@@ -964,6 +983,7 @@ export function useThreadComposerState() {
     dispatchingQueuedMessageId,
     activeWorkStartedAt,
     runlessWorkActive,
+    turnRecap,
     providerSubagentStatus,
     isCompacting,
     composerDraftKey,
