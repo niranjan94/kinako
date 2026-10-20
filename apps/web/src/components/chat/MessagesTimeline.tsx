@@ -304,6 +304,7 @@ import {
   type HandoffTimelineRun,
 } from "./V2LifecycleRow";
 import { SecretRequestCard } from "./SecretRequestCard";
+import { FollowUpCard } from "./FollowUpCard";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { WorkflowOpeningBlock } from "./WorkflowOpeningBlock";
 
@@ -3020,6 +3021,16 @@ function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event"
         environmentId={ctx.activeThreadEnvironmentId}
         item={item}
         visibility={visibility}
+      />
+    );
+  }
+  if (item.type === "follow_up") {
+    return (
+      <FollowUpCard
+        environmentId={ctx.activeThreadEnvironmentId}
+        item={item}
+        visibility={visibility}
+        onOpenThread={ctx.onOpenThread}
       />
     );
   }

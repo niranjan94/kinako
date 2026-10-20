@@ -1420,6 +1420,17 @@ const OrchestrationV2SecretRequestFields = {
   secretStatus: OrchestrationV2SecretRequestStatus,
 } as const;
 
+export const OrchestrationV2FollowUpStatus = Schema.Literals(["suggested", "started", "dismissed"]);
+export type OrchestrationV2FollowUpStatus = typeof OrchestrationV2FollowUpStatus.Type;
+
+const OrchestrationV2FollowUpFields = {
+  type: Schema.Literal("follow_up"),
+  label: TrimmedNonEmptyString,
+  prompt: TrimmedNonEmptyString,
+  followUpStatus: OrchestrationV2FollowUpStatus,
+  startedThreadId: Schema.optional(ThreadId),
+} as const;
+
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1599,6 +1610,10 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemBaseFields,
+    ...OrchestrationV2FollowUpFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2385,6 +2400,10 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
     ...OrchestrationV2SecretRequestFields,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2TurnItemJsonBaseFields,
+    ...OrchestrationV2FollowUpFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
@@ -3235,6 +3254,22 @@ const OrchestrationV2InternalCommand = Schema.Union([
     reason: Schema.String,
     placeholder: Schema.optional(Schema.String),
     secretStatus: OrchestrationV2SecretRequestStatus,
+  }),
+  /**
+   * Internal so a client cannot mark a follow-up started without the thread
+   * being launched.
+   */
+  Schema.Struct({
+    type: Schema.Literal("follow_up.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    nodeId: NodeId,
+    turnItemId: TurnItemId,
+    label: TrimmedNonEmptyString,
+    prompt: TrimmedNonEmptyString,
+    followUpStatus: OrchestrationV2FollowUpStatus,
+    startedThreadId: Schema.optional(ThreadId),
   }),
 ]);
 export type OrchestrationV2InternalCommand = typeof OrchestrationV2InternalCommand.Type;

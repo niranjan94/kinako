@@ -639,6 +639,27 @@ export const OrchestratorMcpRequestSecretResult = Schema.Union([
 ]);
 export type OrchestratorMcpRequestSecretResult = typeof OrchestratorMcpRequestSecretResult.Type;
 
+export const OrchestratorMcpSuggestFollowUpInput = Schema.Struct({
+  title: OrchestratorMcpTitle.annotate({
+    description:
+      "Short label for the follow-up, shown on its card and used as the new thread's title, e.g. 'Add tests for the retry queue'.",
+  }),
+  prompt: OrchestratorMcpPrompt.annotate({
+    description:
+      "The complete first message for the new thread. It starts without this thread's context, so name the files, findings, and goal it needs.",
+  }),
+  clientRequestId: Schema.optional(OrchestratorMcpClientRequestId).annotate({
+    description:
+      "Reuse when retrying a call that lost its result, so the user sees one card. A new id records another follow-up.",
+  }),
+});
+export type OrchestratorMcpSuggestFollowUpInput = typeof OrchestratorMcpSuggestFollowUpInput.Type;
+
+export const OrchestratorMcpSuggestFollowUpResult = Schema.Struct({
+  followUpId: TurnItemId,
+});
+export type OrchestratorMcpSuggestFollowUpResult = typeof OrchestratorMcpSuggestFollowUpResult.Type;
+
 export const OrchestratorMcpDeleteScheduledTaskInput = Schema.Struct({
   scheduledTaskId: ScheduledTaskId,
 });
