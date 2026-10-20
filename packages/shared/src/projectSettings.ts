@@ -241,6 +241,7 @@ export function resolveWorktreeCleanup(
       worktreeOnDelete: false,
       worktreeUnchanged: false,
       worktreeDeleteEditedCopies: settings.storageCleanup.worktreeDeleteEditedCopies,
+      worktreeSnapshotBeforeRemoval: false,
     };
   const {
     worktreeKeepWhen,
@@ -250,6 +251,7 @@ export function resolveWorktreeCleanup(
     worktreeOnDelete,
     worktreeUnchanged,
     worktreeDeleteEditedCopies,
+    worktreeSnapshotBeforeRemoval,
   } = settings.storageCleanup;
   return {
     worktreeKeepWhen,
@@ -259,5 +261,6 @@ export function resolveWorktreeCleanup(
     worktreeOnDelete,
     worktreeUnchanged,
     worktreeDeleteEditedCopies,
+    worktreeSnapshotBeforeRemoval,
   };
 }

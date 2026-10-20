@@ -1,7 +1,9 @@
 import type {
+  EnvironmentId,
   StorageCleanupReport,
   StorageCleanupSettings,
   WorktreeCleanupRules,
+  WorktreeSnapshot,
 } from "@t3tools/contracts";
 import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
 import { useRef, useState } from "react";
@@ -15,6 +17,7 @@ import { environmentAtomList, environmentIdsKey } from "../../state/environmentA
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
+import { requestConfirmDialog } from "../../confirmDialog";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
 
@@ -216,6 +219,7 @@ function CleanupResults({
               >
                 {entry.threadTitle && entry.threadTitle !== name ? `${entry.threadTitle}. ` : ""}
                 {entry.reason}
+                {entry.snapshotRef !== null ? ". Snapshot saved." : ""}
               </span>
             }
             control={
@@ -399,6 +403,143 @@ function CleanupSection() {
           )}
         </FoldedSettingsSection>
       )}
+    </SettingsSection>
+  );
+}
+
+const worktreeSnapshotsAtom = environmentAtomList("web-worktree-snapshots", (environmentId) =>
+  serverEnvironment.worktreeSnapshots({ environmentId, input: {} }),
+);
+const worktreeSnapshotPermissionsAtom = environmentAtomList(
+  "web-worktree-snapshot-permissions",
+  serverEnvironment.restoreWorktreeSnapshot.permissionAtom,
+);
+
+function RecoverySnapshotsSection() {
+  useRelativeTimeTick(60_000);
+  const { connectedEnvironments } = useSettingsScope();
+  const restore = useAtomCommand(serverEnvironment.restoreWorktreeSnapshot);
+  const discard = useAtomCommand(serverEnvironment.deleteWorktreeSnapshot);
+  const [pendingRef, setPendingRef] = useState<string | null>(null);
+  const supported = connectedEnvironments.filter(
+    (environment) => environment.serverConfig?.environment.capabilities.worktreeSnapshots === true,
+  );
+  const supportedIds = supported.map(({ environmentId }) => environmentId);
+  const lists = useAtomValue(worktreeSnapshotsAtom(environmentIdsKey(supportedIds)));
+  const permissions = useAtomValue(
+    worktreeSnapshotPermissionsAtom(environmentIdsKey(supportedIds)),
+  );
+  const rows = supported.flatMap((environment, index) => {
+    const query = lists[index]!;
+    return (query._tag === "Success" ? query.value : []).map((snapshot) => ({
+      environment,
+      allowed: permissions[index]!,
+      snapshot,
+    }));
+  });
+  if (rows.length === 0) return null;
+
+  const run = async (
+    environmentId: EnvironmentId,
+    snapshot: WorktreeSnapshot,
+    action: "restore" | "discard",
+  ) => {
+    if (pendingRef !== null) return;
+    if (
+      action === "discard" &&
+      (await requestConfirmDialog(
+        `Discard the recovery snapshot of ${snapshot.threadTitle ?? snapshot.worktreePath}?\nIts saved files cannot be restored afterwards.`,
+        { variant: "destructive" },
+      )) !== true
+    )
+      return;
+    setPendingRef(snapshot.ref);
+    const input = { repository: snapshot.repository, ref: snapshot.ref };
+    try {
+      if (action === "discard") {
+        const result = await discard({ environmentId, input });
+        if (result._tag !== "Success" && !isAtomCommandInterrupted(result))
+          toastManager.add({
+            type: "error",
+            title: "Could not discard the snapshot",
+            description: String(squashAtomCommandFailure(result)),
+          });
+        return;
+      }
+      const result = await restore({ environmentId, input });
+      if (result._tag === "Success") {
+        const { conflictedPaths, worktreePath } = result.value;
+        toastManager.add(
+          conflictedPaths.length > 0
+            ? {
+                type: "warning",
+                title: "Restored with conflicts",
+                description: `Resolve ${conflictedPaths.length} ${conflictedPaths.length === 1 ? "file" : "files"} in ${worktreePath}: ${conflictedPaths.slice(0, 3).join(", ")}${conflictedPaths.length > 3 ? "…" : ""}`,
+              }
+            : {
+                type: "success",
+                title: "Snapshot restored",
+                description: `Files are back in ${worktreePath} as uncommitted changes.`,
+              },
+        );
+      } else if (!isAtomCommandInterrupted(result)) {
+        toastManager.add({
+          type: "error",
+          title: "Could not restore the snapshot",
+          description: String(squashAtomCommandFailure(result)),
+        });
+      }
+    } finally {
+      setPendingRef(null);
+    }
+  };
+
+  return (
+    <SettingsSection id="storage-recovery-snapshots" title="Recovery snapshots" variant="plain">
+      <SettingsGroup>
+        {rows.map(({ environment, allowed, snapshot }) => {
+          const name =
+            snapshot.threadTitle ?? snapshot.worktreePath.split(/[\\/]/).findLast(Boolean);
+          const label = settingsScopeEnvironmentLabel(environment, connectedEnvironments);
+          return (
+            <SettingsRow
+              key={`${environment.environmentId}:${snapshot.repository}:${snapshot.ref}`}
+              title={supported.length > 1 ? `${label}: ${name}` : name}
+              description={
+                <span className="wrap-anywhere">
+                  {[
+                    snapshot.branch,
+                    `${snapshot.fileCount.toLocaleString()} ${snapshot.fileCount === 1 ? "file" : "files"}`,
+                    `saved ${formatRelativeTimeLabel(snapshot.createdAt)}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              }
+              control={
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!allowed || pendingRef !== null}
+                    onClick={() => void run(environment.environmentId, snapshot, "restore")}
+                  >
+                    Restore
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!allowed || pendingRef !== null}
+                    onClick={() => void run(environment.environmentId, snapshot, "discard")}
+                  >
+                    Discard
+                  </Button>
+                </div>
+              }
+            />
+          );
+        })}
+      </SettingsGroup>
     </SettingsSection>
   );
 }
@@ -739,6 +880,28 @@ export function StorageSettingsPanel() {
                   }
                 />
               )}
+            {!ruleStatus("worktreeKeepWhen") &&
+              settings.worktreeKeepWhen === "tracked-changes" &&
+              connectedEnvironments.every(
+                (environment) =>
+                  environment.serverConfig?.environment.capabilities.worktreeSnapshots === true,
+              ) && (
+                <SettingsRow
+                  {...searchableSetting("storage-worktree-snapshot-before-removal")}
+                  status={ruleStatus("worktreeSnapshotBeforeRemoval")}
+                  description="Before deleting a worktree, save its untracked files so you can restore them for 30 days. Ignored files, such as .env, are not saved."
+                  serverScoped={!isProjectScope}
+                  control={
+                    <Switch
+                      aria-label="Save a recovery snapshot before deleting"
+                      checked={settings.worktreeSnapshotBeforeRemoval}
+                      onCheckedChange={(worktreeSnapshotBeforeRemoval) =>
+                        updateWorktree({ worktreeSnapshotBeforeRemoval })
+                      }
+                    />
+                  }
+                />
+              )}
           </>
         )}
       </SettingsSection>
@@ -774,6 +937,7 @@ export function StorageSettingsPanel() {
         </SettingsSection>
       )}
       {!isProjectScope && <CleanupSection />}
+      {!isProjectScope && <RecoverySnapshotsSection />}
     </SettingsPageContainer>
   );
 }

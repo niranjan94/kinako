@@ -922,6 +922,9 @@ export const WorktreeCleanupRules = Schema.Struct({
    * only copies identical to the main checkout's are disposable.
    */
   worktreeDeleteEditedCopies: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  worktreeSnapshotBeforeRemoval: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
 });
 export type WorktreeCleanupRules = typeof WorktreeCleanupRules.Type;
 
@@ -1063,6 +1066,8 @@ export const StorageCleanupReportEntry = Schema.Struct({
   threadTitle: Schema.NullOr(Schema.String),
   bytes: Schema.NullOr(Schema.Number).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   files: Schema.NullOr(Schema.Number).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  /** Recovery snapshot ref saved before a worktree with local changes was removed. */
+  snapshotRef: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type StorageCleanupReportEntry = typeof StorageCleanupReportEntry.Type;
 export const StorageCleanupReport = Schema.Struct({
@@ -1088,6 +1093,9 @@ export const StorageCleanupSettings = Schema.Struct({
   worktreeOnDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   worktreeUnchanged: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   worktreeDeleteEditedCopies: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  worktreeSnapshotBeforeRemoval: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
   browserArtifactsAfterDays: StorageRetentionDays.pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
@@ -1425,6 +1433,7 @@ export const ServerSettingsPatch = Schema.Struct({
             worktreeOnDelete: Schema.optionalKey(Schema.Boolean),
             worktreeUnchanged: Schema.optionalKey(Schema.Boolean),
             worktreeDeleteEditedCopies: Schema.optionalKey(Schema.Boolean),
+            worktreeSnapshotBeforeRemoval: Schema.optionalKey(Schema.Boolean),
           }),
         }),
       ]),
@@ -1439,6 +1448,7 @@ export const ServerSettingsPatch = Schema.Struct({
       worktreeOnDelete: Schema.optionalKey(Schema.Boolean),
       worktreeUnchanged: Schema.optionalKey(Schema.Boolean),
       worktreeDeleteEditedCopies: Schema.optionalKey(Schema.Boolean),
+      worktreeSnapshotBeforeRemoval: Schema.optionalKey(Schema.Boolean),
       browserArtifactsAfterDays: Schema.optionalKey(StorageRetentionDays),
       logsAfterDays: Schema.optionalKey(StorageRetentionDays),
     }),

@@ -62,6 +62,7 @@ describe("storage cleanup settings", () => {
       worktreeUnchanged: false,
       worktreeKeepWhen: "uncommitted-changes",
       worktreeDeleteEditedCopies: true,
+      worktreeSnapshotBeforeRemoval: false,
       browserArtifactsAfterDays: null,
       logsAfterDays: null,
     });

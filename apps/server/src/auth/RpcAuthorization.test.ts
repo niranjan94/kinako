@@ -156,6 +156,18 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("lists recovery snapshots on read access but restores or discards them as source control writes", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.vcsSubscribeWorktreeSnapshots)).toBe(
+      AuthOrchestrationReadScope,
+    );
+    for (const method of [
+      WS_METHODS.vcsRestoreWorktreeSnapshot,
+      WS_METHODS.vcsDeleteWorktreeSnapshot,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthSourceControlWriteScope);
+    }
+  });
+
   it("separates viewing pull request file progress from writing it", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.pullRequestsFilesViewed)).toBe(
       AuthOrchestrationReadScope,
