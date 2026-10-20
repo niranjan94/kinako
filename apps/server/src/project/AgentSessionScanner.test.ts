@@ -75,10 +75,10 @@ const layerScannerTest = (input: ScannerTestInput) =>
     ),
   );
 
-const runScan = (input: ScannerTestInput) =>
+const runScan = (input: ScannerTestInput & { readonly maxAgeMs?: number }) =>
   Effect.gen(function* () {
     const scanner = yield* AgentSessionScanner.AgentSessionScanner;
-    return yield* scanner.scan;
+    return yield* scanner.scan(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs });
   }).pipe(Effect.provide(layerScannerTest(input)));
 
 const runRecentThreadOutcomes = (input: ScannerTestInput & { readonly workspaceRoot: string }) =>
@@ -148,10 +148,16 @@ function makeRecordLimitTranscript(cwd: string, overflow: boolean): string {
     : records;
 }
 
-const runListSessions = (input: ScannerTestInput & { readonly workspaceRoot: string }) =>
+const runListSessions = (
+  input: ScannerTestInput & { readonly workspaceRoot: string; readonly maxAgeMs?: number },
+) =>
   Effect.gen(function* () {
     const scanner = yield* AgentSessionScanner.AgentSessionScanner;
-    return yield* scanner.listSessions(input.workspaceRoot);
+    const listed = yield* scanner.listSessions(
+      input.workspaceRoot,
+      input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs },
+    );
+    return listed.sessions;
   }).pipe(Effect.provide(layerScannerTest(input)));
 
 const runReadSession = (
@@ -300,6 +306,70 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
       }),
     );
 
+    it.effect("lists only the sessions inside the age window", () =>
+      Effect.gen(function* () {
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-list-window-claude-");
+        const codexHomePath = yield* makeTempDir("t3code-list-window-codex-");
+        const workspace = yield* makeTempDir("t3code-list-window-workspace-");
+        const otherWorkspace = yield* makeTempDir("t3code-list-window-other-");
+        yield* writeSessionListFixture({
+          claudeHomePath,
+          codexHomePath,
+          workspace,
+          otherWorkspace,
+          nowMs,
+        });
+
+        const sessions = yield* runListSessions({
+          claudeHomePath,
+          codexHomePath,
+          workspaceRoot: workspace,
+          maxAgeMs: 30 * 24 * 60 * 60 * 1000,
+        });
+
+        expect(sessions.map((session) => session.providerSessionId)).toEqual(["codex-cli"]);
+      }),
+    );
+
+    it.effect("reports a listing cut at its limit as truncated", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-list-limit-claude-");
+        const codexHomePath = yield* makeTempDir("t3code-list-limit-codex-");
+        const workspace = yield* makeTempDir("t3code-list-limit-workspace-");
+        const sessionIds = Array.from(
+          { length: 101 },
+          (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        );
+        yield* Effect.forEach(sessionIds, (sessionId, index) =>
+          writeTranscript({
+            filePath: path.join(claudeHomePath, "projects", "-workspace", `${sessionId}.jsonl`),
+            contents: `${encodeTranscriptRecord({
+              type: "user",
+              cwd: workspace,
+              sessionId,
+              entrypoint: "cli",
+              message: { role: "user", content: `Task ${index}` },
+            })}\n`,
+            mtimeMs: nowMs - (index + 1) * 60 * 1000,
+          }),
+        );
+
+        const listed = yield* Effect.gen(function* () {
+          const scanner = yield* AgentSessionScanner.AgentSessionScanner;
+          return yield* scanner.listSessions(workspace);
+        }).pipe(Effect.provide(layerScannerTest({ claudeHomePath, codexHomePath })));
+
+        expect(listed.sessions).toHaveLength(100);
+        expect(listed.sessions[0]?.providerSessionId).toBe(sessionIds[0]);
+        expect(listed.truncated).toBe(true);
+      }),
+    );
+
     it.effect("lists a Codex session whose first record is longer than one read", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
@@ -391,6 +461,53 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
   });
 
   describe("scan", () => {
+    it.effect("counts only sessions inside the age window and drops folders without any", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const day = 24 * 60 * 60 * 1000;
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-scan-window-claude-");
+        const codexHomePath = yield* makeTempDir("t3code-scan-window-codex-");
+        const activeWorkspace = yield* makeTempDir("t3code-scan-window-active-");
+        const staleWorkspace = yield* makeTempDir("t3code-scan-window-stale-");
+        yield* writeTranscript({
+          filePath: path.join(claudeHomePath, "projects", "-active", "recent.jsonl"),
+          contents: claudeSessionLine(activeWorkspace),
+          mtimeMs: nowMs - 2 * day,
+        });
+        yield* writeTranscript({
+          filePath: path.join(claudeHomePath, "projects", "-active", "old.jsonl"),
+          contents: claudeSessionLine(activeWorkspace),
+          mtimeMs: nowMs - 60 * day,
+        });
+        yield* writeTranscript({
+          filePath: path.join(claudeHomePath, "projects", "-stale", "old.jsonl"),
+          contents: claudeSessionLine(staleWorkspace),
+          mtimeMs: nowMs - 90 * day,
+        });
+
+        const windowed = yield* runScan({ claudeHomePath, codexHomePath, maxAgeMs: 30 * day });
+        const allTime = yield* runScan({ claudeHomePath, codexHomePath });
+
+        expect(
+          windowed.candidates.map((candidate) => [
+            path.basename(candidate.path),
+            candidate.threadCount,
+          ]),
+        ).toEqual([[path.basename(activeWorkspace), 1]]);
+        expect(
+          allTime.candidates.map((candidate) => [
+            path.basename(candidate.path),
+            candidate.threadCount,
+          ]),
+        ).toEqual([
+          [path.basename(activeWorkspace), 2],
+          [path.basename(staleWorkspace), 1],
+        ]);
+      }),
+    );
+
     it.effect("reads Claude project cwds from transcripts, newest first", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
@@ -1923,7 +2040,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         });
         const outcomes = yield* Effect.gen(function* () {
           const scanner = yield* AgentSessionScanner.AgentSessionScanner;
-          const scan = yield* scanner.scan;
+          const scan = yield* scanner.scan();
           expect(scan.candidates[0]?.threadCount).toBe(5);
           return yield* scanner.recentThreads(workspace).pipe(Stream.runCollect);
         }).pipe(
@@ -2049,7 +2166,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
 
               yield* Effect.gen(function* () {
                 const scanner = yield* AgentSessionScanner.AgentSessionScanner;
-                const scan = yield* scanner.scan;
+                const scan = yield* scanner.scan();
                 expect(scan.candidates.map((candidate) => candidate.path)).toEqual([workspace]);
                 const replacementCwd =
                   replacement === "symlink alias"
@@ -2790,7 +2907,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         };
         const threads = yield* Effect.gen(function* () {
           const scanner = yield* AgentSessionScanner.AgentSessionScanner;
-          const scan = yield* scanner.scan;
+          const scan = yield* scanner.scan();
           expect(scan.truncated).toBe(true);
           return yield* scanner.recentThreads(recentWorkspace).pipe(Stream.runCollect);
         }).pipe(
