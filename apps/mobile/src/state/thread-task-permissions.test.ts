@@ -81,6 +81,7 @@ vi.mock("./use-thread-detail", () => ({
   useSelectedThreadProjection: () => null,
   useSelectedThreadVisibleTurnItems: () => [],
   useSelectedThreadPendingRequests: () => state.pendingRequests,
+  useSelectedThreadCheckpointSummaries: () => [],
 }));
 vi.mock("./use-atom-command", () => ({ useAtomCommand: <A>(command: A) => command }));
 vi.mock("./threads", async () => {
