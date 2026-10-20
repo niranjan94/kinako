@@ -642,9 +642,11 @@ describe("MessagesTimeline messages", () => {
       ),
     ]);
     expect(screen.container.querySelector('a[href="https://example.com"]')).not.toBeNull();
-    expect(
-      screen.container.querySelector('img[src="https://example.com/image.png"]'),
-    ).not.toBeNull();
+    await vi.waitFor(() =>
+      expect(
+        screen.container.querySelector('img[src="https://example.com/image.png"]'),
+      ).not.toBeNull(),
+    );
     expect(screen.container.querySelector('[title="link tip"], [title="image tip"]')).toBeNull();
   });
 

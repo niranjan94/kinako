@@ -205,12 +205,10 @@ describe("right panel new-tab shortcut", () => {
     await press("Escape");
     expect(document.querySelector('[role="menu"]:not([data-closed])')).toBeNull();
     // The menu hands focus back to its trigger once its close finishes, a few frames later.
-    // Timers are fake here, so advance them instead of polling in real time.
+    // vi.waitFor advances the fake timers on every check, so slow runners get as many frames as
+    // the close needs.
     const trigger = screen.container.querySelector('[aria-label="Add panel surface"]');
-    for (let frame = 0; frame < 10 && document.activeElement !== trigger; frame++) {
-      await act(() => vi.advanceTimersToNextFrame());
-    }
-    expect(document.activeElement).toBe(trigger);
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it("does not open over another popup or during text composition", async () => {
