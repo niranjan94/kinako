@@ -38,6 +38,7 @@ import {
 } from "@t3tools/contracts";
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
+import { supportsAgentSessionHistoryImport } from "@t3tools/client-runtime/agentSessionHistoryImport";
 
 import {
   ComposerEditor,
@@ -1448,6 +1449,19 @@ export function NewTaskDraftScreen(props: {
       }),
     );
   };
+
+  const openImportHistory = () => {
+    if (isComposerInteractionLocked) {
+      return;
+    }
+    promptInputRef.current?.blur();
+    void KeyboardController.dismiss({ animated: true });
+    navigation.dispatch(
+      StackActions.push("NewTaskImportHistory", {
+        environmentId: String(selectedProject.environmentId),
+      }),
+    );
+  };
   const openContextPicker = (routeName: "NewTaskBranch" | "NewTaskEnvironment") => {
     if (isComposerInteractionLocked) {
       return;
@@ -1533,6 +1547,16 @@ export function NewTaskDraftScreen(props: {
             icon="terminal"
             label="Import CLI session"
             onPress={openImportSession}
+          />
+        ) : null}
+        {supportsAgentSessionHistoryImport(selectedEnvironmentServerConfig) ? (
+          <ComposerInlineControl
+            accessibilityHint="Imports Claude Code and Codex sessions from all folders, adding projects as needed"
+            chevronDirection="right"
+            disabled={isComposerInteractionLocked}
+            icon="folder.badge.plus"
+            label="Import CLI history"
+            onPress={openImportHistory}
           />
         ) : null}
       </View>
