@@ -15,6 +15,7 @@ import { useFilesystemReadAccess } from "~/state/filesystem";
 import { projectEnvironment } from "~/state/projects";
 import { useProjectPathSearch } from "~/state/queries";
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
+import { workspaceRelativeFilePath } from "@t3tools/shared/path";
 
 const EMPTY_PROJECT_FILE_PATH = "";
 const EMPTY_PROJECT_ENTRIES_QUERY_ATOM = Atom.make(
@@ -32,12 +33,33 @@ export function optimisticFileAtom(
 }
 
 // Dirty contents must survive a closed preview, including failed or unauthorized saves.
-const unsavedFileMounts = new Map<ReturnType<typeof optimisticFileAtom>, () => void>();
+const unsavedFileMounts = new Map<
+  ReturnType<typeof optimisticFileAtom>,
+  {
+    readonly environmentId: EnvironmentId;
+    readonly cwd: string;
+    readonly relativePath: string;
+    readonly unmount: () => void;
+  }
+>();
 
 function releaseUnsavedFile(atom: ReturnType<typeof optimisticFileAtom>): void {
-  const unmount = unsavedFileMounts.get(atom);
+  const entry = unsavedFileMounts.get(atom);
   unsavedFileMounts.delete(atom);
-  unmount?.();
+  entry?.unmount();
+}
+
+export function hasUnsavedProjectFilesUnder(environmentId: EnvironmentId, root: string): boolean {
+  for (const entry of unsavedFileMounts.values()) {
+    if (
+      entry.environmentId === environmentId &&
+      workspaceRelativeFilePath(entry.cwd, root) !== null &&
+      getUnsavedProjectFileQueryData(entry.environmentId, entry.cwd, entry.relativePath) !== null
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 interface ProjectQueryState<A> {
@@ -82,7 +104,12 @@ export function setProjectFileQueryData(
 ): void {
   const atom = optimisticFileAtom(environmentId, cwd, relativePath);
   if (!unsavedFileMounts.has(atom)) {
-    unsavedFileMounts.set(atom, appAtomRegistry.mount(atom));
+    unsavedFileMounts.set(atom, {
+      environmentId,
+      cwd,
+      relativePath,
+      unmount: appAtomRegistry.mount(atom),
+    });
   }
   appAtomRegistry.set(atom, {
     confirmedAgainst: undefined,

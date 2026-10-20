@@ -30,6 +30,7 @@ import { useThreadShells, waitForProjectRemoval } from "../../state/entities";
 import { projectEnvironment } from "../../state/projects";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { openImportAgentSessionDialog } from "../agentSessions/ImportAgentSessionDialog";
+import { openProjectPathDialog } from "../ProjectPathDialog";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -403,16 +404,30 @@ function ProjectDetail({
     if (members) members.push(member);
     else checkoutsByEnvironment.set(member.environmentId, [member]);
   }
-  const checkoutRemoveButton = (member: SidebarProjectGroupMember) => (
+  const checkoutPathButton = (member: SidebarProjectGroupMember) => (
     <Button
       size="sm"
       variant="outline"
       disabled={!editableIds.has(member.environmentId)}
-      onClick={() => void removeMembers([member])}
-      aria-label={`Remove checkout ${member.workspaceRoot}`}
+      onClick={() => openProjectPathDialog(scopeProjectRef(member.environmentId, member.id))}
+      aria-label={`Change path of ${member.workspaceRoot}`}
     >
-      Remove
+      Change path
     </Button>
+  );
+  const checkoutRemoveButton = (member: SidebarProjectGroupMember) => (
+    <div className="flex items-center gap-2">
+      {checkoutPathButton(member)}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!editableIds.has(member.environmentId)}
+        onClick={() => void removeMembers([member])}
+        aria-label={`Remove checkout ${member.workspaceRoot}`}
+      >
+        Remove
+      </Button>
+    </div>
   );
   const checkoutChoices = (
     <SettingsSection title="Checkouts">
@@ -524,6 +539,13 @@ function ProjectDetail({
               />
             }
           />
+          {hasMultipleCheckouts ? null : (
+            <SettingsRow
+              title="Folder"
+              description={representative.workspaceRoot}
+              control={checkoutPathButton(representative)}
+            />
+          )}
           <SettingsRow
             title="Project icon"
             description={

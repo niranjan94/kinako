@@ -4,7 +4,9 @@ import {
   AuthFilesystemReadScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
+  CommandId,
   DEFAULT_SERVER_SETTINGS,
+  ProjectId,
   ProviderInstanceId,
   ThreadId,
   AuthOrchestrationOperateScope,
@@ -420,6 +422,39 @@ it.effect("requires task permission before attaching a prepared worktree to a th
         reference: "42",
         mode: "worktree",
         threadId: ThreadId.make("thread"),
+      }).pipe(Effect.flip),
+    ).toMatchObject({ requiredPermission: AuthOrchestrationOperateScope });
+    expect(handled).toBe(false);
+  }).pipe(Effect.scoped),
+);
+
+it.effect("refuses to move a project's folder without operate permission", () =>
+  Effect.gen(function* () {
+    const group = WsRpcGroup.omit(
+      ...[...WsRpcGroup.requests.keys()].filter(
+        (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof WS_METHODS.projectsMutate> =>
+          tag !== WS_METHODS.projectsMutate,
+      ),
+    );
+    let handled = false;
+    const client = yield* RpcTest.makeClient(group).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          group.toLayerHandler(WS_METHODS.projectsMutate, () =>
+            Effect.sync(() => {
+              handled = true;
+            }).pipe(Effect.andThen(Effect.never)),
+          ),
+          RpcAuthorization.layer([AuthOrchestrationReadScope, AuthFilesystemReadScope]),
+        ),
+      ),
+    );
+    expect(
+      yield* client[WS_METHODS.projectsMutate]({
+        type: "project.update",
+        commandId: CommandId.make("command:relocate"),
+        projectId: ProjectId.make("project"),
+        workspaceRoot: "/work/moved",
       }).pipe(Effect.flip),
     ).toMatchObject({ requiredPermission: AuthOrchestrationOperateScope });
     expect(handled).toBe(false);

@@ -96,9 +96,11 @@ export const layerProjectService = ProjectService.layer.pipe(
     Layer.mergeAll(
       ProjectStore.layer,
       ProjectionStore.layer,
+      EffectOutbox.layer,
       layerEventSinkProvided,
       IdAllocator.layer,
       layerLegacyV1ThreadImporterProvided,
+      GitVcsDriver.layer,
     ),
   ),
 );

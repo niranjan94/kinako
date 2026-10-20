@@ -524,6 +524,19 @@ it.effect("decodes null optional arguments the way it decodes omitted ones", () 
   }).pipe(Effect.provide(layerRecordingTools(calls)));
 });
 
+it.effect("never hands a project folder change from an agent to the project service", () => {
+  const calls: Array<unknown> = [];
+  return Effect.gen(function* () {
+    yield* callTool("t3_project_update", {
+      projectId: "project-1",
+      title: "Renamed",
+      workspaceRoot: "/somewhere/else",
+    }).pipe(Effect.ignore);
+
+    expect(calls).toStrictEqual([{ projectId: "project-1", title: "Renamed" }]);
+  }).pipe(Effect.provide(layerRecordingTools(calls)));
+});
+
 it.effect("accepts finite wait budgets and refuses non-finite ones", () => {
   const calls: Array<unknown> = [];
   return Effect.gen(function* () {

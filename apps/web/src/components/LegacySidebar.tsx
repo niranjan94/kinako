@@ -157,6 +157,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { openProjectPathDialog } from "./ProjectPathDialog";
 import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import {
   NumberField,
@@ -258,7 +259,13 @@ function clampSidebarThreadPreviewCount(value: number): SidebarThreadPreviewCoun
   ) as SidebarThreadPreviewCount;
 }
 
-type ProjectMenuAction = "rename" | "grouping" | "copy-path" | "import-session" | "delete";
+type ProjectMenuAction =
+  | "rename"
+  | "change-path"
+  | "grouping"
+  | "copy-path"
+  | "import-session"
+  | "delete";
 
 function formatProjectMemberActionLabel(
   member: SidebarProjectGroupMember,
@@ -1623,6 +1630,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             case "rename":
               openProjectRenameDialog(member);
               return;
+            case "change-path":
+              if (isMobile) setOpenMobile(false);
+              openProjectPathDialog(scopeProjectRef(member.environmentId, member.id));
+              return;
             case "grouping":
               openProjectGroupingDialog(member);
               return;
@@ -1690,6 +1701,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const clicked = await api.contextMenu.show(
         [
           buildTargetedItem("rename", "Rename", {
+            isDisabled: (member) =>
+              !readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
+          }),
+          buildTargetedItem("change-path", "Change project path...", {
             isDisabled: (member) =>
               !readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
           }),

@@ -9,6 +9,7 @@ import {
   newProjectFolderName,
   normalizeProjectPathForComparison,
   normalizeProjectPathForDispatch,
+  relocatePathUnderRoot,
   resolveWorkspaceFilePath,
 } from "./path.ts";
 
@@ -104,5 +105,38 @@ describe("workspaceRelativeFilePath", () => {
     ["/repo/project/a.ts", undefined, null],
   ])("relates %s to %s", (path, workspaceRoot, relativePath) => {
     expect(workspaceRelativeFilePath(path, workspaceRoot)).toBe(relativePath);
+  });
+});
+
+describe("relocatePathUnderRoot", () => {
+  it.each([
+    ["/a/proj", "/a/proj", "/b/moved", "/b/moved"],
+    ["/a/proj/", "/a/proj", "/b/moved/", "/b/moved"],
+    ["/a/proj/.wt/feature", "/a/proj", "/b/moved", "/b/moved/.wt/feature"],
+    ["/a/proj-2/src", "/a/proj", "/b/moved", null],
+    ["/a/project", "/a/proj", "/b/moved", null],
+    ["/a/other", "/a/proj", "/b/moved", null],
+    ["/A/Proj/src", "/a/proj", "/b/moved", null],
+    ["/x/file", "/", "/root", "/root/x/file"],
+    ["/a/proj/x", "/a/proj", "/", "/x"],
+    ["C:\\Repos\\Proj\\wt", "c:\\repos\\proj", "D:\\New", "D:\\New\\wt"],
+    ["C:/Repos/Proj/a/b", "C:\\Repos\\Proj", "D:\\New\\", "D:\\New\\a\\b"],
+    ["C:\\Repos\\Proj-2", "C:\\Repos\\Proj", "D:\\New", null],
+    ["\\\\Server\\Share\\Proj\\wt", "\\\\server\\share\\proj", "E:\\Proj", "E:\\Proj\\wt"],
+  ])("relocates %s from %s to %s", (path, fromRoot, toRoot, expected) => {
+    expect(relocatePathUnderRoot(path, fromRoot, toRoot)).toBe(expected);
+  });
+
+  it("folds case on case-insensitive filesystems only when asked", () => {
+    expect(
+      relocatePathUnderRoot("/Users/Me/Proj/wt", "/users/me/proj", "/b", {
+        caseInsensitive: true,
+      }),
+    ).toBe("/b/wt");
+    expect(
+      relocatePathUnderRoot("/Users/Me/Proj-2", "/users/me/proj", "/b", {
+        caseInsensitive: true,
+      }),
+    ).toBeNull();
   });
 });

@@ -161,9 +161,7 @@ function ProjectOverviewContent(props: {
                   {environment.displayUrl}
                 </Text>
               ) : null}
-              <Text className="text-sm leading-normal text-foreground-muted" selectable>
-                {member.workspaceRoot}
-              </Text>
+              <CheckoutPathEditor member={member} />
             </View>
           );
         })}
@@ -174,5 +172,88 @@ function ProjectOverviewContent(props: {
         environments={props.environments}
       />
     </>
+  );
+}
+
+function CheckoutPathEditor(props: { readonly member: EnvironmentProject }) {
+  const { member } = props;
+  const [draftPath, setDraftPath] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const updateProject = useAtomCommand(projectEnvironment.update, {
+    label: "project path change",
+    reportFailure: true,
+  });
+  const nextPath = (draftPath ?? member.workspaceRoot).trim();
+  const canSave = !isSaving && nextPath.length > 0 && nextPath !== member.workspaceRoot;
+
+  const savePath = () => {
+    if (!canSave) return;
+    setIsSaving(true);
+    void (async () => {
+      const result = await updateProject({
+        environmentId: member.environmentId,
+        input: { projectId: member.id, workspaceRoot: nextPath },
+      });
+      setIsSaving(false);
+      if (result._tag !== "Failure") setDraftPath(null);
+    })();
+  };
+
+  if (draftPath === null) {
+    return (
+      <View className="flex-row items-center gap-3">
+        <Text className="min-w-0 flex-1 text-sm leading-normal text-foreground-muted" selectable>
+          {member.workspaceRoot}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Change path of ${member.workspaceRoot}`}
+          onPress={() => setDraftPath(member.workspaceRoot)}
+          className="rounded-full bg-subtle-strong px-4 py-2 active:opacity-70"
+        >
+          <Text className="text-sm font-t3-medium text-foreground">Change path</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View className="gap-2">
+      <Text className="text-sm text-foreground-muted">
+        Folder on the machine running the server. Nothing is moved on disk; stop running turns
+        first.
+      </Text>
+      <View className="flex-row items-center gap-3">
+        <AppTextInput
+          accessibilityLabel="Project folder path"
+          autoCapitalize="none"
+          autoCorrect={false}
+          className="min-h-11 min-w-0 flex-1 rounded-xl border-continuous bg-card px-3 text-base text-foreground"
+          value={draftPath}
+          onChangeText={setDraftPath}
+          onSubmitEditing={savePath}
+          returnKeyType="done"
+          editable={!isSaving}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel path change"
+          onPress={() => setDraftPath(null)}
+          className="px-2 py-2 active:opacity-70"
+        >
+          <Text className="text-sm font-t3-medium text-foreground-muted">Cancel</Text>
+        </Pressable>
+        {canSave ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Save project path"
+            onPress={savePath}
+            className="rounded-full bg-subtle-strong px-4 py-2 active:opacity-70"
+          >
+            <Text className="text-sm font-t3-medium text-foreground">Save</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 }
