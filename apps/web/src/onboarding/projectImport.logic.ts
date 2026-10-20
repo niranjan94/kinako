@@ -26,67 +26,6 @@ export function partitionOnboardingProjects<T extends AgentSessionProjectCandida
   };
 }
 
-export interface OnboardingProjectGroup<T> {
-  readonly key: string;
-  readonly label: string;
-  readonly repository: string | null;
-  readonly candidates: ReadonlyArray<T>;
-  readonly threadCount: number;
-  readonly lastActiveAt: string | null;
-}
-
-function latestActivity(left: string | null, right: string | null): string | null {
-  if (left === null) return right;
-  if (right === null) return left;
-  return left > right ? left : right;
-}
-
-export function groupOnboardingProjects<
-  T extends Pick<
-    AgentSessionProjectCandidate,
-    "path" | "title" | "git" | "threadCount" | "lastActiveAt"
-  >,
->(candidates: ReadonlyArray<T>) {
-  const groups = new Map<string, OnboardingProjectGroup<T> & { candidates: Array<T> }>();
-  const other: Array<T> = [];
-
-  for (const candidate of candidates) {
-    if (candidate.git === null) {
-      other.push(candidate);
-      continue;
-    }
-    const git = candidate.git ?? { remoteKey: null, repository: null };
-    const key = git.remoteKey === null ? `path:${candidate.path}` : `remote:${git.remoteKey}`;
-    const existing = groups.get(key);
-    if (existing === undefined) {
-      groups.set(key, {
-        key,
-        label: git.repository ?? candidate.title,
-        repository: git.repository,
-        candidates: [candidate],
-        threadCount: candidate.threadCount,
-        lastActiveAt: candidate.lastActiveAt,
-      });
-      continue;
-    }
-    existing.candidates.push(candidate);
-    groups.set(key, {
-      ...existing,
-      threadCount: existing.threadCount + candidate.threadCount,
-      lastActiveAt: latestActivity(existing.lastActiveAt, candidate.lastActiveAt),
-    });
-  }
-
-  const repositories = [...groups.values()].sort((left, right) => {
-    if (left.lastActiveAt === right.lastActiveAt) return left.label.localeCompare(right.label);
-    if (left.lastActiveAt === null) return 1;
-    if (right.lastActiveAt === null) return -1;
-    return right.lastActiveAt.localeCompare(left.lastActiveAt);
-  });
-
-  return { repositories, other };
-}
-
 /** Use the server's project match before the client snapshot, which can lag behind the scan. */
 export function resolveOnboardingProjectId(
   projects: ReadonlyArray<{

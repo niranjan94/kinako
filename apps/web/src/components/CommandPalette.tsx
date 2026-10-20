@@ -143,6 +143,7 @@ import { useNewProject } from "../hooks/useNewProject";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { resolveThreadCliResumeCommand } from "@t3tools/client-runtime/providerCliResume";
 import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
+import { supportsAgentSessionHistoryImport } from "@t3tools/client-runtime/agentSessionHistoryImport";
 import {
   useEnvironmentProviders,
   useEnvironments,
@@ -228,6 +229,7 @@ import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
 import { openImportAgentSessionDialog } from "./agentSessions/ImportAgentSessionDialog";
 import { openProjectPathDialog } from "./ProjectPathDialog";
+import { openImportCliHistoryDialog } from "./agentSessions/ImportCliHistoryDialog";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
@@ -268,6 +270,16 @@ import { readPullRequestListPreferences } from "~/components/pullRequest/pullReq
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
+const IMPORT_CLI_HISTORY_SEARCH_TERMS = [
+  "import",
+  "cli",
+  "history",
+  "sessions",
+  "terminal",
+  "claude",
+  "codex",
+  "folders",
+];
 
 function getEnvironmentBrowsePlatform(os: string | null | undefined): string {
   if (os === "windows") {
@@ -1408,6 +1420,11 @@ function OpenCommandPaletteDialog(props: {
     void navigate({ to: "/settings/source-control" });
   };
 
+  const supportsHistoryImport = (environmentId: EnvironmentId) =>
+    supportsAgentSessionHistoryImport(
+      environments.find((environment) => environment.environmentId === environmentId)?.serverConfig,
+    );
+
   const buildAddProjectSourceGroups = (
     environmentId: EnvironmentId,
     readinessBySource: AddProjectRemoteSourceReadiness,
@@ -1426,6 +1443,20 @@ function OpenCommandPaletteDialog(props: {
         },
       },
     ];
+
+    if (supportsHistoryImport(environmentId)) {
+      sourceItems.push({
+        kind: "action",
+        value: `action:add-project:${environmentId}:cli-history`,
+        searchTerms: IMPORT_CLI_HISTORY_SEARCH_TERMS,
+        title: "Import CLI history",
+        description: "Add folders and sessions from Claude Code and Codex",
+        icon: <ImportIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          openImportCliHistoryDialog(environmentId);
+        },
+      });
+    }
 
     if (newProjectsRootFor(environmentId) !== null) {
       sourceItems.unshift({
@@ -1993,6 +2024,48 @@ function OpenCommandPaletteDialog(props: {
       openAddProjectFlow();
     },
   });
+
+  const historyImportEnvironmentOptions = addProjectEnvironmentOptions.filter(
+    (option) => option.isConnected && supportsHistoryImport(option.environmentId),
+  );
+  const isSingleHistoryImportEnvironment = historyImportEnvironmentOptions.length === 1;
+  const openImportCliHistoryFlow = () => {
+    const [only] = historyImportEnvironmentOptions;
+    if (isSingleHistoryImportEnvironment && only !== undefined) {
+      openImportCliHistoryDialog(only.environmentId);
+      return;
+    }
+    pushPaletteView({
+      addonIcon: <ImportIcon className={ADDON_ICON_CLASS} />,
+      groups: [
+        {
+          value: "environments",
+          label: "Environments",
+          items: historyImportEnvironmentOptions.map((option) => ({
+            ...buildEnvironmentItem(
+              option,
+              `action:import-cli-history:environment:${option.environmentId}`,
+              openImportCliHistoryDialog,
+            ),
+            keepOpen: false,
+          })),
+        },
+      ],
+    });
+  };
+  if (historyImportEnvironmentOptions.length > 0) {
+    actionItems.push({
+      kind: "action",
+      value: "action:import-cli-history",
+      searchTerms: IMPORT_CLI_HISTORY_SEARCH_TERMS,
+      title: "Import CLI history...",
+      icon: <ImportIcon className={ITEM_ICON_CLASS} />,
+      ...(isSingleHistoryImportEnvironment ? {} : { keepOpen: true }),
+      run: async () => {
+        openImportCliHistoryFlow();
+      },
+    });
+  }
 
   if (wslAddProjectEnvironmentOption) {
     actionItems.push({
