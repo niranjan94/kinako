@@ -73,10 +73,7 @@ conversation so T3 Code does not remove user text. It reads one conversation at
 a time and skips files larger than 16 MiB. It ignores malformed records and skips
 unreadable or unparseable conversations.
 
-Each import attempt reads up to 100 conversation files and 64 MiB per project,
-with up to 100,000 input records. Run import again to continue a large batch.
-Completed conversations are not imported again. You can continue without the
-remaining history.
+Each project imports up to its newest 100 conversations from the last 30 days, leaving out conversations that may still be open in a terminal. Completed conversations are not imported again. To bring in older history or pick individual conversations later, use **Import CLI history** from the command palette.
 
 You can continue without configuring agents or importing projects, or return to an earlier step
 using the setup progress bar. Navigation pauses while an import is running.
