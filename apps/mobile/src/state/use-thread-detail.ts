@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 import type { EnvironmentThread } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, OrchestrationV2ThreadProjection, ThreadId } from "@t3tools/contracts";
@@ -73,6 +74,9 @@ export function useSelectedThreadVisibleTurnItems(): OrchestrationV2ThreadProjec
 
 const EMPTY_WORKTREE_PATH_ATOM = Atom.make<string | null>(null);
 const EMPTY_PENDING_REQUESTS_ATOM = Atom.make<PendingThreadRequests | null>(null);
+const EMPTY_CHECKPOINT_SUMMARIES_ATOM = Atom.make<ReadonlyArray<ThreadCheckpointSummary>>(
+  Object.freeze([]),
+);
 
 export function useSelectedThreadWorktreePath() {
   const { selectedThreadDetailRef } = useThreadSelection();
@@ -89,5 +93,14 @@ export function useSelectedThreadPendingRequests() {
     selectedThreadDetailRef === null
       ? EMPTY_PENDING_REQUESTS_ATOM
       : environmentThreadDetails.pendingRequestsAtom(selectedThreadDetailRef),
+  );
+}
+
+export function useSelectedThreadCheckpointSummaries() {
+  const { selectedThreadDetailRef } = useThreadSelection();
+  return useAtomValue(
+    selectedThreadDetailRef === null
+      ? EMPTY_CHECKPOINT_SUMMARIES_ATOM
+      : environmentThreadDetails.checkpointSummariesAtom(selectedThreadDetailRef),
   );
 }

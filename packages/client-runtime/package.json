@@ -327,6 +327,10 @@
       "types": "./src/state/threadRequests.ts",
       "default": "./src/state/threadRequests.ts"
     },
+    "./state/turn-recap": {
+      "types": "./src/state/turnRecap.ts",
+      "default": "./src/state/turnRecap.ts"
+    },
     "./state/side-chats": {
       "types": "./src/state/sideChats.ts",
       "default": "./src/state/sideChats.ts"

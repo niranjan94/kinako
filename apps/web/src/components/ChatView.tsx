@@ -104,6 +104,7 @@ import {
   presentPendingBackgroundWork,
   presentProviderGoal,
 } from "@t3tools/client-runtime/state/thread-execution";
+import { deriveTurnRecap } from "@t3tools/client-runtime/state/turn-recap";
 import {
   resolveWorkflowOpening,
   workflowOpeningParentThreadId,
@@ -473,6 +474,7 @@ import { useRightPanelSurfaceClose } from "../hooks/useRightPanelSurfaceClose";
 import { useAgentOpenedPreviews } from "./preview/useAgentOpenedPreviews";
 import type { ComposerBannerStackItem } from "./chat/ComposerBannerStack";
 import { ThreadStatusLine } from "./chat/ThreadStatusLine";
+import { TurnRecapCard } from "./chat/TurnRecapCard";
 import { formatRelativeTimeLabel, formatRelativeTimeUntilLabel } from "../timestampFormat";
 import { ComposerSurface } from "./chat/ComposerSurface";
 import { resolveThreadSyncPhase } from "../threadSync";
@@ -5272,6 +5274,17 @@ export default function ChatView(props: ChatViewProps) {
       onAction={acknowledgeActiveThreadWokeStable}
     />
   ) : null;
+  const turnRecap =
+    serverProjection === null
+      ? null
+      : deriveTurnRecap({
+          working: isWorking,
+          latestRun: activeLatestRun,
+          runtime: activeRuntime,
+          pendingRequests: { approvals: pendingApprovals, userInputs: pendingUserInputs },
+          messages: serverProjection.messages,
+          checkpoints: turnDiffSummaries,
+        });
   const activeThreadHasCompactableConversation = serverVisibleTurnItems.some(
     ({ item }) =>
       item.type === "user_message" &&
@@ -8267,17 +8280,33 @@ export default function ChatView(props: ChatViewProps) {
                 {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
                 isPreparingWorktree={!paintOnlyDisplayedTimeline && isPreparingWorktree}
                 footer={
-                  paintOnlyDisplayedTimeline ? null : pendingHandoff === null ? (
+                  paintOnlyDisplayedTimeline ? null : pendingHandoff === null &&
+                    turnRecap === null ? (
                     threadStatusLine
                   ) : (
                     <>
-                      <div className="chat-content-lane">
-                        <HandoffRow
-                          endpoints={pendingHandoff}
-                          providers={providerStatuses}
-                          pending
-                        />
-                      </div>
+                      {turnRecap ? (
+                        <div className="chat-content-lane">
+                          <TurnRecapCard
+                            recap={turnRecap}
+                            changesShownAbove={turnDiffSummaries.some(
+                              (summary) =>
+                                summary.runId === turnRecap.runId &&
+                                summary.assistantMessageId !== null,
+                            )}
+                            onOpenTurnDiff={onOpenTurnDiffStable}
+                          />
+                        </div>
+                      ) : null}
+                      {pendingHandoff ? (
+                        <div className="chat-content-lane">
+                          <HandoffRow
+                            endpoints={pendingHandoff}
+                            providers={providerStatuses}
+                            pending
+                          />
+                        </div>
+                      ) : null}
                       {threadStatusLine}
                     </>
                   )
