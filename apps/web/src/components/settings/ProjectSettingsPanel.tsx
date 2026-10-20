@@ -11,6 +11,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
+import { supportsAgentSessionHistoryImport } from "@t3tools/client-runtime/agentSessionHistoryImport";
 import { AsyncResult } from "effect/reactivity";
 import { type EnvironmentId, type ProjectIconOverride } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -31,6 +32,7 @@ import { projectEnvironment } from "../../state/projects";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { openImportAgentSessionDialog } from "../agentSessions/ImportAgentSessionDialog";
 import { openProjectPathDialog } from "../ProjectPathDialog";
+import { openImportCliHistoryDialog } from "../agentSessions/ImportCliHistoryDialog";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -316,6 +318,17 @@ function ProjectDetail({
   const sessionImportMembers = group.memberProjects.filter((member) =>
     supportsAgentSessionImport(environmentById.get(member.environmentId)?.serverConfig),
   );
+  const historyImportMembers = [
+    ...new Map(
+      group.memberProjects
+        .filter((member) =>
+          supportsAgentSessionHistoryImport(
+            environmentById.get(member.environmentId)?.serverConfig,
+          ),
+        )
+        .map((member) => [member.environmentId, member]),
+    ).values(),
+  ];
 
   const removeMembers = async (members: ReadonlyArray<SidebarProjectGroupMember>) => {
     if (checkProjectAccess(members, "Failed to remove project")) return;
@@ -627,6 +640,28 @@ function ProjectDetail({
                 </div>
               }
             />
+            {historyImportMembers.length > 0 ? (
+              <SettingsRow
+                title="Import CLI history"
+                description="Bring in Claude Code and Codex sessions from your other folders too, adding projects as needed."
+                control={
+                  <div className="flex flex-wrap items-center gap-2">
+                    {historyImportMembers.map((member) => (
+                      <Button
+                        key={member.environmentId}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openImportCliHistoryDialog(member.environmentId)}
+                      >
+                        {historyImportMembers.length > 1
+                          ? (member.environmentLabel ?? member.environmentId)
+                          : "Import"}
+                      </Button>
+                    ))}
+                  </div>
+                }
+              />
+            ) : null}
           </SettingsSection>
         ) : null}
         {hasMultipleCheckouts ? checkoutChoices : null}

@@ -11,6 +11,13 @@ import type {
 } from "@t3tools/contracts";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
+  DEFAULT_AGENT_SESSION_AGE_WINDOW,
+  groupAgentSessionProjects,
+  runAgentSessionHistoryImport,
+  supportsAgentSessionHistoryImport,
+  type AgentSessionProjectGroup,
+} from "@t3tools/client-runtime/agentSessionHistoryImport";
+import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
@@ -40,12 +47,10 @@ import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
 import { completeOnboarding } from "../../onboarding/firstRun";
 import {
-  groupOnboardingProjects,
   partitionOnboardingProjects,
   onboardingProjectKey,
   resolveOnboardingLandingProject,
   resolveOnboardingProjectId,
-  type OnboardingProjectGroup,
   splitOnboardingProjectPath,
 } from "../../onboarding/projectImport.logic";
 import {
@@ -1173,6 +1178,12 @@ function ImportStep({
   const writableEnvironments = useEnvironmentsWithScope(scans, AuthOrchestrationOperateScope);
   const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
   const importThreads = useAtomCommand(agentSessionImport, { reportFailure: false });
+  const listSessions = useAtomCommand(serverEnvironment.listAgentSessions, {
+    reportFailure: false,
+  });
+  const importSession = useAtomCommand(serverEnvironment.importAgentSession, {
+    reportFailure: false,
+  });
   const projects = useProjects();
   const [selectedPaths, setSelectedPaths] = useState<ReadonlySet<string> | null>(null);
   const importWarningRef = useRef("");
@@ -1246,6 +1257,50 @@ function ImportStep({
     }
     setIsImporting(true);
     setLandingProject(projectRef);
+  };
+
+  /** Imports a folder's recent sessions one at a time; null when they could not be listed. */
+  const importRecentSessions = async (
+    environmentId: EnvironmentId,
+    path: string,
+    projectId: ProjectId,
+    shouldStop: () => boolean,
+  ) => {
+    let importedCount = 0;
+    let skippedCount = 0;
+    let listed = true;
+    await runAgentSessionHistoryImport([{ path, title: path, projectId, selection: "all" }], {
+      nowMs: Date.now,
+      listSessions: async () => {
+        const result = await listSessions({
+          environmentId,
+          input: { workspaceRoot: path, maxAgeMs: DEFAULT_AGENT_SESSION_AGE_WINDOW.maxAgeMs },
+        });
+        if (result._tag === "Success") return result.value.sessions;
+        throw squashAtomCommandFailure(result);
+      },
+      ensureProject: async () => projectId,
+      importSession: async (targetProjectId, session) => {
+        const result = await importSession({
+          environmentId,
+          input: {
+            projectId: targetProjectId,
+            providerInstanceId: session.providerInstanceId,
+            providerSessionId: session.providerSessionId,
+          },
+        });
+        if (result._tag === "Success") return result.value;
+        throw squashAtomCommandFailure(result);
+      },
+      shouldStop,
+      onEvent: (event) => {
+        if (event.type === "folder-failed") listed = false;
+        if (event.type !== "session") return;
+        if (event.result.status === "failed") skippedCount += 1;
+        else if (event.result.status === "imported") importedCount += 1;
+      },
+    });
+    return listed ? { importedCount, skippedCount } : null;
   };
 
   const runImport = async (selection: typeof candidates) => {
@@ -1335,17 +1390,29 @@ function ImportStep({
         stopForDeniedAccess();
         return;
       }
-      const threadImportResult = await importThreads({
-        environmentId,
-        input: { projectId, expectedWorkspaceRoot: candidate.path },
-      });
+      const threadImportResult = supportsAgentSessionHistoryImport(
+        environments.find((environment) => environment.environmentId === environmentId)
+          ?.serverConfig,
+      )
+        ? await importRecentSessions(
+            environmentId,
+            candidate.path,
+            projectId,
+            () =>
+              importGeneration !== importGenerationRef.current ||
+              importedProjects !== importedProjectsRef.current,
+          ).then((value) => (value === null ? null : ({ _tag: "Success", value } as const)))
+        : await importThreads({
+            environmentId,
+            input: { projectId, expectedWorkspaceRoot: candidate.path },
+          });
       if (
         importGeneration !== importGenerationRef.current ||
         importedProjects !== importedProjectsRef.current
       ) {
         return;
       }
-      if (threadImportResult._tag === "Success") {
+      if (threadImportResult?._tag === "Success") {
         importedThreadCount += threadImportResult.value.importedCount;
         skippedThreadCount += threadImportResult.value.skippedCount;
         if (threadImportResult.value.importedCount > 0) {
@@ -1358,7 +1425,7 @@ function ImportStep({
           importedProjectsCount += 1;
           importedProjects.set(candidate.key, scopeProjectRef(environmentId, projectId));
         }
-      } else if (!isAtomCommandInterrupted(threadImportResult)) {
+      } else if (threadImportResult === null || !isAtomCommandInterrupted(threadImportResult)) {
         projectAttempts.delete(candidate.key);
         refreshEnvironments.add(environmentId);
       }
@@ -1519,7 +1586,7 @@ function ImportCandidateList({
   readonly selectedKeys: ReadonlySet<string>;
   readonly onSelectionChange: (next: ReadonlySet<string>) => void;
 }) {
-  const { repositories, other } = groupOnboardingProjects(candidates);
+  const { repositories, other } = groupAgentSessionProjects(candidates);
   const setKeys = (keys: ReadonlyArray<string>, checked: boolean) => {
     const next = new Set(selectedKeys);
     for (const key of keys) {
@@ -1584,7 +1651,7 @@ function ImportRepositoryGroup({
   selectedKeys,
   onToggle,
 }: {
-  readonly group: OnboardingProjectGroup<ImportCandidate>;
+  readonly group: AgentSessionProjectGroup<ImportCandidate>;
   readonly selectedKeys: ReadonlySet<string>;
   readonly onToggle: (keys: ReadonlyArray<string>, checked: boolean) => void;
 }) {

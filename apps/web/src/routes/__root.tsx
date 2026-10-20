@@ -22,6 +22,7 @@ import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
 import { ProjectPathDialogHost } from "../components/ProjectPathDialog";
 import { ThreadGroupDialogHost } from "../components/ThreadGroupDialog";
 import { ImportAgentSessionDialogHost } from "../components/agentSessions/ImportAgentSessionDialog";
+import { ImportCliHistoryDialogHost } from "../components/agentSessions/ImportCliHistoryDialog";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
 import { KeybindingsConfigWarning } from "../components/KeybindingsConfigWarning";
 import { FirstRunGate } from "../components/onboarding/FirstRunGate";
@@ -192,6 +193,7 @@ function RootRouteView() {
           <ThreadGroupDialogHost />
           <ImportAgentSessionDialogHost />
           <ProjectPathDialogHost />
+          <ImportCliHistoryDialogHost />
           <CommandPalette>
             <AppSidebarLayout>
               <Outlet />
@@ -250,6 +252,7 @@ function RootRouteView() {
           <ThreadGroupDialogHost />
           <ImportAgentSessionDialogHost />
           <ProjectPathDialogHost />
+          <ImportCliHistoryDialogHost />
           <SlowRpcRequestToastCoordinator />
           <PermissionUpdateNotice />
           {primaryEnvironmentAuthenticated ? <LegacyThreadMigrationToast /> : null}
