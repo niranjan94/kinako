@@ -1,4 +1,3 @@
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import {
   CommandId,
   MessageId,
@@ -65,7 +64,7 @@ const make = Effect.gen(function* () {
       ? Effect.fail(
           failure(
             "thread_credential_required",
-            `Worktree handoff and status act as the calling T3 thread, so they need an agent running inside ${FORK_DISPLAY_NAME}.`,
+            "Worktree handoff and status act as the calling T3 thread, so they need an agent running inside T3 Code.",
           ),
         )
       : Effect.succeed(scope as McpThreadInvocationScope);

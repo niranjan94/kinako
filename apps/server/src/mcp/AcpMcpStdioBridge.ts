@@ -8,7 +8,6 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import { discardResponseBody, responsePayloads } from "@t3tools/shared/mcpResponsePayloads";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 /**
  * ACP agents must support stdio MCP servers, while optional http/sse support is
@@ -97,9 +96,7 @@ export function callAcpMcpTool(
       if (!response.ok) {
         yield* discardResponseBody(response);
         return yield* Effect.fail(
-          new AcpMcpBridgeError(
-            `${FORK_DISPLAY_NAME} MCP endpoint responded with HTTP ${response.status}.`,
-          ),
+          new AcpMcpBridgeError(`T3 Code MCP endpoint responded with HTTP ${response.status}.`),
         );
       }
       const payloads = yield* Stream.runCollect(responsePayloads(response, bridgeError));
@@ -123,7 +120,7 @@ export function callAcpMcpTool(
     const initializeResponse = initialized.find((entry) => asEnvelope(entry)?.id === initializeId);
     if (initializeResponse === undefined || asEnvelope(initializeResponse)?.error !== undefined) {
       return yield* Effect.fail(
-        new AcpMcpBridgeError(`${FORK_DISPLAY_NAME} MCP endpoint rejected initialization.`),
+        new AcpMcpBridgeError("T3 Code MCP endpoint rejected initialization."),
       );
     }
     yield* send({ jsonrpc: "2.0", method: "notifications/initialized" });
@@ -140,7 +137,7 @@ export function callAcpMcpTool(
     if (envelope === null || envelope.error !== undefined) {
       return yield* Effect.fail(
         new AcpMcpBridgeError(
-          `${FORK_DISPLAY_NAME} MCP tool call failed${envelope?.error === undefined ? "." : `: ${JSON.stringify(envelope.error)}`}`,
+          `T3 Code MCP tool call failed${envelope?.error === undefined ? "." : `: ${JSON.stringify(envelope.error)}`}`,
         ),
       );
     }
@@ -204,7 +201,7 @@ export function runAcpMcpStdioBridge(options: AcpMcpStdioBridgeOptions): Effect.
           if (envelope.id !== undefined) {
             yield* respondWithError(
               envelope.id,
-              `${FORK_DISPLAY_NAME} MCP endpoint responded with HTTP ${response.status}.`,
+              `T3 Code MCP endpoint responded with HTTP ${response.status}.`,
             );
           }
           return yield* discardResponseBody(response);
@@ -218,7 +215,7 @@ export function runAcpMcpStdioBridge(options: AcpMcpStdioBridgeOptions): Effect.
             const error = Cause.squash(cause);
             return respondWithError(
               envelope.id,
-              `${FORK_DISPLAY_NAME} MCP bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+              `T3 Code MCP bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
             );
           }),
         ),

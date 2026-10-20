@@ -1,4 +1,3 @@
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import { expect, it } from "@effect/vitest";
@@ -426,7 +425,7 @@ it.effect("refuses preview tools to a client outside a thread before they run", 
     expect(click.content).toEqual([
       {
         type: "text",
-        text: expect.stringContaining(`needs an agent running inside ${FORK_DISPLAY_NAME}`),
+        text: expect.stringContaining("needs an agent running inside T3 Code"),
       },
     ]);
   }).pipe(Effect.provide(layerTest)),

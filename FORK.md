@@ -56,7 +56,7 @@ Kinako keeps migrations 63 and 64 for additional directories and database connec
 
 ## Rebrand seams
 
-Kinako's identity lives in `packages/shared/src/forkBrand.ts`. Call sites import from it instead of carrying literals, so most upstream changes merge cleanly; a conflict on one of these lines usually means upstream touched the same literal, and the fix is to keep the import. Internal names stay upstream's on purpose: the `@t3tools/*` scope, contract names, and `T3CODE_*` environment variables. The worktree-local dev state directory is `.kinako` like the home directory; `.t3` stays in `.gitignore` so older worktrees' data is not committed.
+Kinako's identity lives in `packages/shared/src/forkBrand.ts`. Call sites import from it instead of carrying literals, so most upstream changes merge cleanly; a conflict on one of these lines usually means upstream touched the same literal, and the fix is to keep the import. Internal names stay upstream's on purpose: the `@t3tools/*` scope, contract names, and `T3CODE_*` environment variables. Text only agents read also keeps upstream's "T3 Code": MCP tool names and descriptions, the MCP server name, MCP errors returned to agents, and prompts injected into turns such as pull request watch wakes. Commands, paths, and repository URLs inside that text still use Kinako's values, since an agent has to be able to run them. The worktree-local dev state directory is `.kinako` like the home directory; `.t3` stays in `.gitignore` so older worktrees' data is not committed.
 
 Some files cannot import TypeScript and repeat the values. Re-check them when merging upstream changes to them:
 

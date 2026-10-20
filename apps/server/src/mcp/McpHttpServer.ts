@@ -74,7 +74,6 @@ import {
 } from "./toolkits/device/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const mcpResourceMetadataUrl = (request: HttpServerRequest.HttpServerRequest) =>
   HttpServerRequest.toURL(request).pipe(
@@ -106,7 +105,7 @@ const unauthorized = (input: {
   return HttpServerResponse.jsonUnsafe(
     {
       error: "invalid_mcp_credential",
-      message: `A valid ${FORK_DISPLAY_NAME} MCP credential is required.`,
+      message: "A valid T3 Code MCP credential is required.",
     },
     {
       status: 401,
@@ -1061,7 +1060,7 @@ export const layerDeviceToolkit = Layer.mergeAll(
 );
 
 export const layerMcpTransport = McpServer.layerHttp({
-  name: FORK_DISPLAY_NAME,
+  name: "T3 Code",
   version: packageJson.version,
   path: "/mcp",
   protocols: [McpProtocol.v2025_06_18],
