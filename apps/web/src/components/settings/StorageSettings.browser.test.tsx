@@ -105,6 +105,7 @@ beforeEach(() => {
       worktreeOnDelete: false,
       worktreeUnchanged: false,
       worktreeDeleteEditedCopies: true,
+      worktreeSnapshotBeforeRemoval: false,
       browserArtifactsAfterDays: null,
       logsAfterDays: null,
     },
@@ -208,6 +209,7 @@ it("shows an orphan's full path and size while keeping thread row titles unchang
         reason: "No thread uses this folder, and it isn't a git worktree",
         bytes: 6600000,
         files: null,
+        snapshotRef: null,
       },
       {
         kind: "worktree",
@@ -218,6 +220,7 @@ it("shows an orphan's full path and size while keeping thread row titles unchang
         reason: "Thread is running or has pending work",
         bytes: null,
         files: null,
+        snapshotRef: null,
       },
     ],
     counts: { removed: 0, kept: 2, failed: 0 },

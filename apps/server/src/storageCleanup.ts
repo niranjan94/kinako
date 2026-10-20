@@ -47,6 +47,7 @@ import * as TerminalManager from "./terminal/Manager.ts";
 import { isFilesystemRoot, managedWorktreesDirectories } from "./worktreesDirectory.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import { withWorkspaceLease } from "./workspace/workspaceLease.ts";
+import * as WorktreeSnapshots from "./worktreeSnapshots.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
@@ -216,6 +217,7 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const git = yield* GitVcsDriver.GitVcsDriver;
   const gitManager = yield* GitManager.GitManager;
+  const snapshots = yield* WorktreeSnapshots.WorktreeSnapshots;
   const terminals = yield* TerminalManager.TerminalManager;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -485,6 +487,7 @@ const make = Effect.gen(function* () {
           threadTitle: null,
           bytes,
           files: null,
+          snapshotRef: null,
         });
       },
       Effect.orElseSucceed(() => undefined),
@@ -758,6 +761,7 @@ const make = Effect.gen(function* () {
         threadTitle: thread.title,
         bytes: null,
         files: null,
+        snapshotRef: null,
       };
       const keep = (reason: string) => entries.push({ ...entry, reason: sentence(reason) });
       yield* Effect.gen(function* () {
@@ -1005,6 +1009,30 @@ const make = Effect.gen(function* () {
           )
         )
           return keep("settings changed since check");
+        let snapshotRef: string | null = null;
+        if (settings.worktreeSnapshotBeforeRemoval) {
+          const captured = yield* snapshots
+            .capture({
+              worktreePath,
+              threadId: thread.id,
+              threadTitle: thread.title,
+              branch,
+            })
+            .pipe(
+              Effect.map((ref) => ({ ref })),
+              Effect.catch((error) => Effect.succeed({ error })),
+            );
+          // Without the snapshot, removal would lose the changes it was meant to save.
+          if ("error" in captured) {
+            entries.push({
+              ...entry,
+              outcome: "failed",
+              reason: `Could not save a recovery snapshot: ${cleanupFailureReason(captured.error)}`,
+            });
+            return;
+          }
+          snapshotRef = captured.ref;
+        }
         // Clean only untracked files; Git must still refuse removal if a tracked
         // edit arrives after our last status check.
         if (settings.worktreeKeepWhen === "tracked-changes")
@@ -1014,7 +1042,13 @@ const make = Effect.gen(function* () {
           ["-c", "status.showUntrackedFiles=normal", "worktree", "remove", "--", worktreePath],
           "git worktree remove",
         );
-        entries.push({ ...entry, outcome: "removed", reason: sentence(removalReason), bytes });
+        entries.push({
+          ...entry,
+          outcome: "removed",
+          reason: sentence(removalReason),
+          bytes,
+          snapshotRef,
+        });
         yield* gitManager.invalidateStatus(repositoryRoot);
         // Preserve branch and path: ProviderTurnStartService recreates the checkout
         // from that branch when the thread is resumed.
@@ -1099,11 +1133,14 @@ const make = Effect.gen(function* () {
             threadTitle: null,
             bytes: null,
             files: null,
+            snapshotRef: null,
           });
           yield* Effect.logWarning("worktree cleanup failed", { error });
         }),
       ),
     );
+    // Expiry runs even with every cleanup rule off, so saved snapshots never linger.
+    yield* snapshots.prune;
     for (const category of [
       {
         kind: "browser-artifacts" as const,
@@ -1131,6 +1168,7 @@ const make = Effect.gen(function* () {
             threadTitle: null,
             bytes: files > 0 ? bytes : null,
             files: files > 0 ? files : null,
+            snapshotRef: null,
           }),
         ),
         Effect.catch((error) =>
@@ -1144,6 +1182,7 @@ const make = Effect.gen(function* () {
               threadTitle: null,
               bytes: removed.files > 0 ? removed.bytes : null,
               files: removed.files > 0 ? removed.files : null,
+              snapshotRef: null,
             });
             yield* Effect.logWarning("storage file cleanup failed", { kind: category.kind, error });
           }),

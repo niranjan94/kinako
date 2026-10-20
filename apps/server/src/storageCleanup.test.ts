@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -15,12 +16,17 @@ import * as SqlClient from "effect/sql/SqlClient";
 import {
   DEFAULT_SERVER_SETTINGS,
   StorageCleanupReport,
+  VcsProcessExitError,
   type WorktreeKeepWhen,
   type StorageCleanupSettings,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as ServerConfig from "./config.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
+import * as WorktreeSnapshots from "./worktreeSnapshots.ts";
+import * as CheckpointStore from "./checkpointing/CheckpointStore.ts";
+import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
+import * as VcsProcess from "./vcs/VcsProcess.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as Settings from "./serverSettings.ts";
@@ -275,7 +281,9 @@ const cleanupFixture = (
     let snapshotReads = 0;
     let events: Stream.Stream<OrchestrationV2DomainEvent> = Stream.empty;
     const activated = yield* Deferred.make<void>();
-    const context = yield* Layer.build(StorageCleanup.layer).pipe(
+    const context = yield* Layer.build(
+      StorageCleanup.layer.pipe(Layer.provideMerge(WorktreeSnapshots.layer)),
+    ).pipe(
       Effect.provideService(GitVcsDriver.GitVcsDriver, {
         ...git,
         execute: (input) =>
@@ -358,6 +366,8 @@ const cleanupFixture = (
         )) as unknown as SqlClient.SqlClient),
       Effect.provideService(GitManager.GitManager, {
         invalidateStatus: () => Effect.void,
+        createWorktree: (...args: Parameters<GitManager.GitManager["Service"]["createWorktree"]>) =>
+          git.createWorktree(...args),
       } as unknown as GitManager.GitManager["Service"]),
       Effect.provideService(TerminalManager.TerminalManager, {
         subscribeMetadata: () => Effect.succeed(() => {}),
@@ -366,6 +376,7 @@ const cleanupFixture = (
     );
     return {
       service: Context.get(context, StorageCleanup.StorageCleanup),
+      snapshots: Context.get(context, WorktreeSnapshots.WorktreeSnapshots),
       repo,
       editBeforeRemoval: () => {
         editBeforeRemoval = true;
@@ -481,7 +492,13 @@ const sessionUpdated = (
     lastError: null,
   },
 });
-const cleanupTestLayer = GitVcsDriver.layer.pipe(
+const cleanupTestLayer = Layer.merge(
+  GitVcsDriver.layer,
+  CheckpointStore.layer.pipe(
+    Layer.provide(VcsDriverRegistry.layer),
+    Layer.provide(VcsProcess.layer),
+  ),
+).pipe(
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "storage-cleanup-" })),
   Layer.provideMerge(NodeServices.layer),
 );
@@ -492,6 +509,7 @@ const runCleanupTest = <A, E>(
     | FileSystem.FileSystem
     | ServerConfig.ServerConfig
     | GitVcsDriver.GitVcsDriver
+    | CheckpointStore.CheckpointStore
     | Path.Path
     | Scope.Scope
   >,
@@ -912,6 +930,7 @@ describe("orphan worktree reports", () => {
               threadTitle: null,
               bytes: sizes.reduce((sum, size) => sum + size, 0),
               files: null,
+              snapshotRef: null,
             },
           ]);
           expect(report.bytesFreed).toBe(0);
@@ -1934,3 +1953,206 @@ it.live.each(["thread.settled", "stopped", "ready"] as const)(
       }),
     ),
 );
+
+describe("recovery snapshots", () => {
+  const snapshotFixture = Effect.gen(function* () {
+    const fixture = yield* cleanupFixture();
+    const worktree = `${fixture.config.worktreesDir}/repo/snapshot`;
+    yield* fixture.command(fixture.repo, ["worktree", "add", "-b", "snapshot", worktree]);
+    fixture.setThreads([shell({ branch: "snapshot", worktreePath: worktree })]);
+    fixture.setPolicy("tracked-changes");
+    const enable = () =>
+      fixture.setSettings({
+        storageCleanup: {
+          ...DEFAULT_SERVER_SETTINGS.storageCleanup,
+          worktreeAfterDays: 8,
+          worktreeKeepWhen: "tracked-changes",
+          worktreeSnapshotBeforeRemoval: true,
+        },
+      });
+    const listed = Stream.runHead(fixture.snapshots.snapshots).pipe(
+      Effect.map((value) => (value._tag === "Some" ? value.value : [])),
+    );
+    return { ...fixture, worktree, enable, listed };
+  });
+
+  it.live(
+    "saves untracked files before removal and restores them into the recreated worktree",
+    () =>
+      runCleanupTest(
+        Effect.gen(function* () {
+          const fixture = yield* snapshotFixture;
+          fixture.enable();
+          yield* fixture.fs.writeFileString(`${fixture.worktree}/notes.txt`, "unsaved notes\n");
+          yield* fixture.fs.writeFile(
+            `${fixture.worktree}/image.bin`,
+            new Uint8Array([0, 1, 2, 255]),
+          );
+          yield* fixture.fs.writeFileString(`${fixture.worktree}/.env`, "SECRET=1\n");
+          const report = yield* fixture.service.runNow;
+          const removed = report.entries.find((entry) => entry.path === fixture.worktree);
+          expect(removed).toMatchObject({ outcome: "removed" });
+          expect(removed?.snapshotRef).toMatch(/^refs\/t3\/worktree-snapshots\/[^/]+\/\d+$/);
+          expect(yield* fixture.fs.exists(fixture.worktree)).toBe(false);
+
+          const [snapshot, ...others] = yield* fixture.listed;
+          expect(others).toEqual([]);
+          expect(snapshot).toMatchObject({
+            ref: removed?.snapshotRef,
+            threadId: "thread-1",
+            threadTitle: "Thread",
+            branch: "snapshot",
+            worktreePath: fixture.worktree,
+            fileCount: 2,
+          });
+
+          const restored = yield* fixture.snapshots.restore({
+            repository: snapshot!.repository,
+            ref: snapshot!.ref,
+          });
+          expect(restored).toEqual({ worktreePath: fixture.worktree, conflictedPaths: [] });
+          expect(yield* fixture.fs.readFileString(`${fixture.worktree}/notes.txt`)).toBe(
+            "unsaved notes\n",
+          );
+          expect([...(yield* fixture.fs.readFile(`${fixture.worktree}/image.bin`))]).toEqual([
+            0, 1, 2, 255,
+          ]);
+          expect(yield* fixture.fs.exists(`${fixture.worktree}/.env`)).toBe(false);
+          // Restore leaves the snapshot until it is discarded.
+          expect(yield* fixture.listed).toHaveLength(1);
+          yield* fixture.snapshots.discard({
+            repository: snapshot!.repository,
+            ref: snapshot!.ref,
+          });
+          expect(yield* fixture.listed).toEqual([]);
+        }),
+      ),
+  );
+
+  it.live("restores tracked edits and deletions, and refuses a worktree with changes", () =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        const fixture = yield* snapshotFixture;
+        yield* fixture.fs.writeFileString(`${fixture.worktree}/tracked.txt`, "edited\n");
+        yield* fixture.fs.remove(`${fixture.worktree}/.gitignore`);
+        yield* fixture.fs.writeFileString(`${fixture.worktree}/added.txt`, "added\n");
+        const ref = yield* fixture.snapshots.capture({
+          worktreePath: fixture.worktree,
+          threadId: ThreadId.make("thread-1"),
+          threadTitle: "Thread",
+          branch: "snapshot",
+        });
+        expect(ref).not.toBeNull();
+        const input = { repository: fixture.repo, ref: ref! };
+
+        expect((yield* fixture.snapshots.restore(input).pipe(Effect.flip)).detail).toContain(
+          "uncommitted changes",
+        );
+
+        yield* fixture.command(fixture.worktree, ["checkout", "--", "."]);
+        yield* fixture.command(fixture.worktree, ["clean", "-fd"]);
+        yield* fixture.snapshots.restore(input);
+        expect(yield* fixture.fs.readFileString(`${fixture.worktree}/tracked.txt`)).toBe(
+          "edited\n",
+        );
+        expect(yield* fixture.fs.exists(`${fixture.worktree}/.gitignore`)).toBe(false);
+        expect(yield* fixture.fs.readFileString(`${fixture.worktree}/added.txt`)).toBe("added\n");
+        const status = yield* fixture.command(fixture.worktree, ["status", "--porcelain"]);
+        expect(status.stdout.split("\n").filter(Boolean).sort()).toEqual([
+          " D .gitignore",
+          " M tracked.txt",
+          "?? added.txt",
+        ]);
+      }),
+    ),
+  );
+
+  it.live("takes no snapshot when the setting is off or the worktree is clean", () =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        const fixture = yield* snapshotFixture;
+        yield* fixture.fs.writeFileString(`${fixture.worktree}/notes.txt`, "unsaved notes\n");
+        const report = yield* fixture.service.runNow;
+        expect(report.entries.find((entry) => entry.path === fixture.worktree)).toMatchObject({
+          outcome: "removed",
+          snapshotRef: null,
+        });
+        expect(yield* fixture.listed).toEqual([]);
+
+        expect(
+          yield* fixture.snapshots.capture({
+            worktreePath: fixture.config.worktreesDir + "/feature",
+            threadId: ThreadId.make("thread-2"),
+            threadTitle: null,
+            branch: "feature",
+          }),
+        ).toBeNull();
+      }),
+    ),
+  );
+
+  it.live("keeps the worktree when the snapshot cannot be saved", () =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        const store = yield* CheckpointStore.CheckpointStore;
+        const fixture = yield* snapshotFixture.pipe(
+          Effect.provideService(CheckpointStore.CheckpointStore, {
+            ...store,
+            captureCheckpoint: (input) =>
+              Effect.fail(
+                new VcsProcessExitError({
+                  operation: "test",
+                  command: "git write-tree",
+                  cwd: input.cwd,
+                  exitCode: 128,
+                  detail: "disk full",
+                }),
+              ),
+          }),
+        );
+        fixture.enable();
+        yield* fixture.fs.writeFileString(`${fixture.worktree}/notes.txt`, "unsaved notes\n");
+        const report = yield* fixture.service.runNow;
+        expect(report.entries.find((entry) => entry.path === fixture.worktree)).toMatchObject({
+          outcome: "failed",
+          snapshotRef: null,
+        });
+        expect(report.entries.find((entry) => entry.path === fixture.worktree)?.reason).toContain(
+          "Could not save a recovery snapshot",
+        );
+        expect(yield* fixture.fs.readFileString(`${fixture.worktree}/notes.txt`)).toBe(
+          "unsaved notes\n",
+        );
+      }),
+    ),
+  );
+
+  it.live("prunes snapshots past retention and beyond the per-thread limit", () =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        const fixture = yield* snapshotFixture;
+        yield* fixture.fs.writeFileString(`${fixture.worktree}/notes.txt`, "unsaved notes\n");
+        const ref = yield* fixture.snapshots.capture({
+          worktreePath: fixture.worktree,
+          threadId: ThreadId.make("thread-1"),
+          threadTitle: "Thread",
+          branch: "snapshot",
+        });
+        const owner = ref!.slice(0, ref!.lastIndexOf("/"));
+        const now = yield* Clock.currentTimeMillis;
+        const expired = `${owner}/${now - WorktreeSnapshots.WORKTREE_SNAPSHOT_RETENTION_MS - 1_000}`;
+        const recent = [1, 2, 3, 4].map((minutes) => `${owner}/${now - minutes * 60_000}`);
+        for (const extra of [expired, ...recent])
+          yield* fixture.command(fixture.repo, ["update-ref", extra, ref!]);
+        expect(yield* fixture.listed).toHaveLength(6);
+
+        yield* fixture.snapshots.prune;
+        expect((yield* fixture.listed).map((snapshot) => snapshot.ref)).toEqual([
+          ref,
+          recent[0],
+          recent[1],
+        ]);
+      }),
+    ),
+  );
+});

@@ -192,6 +192,12 @@ Choose **Delete now** to run the enabled rules immediately. The latest results s
 worktrees were removed or kept and why, plus any failures.
 Results also list folders in the worktree folder that no thread uses, with their sizes; cleanup never removes them, so remove them manually if you want.
 
+### Recovery snapshots
+
+With **Edited tracked files**, cleanup deletes a worktree's untracked files along with it. Turn on **Save a recovery snapshot before deleting** to keep a copy of them first; ignored files such as `.env` and build output are not saved. The other keep options never delete uncommitted work, so the setting appears only with this one. If a snapshot cannot be saved, cleanup keeps the worktree and reports the failure. The setting is off by default and can be set per project like the other rules.
+
+Saved snapshots appear under **Recovery snapshots** in **Settings → Storage**. **Restore** puts the files back into the thread's worktree as uncommitted changes, recreating the worktree from its branch first if needed. The worktree must have no uncommitted changes. If the branch has moved on, conflicting files are left with conflict markers to resolve. Restoring keeps the snapshot; choose **Discard** to delete it. Snapshots expire after 30 days, and only the 3 newest are kept per thread. They are stored as hidden git refs in the project's repository, so `git log refs/t3/worktree-snapshots` also shows them.
+
 Browser captures and rotated logs have separate retention periods. Expired capture links stop
 working. Current logs, message attachments, and browser profiles are kept.
 

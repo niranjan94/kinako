@@ -439,6 +439,7 @@ describe("resolveWorktreeCleanup", () => {
       worktreeUnchanged: false,
       worktreeKeepWhen: "any-local-files",
       worktreeDeleteEditedCopies: true,
+      worktreeSnapshotBeforeRemoval: false,
     });
     expect(resolveWorktreeCleanup(off, otherProjectId)).toEqual(inherited);
     const custom = applyServerSettingsPatch(off, {
@@ -480,6 +481,7 @@ describe("resolveWorktreeCleanup", () => {
       worktreeUnchanged: false,
       worktreeKeepWhen: "uncommitted-changes",
       worktreeDeleteEditedCopies: true,
+      worktreeSnapshotBeforeRemoval: false,
     });
     expect(
       resolveWorktreeCleanup(applyServerSettingsPatch(edited, { worktreeCleanup: null }), null)

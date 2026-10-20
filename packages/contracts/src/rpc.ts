@@ -173,6 +173,9 @@ import {
   GitPullRequestRefInput,
   VcsPullResult,
   VcsRemoveWorktreeInput,
+  VcsRestoreWorktreeSnapshotResult,
+  VcsWorktreeSnapshotInput,
+  WorktreeSnapshot,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   VcsStatusInput,
@@ -478,6 +481,9 @@ export const WS_METHODS = {
   vcsCreateWorktree: "vcs.createWorktree",
   vcsMoveThread: "vcs.moveThread",
   vcsRemoveWorktree: "vcs.removeWorktree",
+  vcsSubscribeWorktreeSnapshots: "vcs.subscribeWorktreeSnapshots",
+  vcsRestoreWorktreeSnapshot: "vcs.restoreWorktreeSnapshot",
+  vcsDeleteWorktreeSnapshot: "vcs.deleteWorktreeSnapshot",
   vcsCreateRef: "vcs.createRef",
   vcsSwitchRef: "vcs.switchRef",
   vcsInit: "vcs.init",
@@ -1574,6 +1580,24 @@ const WsVcsRemoveWorktreeRpc = Rpc.make(WS_METHODS.vcsRemoveWorktree, {
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
+const WsVcsSubscribeWorktreeSnapshotsRpc = Rpc.make(WS_METHODS.vcsSubscribeWorktreeSnapshots, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(WorktreeSnapshot),
+  stream: true,
+  error: EnvironmentAuthorizationError,
+});
+
+const WsVcsRestoreWorktreeSnapshotRpc = Rpc.make(WS_METHODS.vcsRestoreWorktreeSnapshot, {
+  payload: VcsWorktreeSnapshotInput,
+  success: VcsRestoreWorktreeSnapshotResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+const WsVcsDeleteWorktreeSnapshotRpc = Rpc.make(WS_METHODS.vcsDeleteWorktreeSnapshot, {
+  payload: VcsWorktreeSnapshotInput,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
 const WsVcsCreateRefRpc = Rpc.make(WS_METHODS.vcsCreateRef, {
   payload: VcsCreateRefInput,
   success: VcsCreateRefResult,
@@ -2181,13 +2205,6 @@ export const CoreWsRpcGroup = RpcGroup.make(
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
   WsGitPreparePullRequestThreadRpc,
-  WsVcsListRefsRpc,
-  WsVcsCreateWorktreeRpc,
-  WsVcsMoveThreadRpc,
-  WsVcsRemoveWorktreeRpc,
-  WsVcsCreateRefRpc,
-  WsVcsSwitchRefRpc,
-  WsVcsInitRpc,
   WsReviewGetDiffPreviewRpc,
   WsReviewGetDiffFileContentsRpc,
   WsTerminalOpenRpc,
@@ -2260,4 +2277,17 @@ export const DatabaseRpcGroup = RpcGroup.make(
   WsDatabaseBrowseTableRpc,
 ).middleware(RpcScopeAuthorization);
 
-export const WsRpcGroup = CoreWsRpcGroup.merge(DatabaseRpcGroup);
+export const VcsRpcGroup = RpcGroup.make(
+  WsVcsListRefsRpc,
+  WsVcsCreateWorktreeRpc,
+  WsVcsMoveThreadRpc,
+  WsVcsRemoveWorktreeRpc,
+  WsVcsCreateRefRpc,
+  WsVcsSwitchRefRpc,
+  WsVcsInitRpc,
+  WsVcsSubscribeWorktreeSnapshotsRpc,
+  WsVcsRestoreWorktreeSnapshotRpc,
+  WsVcsDeleteWorktreeSnapshotRpc,
+).middleware(RpcScopeAuthorization);
+
+export const WsRpcGroup = CoreWsRpcGroup.merge(DatabaseRpcGroup, VcsRpcGroup);

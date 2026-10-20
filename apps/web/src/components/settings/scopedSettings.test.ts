@@ -164,6 +164,7 @@ describe("scoped settings writes", () => {
             worktreeUnchanged: false,
             worktreeKeepWhen: "uncommitted-changes",
             worktreeDeleteEditedCopies: true,
+            worktreeSnapshotBeforeRemoval: false,
           },
         },
       },
@@ -190,6 +191,7 @@ describe("scoped settings writes", () => {
         worktreeUnchanged: false,
         worktreeKeepWhen: "uncommitted-changes",
         worktreeDeleteEditedCopies: true,
+        worktreeSnapshotBeforeRemoval: false,
       },
       {
         worktreeAfterDays: null,
@@ -199,6 +201,7 @@ describe("scoped settings writes", () => {
         worktreeUnchanged: false,
         worktreeKeepWhen: "uncommitted-changes",
         worktreeDeleteEditedCopies: true,
+        worktreeSnapshotBeforeRemoval: false,
       },
     ]);
   });
@@ -392,6 +395,7 @@ describe("scoped settings writes", () => {
                 worktreeUnchanged: false,
                 worktreeKeepWhen: "uncommitted-changes",
                 worktreeDeleteEditedCopies: true,
+                worktreeSnapshotBeforeRemoval: false,
               },
             },
           },
@@ -424,6 +428,7 @@ describe("scoped settings writes", () => {
               worktreeUnchanged: false,
               worktreeKeepWhen: "uncommitted-changes",
               worktreeDeleteEditedCopies: true,
+              worktreeSnapshotBeforeRemoval: false,
             },
           },
         },
@@ -440,6 +445,7 @@ describe("scoped settings writes", () => {
               worktreeUnchanged: false,
               worktreeKeepWhen: "uncommitted-changes",
               worktreeDeleteEditedCopies: true,
+              worktreeSnapshotBeforeRemoval: false,
             },
           },
         },

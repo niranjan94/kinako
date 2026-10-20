@@ -159,6 +159,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["worktreeinclude files to copy edited env cleanup any local files"],
   },
   {
+    id: "storage-worktree-snapshot-before-removal",
+    targetId: "storage-worktrees",
+    title: "Save a recovery snapshot before deleting",
+    to: "/settings/storage",
+    scope: "project-defaults",
+    searchTerms: ["recovery snapshot backup restore undo lost changes untracked files cleanup"],
+  },
+  {
     id: "storage-delete-now",
     title: "Delete now",
     to: "/settings/storage",

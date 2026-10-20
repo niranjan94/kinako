@@ -5,6 +5,7 @@ import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
+import * as WorktreeSnapshots from "./worktreeSnapshots.ts";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
 import * as PullRequestWatchReactor from "./orchestration-v2/PullRequestWatchReactor.ts";
 import * as DelegatedTaskQuestionReactor from "./orchestration-v2/DelegatedTaskQuestionReactor.ts";
@@ -551,7 +552,10 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   KeepAwake.layer,
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,
-  StorageCleanup.layer.pipe(Layer.provide(ProjectionStoreV2.layer)),
+  StorageCleanup.layer.pipe(
+    Layer.provideMerge(WorktreeSnapshots.layer.pipe(Layer.provide(layerCheckpointStore))),
+    Layer.provide(ProjectionStoreV2.layer),
+  ),
   DatabaseStorage.layer.pipe(
     Layer.provide(ProjectionMaintenance.layer),
     Layer.provide(

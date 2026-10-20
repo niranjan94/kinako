@@ -2,6 +2,7 @@ import {
   OrchestrationDispatchCommandError,
   CoreWsRpcGroup,
   DatabaseRpcGroup,
+  VcsRpcGroup,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
@@ -182,6 +183,7 @@ import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
+import * as WorktreeSnapshots from "./worktreeSnapshots.ts";
 import * as KeepAwake from "./background/KeepAwake.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import { withTerminalOutputWindow } from "./terminal/OutputProtocol.ts";
@@ -554,6 +556,7 @@ const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
 const CoreServerWsRpcGroup = CoreWsRpcGroup.middleware(RpcInstrumentation);
 const DatabaseServerRpcGroup = DatabaseRpcGroup.middleware(RpcInstrumentation);
+const VcsServerRpcGroup = VcsRpcGroup.middleware(RpcInstrumentation);
 // Replaying each intervening event costs a shell refetch; past this gap a
 // single O(active-threads) snapshot is cheaper and bounded.
 const SHELL_RESUME_MAX_GAP = 1_000;
@@ -1248,9 +1251,7 @@ const layerWsRpc = (
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
       const directEndpoints = yield* DirectEndpoints.DirectEndpoints;
       const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
-      const threadWorkspace = yield* ThreadWorkspaceService.ThreadWorkspaceService;
       const review = yield* ReviewService.ReviewService;
-      const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
       const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
       const terminalManager = yield* TerminalManager.TerminalManager;
       const previewManager = yield* PreviewManager.PreviewManager;
@@ -2843,18 +2844,6 @@ const layerWsRpc = (
           gitWorkflow
             .preparePullRequestThread(input)
             .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-        [WS_METHODS.vcsListRefs]: (input) => gitWorkflow.listRefs(input),
-        [WS_METHODS.vcsMoveThread]: (input) => threadWorkspace.moveThread(input),
-        [WS_METHODS.vcsCreateWorktree]: (input) =>
-          gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-        [WS_METHODS.vcsRemoveWorktree]: (input) =>
-          gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-        [WS_METHODS.vcsCreateRef]: (input) =>
-          gitWorkflow.createRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-        [WS_METHODS.vcsSwitchRef]: (input) =>
-          gitWorkflow.switchRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-        [WS_METHODS.vcsInit]: (input) =>
-          vcsProvisioning.initRepository(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
         [WS_METHODS.reviewGetDiffPreview]: (input) => review.getDiffPreview(input),
         [WS_METHODS.reviewGetDiffFileContents]: (input) => review.getDiffFileContents(input),
         [WS_METHODS.terminalOpen]: (input) => terminalManager.open(input),
@@ -3113,6 +3102,40 @@ const layerWsRpc = (
     }),
   );
 
+const vcsRpcLayer = VcsServerRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
+    const threadWorkspace = yield* ThreadWorkspaceService.ThreadWorkspaceService;
+    const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
+    const worktreeSnapshots = yield* WorktreeSnapshots.WorktreeSnapshots;
+    const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
+    const refreshGitStatus = (cwd: string) =>
+      vcsStatusBroadcaster
+        .refreshStatus(cwd)
+        .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
+    return VcsServerRpcGroup.of({
+      [WS_METHODS.vcsListRefs]: (input) => gitWorkflow.listRefs(input),
+      [WS_METHODS.vcsMoveThread]: (input) => threadWorkspace.moveThread(input),
+      [WS_METHODS.vcsCreateWorktree]: (input) =>
+        gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+      [WS_METHODS.vcsRemoveWorktree]: (input) =>
+        gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+      [WS_METHODS.vcsCreateRef]: (input) =>
+        gitWorkflow.createRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+      [WS_METHODS.vcsSwitchRef]: (input) =>
+        gitWorkflow.switchRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+      [WS_METHODS.vcsInit]: (input) =>
+        vcsProvisioning.initRepository(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+      [WS_METHODS.vcsSubscribeWorktreeSnapshots]: () => worktreeSnapshots.snapshots,
+      [WS_METHODS.vcsRestoreWorktreeSnapshot]: (input) =>
+        worktreeSnapshots
+          .restore(input)
+          .pipe(Effect.tap((result) => refreshGitStatus(result.worktreePath))),
+      [WS_METHODS.vcsDeleteWorktreeSnapshot]: (input) => worktreeSnapshots.discard(input),
+    });
+  }),
+);
+
 const databaseRpcLayer = DatabaseServerRpcGroup.toLayer(
   Effect.gen(function* () {
     const database = yield* DatabaseService.DatabaseService;
@@ -3222,6 +3245,7 @@ export const layer = Layer.unwrap(
               serverBrowser,
             ).pipe(
               Layer.merge(databaseRpcLayer),
+              Layer.merge(vcsRpcLayer),
               Layer.provide(
                 Layer.succeed(ThreadWorkspaceService.ThreadWorkspaceService, threadWorkspace),
               ),

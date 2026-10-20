@@ -175,6 +175,31 @@ export const VcsRemoveWorktreeInput = Schema.Struct({
 });
 export type VcsRemoveWorktreeInput = typeof VcsRemoveWorktreeInput.Type;
 
+/** A worktree's uncommitted state, saved by storage cleanup before it removed the worktree. */
+export const WorktreeSnapshot = Schema.Struct({
+  repository: TrimmedNonEmptyStringSchema,
+  ref: TrimmedNonEmptyStringSchema,
+  threadId: Schema.NullOr(ThreadId),
+  threadTitle: Schema.NullOr(Schema.String),
+  branch: Schema.NullOr(Schema.String),
+  worktreePath: TrimmedNonEmptyStringSchema,
+  createdAt: Schema.String,
+  fileCount: Schema.Number,
+});
+export type WorktreeSnapshot = typeof WorktreeSnapshot.Type;
+
+export const VcsWorktreeSnapshotInput = Schema.Struct({
+  repository: TrimmedNonEmptyStringSchema,
+  ref: TrimmedNonEmptyStringSchema,
+});
+export type VcsWorktreeSnapshotInput = typeof VcsWorktreeSnapshotInput.Type;
+
+export const VcsRestoreWorktreeSnapshotResult = Schema.Struct({
+  worktreePath: TrimmedNonEmptyStringSchema,
+  conflictedPaths: Schema.Array(Schema.String),
+});
+export type VcsRestoreWorktreeSnapshotResult = typeof VcsRestoreWorktreeSnapshotResult.Type;
+
 export const VcsCreateRefInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   refName: TrimmedNonEmptyStringSchema,

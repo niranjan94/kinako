@@ -980,6 +980,27 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverGetStorageCleanupReport,
       idleTtlMs: 0,
     }),
+    worktreeSnapshots: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:worktree-snapshots",
+      tag: WS_METHODS.vcsSubscribeWorktreeSnapshots,
+      idleTtlMs: 0,
+    }),
+    restoreWorktreeSnapshot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:restore-worktree-snapshot",
+      tag: WS_METHODS.vcsRestoreWorktreeSnapshot,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.ref]),
+      },
+    }),
+    deleteWorktreeSnapshot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:delete-worktree-snapshot",
+      tag: WS_METHODS.vcsDeleteWorktreeSnapshot,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.ref]),
+      },
+    }),
     keepAwakeStatus: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:keep-awake-status",
       tag: WS_METHODS.serverSubscribeKeepAwakeStatus,
