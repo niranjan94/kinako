@@ -455,43 +455,41 @@ function RecoverySnapshotsSection() {
       return;
     setPendingRef(snapshot.ref);
     const input = { repository: snapshot.repository, ref: snapshot.ref };
-    try {
-      if (action === "discard") {
-        const result = await discard({ environmentId, input });
-        if (result._tag !== "Success" && !isAtomCommandInterrupted(result))
-          toastManager.add({
-            type: "error",
-            title: "Could not discard the snapshot",
-            description: String(squashAtomCommandFailure(result)),
-          });
-        return;
-      }
-      const result = await restore({ environmentId, input });
-      if (result._tag === "Success") {
-        const { conflictedPaths, worktreePath } = result.value;
-        toastManager.add(
-          conflictedPaths.length > 0
-            ? {
-                type: "warning",
-                title: "Restored with conflicts",
-                description: `Resolve ${conflictedPaths.length} ${conflictedPaths.length === 1 ? "file" : "files"} in ${worktreePath}: ${conflictedPaths.slice(0, 3).join(", ")}${conflictedPaths.length > 3 ? "…" : ""}`,
-              }
-            : {
-                type: "success",
-                title: "Snapshot restored",
-                description: `Files are back in ${worktreePath} as uncommitted changes.`,
-              },
-        );
-      } else if (!isAtomCommandInterrupted(result)) {
-        toastManager.add({
-          type: "error",
-          title: "Could not restore the snapshot",
-          description: String(squashAtomCommandFailure(result)),
-        });
-      }
-    } finally {
-      setPendingRef(null);
-    }
+    await (
+      action === "discard"
+        ? discard({ environmentId, input }).then((result) => {
+            if (result._tag !== "Success" && !isAtomCommandInterrupted(result))
+              toastManager.add({
+                type: "error",
+                title: "Could not discard the snapshot",
+                description: String(squashAtomCommandFailure(result)),
+              });
+          })
+        : restore({ environmentId, input }).then((result) => {
+            if (result._tag === "Success") {
+              const { conflictedPaths, worktreePath } = result.value;
+              toastManager.add(
+                conflictedPaths.length > 0
+                  ? {
+                      type: "warning",
+                      title: "Restored with conflicts",
+                      description: `Resolve ${conflictedPaths.length} ${conflictedPaths.length === 1 ? "file" : "files"} in ${worktreePath}: ${conflictedPaths.slice(0, 3).join(", ")}${conflictedPaths.length > 3 ? "…" : ""}`,
+                    }
+                  : {
+                      type: "success",
+                      title: "Snapshot restored",
+                      description: `Files are back in ${worktreePath} as uncommitted changes.`,
+                    },
+              );
+            } else if (!isAtomCommandInterrupted(result)) {
+              toastManager.add({
+                type: "error",
+                title: "Could not restore the snapshot",
+                description: String(squashAtomCommandFailure(result)),
+              });
+            }
+          })
+    ).finally(() => setPendingRef(null));
   };
 
   return (

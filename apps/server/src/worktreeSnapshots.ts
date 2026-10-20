@@ -36,7 +36,7 @@ const SNAPSHOT_REFS_PREFIX = "refs/t3/worktree-snapshots";
 const SNAPSHOT_REF_PATTERN = /^refs\/t3\/worktree-snapshots\/[A-Za-z0-9_-]+\/(\d+)$/;
 const SNAPSHOT_MESSAGE_SUBJECT = "t3 worktree snapshot";
 export const WORKTREE_SNAPSHOT_RETENTION_MS = 30 * 86_400_000;
-export const WORKTREE_SNAPSHOTS_PER_THREAD = 3;
+const WORKTREE_SNAPSHOTS_PER_THREAD = 3;
 
 const SnapshotMetadata = Schema.Struct({
   threadId: Schema.NullOr(ThreadId),
