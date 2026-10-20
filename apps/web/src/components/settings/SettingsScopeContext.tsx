@@ -44,7 +44,9 @@ const memberProjectFilesAtom = Atom.family((membersKey: string) => {
       if (!settled) continue;
       files.set(
         physicalProjectKey,
-        data === null || data.truncated ? null : parseT3ProjectFile(data.contents),
+        data === null || data.exists === false || data.truncated
+          ? null
+          : parseT3ProjectFile(data.contents),
       );
     }
     return files;

@@ -139,21 +139,21 @@ const make = Effect.gen(function* () {
       const project = yield* loadProject(scope, projection.thread.projectId);
       let baseRef = input.baseRef;
       const startFromOrigin = input.startFromOrigin ?? (yield* readDefaultStartFromOrigin);
+      let startedFromOrigin = false;
       if (input.target !== "local" && startFromOrigin && input.branch !== undefined) {
-        baseRef ??=
+        const localBaseRef =
+          baseRef ??
           (yield* gitWorkflow
             .localStatus({ cwd: project.workspaceRoot })
-            .pipe(asOperationFailed("Unable to read git status"))).refName ?? "HEAD";
-        yield* gitWorkflow
-          .fetchRemote({ cwd: project.workspaceRoot, remoteName: "origin" })
-          .pipe(asOperationFailed("Unable to fetch origin"));
-        baseRef = (yield* gitWorkflow
-          .resolveRemoteTrackingCommit({
-            cwd: project.workspaceRoot,
-            refName: baseRef,
-            fallbackRemoteName: "origin",
-          })
-          .pipe(asOperationFailed("Unable to resolve origin"))).commitSha;
+            .pipe(asOperationFailed("Unable to read git status"))).refName ??
+          "HEAD";
+        const resolvedRemoteBase = yield* gitWorkflow
+          .fetchWorktreeBaseCommit({ cwd: project.workspaceRoot, refName: localBaseRef })
+          .pipe(asOperationFailed(`Unable to fetch the remote base of '${localBaseRef}'`));
+        if (resolvedRemoteBase !== null) {
+          baseRef = resolvedRemoteBase.commitSha;
+          startedFromOrigin = true;
+        }
       }
       const result = yield* workspace
         .moveThread({
@@ -206,7 +206,7 @@ const make = Effect.gen(function* () {
         worktreePath: result.worktreePath,
         branch: result.branch,
         baseRef: input.baseRef ?? projection.thread.branch ?? "HEAD",
-        startedFromOrigin: input.target !== "local" && startFromOrigin,
+        startedFromOrigin,
         setupScript: result.setupScript,
         continuation,
         note: result.cleanupPending

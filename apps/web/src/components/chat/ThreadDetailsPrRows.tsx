@@ -109,8 +109,9 @@ export function ThreadDetailsPrRows({
   return (
     <>
       {currentRow}
-      {expanded
-        ? rest.map((link) => (
+      {expanded ? (
+        <div data-thread-details-pr-list className="flex flex-col">
+          {rest.map((link) => (
             <ThreadDetailsPrLinkRow
               key={threadPullRequestKeyOf(link)}
               environmentId={row.environmentId}
@@ -119,8 +120,9 @@ export function ThreadDetailsPrRows({
               onActed={row.onActed}
               onStopWatching={stopWatching(link)}
             />
-          ))
-        : null}
+          ))}
+        </div>
+      ) : null}
       <ThreadDetailsControl
         variant="ghost"
         size="sm"

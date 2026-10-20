@@ -1,7 +1,9 @@
 # Product usage data
 
 The T3 Code server sends product usage events to T3 Code's own endpoint at `ingest.t3.codes`,
-associated with a hashed account or installation identifier. The endpoint keeps a copy of each
+associated with a hashed account or installation identifier. To count how many installations one person
+uses, the server also sends hashed account identifiers: your T3 Connect account, your OpenAI and
+Claude accounts when you are signed in, and a random identifier for each device that connects. The endpoint keeps a copy of each
 event and forwards events to PostHog. Events include the provider, model, reasoning effort,
 permission mode, turn result, duration, release channel, and main-agent token totals when
 available.
@@ -13,7 +15,16 @@ This fork collects nothing by default. To send events to a PostHog project you c
 `T3CODE_TELEMETRY_ENABLED=true` and `T3CODE_POSTHOG_KEY` (plus `T3CODE_POSTHOG_HOST` for a
 self-hosted PostHog) in the server's environment before starting it.
 
-The desktop app reads the variable from your shell profile (for example `~/.zshrc`) on macOS and
+Relay connection traces, used to diagnose T3 Connect connectivity, are sent only when the build or
+the server's environment provides a trace endpoint (`T3CODE_RELAY_CLIENT_OTLP_TRACES_URL`,
+`T3CODE_RELAY_CLIENT_OTLP_TRACES_DATASET`, and `T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN`).
+
+To disable product events and relay tracing, set `T3CODE_TELEMETRY_ENABLED=false` in the server's
+environment before starting it. Relay tracing also stops when `T3CODE_OTEL_SDK_DISABLED` or
+`OTEL_SDK_DISABLED` turns OpenTelemetry export off. The web app in a browser, including one the
+`kinako` CLI opens, does not read these variables.
+
+The desktop app reads `T3CODE_TELEMETRY_ENABLED` from your shell profile (for example `~/.zshrc`) on macOS and
 Linux, so export it there and restart the app. On Windows, set it as a user environment variable.
 
 ## Export diagnostics to your own receiver

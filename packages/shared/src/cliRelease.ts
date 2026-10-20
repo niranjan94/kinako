@@ -1,6 +1,7 @@
 import { FORK_CLI_NAME, FORK_REPOSITORY } from "./forkBrand.ts";
 
 const CLI_RELEASE_REPOSITORY = FORK_REPOSITORY;
+export const CLI_RELEASES_PAGE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases`;
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";
 

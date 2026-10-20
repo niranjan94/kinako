@@ -19,9 +19,9 @@ import { Pressable, View, type ColorValue } from "react-native";
 
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { RequestActionButton } from "./RequestActionButton";
 
 const FOLLOW_UP_SYMBOL: AppSymbolName = "plus";
 
@@ -154,7 +154,7 @@ function SuggestedFollowUp(props: {
           {error}
         </Text>
       ) : null}
-      <RequestActionButton label="Start thread" disabled={disabled} onPress={() => startIn()} />
+      <Button label="Start thread" tone="primary" disabled={disabled} onPress={() => startIn()} />
       <View className="flex-row items-center justify-between gap-2">
         <View className="flex-row items-center gap-3">
           <Pressable

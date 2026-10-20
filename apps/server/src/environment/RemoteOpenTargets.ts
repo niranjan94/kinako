@@ -1,4 +1,5 @@
 import { type RemoteOpenTarget } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { readMdnsHostName } from "@t3tools/shared/mdnsHostName";
 import * as NetService from "@t3tools/shared/Net";
 import { readTailscaleSshEnabled, readTailscaleStatus } from "@t3tools/tailscale";
@@ -28,6 +29,7 @@ export const make = Effect.gen(function* () {
       net.hasListenerOnHost(SSH_PORT, "::1"),
       (ipv4, ipv6) => ipv4 || ipv6,
     );
+    const username = yield* HostProcess.Username;
 
     const magicDnsName = yield* readTailscaleStatus.pipe(
       Effect.map((status) => status.magicDnsName),
@@ -47,20 +49,32 @@ export const make = Effect.gen(function* () {
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         ))
       ) {
-        targets.push({ kind: "tailscale", host: magicDnsName });
+        targets.push({
+          kind: "tailscale",
+          host: magicDnsName,
+          ...(username === null ? {} : { username }),
+        });
       }
       return targets;
     }
 
     if (magicDnsName !== null) {
-      targets.push({ kind: "tailscale", host: magicDnsName });
+      targets.push({
+        kind: "tailscale",
+        host: magicDnsName,
+        ...(username === null ? {} : { username }),
+      });
     }
 
     const mdnsHostName = yield* readMdnsHostName.pipe(
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
     if (mdnsHostName !== null) {
-      targets.push({ kind: "mdns", host: mdnsHostName });
+      targets.push({
+        kind: "mdns",
+        host: mdnsHostName,
+        ...(username === null ? {} : { username }),
+      });
     }
 
     return targets;

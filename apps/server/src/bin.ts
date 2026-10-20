@@ -14,6 +14,9 @@ if (
   })
 ) {
   const command = process.argv[2];
+  // Guard sockets before either dispatch path can load outbound-capable modules.
+  const { ignoreMacosTypeOfServiceEinval } = await import("./outboundHttp.ts");
+  ignoreMacosTypeOfServiceEinval();
   if (command === "database-session-process") {
     const { runSqliteProcess } = await import("./database/sqliteProcess.ts");
     runSqliteProcess();

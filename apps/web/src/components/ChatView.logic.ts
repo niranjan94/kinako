@@ -187,12 +187,7 @@ export function shouldOpenProactiveTurnDiff(input: {
 export function resolveProactiveTurnDiffAction(input: {
   checkpoint: Pick<TurnDiffSummary, "status" | "files"> | undefined;
   isGitRepo: boolean | undefined;
-  activeSurfaceKind: RightPanelSurface["kind"] | null;
 }): "defer" | "ignore" | "open" {
-  // An open diff already shows the work; reopening it would reset the chosen scope.
-  if (input.activeSurfaceKind === "pull-request" || input.activeSurfaceKind === "diff") {
-    return "ignore";
-  }
   if (input.checkpoint === undefined || input.checkpoint.status === "missing") return "defer";
   if (input.isGitRepo === undefined) return "defer";
   if (
@@ -434,17 +429,6 @@ export function resolveThreadSwitchTimeline<T extends readonly unknown[]>(input:
     return { entries: rememberedForActive, displayThreadKey: input.activeThreadKey };
   }
 
-  const lastReady = input.lastReady ?? peekHeldThreadTimeline<T>();
-  if (
-    input.loading &&
-    lastReady !== null &&
-    lastReady.threadKey !== null &&
-    lastReady.threadKey !== input.activeThreadKey &&
-    lastReady.entries.length > 0 &&
-    threadKeysShareEnvironment(lastReady.threadKey, input.activeThreadKey)
-  ) {
-    return { entries: lastReady.entries, displayThreadKey: lastReady.threadKey };
-  }
   return { entries: input.nextEntries, displayThreadKey: input.activeThreadKey };
 }
 
@@ -702,6 +686,17 @@ export function reconcileMountedTerminalThreadIds(input: {
   }
 
   return nextThreadIds;
+}
+
+// Null identifies the project checkout when a launch or session is known.
+export function resolveTerminalWorktreePath(input: {
+  launchContext: { readonly worktreePath: string | null } | null;
+  summary: { readonly worktreePath: string | null } | null;
+  threadWorktreePath: string | null;
+}): string | null {
+  if (input.launchContext !== null) return input.launchContext.worktreePath;
+  if (input.summary !== null) return input.summary.worktreePath;
+  return input.threadWorktreePath;
 }
 
 export function revokeBlobPreviewUrl(previewUrl: string | undefined): void {
@@ -1127,7 +1122,6 @@ function waitForThreadOutcome(input: {
 
 export async function waitForRevertedMessage(
   threadRef: ScopedThreadRef,
-  messageId: MessageId,
   turnCount: number,
   requestId: CommandId,
   revert: () => Promise<void>,
@@ -1135,9 +1129,25 @@ export async function waitForRevertedMessage(
 ): Promise<void> {
   const threadAtom = environmentThreadDetails.stateAtom(threadRef);
   const initial = Option.getOrNull(appAtomRegistry.get(threadAtom).data);
-  const messageRunId = initial?.messages.find((message) => message.id === messageId)?.runId;
-  if (messageRunId === undefined) {
-    throw new Error("The message to rewind is no longer available.");
+  const providerThreadId = initial?.thread.activeProviderThreadId;
+  const initialProviderThread = initial?.providerThreads.find(
+    (providerThread) => providerThread.id === providerThreadId,
+  );
+  const initialProviderThreadIds = new Set(initial?.providerThreads.map((thread) => thread.id));
+  // Paging can omit the source run. Rollback commits the entire settled suffix atomically.
+  const witness = initial?.runs.reduce<(typeof initial.runs)[number] | undefined>((latest, run) => {
+    if (
+      run.ordinal <= turnCount ||
+      (run.status !== "completed" &&
+        run.status !== "interrupted" &&
+        run.status !== "failed" &&
+        run.status !== "cancelled")
+    )
+      return latest;
+    return latest === undefined || run.ordinal > latest.ordinal ? run : latest;
+  }, undefined);
+  if (witness === undefined) {
+    throw new Error("The thread has changed. Select a message to rewind again.");
   }
   return waitForThreadOutcome({
     threadRef,
@@ -1145,9 +1155,17 @@ export async function waitForRevertedMessage(
     inspect: (thread) => {
       const failure = thread.thread.rollbackFailure;
       if (failure?.requestId === requestId) return new Error(failure.message);
-      return thread.runs.some(
-        (run) => run.id === messageRunId && run.ordinal > turnCount && run.status === "rolled_back",
-      )
+      return thread.providerThreads.some(
+        (providerThread) =>
+          (providerThread.id === providerThreadId ||
+            // Claude resets to a fresh root session when rewinding to thread start.
+            (turnCount === 0 &&
+              providerThread.ownerNodeId === null &&
+              providerThread.appThreadId === initial?.thread.id &&
+              providerThread.providerInstanceId === initialProviderThread?.providerInstanceId &&
+              !initialProviderThreadIds.has(providerThread.id))) &&
+          providerThread.lastRunOrdinal === (turnCount === 0 ? null : turnCount),
+      ) && thread.runs.some((run) => run.id === witness.id && run.status === "rolled_back")
         ? true
         : undefined;
     },

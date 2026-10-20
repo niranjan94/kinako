@@ -50,6 +50,12 @@ function harness(worktreePath: string | null = null, fails = false) {
         }),
   );
   const sendToThread = vi.fn(() => Effect.succeed({ delivery: "queued" }));
+  const fetchWorktreeBaseCommit = vi.fn((_input: { cwd: string; refName: string }) =>
+    Effect.succeed<{ commitSha: string; remoteRefName: string } | null>({
+      commitSha: "abc123",
+      remoteRefName: "upstream/main",
+    }),
+  );
   const layer = WorktreeMcpService.layer.pipe(
     Layer.provide(Layer.succeed(ThreadWorkspaceService.ThreadWorkspaceService, { moveThread })),
     Layer.provide(
@@ -85,14 +91,13 @@ function harness(worktreePath: string | null = null, fails = false) {
       } as unknown as ServerSettings.ServerSettingsService["Service"]),
     ),
     Layer.provide(
-      Layer.succeed(
-        GitWorkflowService.GitWorkflowService,
-        {} as GitWorkflowService.GitWorkflowService["Service"],
-      ),
+      Layer.succeed(GitWorkflowService.GitWorkflowService, {
+        fetchWorktreeBaseCommit,
+      } as unknown as GitWorkflowService.GitWorkflowService["Service"]),
     ),
     Layer.provide(NodeServices.layer),
   );
-  return { layer, moveThread, sendToThread };
+  return { layer, moveThread, sendToThread, fetchWorktreeBaseCommit };
 }
 
 describe("WorktreeMcpService", () => {
@@ -118,6 +123,23 @@ describe("WorktreeMcpService", () => {
       }).pipe(Effect.provide(h.layer));
     },
   );
+
+  it.effect("starts a new worktree branch from the base ref's own remote when asked", () => {
+    const h = harness();
+    return Effect.gen(function* () {
+      const service = yield* WorktreeMcpService.WorktreeMcpService;
+      const result = yield* service.handoff(scope, {
+        branch: "feature/move",
+        baseRef: "main",
+        startFromOrigin: true,
+      });
+      expect(h.fetchWorktreeBaseCommit).toHaveBeenCalledWith({ cwd: "/repo", refName: "main" });
+      expect(h.moveThread.mock.calls[0]?.[0].target).toEqual({
+        worktree: { branch: "feature/move", baseRef: "abc123" },
+      });
+      expect(result.startedFromOrigin).toBe(true);
+    }).pipe(Effect.provide(h.layer));
+  });
 
   it.effect("moves back to local and retains the original source for cleanup retries", () => {
     const h = harness("/repo/worktree");
