@@ -1255,6 +1255,7 @@ export function createServerEnvironmentAtoms<R, E>(
             environmentId,
             "projectId" in input ? input.projectId : input.workspaceRoot,
             input.maxAgeMs ?? null,
+            input.cursor ?? null,
           ]),
       },
     }),

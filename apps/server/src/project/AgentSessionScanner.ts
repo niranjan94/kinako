@@ -181,14 +181,22 @@ export class AgentSessionScanner extends Context.Service<
       completedSources?: ReadonlyArray<AgentSessionImportSource>,
     ) => Stream.Stream<AgentSessionRecentThread, AgentSessionScanError>;
     /**
-     * Sessions started in a terminal from this directory, newest first. `reuseDiscovery` lists
-     * from the latest scan's discovery instead of walking the provider homes again.
+     * One page of the sessions started in a terminal from this directory, newest first.
+     * `reuseDiscovery` lists from the latest scan's discovery instead of walking the provider
+     * homes again. `nextCursor` is where the next page starts, absent on the last one.
      */
     readonly listSessions: (
       workspaceRoot: string,
-      options?: { readonly maxAgeMs?: number; readonly reuseDiscovery?: boolean },
+      options?: {
+        readonly maxAgeMs?: number;
+        readonly reuseDiscovery?: boolean;
+        readonly cursor?: number;
+      },
     ) => Effect.Effect<
-      { readonly sessions: ReadonlyArray<AgentSessionSummary>; readonly truncated: boolean },
+      {
+        readonly sessions: ReadonlyArray<AgentSessionSummary>;
+        readonly nextCursor: number | null;
+      },
       AgentSessionScanError
     >;
     /** One terminal session from this directory with its history, if it is still there. */
@@ -1578,7 +1586,7 @@ export const make = Effect.gen(function* () {
       cachedCandidates = candidates;
     }
     const project = yield* projectTranscripts(workspaceRoot, candidates);
-    if (project === null) return { sessions: [], truncated: false };
+    if (project === null) return { sessions: [], nextCursor: null };
     const { maxAgeMs } = options;
     const eligibleTranscripts =
       maxAgeMs === undefined
@@ -1586,8 +1594,10 @@ export const make = Effect.gen(function* () {
         : project.transcripts.filter(
             ({ transcript }) => transcript.mtimeMs >= project.nowMs - maxAgeMs,
           );
+    // The cursor counts transcripts, since one session can span several and some are skipped.
+    const start = Math.min(options.cursor ?? 0, eligibleTranscripts.length);
     const summaries = yield* Effect.forEach(
-      eligibleTranscripts.slice(0, MAX_SUMMARIZED_TRANSCRIPTS),
+      eligibleTranscripts.slice(start, start + MAX_SUMMARIZED_TRANSCRIPTS),
       ({ candidate, transcript }) =>
         Effect.gen(function* () {
           const records = yield* readTranscriptEnds(transcript.filePath);
@@ -1615,18 +1625,19 @@ export const make = Effect.gen(function* () {
       { concurrency: 8 },
     );
     const seen = new Set<string>();
-    const sessions = summaries.flat().filter((summary) => {
-      const key = `${summary.providerInstanceId}\0${summary.providerSessionId}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    return {
-      sessions: sessions.slice(0, MAX_LISTED_SESSIONS),
-      truncated:
-        sessions.length > MAX_LISTED_SESSIONS ||
-        eligibleTranscripts.length > MAX_SUMMARIZED_TRANSCRIPTS,
-    };
+    const sessions: Array<AgentSessionSummary> = [];
+    let next = start;
+    for (const transcriptSummaries of summaries) {
+      if (sessions.length === MAX_LISTED_SESSIONS) break;
+      next += 1;
+      for (const summary of transcriptSummaries) {
+        const key = `${summary.providerInstanceId}\0${summary.providerSessionId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        sessions.push(summary);
+      }
+    }
+    return { sessions, nextCursor: next < eligibleTranscripts.length ? next : null };
   });
 
   const readSession: AgentSessionScanner["Service"]["readSession"] = Effect.fn(

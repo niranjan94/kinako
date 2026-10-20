@@ -59,6 +59,10 @@ function session(id: string, overrides: Partial<AgentSessionListItem> = {}): Age
   };
 }
 
+function listed(sessions: ReadonlyArray<AgentSessionListItem>) {
+  return { sessions, listedAtMs: nowMs };
+}
+
 function folder(
   path: string,
   overrides: Partial<AgentSessionImportFolder> = {},
@@ -75,7 +79,7 @@ async function runPlan(
   const imports: Array<string> = [];
   await runAgentSessionHistoryImport(plan, {
     nowMs: () => nowMs,
-    listSessions: async () => [],
+    listSessions: async () => ({ sessions: [] }),
     ensureProject: async (target) => ProjectId.make(`project:${target.path}`),
     importSession: async (projectId, item) => {
       imports.push(`${projectId}/${item.providerSessionId}`);
@@ -206,11 +210,13 @@ describe("toggleAgentSessionSelection", () => {
 describe("runAgentSessionHistoryImport", () => {
   it("imports a folder's default selection and skips sessions that already have a thread", async () => {
     const { progress, imports } = await runPlan([folder("/code/app")], {
-      listSessions: async () => [
-        session("new"),
-        session("open", { updatedAt: "2026-10-13T11:58:00.000Z" }),
-        session("done", { importedThreadId: ThreadId.make("thread:done") }),
-      ],
+      listSessions: async () => ({
+        sessions: [
+          session("new"),
+          session("open", { updatedAt: "2026-10-13T11:58:00.000Z" }),
+          session("done", { importedThreadId: ThreadId.make("thread:done") }),
+        ],
+      }),
     });
 
     expect(imports).toEqual(["project:/code/app/new"]);
@@ -226,8 +232,8 @@ describe("runAgentSessionHistoryImport", () => {
     const { progress, imports } = await runPlan(
       [
         folder("/code/unlisted"),
-        folder("/code/no-project", { sessions: [session("orphan")] }),
-        folder("/code/app", { sessions: [session("broken"), session("fine")] }),
+        folder("/code/no-project", { listing: listed([session("orphan")]) }),
+        folder("/code/app", { listing: listed([session("broken"), session("fine")]) }),
       ],
       {
         listSessions: async () => {
@@ -263,7 +269,10 @@ describe("runAgentSessionHistoryImport", () => {
     let stop = false;
     const imports: Array<string> = [];
     const { progress } = await runPlan(
-      [folder("/code/app", { sessions: [session("one"), session("two")] }), folder("/code/next")],
+      [
+        folder("/code/app", { listing: listed([session("one"), session("two")]) }),
+        folder("/code/next"),
+      ],
       {
         importSession: async (projectId, item) => {
           imports.push(item.providerSessionId);
@@ -289,7 +298,7 @@ describe("runAgentSessionHistoryImport", () => {
     let attempt = 0;
     const plan = [
       folder("/code/unlisted"),
-      folder("/code/app", { sessions: [session("broken"), session("fine")] }),
+      folder("/code/app", { listing: listed([session("broken"), session("fine")]) }),
     ];
     const first = await runPlan(plan, {
       listSessions: async () => {
@@ -306,7 +315,7 @@ describe("runAgentSessionHistoryImport", () => {
 
     const retry = agentSessionImportRetryPlan(first.progress);
     expect(
-      retry.map((item) => [item.path, item.sessions?.map((s) => s.providerSessionId)]),
+      retry.map((item) => [item.path, item.listing?.sessions.map((s) => s.providerSessionId)]),
     ).toEqual([
       ["/code/unlisted", undefined],
       ["/code/app", ["broken"]],
@@ -315,7 +324,7 @@ describe("runAgentSessionHistoryImport", () => {
     let progress = first.progress;
     await runAgentSessionHistoryImport(retry, {
       nowMs: () => nowMs,
-      listSessions: async () => [session("late")],
+      listSessions: async () => ({ sessions: [session("late")] }),
       ensureProject: async (target) => ProjectId.make(`project:${target.path}`),
       importSession: async (projectId, item) => {
         attempt += 1;
@@ -336,6 +345,50 @@ describe("runAgentSessionHistoryImport", () => {
     expect(agentSessionImportRetryPlan(progress)).toEqual([]);
   });
 
+  it("reads every page of a folder-wide selection and judges open sessions when listed", async () => {
+    const cursors: Array<number | undefined> = [];
+    const later = nowMs + 10 * 60 * 1000;
+    const { progress, imports } = await runPlan([folder("/code/app")], {
+      nowMs: () => (cursors.length === 1 ? nowMs : later),
+      listSessions: async (_folder, cursor) => {
+        cursors.push(cursor);
+        return cursor === undefined
+          ? {
+              sessions: [
+                session("done", { importedThreadId: ThreadId.make("thread:done") }),
+                session("open", { updatedAt: "2026-10-13T11:58:00.000Z" }),
+              ],
+              nextCursor: 2,
+            }
+          : { sessions: [session("older", { updatedAt: "2026-09-01T10:00:00.000Z" })] };
+      },
+    });
+
+    expect(cursors).toEqual([undefined, 2]);
+    // "open" looked still open when its page was listed, even though the import ran later.
+    expect(imports).toEqual(["project:/code/app/older"]);
+    expect(statuses(progress)).toEqual({ done: "already-imported", older: "imported" });
+  });
+
+  it("imports only the listed sessions an explicit selection names", async () => {
+    const chosen = session("chosen");
+    const { imports } = await runPlan(
+      [
+        folder("/code/app", {
+          selection: new Set([agentSessionKey(chosen)]),
+          listing: { ...listed([chosen, session("other")]), nextCursor: 2 },
+        }),
+      ],
+      {
+        listSessions: async () => {
+          throw new Error("Should not list more pages.");
+        },
+      },
+    );
+
+    expect(imports).toEqual(["project:/code/app/chosen"]);
+  });
+
   it("clears a folder's listing failure when a retry lists nothing to import", async () => {
     const first = await runPlan([folder("/code/unlisted")], {
       listSessions: async () => {
@@ -346,9 +399,9 @@ describe("runAgentSessionHistoryImport", () => {
 
     let progress = first.progress;
     await runPlan(agentSessionImportRetryPlan(first.progress), {
-      listSessions: async () => [
-        session("done", { importedThreadId: ThreadId.make("thread:done") }),
-      ],
+      listSessions: async () => ({
+        sessions: [session("done", { importedThreadId: ThreadId.make("thread:done") })],
+      }),
       onEvent: (event) => {
         progress = applyAgentSessionImportEvent(progress, event);
       },

@@ -1271,12 +1271,16 @@ function ImportStep({
     let listed = true;
     await runAgentSessionHistoryImport([{ path, title: path, projectId, selection: "all" }], {
       nowMs: Date.now,
-      listSessions: async () => {
+      listSessions: async (_folder, cursor) => {
         const result = await listSessions({
           environmentId,
-          input: { workspaceRoot: path, maxAgeMs: DEFAULT_AGENT_SESSION_AGE_WINDOW.maxAgeMs },
+          input: {
+            workspaceRoot: path,
+            maxAgeMs: DEFAULT_AGENT_SESSION_AGE_WINDOW.maxAgeMs,
+            ...(cursor === undefined ? {} : { cursor }),
+          },
         });
-        if (result._tag === "Success") return result.value.sessions;
+        if (result._tag === "Success") return result.value;
         throw squashAtomCommandFailure(result);
       },
       ensureProject: async () => projectId,

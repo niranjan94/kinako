@@ -376,10 +376,13 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  /** The generation an import of this session uses, and its live thread if there is one. */
+  /**
+   * The generation an import of this session uses, and its live thread if there is one. A null
+   * project accepts a live thread in any project.
+   */
   const resolveImportGeneration = Effect.fn("resolveAgentSessionImportGeneration")(function* (
     session: Parameters<typeof importedThreadId>[0],
-    projectId: ProjectId,
+    projectId: ProjectId | null,
   ) {
     for (let generation = 0; generation < MAX_IMPORT_GENERATIONS; generation++) {
       const threadId = importedThreadId(session, generation);
@@ -389,66 +392,46 @@ const make = Effect.gen(function* () {
         // Another project's thread is not this project's to open; importing reports the conflict.
         return {
           generation,
-          liveThreadId: existing.value.thread.projectId === projectId ? threadId : null,
+          liveThreadId:
+            projectId === null || existing.value.thread.projectId === projectId ? threadId : null,
         };
       }
     }
     return { generation: MAX_IMPORT_GENERATIONS, liveThreadId: null };
   });
 
-  /** The listed folder, and the project that owns it if there is one yet. */
-  const resolveListTarget = Effect.fn("resolveAgentSessionListTarget")(function* (
-    input: AgentSessionListInput,
-  ) {
-    if ("projectId" in input) {
-      const project = yield* readProject(input.projectId);
-      return { workspaceRoot: project.workspaceRoot, projectId: project.id, fromScan: false };
-    }
-    const project = Option.getOrNull(
-      yield* projects
-        .getByWorkspaceRoot(input.workspaceRoot)
-        .pipe(
-          Effect.mapError(
-            (cause) => new AgentSessionScanError({ operation: "read-projects", cause }),
-          ),
-        ),
-    );
-    return {
-      workspaceRoot: project?.workspaceRoot ?? input.workspaceRoot,
-      projectId: project?.id ?? null,
-      fromScan: true,
-    };
-  });
-
   const listSessions = Effect.fn("listAgentSessions")(function* (input: AgentSessionListInput) {
-    const target = yield* resolveListTarget(input);
+    // A scanned folder may not be a project yet, and its sessions may live in any project.
+    const target =
+      "projectId" in input
+        ? {
+            workspaceRoot: (yield* readProject(input.projectId)).workspaceRoot,
+            projectId: input.projectId,
+          }
+        : { workspaceRoot: input.workspaceRoot, projectId: null };
     const listed = yield* scanner.listSessions(target.workspaceRoot, {
       ...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
-      reuseDiscovery: target.fromScan,
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      reuseDiscovery: target.projectId === null,
     });
-    const { projectId } = target;
     const sessions = yield* Effect.forEach(
       listed.sessions,
       (summary) =>
-        Effect.gen(function* () {
-          const liveThreadId =
-            projectId === null
-              ? null
-              : (yield* resolveImportGeneration(summary, projectId)).liveThreadId;
-          return {
+        resolveImportGeneration(summary, target.projectId).pipe(
+          Effect.map(({ liveThreadId }): AgentSessionListItem => ({
             provider: summary.source,
             providerInstanceId: summary.providerInstanceId,
             providerSessionId: summary.providerSessionId,
             title: summary.title,
             updatedAt: summary.updatedAt,
             importedThreadId: liveThreadId,
-          } satisfies AgentSessionListItem;
-        }),
+          })),
+        ),
       { concurrency: 16 },
     );
     return {
       sessions,
-      ...(listed.truncated ? { truncated: true } : {}),
+      ...(listed.nextCursor === null ? {} : { nextCursor: listed.nextCursor }),
     } satisfies AgentSessionListResult;
   });
 

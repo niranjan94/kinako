@@ -176,7 +176,7 @@ it.effect("imports one listed session and imports it again after its thread is d
             updatedAt: "2026-09-01T10:01:00.000Z",
           },
         ],
-        truncated: false,
+        nextCursor: null,
       }),
     readSession: (input) =>
       Effect.succeed(
@@ -287,9 +287,9 @@ it.effect("imports one listed session and imports it again after its thread is d
   }).pipe(Effect.provide(layerTest));
 });
 
-it.effect("lists a scanned folder's sessions before and after it becomes a project", () => {
+it.effect("lists a scanned folder's sessions with their live thread in any project", () => {
   const listCalls: Array<{ workspaceRoot: string; options: unknown }> = [];
-  let project: { id: ProjectId; workspaceRoot: string } | null = null;
+  let importedInto: ProjectId | null = null;
   const scanner = AgentSessionScanner.AgentSessionScanner.of({
     scan: () => Effect.die("unused"),
     recentThreads: () => Stream.die("unused"),
@@ -307,7 +307,7 @@ it.effect("lists a scanned folder's sessions before and after it becomes a proje
               updatedAt: "2026-09-01T10:01:00.000Z",
             },
           ],
-          truncated: true,
+          nextCursor: 7,
         };
       }),
   });
@@ -315,14 +315,17 @@ it.effect("lists a scanned folder's sessions before and after it becomes a proje
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(AgentSessionScanner.AgentSessionScanner, scanner),
-        Layer.mock(ProjectService.ProjectService)({
-          getByWorkspaceRoot: () => Effect.succeed(Option.fromNullOr(project as never)),
-        }),
+        Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(Orchestrator.OrchestratorV2)({
           getThreadRecords: (id) =>
-            project !== null && id === threadId
+            importedInto !== null && id === threadId
               ? Effect.succeed({
-                  thread: { id, projectId, historyOrigin: "v1_import", deletedAt: null },
+                  thread: {
+                    id,
+                    projectId: importedInto,
+                    historyOrigin: "v1_import",
+                    deletedAt: null,
+                  },
                 } as never)
               : Effect.fail(new Orchestrator.OrchestratorProjectionError({ threadId: id })),
         }),
@@ -337,20 +340,26 @@ it.effect("lists a scanned folder's sessions before and after it becomes a proje
     const importer = yield* AgentSessionImporter.AgentSessionImporter;
     const maxAgeMs = 30 * 24 * 60 * 60 * 1000;
 
-    const beforeProject = yield* importer.listSessions({
+    const notImported = yield* importer.listSessions({
       workspaceRoot: "/workspace/folder",
       maxAgeMs,
     });
-    expect(beforeProject.truncated).toBe(true);
-    expect(beforeProject.sessions.map((session) => session.importedThreadId)).toEqual([null]);
+    expect(notImported.nextCursor).toBe(7);
+    expect(notImported.sessions.map((session) => session.importedThreadId)).toEqual([null]);
 
-    project = { id: projectId, workspaceRoot: "/workspace/folder" };
-    const afterProject = yield* importer.listSessions({ workspaceRoot: "/workspace/folder" });
-    expect(afterProject.sessions.map((session) => session.importedThreadId)).toEqual([threadId]);
+    // An import into a project for another path to this folder still counts.
+    importedInto = ProjectId.make("other-project");
+    const importedElsewhere = yield* importer.listSessions({
+      workspaceRoot: "/workspace/folder",
+      cursor: 7,
+    });
+    expect(importedElsewhere.sessions.map((session) => session.importedThreadId)).toEqual([
+      threadId,
+    ]);
 
     expect(listCalls).toEqual([
       { workspaceRoot: "/workspace/folder", options: { maxAgeMs, reuseDiscovery: true } },
-      { workspaceRoot: "/workspace/folder", options: { reuseDiscovery: true } },
+      { workspaceRoot: "/workspace/folder", options: { cursor: 7, reuseDiscovery: true } },
     ]);
   }).pipe(Effect.provide(layerTest));
 });
