@@ -25,6 +25,7 @@ import * as ServerSettings from "../../../serverSettings.ts";
 import * as ThreadLaunchService from "../../../orchestration-v2/ThreadLaunchService.ts";
 import * as Crypto from "effect/Crypto";
 import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 import { Tool, Toolkit } from "effect/ai";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
@@ -81,8 +82,11 @@ const ProjectCreateTool = Tool.make("t3_project_create", {
 const ProjectUpdateTool = Tool.make("t3_project_update", {
   ...shared,
   description:
-    "Update a registered project's settings. Omitted fields are preserved. Uses the same project service as the app.",
-  parameters: Schema.Struct({ projectId: ProjectId, ...ProjectUpdatePayload.fields }),
+    "Update a registered project's settings. Omitted fields are preserved. Uses the same project service as the app. The project's folder cannot be changed here.",
+  // Moving a project's folder detaches the sessions working in it, so it stays a user action.
+  parameters: ProjectUpdatePayload.mapFields(Struct.omit(["workspaceRoot"])).mapFields(
+    (fields) => ({ projectId: ProjectId, ...fields }),
+  ),
 }).annotate(Tool.Destructive, true);
 const ProjectDeleteTool = Tool.make("t3_project_delete", {
   ...shared,

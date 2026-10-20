@@ -1,7 +1,7 @@
 import { type ProjectMutation } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { type ProjectService } from "./ProjectService.ts";
+import { type ProjectService, type ProjectServiceError } from "./ProjectService.ts";
 
 type ProjectMutations = Pick<ProjectService["Service"], "create" | "delete" | "update">;
 
@@ -54,3 +54,19 @@ export const projectMutationOperation = Effect.fn("projectMutationOperation")(fu
       });
   }
 });
+
+/** The user-facing message for a failed mutation. */
+export function describeProjectMutationFailure(cause: ProjectServiceError): string {
+  switch (cause._tag) {
+    case "ProjectNotEmptyError":
+    case "ProjectConflictError":
+    case "ProjectRelocationBlockedError":
+      return cause.message;
+    case "ProjectOperationError":
+      return cause.operation === "normalize-workspace"
+        ? `Could not open ${cause.workspaceRoot ?? "the folder"} on the server's machine. Check that the folder exists.`
+        : "Failed to mutate project.";
+    case "ProjectNotFoundError":
+      return "Failed to mutate project.";
+  }
+}

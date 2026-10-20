@@ -160,6 +160,14 @@ For each folder, choose how threads use it. **Current checkout** uses the folder
 
 Only the thread's workspace is checkpointed. Edits in additional directories do not appear in diffs, are not undone by rolling back or editing an earlier message, and commit and pull request actions stay on the workspace. Claude, Codex, Cursor, Antigravity, Grok and ACP agents receive additional directories, though an ACP agent may ignore them. OpenCode, Pi and Muse Code cannot use them, and the composer's workspace menu says so.
 
+## Moved project folders
+
+If you move, rename, or restore a project's folder, point the project at its new location instead of adding it again. Use **Change project path...** from the command palette, **Change path** beside the folder in the project's settings (also on mobile), or the project's menu in the legacy sidebar. Enter the folder's path on the machine running the server; from another device you type it, because only the server's machine can browse it.
+
+The folder must already exist. Nothing is moved on disk. Threads keep their history, and their next message runs in the new folder. An agent that cannot resume its own session there, such as one that stores sessions by folder, starts a fresh session with the thread's history handed over. Worktrees inside the old folder follow it, and worktrees elsewhere are relinked to the moved repository with `git worktree repair`. If that repair fails, run it yourself from the new folder.
+
+Stop running turns, background tasks, and checkpoint restores first, and save or discard open file edits in the project; the change is refused until they finish. To undo a change, change the path back.
+
 ## Storage cleanup
 
 Open **Settings → Storage** to enable automatic cleanup on one machine or all connected

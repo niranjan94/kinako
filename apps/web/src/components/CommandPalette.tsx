@@ -72,6 +72,7 @@ import {
   FileSearchIcon,
   FolderGit2Icon,
   FolderIcon,
+  FolderInputIcon,
   FolderPlusIcon,
   ImportIcon,
   MessageSquareDashedIcon,
@@ -226,6 +227,7 @@ import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
 import { openImportAgentSessionDialog } from "./agentSessions/ImportAgentSessionDialog";
+import { openProjectPathDialog } from "./ProjectPathDialog";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
@@ -1786,6 +1788,23 @@ function OpenCommandPaletteDialog(props: {
     currentProjectEnvironmentId !== null && currentProjectId !== null
       ? projectByKey.get(`${currentProjectEnvironmentId}:${currentProjectId}`)
       : undefined;
+  if (
+    currentProject !== undefined &&
+    !isScratchProject(currentProject, scratchWorkspaceRootFor(currentProject.environmentId))
+  ) {
+    const projectRef = scopeProjectRef(currentProject.environmentId, currentProject.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:change-project-path",
+      searchTerms: ["project", "path", "folder", "move", "moved", "relocate", "location"],
+      title: "Change project path...",
+      icon: <FolderInputIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openProjectPathDialog(projectRef);
+      },
+    });
+  }
+
   if (
     currentProject !== undefined &&
     !isScratchProject(currentProject, scratchWorkspaceRootFor(currentProject.environmentId)) &&

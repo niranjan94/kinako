@@ -101,6 +101,41 @@ export function workspaceRelativeFilePath(
   return normalizedPath.slice(normalizedRoot.length + 1);
 }
 
+/**
+ * Rebases `path` from `fromRoot` onto `toRoot`, or returns null when `path` is
+ * not `fromRoot` or inside it. Windows-shaped roots always compare
+ * case-insensitively; `caseInsensitive` covers other case-folding filesystems.
+ */
+export function relocatePathUnderRoot(
+  path: string,
+  fromRoot: string,
+  toRoot: string,
+  options: { readonly caseInsensitive?: boolean } = {},
+): string | null {
+  const windows = isWindowsAbsolutePath(fromRoot);
+  const fold = (value: string) => {
+    const unified = windows ? value.replaceAll("/", "\\") : value;
+    return windows || options.caseInsensitive === true ? unified.toLowerCase() : unified;
+  };
+  const sourceSeparator = windows ? "\\" : "/";
+  const source = trimTrailingPathSeparators(fromRoot);
+  const candidate = trimTrailingPathSeparators(path);
+  const target = trimTrailingPathSeparators(toRoot);
+  if (fold(candidate) === fold(source)) return target;
+  const base = source.endsWith(sourceSeparator) ? source : `${source}${sourceSeparator}`;
+  // Fold only the prefix: lowercasing can change string length, so slicing a
+  // folded copy of the whole path could cut the remainder at the wrong index.
+  if (fold(candidate.slice(0, base.length)) !== fold(base)) return null;
+  const targetSeparator = isWindowsAbsolutePath(toRoot) ? "\\" : "/";
+  const remainder =
+    targetSeparator === "\\"
+      ? candidate.slice(base.length).replaceAll("/", "\\")
+      : candidate.slice(base.length);
+  return target.endsWith(targetSeparator)
+    ? `${target}${remainder}`
+    : `${target}${targetSeparator}${remainder}`;
+}
+
 export function isAbsolutePath(value: string): boolean {
   return value.startsWith("/") || isWindowsAbsolutePath(value);
 }
