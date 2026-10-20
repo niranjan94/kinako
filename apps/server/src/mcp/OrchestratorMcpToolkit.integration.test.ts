@@ -1651,6 +1651,71 @@ describe("orchestrator MCP toolkit", () => {
               .pipe(Effect.flip);
             expect(reused.message).toContain("already used");
 
+            const followUpInput = {
+              title: "Add retry queue tests",
+              prompt: "Write tests for the retry queue in src/retry.ts.",
+              clientRequestId: "follow-up-retry-tests",
+            };
+            const followUpCall = yield* invoke("suggest_follow_up", followUpInput);
+            expect(followUpCall.isError).toBe(false);
+            const { followUpId } = followUpCall.structuredContent as { followUpId: string };
+            const retriedFollowUp = yield* invoke("suggest_follow_up", followUpInput);
+            expect(retriedFollowUp.structuredContent).toEqual({ followUpId });
+            const followUps = (yield* orchestrator.getThreadProjection(
+              parentThreadId,
+            )).turnItems.filter((item) => item.type === "follow_up");
+            expect(followUps).toHaveLength(1);
+            const followUp = followUps[0];
+            if (followUp?.type !== "follow_up") {
+              return yield* Effect.die(new Error("Follow-up card missing."));
+            }
+            expect(followUp).toMatchObject({
+              id: followUpId,
+              label: followUpInput.title,
+              prompt: followUpInput.prompt,
+              followUpStatus: "suggested",
+            });
+            const recordFollowUp = (
+              suffix: string,
+              followUpStatus: "suggested" | "started" | "dismissed",
+              startedThreadId?: ThreadId,
+            ) =>
+              orchestrator.dispatch({
+                type: "follow_up.record",
+                commandId: CommandId.make(`command:test:follow-up-${suffix}`),
+                threadId: parentThreadId,
+                runId: followUp.runId!,
+                nodeId: followUp.nodeId!,
+                turnItemId: followUp.id,
+                label: "Something else",
+                prompt: "A different prompt.",
+                followUpStatus,
+                ...(startedThreadId === undefined ? {} : { startedThreadId }),
+              });
+            const followUpNow = () =>
+              orchestrator
+                .getThreadProjection(parentThreadId)
+                .pipe(
+                  Effect.map((projection) =>
+                    projection.turnItems.find((item) => item.id === followUp.id),
+                  ),
+                );
+            yield* recordFollowUp("dismiss", "dismissed");
+            expect(yield* followUpNow()).toMatchObject({
+              followUpStatus: "dismissed",
+              label: followUpInput.title,
+              prompt: followUpInput.prompt,
+            });
+            yield* recordFollowUp("restore", "suggested");
+            expect(yield* followUpNow()).toMatchObject({ followUpStatus: "suggested" });
+            const startedThreadId = ThreadId.make("thread-follow-up-started");
+            yield* recordFollowUp("start", "started", startedThreadId);
+            yield* recordFollowUp("dismiss-after-start", "dismissed");
+            expect(yield* followUpNow()).toMatchObject({
+              followUpStatus: "started",
+              startedThreadId,
+            });
+
             const delegatedCall = yield* invoke("delegate_task", {
               task: delegatedPrompt,
               target: {

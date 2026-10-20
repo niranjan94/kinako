@@ -10,6 +10,8 @@ import {
   OrchestratorMcpDeleteScheduledTaskResult,
   OrchestratorMcpRequestSecretInput,
   OrchestratorMcpRequestSecretResult,
+  OrchestratorMcpSuggestFollowUpInput,
+  OrchestratorMcpSuggestFollowUpResult,
   OrchestratorMcpFailure,
   OrchestratorMcpListScheduledTasksInput,
   OrchestratorMcpListScheduledTasksResult,
@@ -178,6 +180,18 @@ const RequestSecretTool = Tool.make("request_secret", {
   .annotate(Tool.Title, "Request a secret from the user")
   .annotate(Tool.Destructive, false);
 
+const SuggestFollowUpTool = Tool.make("suggest_follow_up", {
+  description:
+    "Record follow-up work you noticed but are not doing in this turn (missing tests, a related bug, a cleanup elsewhere) as a card in this thread. The user can start it as a new thread in one click or dismiss it. Call it once per distinct follow-up, and only for work worth its own thread; do not use it for steps you are about to do yourself. The new thread starts without this thread's context, so the prompt must stand alone. Returns immediately; nothing waits on the user.",
+  parameters: OrchestratorMcpSuggestFollowUpInput,
+  success: OrchestratorMcpSuggestFollowUpResult,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies,
+})
+  .annotate(Tool.Title, "Suggest a follow-up thread")
+  .annotate(Tool.Destructive, false);
+
 export const CreateThreadsTool = Tool.make("create_threads", {
   description:
     "Needs an agent running inside a T3 thread. Create one or more ORDINARY TOP-LEVEL T3 conversations. This is not delegation and does not create child agents/subagents. For delegated work, choose models from orchestrator_capabilities. Prefer native subagents only when they support the chosen model; otherwise call delegate_task, including for same-provider work. Use create_threads for a batch of separate top-level threads sharing this checkout. Prefer t3_thread_launch for a single thread. Both require the user to request separate/new/top-level threads or conversations. Each entry may override provider, model, options, runtime mode, and interaction mode; omitted settings inherit. Project, branch, and worktree always inherit and cannot be overridden here. For independent implementation or a PR stack in its own worktree, use t3_thread_launch with workspaceStrategy instead of asking the agent to create a worktree in its prompt.",
@@ -281,6 +295,7 @@ export const OrchestratorToolkit = Toolkit.make(
   UpdateScheduledTaskTool,
   DeleteScheduledTaskTool,
   RequestSecretTool,
+  SuggestFollowUpTool,
   CreateThreadsTool,
   ThreadListTool,
   ThreadReadTool,

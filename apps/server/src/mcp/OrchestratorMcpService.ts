@@ -23,6 +23,8 @@ import {
   type OrchestratorMcpDeleteScheduledTaskInput,
   type OrchestratorMcpRequestSecretInput,
   type OrchestratorMcpRequestSecretResult,
+  type OrchestratorMcpSuggestFollowUpInput,
+  type OrchestratorMcpSuggestFollowUpResult,
   type OrchestratorMcpDeleteScheduledTaskResult,
   type OrchestratorMcpListScheduledTasksResult,
   type OrchestratorMcpRuntimeMode,
@@ -174,6 +176,10 @@ export interface OrchestratorMcpServiceShape {
     scope: McpInvocationScope,
     input: OrchestratorMcpRequestSecretInput,
   ) => Effect.Effect<OrchestratorMcpRequestSecretResult, OrchestratorMcpFailure>;
+  readonly suggestFollowUp: (
+    scope: McpInvocationScope,
+    input: OrchestratorMcpSuggestFollowUpInput,
+  ) => Effect.Effect<OrchestratorMcpSuggestFollowUpResult, OrchestratorMcpFailure>;
   readonly listThreads: (
     scope: McpInvocationScope,
     input: OrchestratorMcpThreadListInput,
@@ -878,6 +884,8 @@ function turnItemText(item: OrchestrationV2TurnItem): string | null {
       return `Created thread ${item.targetThreadId} with ${item.targetProviderInstanceId} (${item.targetModel}).`;
     case "secret_request":
       return `Asked the user for ${item.label}: ${item.secretStatus}.`;
+    case "follow_up":
+      return `Suggested follow-up "${item.label}" (${item.followUpStatus}): ${item.prompt}`;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":
@@ -1903,6 +1911,48 @@ const make = Effect.gen(function* () {
         }
         return { status, secretRef: secretRef.value };
       }).pipe(Effect.withSpan("OrchestratorMcpService.requestSecret")),
+
+    suggestFollowUp: (scope, input) =>
+      Effect.gen(function* () {
+        const { scope: threadScope, parent } = yield* loadThreadCaller(scope, "suggest_follow_up");
+        const threadId = threadScope.thread.threadId;
+        const run = ThreadManagementService.latestActiveRun(parent);
+        if (
+          run === undefined ||
+          run.rootNodeId === null ||
+          run.providerInstanceId !== threadScope.thread.providerInstanceId
+        ) {
+          return yield* failure(
+            "parent_not_active",
+            "Suggesting a follow-up requires an active run owned by this MCP provider session.",
+          );
+        }
+        const key = yield* requestKey(input.clientRequestId);
+        const turnItemId = TurnItemId.make(
+          `turn-item:follow-up:${stablePart(threadId)}:${stablePart(key)}`,
+        );
+        yield* threadManagement
+          .dispatch({
+            type: "follow_up.record",
+            commandId: stableCommandId({ scope, requestKey: key, operation: "follow-up-suggest" }),
+            threadId,
+            runId: run.id,
+            nodeId: run.rootNodeId,
+            turnItemId,
+            label: input.title,
+            prompt: input.prompt,
+            followUpStatus: "suggested",
+          })
+          .pipe(
+            Effect.mapError((error) =>
+              failure(
+                "orchestration_error",
+                `Could not record the follow-up: ${errorMessage(error)}`,
+              ),
+            ),
+          );
+        return { followUpId: turnItemId };
+      }).pipe(Effect.withSpan("OrchestratorMcpService.suggestFollowUp")),
 
     capabilities: (scope) =>
       Effect.gen(function* () {

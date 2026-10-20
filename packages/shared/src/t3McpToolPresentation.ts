@@ -42,6 +42,7 @@ export type T3McpToolSummaryAction =
   | "question-read"
   | "question-respond"
   | "secret-request"
+  | "follow-up-suggest"
   | "worktree-handoff"
   | "worktree-list"
   | "worktree-status"
@@ -146,6 +147,10 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "schedule-delete",
   ),
   request_secret: tool(["Ask for", "Asking for", "Asked for", "a secret"], "secret-request"),
+  suggest_follow_up: tool(
+    ["Suggest", "Suggesting", "Suggested", "a follow-up"],
+    "follow-up-suggest",
+  ),
   create_threads: tool(["Create", "Creating", "Created", "threads"], "thread-create"),
   t3_thread_start: tool(["Start", "Starting", "Started", "a thread"], "thread-create"),
   t3_thread_list: tool(["List", "Listing", "Listed", "threads"], "thread-list"),

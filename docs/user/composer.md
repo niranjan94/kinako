@@ -87,6 +87,12 @@ While the card is open, send `/btw` again to follow up in the same side conversa
 
 Side questions work the same way on mobile, from the slash menu in the thread composer. Thread and pull request mentions are not supported in a side question on mobile.
 
+## Suggested follow-ups
+
+Agents can record follow-up work they noticed but did not do, such as missing tests or a related fix, as a card in the conversation. Starting one opens a new thread in the same project with the agent's prompt as its first message. By default it follows the project's setting for new threads: a new worktree branched from the current thread's branch, or the current thread's checkout. You can also pick either one for a single follow-up. Once started, the card links to the new thread, and a dismissed card can be restored.
+
+Every provider can suggest follow-ups, but agents only do so when they see something worth a separate thread, so asking for "suggest follow-ups for anything you skip" makes them more likely.
+
 ## Queue messages offline on mobile
 
 Mobile keeps local copies of draft attachments, so you can preview them and queue

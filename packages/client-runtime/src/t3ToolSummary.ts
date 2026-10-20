@@ -298,6 +298,9 @@ export function summarizeT3ToolCalls(
     case "secret-request":
       label = phrase("Asked for", "ask for", quantity(selected.length, "secret"));
       break;
+    case "follow-up-suggest":
+      label = phrase("Suggested", "suggest", quantity(selected.length, "follow-up"));
+      break;
     case "worktree-handoff":
       label = phrase(
         "Handed off to",

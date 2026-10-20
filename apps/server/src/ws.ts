@@ -3,6 +3,7 @@ import {
   CoreWsRpcGroup,
   DatabaseRpcGroup,
   VcsRpcGroup,
+  FollowUpRpcGroup,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
@@ -129,6 +130,7 @@ import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts"
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
+import * as FollowUpService from "./followUps/FollowUpService.ts";
 import {
   archivedShellStreamItemFromThreadShell,
   buildActiveShellSnapshot,
@@ -560,6 +562,7 @@ const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
 const CoreServerWsRpcGroup = CoreWsRpcGroup.middleware(RpcInstrumentation);
 const DatabaseServerRpcGroup = DatabaseRpcGroup.middleware(RpcInstrumentation);
 const VcsServerRpcGroup = VcsRpcGroup.middleware(RpcInstrumentation);
+const FollowUpServerRpcGroup = FollowUpRpcGroup.middleware(RpcInstrumentation);
 // Replaying each intervening event costs a shell refetch; past this gap a
 // single O(active-threads) snapshot is cheaper and bounded.
 const SHELL_RESUME_MAX_GAP = 1_000;
@@ -3159,6 +3162,16 @@ const databaseRpcLayer = DatabaseServerRpcGroup.toLayer(
   }),
 );
 
+const followUpRpcLayer = FollowUpServerRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const followUps = yield* FollowUpService.FollowUpService;
+    return FollowUpServerRpcGroup.of({
+      [WS_METHODS.followUpsStart]: (input) => followUps.start(input),
+      [WS_METHODS.followUpsSetDismissed]: (input) => followUps.setDismissed(input),
+    });
+  }),
+);
+
 // RpcServer's default sends a socket-level Defect frame instead, and the client
 // ends every pending request on the socket with it.
 export const WS_RPC_SERVER_OPTIONS = {
@@ -3249,6 +3262,7 @@ export const layer = Layer.unwrap(
             ).pipe(
               Layer.merge(databaseRpcLayer),
               Layer.merge(vcsRpcLayer),
+              Layer.merge(followUpRpcLayer),
               Layer.provide(
                 Layer.succeed(ThreadWorkspaceService.ThreadWorkspaceService, threadWorkspace),
               ),

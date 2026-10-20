@@ -44,6 +44,12 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("requires operate access to start or dismiss a suggested follow-up", () => {
+    for (const method of [WS_METHODS.followUpsStart, WS_METHODS.followUpsSetDismissed]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
+  });
+
   it("authorizes background policy reporting and observation deliberately", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.serverReportClientActivity)).toBe(
       AuthOrchestrationReadScope,

@@ -13,6 +13,7 @@ import {
 } from "./thread-conversation-summary";
 import type { ConversationSummaryFeedControls } from "./use-conversation-summary";
 import { SecretRequestCard } from "./SecretRequestCard";
+import { FollowUpCard } from "./FollowUpCard";
 import { WorkflowRunCard } from "./WorkflowRunCard";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import {
@@ -189,6 +190,7 @@ import {
   isContextCompactionActivityGroup,
   isContextHandoffActivityGroup,
   isSecretRequestActivityGroup,
+  isFollowUpActivityGroup,
   type ThreadFeedEntry,
   type ThreadFeedLatestRun,
 } from "../../lib/threadActivity";
@@ -1125,6 +1127,16 @@ function renderFeedEntry(
   if (entry.type === "activity-group" && isSecretRequestActivityGroup(entry)) {
     return (
       <SecretRequestCard
+        environmentId={props.environmentId}
+        projectedItem={entry.activities[0]!.projectedItem}
+        iconColor={iconSubtleColor}
+      />
+    );
+  }
+
+  if (entry.type === "activity-group" && isFollowUpActivityGroup(entry)) {
+    return (
+      <FollowUpCard
         environmentId={props.environmentId}
         projectedItem={entry.activities[0]!.projectedItem}
         iconColor={iconSubtleColor}

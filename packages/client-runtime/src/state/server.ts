@@ -1362,6 +1362,25 @@ export function createServerEnvironmentAtoms<R, E>(
           JSON.stringify([environmentId, input.threadId, input.turnItemId]),
       },
     }),
+    // One action per card at a time, so a double click cannot launch two threads.
+    startFollowUp: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:follow-ups:start",
+      tag: WS_METHODS.followUpsStart,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.threadId, input.turnItemId]),
+      },
+    }),
+    setFollowUpDismissed: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:follow-ups:set-dismissed",
+      tag: WS_METHODS.followUpsSetDismissed,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.threadId, input.turnItemId]),
+      },
+    }),
     refreshUsageRates: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-usage-rates",
       tag: WS_METHODS.serverRefreshUsageRates,

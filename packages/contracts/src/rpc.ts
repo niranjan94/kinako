@@ -393,6 +393,12 @@ import {
 } from "./scheduledTask.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import {
+  FollowUpError,
+  FollowUpSetDismissedInput,
+  FollowUpStartInput,
+  FollowUpStartResult,
+} from "./followUp.ts";
+import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
   ProjectCloneListEvent,
@@ -573,6 +579,8 @@ export const WS_METHODS = {
   scheduledTasksRunNow: "scheduledTasks.runNow",
   scheduledTasksRotateWebhookToken: "scheduledTasks.rotateWebhookToken",
   secretsAnswerRequest: "secrets.answerRequest",
+  followUpsStart: "followUps.start",
+  followUpsSetDismissed: "followUps.setDismissed",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
 
@@ -2018,6 +2026,17 @@ const WsSecretsAnswerRequestRpc = Rpc.make(WS_METHODS.secretsAnswerRequest, {
   error: Schema.Union([SecretRequestError, EnvironmentAuthorizationError]),
 });
 
+const WsFollowUpsStartRpc = Rpc.make(WS_METHODS.followUpsStart, {
+  payload: FollowUpStartInput,
+  success: FollowUpStartResult,
+  error: Schema.Union([FollowUpError, EnvironmentAuthorizationError]),
+});
+
+const WsFollowUpsSetDismissedRpc = Rpc.make(WS_METHODS.followUpsSetDismissed, {
+  payload: FollowUpSetDismissedInput,
+  error: Schema.Union([FollowUpError, EnvironmentAuthorizationError]),
+});
+
 const WsScheduledTasksListWebhookDeliveriesRpc = Rpc.make(
   WS_METHODS.scheduledTasksListWebhookDeliveries,
   {
@@ -2290,4 +2309,9 @@ export const VcsRpcGroup = RpcGroup.make(
   WsVcsDeleteWorktreeSnapshotRpc,
 ).middleware(RpcScopeAuthorization);
 
-export const WsRpcGroup = CoreWsRpcGroup.merge(DatabaseRpcGroup, VcsRpcGroup);
+export const FollowUpRpcGroup = RpcGroup.make(
+  WsFollowUpsStartRpc,
+  WsFollowUpsSetDismissedRpc,
+).middleware(RpcScopeAuthorization);
+
+export const WsRpcGroup = CoreWsRpcGroup.merge(DatabaseRpcGroup, VcsRpcGroup, FollowUpRpcGroup);

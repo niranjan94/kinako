@@ -509,6 +509,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.created.record":
       return command.parentThreadId;
     case "secret_request.record":
+    case "follow_up.record":
       return command.threadId;
     case "thread.fork":
     case "thread.merge_back":
@@ -7602,6 +7603,99 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchFollowUpRecord = Effect.fn("orchestrationV2.dispatch.followUpRecord")(function* (
+    command: Extract<OrchestrationV2InternalCommand, { readonly type: "follow_up.record" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(
+        command.threadId,
+        ["runs", "nodes", "turnItems", "attempts", "providerTurns"],
+        {
+          turnItemTypes: ["follow_up"],
+          messageRoles: [],
+        },
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    const run = projection.runs.find((candidate) => candidate.id === command.runId);
+    if (run === undefined || run.rootNodeId !== command.nodeId) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Node ${command.nodeId} is not the root of run ${command.runId}.`,
+      });
+    }
+    const existing = projection.turnItems.find((item) => item.id === command.turnItemId);
+    if (existing !== undefined && existing.type !== "follow_up") {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Turn item ${command.turnItemId} is not a follow-up.`,
+      });
+    }
+    if (existing !== undefined && existing.runId !== command.runId) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Follow-up ${command.turnItemId} belongs to another run.`,
+      });
+    }
+    if (command.followUpStatus === "started" && command.startedThreadId === undefined) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Follow-up ${command.turnItemId} cannot be started without its thread.`,
+      });
+    }
+    const now = yield* DateTime.now;
+    // A started follow-up already has its thread, so it never goes back.
+    const unchanged =
+      existing !== undefined &&
+      (existing.followUpStatus === command.followUpStatus || existing.followUpStatus === "started");
+    const startedThreadId =
+      command.followUpStatus === "started" ? command.startedThreadId : undefined;
+    const turnItem: OrchestrationV2TurnItem = unchanged
+      ? existing
+      : {
+          id: command.turnItemId,
+          threadId: command.threadId,
+          runId: command.runId,
+          nodeId: command.nodeId,
+          providerThreadId: existing?.providerThreadId ?? run.providerThreadId,
+          providerTurnId:
+            existing?.providerTurnId ?? providerTurnForRun(projection, run)?.id ?? null,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: existing?.ordinal ?? (yield* nextTurnItemOrdinal(projection)),
+          status: "completed",
+          title: existing?.label ?? command.label,
+          startedAt: existing?.startedAt ?? now,
+          completedAt: existing?.completedAt ?? now,
+          updatedAt: now,
+          type: "follow_up",
+          label: existing?.label ?? command.label,
+          prompt: existing?.prompt ?? command.prompt,
+          followUpStatus: command.followUpStatus,
+          ...(startedThreadId === undefined ? {} : { startedThreadId }),
+        };
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      runId: command.runId,
+      nodeId: command.nodeId,
+      providerInstanceId: run.providerInstanceId,
+      occurredAt: now,
+      payload: turnItem,
+    });
+  });
+
   const dispatchRuntimeRequestRespond = (
     command: Extract<OrchestrationV2Command, { readonly type: "runtime-request.respond" }>,
     events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
@@ -12164,6 +12258,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "secret_request.record":
         yield* dispatchSecretRequestRecord(command, events);
+        break;
+      case "follow_up.record":
+        yield* dispatchFollowUpRecord(command, events);
         break;
       default:
         return yield* dispatchUnsupported(command);
