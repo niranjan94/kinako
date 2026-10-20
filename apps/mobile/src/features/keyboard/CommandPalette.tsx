@@ -1,5 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import { supportsAgentSessionImport } from "@t3tools/client-runtime/agentSessionImport";
+import { supportsAgentSessionHistoryImport } from "@t3tools/client-runtime/agentSessionHistoryImport";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { THREAD_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
@@ -314,6 +315,25 @@ export function CommandPalette(props: {
               environmentId: activeProject.environmentId,
               projectId: activeProject.id,
             },
+          }),
+      });
+    }
+    const historyImportEnvironmentId =
+      activeProject && supportsAgentSessionHistoryImport(activeProjectServerConfig)
+        ? activeProject.environmentId
+        : [...serverConfigs.entries()].find(([, config]) =>
+            supportsAgentSessionHistoryImport(config),
+          )?.[0];
+    if (historyImportEnvironmentId !== undefined) {
+      actions.push({
+        key: "importCliHistory",
+        kind: "action",
+        title: "Import CLI history",
+        searchTerms: ["claude", "codex", "terminal", "sessions", "folders", "projects"],
+        run: () =>
+          navigation.navigate("NewTaskSheet", {
+            screen: "NewTaskImportHistory",
+            params: { environmentId: historyImportEnvironmentId },
           }),
       });
     }
