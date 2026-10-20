@@ -333,7 +333,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
       }),
     );
 
-    it.effect("reports a listing cut at its limit as truncated", () =>
+    it.effect("pages a listing past its limit until every session is listed", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
@@ -359,14 +359,23 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
           }),
         );
 
-        const listed = yield* Effect.gen(function* () {
+        const [first, second] = yield* Effect.gen(function* () {
           const scanner = yield* AgentSessionScanner.AgentSessionScanner;
-          return yield* scanner.listSessions(workspace);
+          const firstPage = yield* scanner.listSessions(workspace);
+          const secondPage = yield* scanner.listSessions(workspace, {
+            reuseDiscovery: true,
+            cursor: firstPage.nextCursor ?? 0,
+          });
+          return [firstPage, secondPage] as const;
         }).pipe(Effect.provide(layerScannerTest({ claudeHomePath, codexHomePath })));
 
-        expect(listed.sessions).toHaveLength(100);
-        expect(listed.sessions[0]?.providerSessionId).toBe(sessionIds[0]);
-        expect(listed.truncated).toBe(true);
+        expect(first.sessions).toHaveLength(100);
+        expect(first.sessions[0]?.providerSessionId).toBe(sessionIds[0]);
+        expect(first.nextCursor).toBe(100);
+        expect(second.sessions.map((session) => session.providerSessionId)).toEqual([
+          sessionIds[100],
+        ]);
+        expect(second.nextCursor).toBeNull();
       }),
     );
 

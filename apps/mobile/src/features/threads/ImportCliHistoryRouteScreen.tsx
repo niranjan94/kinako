@@ -246,12 +246,16 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
     try {
       await runAgentSessionHistoryImport(plan, {
         nowMs: Date.now,
-        listSessions: async (folder) => {
+        listSessions: async (folder, cursor) => {
           const result = await listSessions({
             environmentId,
-            input: { workspaceRoot: folder.path, ...maxAgeInput },
+            input: {
+              workspaceRoot: folder.path,
+              ...maxAgeInput,
+              ...(cursor === undefined ? {} : { cursor }),
+            },
           });
-          if (result._tag === "Success") return result.value.sessions;
+          if (result._tag === "Success") return result.value;
           throw new Error(
             isAtomCommandInterrupted(result)
               ? "Listing sessions was interrupted."

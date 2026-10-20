@@ -14,6 +14,7 @@ import {
   summarizeAgentSessionImport,
   toggleAgentSessionSelection,
   type AgentSessionAgeWindow,
+  type AgentSessionFolderListing,
   type AgentSessionFolderSelection,
   type AgentSessionImportFolder,
   type AgentSessionImportProgress,
@@ -90,9 +91,9 @@ type FolderSessions =
   | { readonly status: "error"; readonly message: string }
   | {
       readonly status: "ready";
-      readonly sessions: ReadonlyArray<AgentSessionListItem>;
-      readonly truncated: boolean;
-      readonly loadedAtMs: number;
+      readonly listing: AgentSessionFolderListing;
+      readonly loadingMore: boolean;
+      readonly moreError: string | null;
     };
 
 const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some folders or sessions may be missing.";
@@ -148,10 +149,14 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
   const candidates = scan?.candidates ?? [];
   const candidateByPath = new Map(candidates.map((candidate) => [candidate.path, candidate]));
 
-  const fetchFolderSessions = async (path: string) => {
+  const fetchFolderSessions = async (path: string, cursor?: number) => {
     const result = await listSessions({
       environmentId,
-      input: { workspaceRoot: path, ...scanInputFor(ageWindow) },
+      input: {
+        workspaceRoot: path,
+        ...scanInputFor(ageWindow),
+        ...(cursor === undefined ? {} : { cursor }),
+      },
     });
     if (result._tag === "Success") return result.value;
     throw new Error(
@@ -168,9 +173,9 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
     const next: FolderSessions = await fetchFolderSessions(path).then(
       (listed) => ({
         status: "ready",
-        sessions: listed.sessions,
-        truncated: listed.truncated === true,
-        loadedAtMs: Date.now(),
+        listing: { ...listed, listedAtMs: Date.now() },
+        loadingMore: false,
+        moreError: null,
       }),
       (error: unknown) => ({
         status: "error",
@@ -182,17 +187,54 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
     setFolderSessions((current) => new Map(current).set(path, next));
   };
 
-  const markFolderSessionImported = (path: string, key: string, threadId: ThreadId) =>
+  const updateReadyFolder = (
+    path: string,
+    update: (listed: Extract<FolderSessions, { status: "ready" }>) => FolderSessions,
+  ) =>
     setFolderSessions((current) => {
       const listed = current.get(path);
-      if (listed?.status !== "ready") return current;
-      return new Map(current).set(path, {
-        ...listed,
-        sessions: listed.sessions.map((session) =>
+      return listed?.status === "ready" ? new Map(current).set(path, update(listed)) : current;
+    });
+
+  const loadMoreFolderSessions = async (path: string) => {
+    const listed = folderSessions.get(path);
+    const cursor = listed?.status === "ready" ? listed.listing.nextCursor : undefined;
+    if (cursor === undefined || listed?.status !== "ready" || listed.loadingMore) return;
+    const requestedAgeWindowKey = ageWindow.key;
+    updateReadyFolder(path, (ready) => ({ ...ready, loadingMore: true, moreError: null }));
+    const page = await fetchFolderSessions(path, cursor).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({
+        ok: false as const,
+        message: failureMessage(error, "Could not list more sessions."),
+      }),
+    );
+    if (ageWindowKeyRef.current !== requestedAgeWindowKey) return;
+    updateReadyFolder(path, (ready) =>
+      page.ok
+        ? {
+            ...ready,
+            listing: {
+              ...ready.listing,
+              sessions: [...ready.listing.sessions, ...page.value.sessions],
+              nextCursor: page.value.nextCursor,
+            },
+            loadingMore: false,
+          }
+        : { ...ready, loadingMore: false, moreError: page.message },
+    );
+  };
+
+  const markFolderSessionImported = (path: string, key: string, threadId: ThreadId) =>
+    updateReadyFolder(path, (ready) => ({
+      ...ready,
+      listing: {
+        ...ready.listing,
+        sessions: ready.listing.sessions.map((session) =>
           agentSessionKey(session) === key ? { ...session, importedThreadId: threadId } : session,
         ),
-      });
-    });
+      },
+    }));
 
   const ensureProject = () => {
     ensureProjectRef.current ??= createAgentSessionProjectEnsurer({
@@ -236,7 +278,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
     try {
       await runAgentSessionHistoryImport(plan, {
         nowMs: Date.now,
-        listSessions: async (folder) => (await fetchFolderSessions(folder.path)).sessions,
+        listSessions: (folder, cursor) => fetchFolderSessions(folder.path, cursor),
         ensureProject: ensureProject(),
         importSession: async (projectId, session) => {
           const result = await importSession({
@@ -288,7 +330,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
           title: candidate.title,
           projectId: candidate.projectId ?? null,
           selection: folderSelection,
-          ...(listed?.status === "ready" ? { sessions: listed.sessions } : {}),
+          ...(listed?.status === "ready" ? { listing: listed.listing } : {}),
         },
       ];
     },
@@ -311,10 +353,10 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
       const next = new Map(current);
       const folderSelection = toggleAgentSessionSelection({
         selection: current.get(path),
-        sessions: listed.sessions,
+        sessions: listed.listing.sessions,
         key: agentSessionKey(session),
         checked,
-        nowMs: listed.loadedAtMs,
+        nowMs: listed.listing.listedAtMs,
       });
       if (folderSelection === undefined) next.delete(path);
       else next.set(path, folderSelection);
@@ -334,6 +376,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
       progress={progress}
       currentKey={currentKey}
       onExpand={() => void loadFolder(candidate.path)}
+      onLoadMore={() => void loadMoreFolderSessions(candidate.path)}
       onFolderChecked={(checked) => setFolderChecked(candidate.path, checked)}
       onSessionChecked={(session, checked) => setSessionChecked(candidate.path, session, checked)}
     />
@@ -554,6 +597,7 @@ function FolderRow(props: {
   readonly progress: AgentSessionImportProgress | null;
   readonly currentKey: string | null;
   readonly onExpand: () => void;
+  readonly onLoadMore: () => void;
   readonly onFolderChecked: (checked: boolean) => void;
   readonly onSessionChecked: (session: AgentSessionListItem, checked: boolean) => void;
 }) {
@@ -600,30 +644,42 @@ function FolderRow(props: {
             </div>
           ) : sessions.status === "error" ? (
             <p className="py-2 text-destructive text-xs">{sessions.message}</p>
-          ) : sessions.sessions.length === 0 ? (
+          ) : sessions.listing.sessions.length === 0 ? (
             <p className="py-2 text-muted-foreground text-xs">No sessions in this period.</p>
           ) : (
             <>
-              {sessions.sessions.map((session) => (
+              {sessions.listing.sessions.map((session) => (
                 <SessionRow
                   key={agentSessionKey(session)}
                   session={session}
                   checked={
                     selection === "all"
-                      ? defaultSelectedAgentSessions([session], sessions.loadedAtMs).length > 0
+                      ? defaultSelectedAgentSessions([session], sessions.listing.listedAtMs)
+                          .length > 0
                       : selection?.has(agentSessionKey(session)) === true
                   }
-                  recentlyActive={isAgentSessionRecentlyActive(session, sessions.loadedAtMs)}
+                  recentlyActive={isAgentSessionRecentlyActive(
+                    session,
+                    sessions.listing.listedAtMs,
+                  )}
                   result={props.progress?.sessions.get(agentSessionKey(session))?.result}
                   importing={props.currentKey === agentSessionKey(session)}
                   disabled={props.disabled}
                   onCheckedChange={(checked) => props.onSessionChecked(session, checked)}
                 />
               ))}
-              {sessions.truncated ? (
-                <p className="py-1 text-muted-foreground text-xs">
-                  Showing the newest {sessions.sessions.length} sessions.
-                </p>
+              {sessions.moreError !== null ? (
+                <p className="py-1 text-destructive text-xs">{sessions.moreError}</p>
+              ) : null}
+              {sessions.listing.nextCursor !== undefined ? (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  disabled={props.disabled || sessions.loadingMore}
+                  onClick={props.onLoadMore}
+                >
+                  {sessions.loadingMore ? "Loading..." : "Show older sessions"}
+                </Button>
               ) : null}
             </>
           )}

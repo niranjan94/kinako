@@ -135,8 +135,17 @@ export interface AgentSessionImportFolder {
   /** The folder's project when it already has one. */
   readonly projectId: ProjectId | null;
   readonly selection: AgentSessionFolderSelection;
-  /** Sessions already listed for this folder; listed on demand otherwise. */
-  readonly sessions?: ReadonlyArray<AgentSessionListItem>;
+  /** The pages already listed for this folder; listed on demand otherwise. */
+  readonly listing?: AgentSessionFolderListing;
+}
+
+/** Listed sessions, newest first, and when they were listed. */
+export interface AgentSessionFolderListing {
+  readonly sessions: ReadonlyArray<AgentSessionListItem>;
+  /** Where the older sessions start; absent once every page is listed. */
+  readonly nextCursor?: number | undefined;
+  /** Decides which sessions looked still open, so an import matches what was shown. */
+  readonly listedAtMs: number;
 }
 
 export type AgentSessionImportStatus =
@@ -224,16 +233,17 @@ export function agentSessionImportRetryPlan(
 ): ReadonlyArray<AgentSessionImportFolder> {
   const plan = new Map<string, AgentSessionImportFolder>();
   for (const { folder } of progress.failedFolders.values()) {
-    plan.set(folder.path, folder);
+    const { listing: _staleListing, ...unlisted } = folder;
+    plan.set(folder.path, unlisted);
   }
   for (const { folder, session, result } of progress.sessions.values()) {
     if (result.status !== "failed" || plan.has(folder.path)) continue;
     const existing = plan.get(`session:${folder.path}`);
-    const sessions = [...(existing?.sessions ?? []), session];
+    const sessions = [...(existing?.listing?.sessions ?? []), session];
     plan.set(`session:${folder.path}`, {
       ...folder,
       selection: new Set(sessions.map(agentSessionKey)),
-      sessions,
+      listing: { sessions, listedAtMs: folder.listing?.listedAtMs ?? 0 },
     });
   }
   return [...plan.values()];
@@ -241,10 +251,11 @@ export function agentSessionImportRetryPlan(
 
 export interface AgentSessionHistoryImportDeps {
   readonly nowMs: () => number;
-  /** Rejects with the reason the folder could not be listed. */
+  /** Lists one page from `cursor`, or the first page; rejects with the reason it failed. */
   readonly listSessions: (
     folder: AgentSessionImportFolder,
-  ) => Promise<ReadonlyArray<AgentSessionListItem>>;
+    cursor: number | undefined,
+  ) => Promise<Omit<AgentSessionFolderListing, "listedAtMs">>;
   /** Resolves the folder's project, creating it when needed; rejects with the reason. */
   readonly ensureProject: (folder: AgentSessionImportFolder) => Promise<ProjectId>;
   /** Rejects with the reason the session could not be imported. */
@@ -267,25 +278,39 @@ export async function runAgentSessionHistoryImport(
   deps: AgentSessionHistoryImportDeps,
 ): Promise<void> {
   for (const folder of plan) {
-    if (deps.shouldStop()) return;
-    let sessions: ReadonlyArray<AgentSessionListItem>;
-    try {
-      sessions = folder.sessions ?? (await deps.listSessions(folder));
-    } catch (error) {
-      deps.onEvent({ type: "folder-failed", folder, reason: failureReason(error) });
-      continue;
+    if (deps.shouldStop() || !(await importFolder(folder, deps))) return;
+  }
+}
+
+/** Imports one folder's chosen sessions; false when a stop was requested. */
+async function importFolder(
+  folder: AgentSessionImportFolder,
+  deps: AgentSessionHistoryImportDeps,
+): Promise<boolean> {
+  const { selection } = folder;
+  let listing = folder.listing;
+  let cursor: number | undefined;
+  let projectId: ProjectId | null = null;
+  for (let page = 0; ; page++) {
+    if (listing === undefined) {
+      try {
+        listing = { ...(await deps.listSessions(folder, cursor)), listedAtMs: deps.nowMs() };
+      } catch (error) {
+        deps.onEvent({ type: "folder-failed", folder, reason: failureReason(error) });
+        return true;
+      }
     }
-    deps.onEvent({ type: "folder-listed", folder });
-    const { selection } = folder;
+    if (page === 0) deps.onEvent({ type: "folder-listed", folder });
+    const { listedAtMs } = listing;
     // A folder-wide selection still reports the sessions an earlier import already brought in.
     const chosen =
       selection === "all"
-        ? sessions.filter(
+        ? listing.sessions.filter(
             (session) =>
               session.importedThreadId !== null ||
-              !isAgentSessionRecentlyActive(session, deps.nowMs()),
+              !isAgentSessionRecentlyActive(session, listedAtMs),
           )
-        : sessions.filter((session) => selection.has(agentSessionKey(session)));
+        : listing.sessions.filter((session) => selection.has(agentSessionKey(session)));
     const pending: Array<AgentSessionListItem> = [];
     for (const session of chosen) {
       if (session.importedThreadId === null) {
@@ -299,42 +324,55 @@ export async function runAgentSessionHistoryImport(
         result: { status: "already-imported", threadId: session.importedThreadId },
       });
     }
-    if (pending.length === 0) continue;
-    if (deps.shouldStop()) return;
 
-    let projectId: ProjectId;
-    try {
-      projectId = await deps.ensureProject(folder);
-    } catch (error) {
-      const reason = failureReason(error);
+    if (pending.length > 0) {
+      if (deps.shouldStop()) return false;
+      if (projectId === null) {
+        try {
+          projectId = await deps.ensureProject(folder);
+        } catch (error) {
+          const reason = failureReason(error);
+          for (const session of pending) {
+            deps.onEvent({
+              type: "session",
+              folder,
+              session,
+              result: { status: "failed", reason },
+            });
+          }
+          return true;
+        }
+      }
       for (const session of pending) {
-        deps.onEvent({ type: "session", folder, session, result: { status: "failed", reason } });
-      }
-      continue;
-    }
-    for (const session of pending) {
-      if (deps.shouldStop()) return;
-      deps.onEvent({ type: "session", folder, session, result: { status: "importing" } });
-      try {
-        const result = await deps.importSession(projectId, session);
-        deps.onEvent({
-          type: "session",
-          folder,
-          session,
-          result: {
-            status: result.imported ? "imported" : "already-imported",
-            threadId: result.threadId,
-          },
-        });
-      } catch (error) {
-        deps.onEvent({
-          type: "session",
-          folder,
-          session,
-          result: { status: "failed", reason: failureReason(error) },
-        });
+        if (deps.shouldStop()) return false;
+        deps.onEvent({ type: "session", folder, session, result: { status: "importing" } });
+        try {
+          const result = await deps.importSession(projectId, session);
+          deps.onEvent({
+            type: "session",
+            folder,
+            session,
+            result: {
+              status: result.imported ? "imported" : "already-imported",
+              threadId: result.threadId,
+            },
+          });
+        } catch (error) {
+          deps.onEvent({
+            type: "session",
+            folder,
+            session,
+            result: { status: "failed", reason: failureReason(error) },
+          });
+        }
       }
     }
+
+    // An explicit selection names sessions already listed; a folder-wide one reads every page.
+    if (selection !== "all" || listing.nextCursor === undefined) return true;
+    if (deps.shouldStop()) return false;
+    cursor = listing.nextCursor;
+    listing = undefined;
   }
 }
 

@@ -87,13 +87,25 @@ export const AgentSessionImportResult = Schema.Struct({
 });
 export type AgentSessionImportResult = typeof AgentSessionImportResult.Type;
 
+/** Where a listing continues, from a previous result's `nextCursor`. */
+const AgentSessionListCursor = Schema.optional(NonNegativeInt);
+
 /**
- * A project's sessions, or a folder's before it is a project. Listing by folder reuses the
- * discovery of the latest scan, since the folder came from one.
+ * A project's sessions, or a scanned folder's whether or not it is a project yet. Listing by
+ * folder reuses the discovery of the latest scan, since the folder came from one, and reports a
+ * session's live thread in any project.
  */
 export const AgentSessionListInput = Schema.Union([
-  Schema.Struct({ projectId: ProjectId, maxAgeMs: AgentSessionMaxAge }),
-  Schema.Struct({ workspaceRoot: TrimmedNonEmptyString, maxAgeMs: AgentSessionMaxAge }),
+  Schema.Struct({
+    projectId: ProjectId,
+    maxAgeMs: AgentSessionMaxAge,
+    cursor: AgentSessionListCursor,
+  }),
+  Schema.Struct({
+    workspaceRoot: TrimmedNonEmptyString,
+    maxAgeMs: AgentSessionMaxAge,
+    cursor: AgentSessionListCursor,
+  }),
 ]);
 export type AgentSessionListInput = typeof AgentSessionListInput.Type;
 
@@ -111,10 +123,10 @@ export const AgentSessionListItem = Schema.Struct({
 });
 export type AgentSessionListItem = typeof AgentSessionListItem.Type;
 
-/** `truncated` means older sessions exist past the listing limit. */
+/** `nextCursor` lists the older sessions past this page's limit. */
 export const AgentSessionListResult = Schema.Struct({
   sessions: Schema.Array(AgentSessionListItem),
-  truncated: Schema.optional(Schema.Boolean),
+  nextCursor: Schema.optional(NonNegativeInt),
 });
 export type AgentSessionListResult = typeof AgentSessionListResult.Type;
 
