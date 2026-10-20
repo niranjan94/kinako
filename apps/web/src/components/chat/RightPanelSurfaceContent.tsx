@@ -18,6 +18,8 @@ import {
   PersistentThreadTerminalPanel,
   type PersistentThreadTerminalPanelProps,
 } from "../PersistentThreadTerminals";
+import { issueReference } from "../pullRequest/issue.logic";
+import { IssueDetailPanel } from "../pullRequest/IssueDetailPanel";
 import { pullRequestPanelContext } from "../pullRequest/pullRequestDetail.logic";
 import { PullRequestDetailPanel } from "../pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
@@ -135,6 +137,16 @@ export function RightPanelSurfaceContent(props: {
           <PullRequestsUnavailableState
             title="Pull requests unavailable"
             error={`Update this environment's ${APP_BASE_NAME} server to browse pull requests.`}
+          />
+        );
+      }
+      if (surface.item === "issue") {
+        return (
+          <IssueDetailPanel
+            key={surface.id}
+            environmentId={props.environmentId}
+            reference={issueReference(surface)}
+            threadRef={threadRef}
           />
         );
       }

@@ -1,6 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import type { EnvironmentId, IssueDetail, IssueRef, PullRequestComment } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  IssueDetail,
+  IssueRef,
+  PullRequestComment,
+  ScopedThreadRef,
+} from "@t3tools/contracts";
 import { BotIcon, ExternalLinkIcon, SendIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -120,12 +126,15 @@ function IssueCommentForm({
 export function IssueDetailPanel({
   environmentId,
   reference,
-  refreshToken,
+  refreshToken = 0,
+  threadRef = null,
 }: {
   environmentId: EnvironmentId;
   reference: IssueRef;
   /** Bumped by the page's own refresh, which asks for this panel's read again too. */
-  refreshToken: number;
+  refreshToken?: number;
+  /** The thread whose panel holds this issue, so links in it open beside that thread. */
+  threadRef?: ScopedThreadRef | null;
 }) {
   const query = useEnvironmentQuery(
     pullRequestEnvironment.issueDetail({ environmentId, input: reference }),
@@ -155,7 +164,7 @@ export function IssueDetailPanel({
   const markdownContext = (() => ({
     repositoryUrl:
       repositoryUrl === null ? null : hostClient.referenceAutolinkRepositoryUrl(repositoryUrl),
-    threadRef: null,
+    threadRef,
   }))();
 
   if (detail === null) {
