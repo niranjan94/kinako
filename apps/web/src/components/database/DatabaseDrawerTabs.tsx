@@ -94,8 +94,10 @@ export function DatabaseDrawerTabs({
             )
           }
           label={tab.title}
-          {...(!tab.table && tab.sql.trim() && tab.sql !== tab.savedSql
-            ? { hint: `${tab.title} · Not saved to a file` }
+          {...(tab.database || (!tab.table && tab.sql.trim() && tab.sql !== tab.savedSql)
+            ? {
+                hint: `${tab.database ? `${tab.database} · ` : ""}${tab.title}${!tab.table && tab.sql.trim() && tab.sql !== tab.savedSql ? " · Not saved to a file" : ""}`,
+              }
             : {})}
           onSelect={() => showDatabaseTab(registry, threadRef, tab.id)}
         >

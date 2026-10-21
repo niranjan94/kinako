@@ -80,14 +80,20 @@ export async function ensureDatabaseSession(
   connection: DatabaseConnection,
 ) {
   const { registry, environmentId, projectId, threadRef } = scope;
-  const existing = findDatabaseTab(registry, threadRef, tabId)?.sessionId;
+  const tab = findDatabaseTab(registry, threadRef, tabId);
+  const existing = tab?.sessionId;
   if (existing) return existing;
   const sessionId = DatabaseSessionId.make(randomUUID());
   updateDatabaseTab(registry, threadRef, tabId, { sessionId });
   databaseValue(
     await databaseState.openSession.run(registry, {
       environmentId,
-      input: { projectId, connectionId: connection.id, sessionId },
+      input: {
+        projectId,
+        connectionId: connection.id,
+        sessionId,
+        ...(tab?.database !== undefined ? { database: tab.database } : {}),
+      },
     }),
   );
   if (!findDatabaseTab(registry, threadRef, tabId)) {
@@ -105,6 +111,11 @@ export async function ensureDatabaseSession(
 export async function newDatabaseConsole(
   scope: DatabaseWorkspaceScope,
   connection: DatabaseConnection,
+  database = connection.target.engine === "postgres"
+    ? connection.target.databaseSelection && connection.target.databaseSelection !== "all"
+      ? connection.target.databaseSelection[0]
+      : connection.target.database
+    : undefined,
 ) {
   const { registry, threadRef } = scope;
   const consoleNumbers = registry
@@ -114,6 +125,7 @@ export async function newDatabaseConsole(
   addDatabaseTab(scope, {
     id,
     connectionId: connection.id,
+    database,
     title: `Console ${Math.max(0, ...consoleNumbers) + 1}`,
     sql: "",
     loading: true,
@@ -136,6 +148,7 @@ export function openDatabaseTable(
   connection: DatabaseConnection,
   schema: string,
   object: string,
+  database?: string,
 ) {
   const { registry, environmentId, projectId, threadRef } = scope;
   const existing = registry
@@ -143,6 +156,7 @@ export function openDatabaseTable(
     .tabs.find(
       (tab) =>
         tab.connectionId === connection.id &&
+        tab.database === database &&
         tab.table?.schema === schema &&
         tab.table.object === object,
     );
@@ -153,14 +167,20 @@ export function openDatabaseTable(
   addDatabaseTab(scope, {
     id: randomUUID(),
     connectionId: connection.id,
-    title: `${schema}.${object}`,
+    database,
+    title: `${database ? `${database}.` : ""}${schema}.${object}`,
     sql: "",
     loading: false,
     table: { schema, object, where: "", orderBy: "", offset: 0, after: null },
   });
   void databaseState.introspect.run(registry, {
     environmentId,
-    input: { projectId, connectionId: connection.id, scope: { kind: "columns", schema, object } },
+    input: {
+      projectId,
+      connectionId: connection.id,
+      ...(database !== undefined ? { database } : {}),
+      scope: { kind: "columns", schema, object },
+    },
   });
 }
 

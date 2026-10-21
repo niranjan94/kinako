@@ -68,7 +68,15 @@ export const DatabasePostgresTarget = Schema.Struct({
   engine: Schema.Literal("postgres"),
   host: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
   port: PortSchema,
+  /** Initial database used for server discovery. */
   database: Identifier,
+  /** All discovers connectable databases; a list selects names. Absent shows only the initial database. */
+  databaseSelection: Schema.optionalKey(
+    Schema.Union([
+      Schema.Literal("all"),
+      Schema.Array(Identifier).check(Schema.isMinLength(1), Schema.isMaxLength(500)),
+    ]),
+  ),
   user: Identifier,
   sslMode: DatabasePostgresSslMode,
   /** Absent means a password, which is how connections saved before this field authenticate. */
@@ -141,6 +149,7 @@ export const DatabaseTestConnectionResult = Schema.Union([
 export type DatabaseTestConnectionResult = typeof DatabaseTestConnectionResult.Type;
 
 export const DatabaseIntrospectScope = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("databases") }),
   Schema.Struct({ kind: Schema.Literal("schemas") }),
   Schema.Struct({ kind: Schema.Literal("objects"), schema: Identifier }),
   Schema.Struct({ kind: Schema.Literal("columns"), schema: Identifier, object: Identifier }),
@@ -150,6 +159,7 @@ export type DatabaseIntrospectScope = typeof DatabaseIntrospectScope.Type;
 export const DatabaseIntrospectInput = Schema.Struct({
   ...DatabaseProjectContext.fields,
   connectionId: DatabaseConnectionId,
+  database: Schema.optionalKey(Identifier),
   sessionId: Schema.optionalKey(DatabaseSessionId),
   scope: DatabaseIntrospectScope,
 });
@@ -171,6 +181,10 @@ const DatabaseColumnInfo = Schema.Struct({
 export type DatabaseColumnInfo = typeof DatabaseColumnInfo.Type;
 
 export const DatabaseIntrospectResult = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("databases"),
+    databases: Schema.Array(Schema.Struct({ name: Schema.String })),
+  }),
   Schema.Struct({
     kind: Schema.Literal("schemas"),
     schemas: Schema.Array(Schema.Struct({ name: Schema.String })),
@@ -202,6 +216,7 @@ const PageSize = PositiveInt.check(Schema.isLessThanOrEqualTo(DATABASE_PAGE_SIZE
 export const DatabaseExecuteInput = Schema.Struct({
   ...DatabaseProjectContext.fields,
   connectionId: DatabaseConnectionId,
+  database: Schema.optionalKey(Identifier),
   queryId: DatabaseQueryId,
   sessionId: Schema.optionalKey(DatabaseSessionId),
   forceReadOnly: Schema.optionalKey(Schema.Boolean),
@@ -262,6 +277,7 @@ export const DatabaseQueryInput = Schema.Struct({
 export type DatabaseQueryInput = typeof DatabaseQueryInput.Type;
 
 const DatabaseRequestFailure = Schema.Literals([
+  "database-not-selected",
   "connection-not-found",
   "invalid-connection-level",
   "project-mismatch",
@@ -278,6 +294,8 @@ const DatabaseRequestFailure = Schema.Literals([
 export type DatabaseRequestFailure = typeof DatabaseRequestFailure.Type;
 
 const databaseRequestMessages: Record<DatabaseRequestFailure, string> = {
+  "database-not-selected":
+    "Choose a database included in this connection. Open a new tab to change an editor’s database.",
   "invalid-connection-level":
     "Choose a project for project connections. SQLite connections cannot be global.",
   "project-mismatch": "That connection or result belongs to another project.",
@@ -313,6 +331,7 @@ export class DatabaseRequestError extends Schema.TaggedError<DatabaseRequestErro
 export const DatabaseOpenSessionInput = Schema.Struct({
   ...DatabaseProjectContext.fields,
   connectionId: DatabaseConnectionId,
+  database: Schema.optionalKey(Identifier),
   sessionId: DatabaseSessionId,
   forceReadOnly: Schema.optionalKey(Schema.Boolean),
 });
@@ -326,6 +345,7 @@ export type DatabaseSessionInput = typeof DatabaseSessionInput.Type;
 export const DatabaseBrowseTableInput = Schema.Struct({
   ...DatabaseProjectContext.fields,
   connectionId: DatabaseConnectionId,
+  database: Schema.optionalKey(Identifier),
   schema: Identifier,
   object: Identifier,
   where: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(10000))),
@@ -351,6 +371,7 @@ export type DatabaseBrowseTableResult = typeof DatabaseBrowseTableResult.Type;
 export const DatabaseReadOnlyQueryInput = Schema.Struct({
   ...DatabaseProjectContext.fields,
   connectionId: DatabaseConnectionId,
+  database: Schema.optionalKey(Identifier),
   sql: DatabaseExecuteInput.fields.sql,
   rowCap: Schema.optionalKey(PageSize),
 });

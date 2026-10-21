@@ -119,6 +119,35 @@ function ConsoleView({
   const sqlEditor = useRef<DatabaseSqlEditorHandle>(null);
   const [filesOpen, setFilesOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [databaseList, setDatabaseList] = useState<{
+    connectionId: string;
+    names: readonly string[];
+  } | null>(null);
+  const databaseName =
+    tab.database ??
+    (tabConnection?.target.engine === "postgres"
+      ? tabConnection.target.databaseSelection && tabConnection.target.databaseSelection !== "all"
+        ? tabConnection.target.databaseSelection[0]
+        : tabConnection.target.database
+      : undefined);
+  const loadDatabases = async () => {
+    if (!tabConnection) return;
+    try {
+      const result = databaseValue(
+        await databaseState.introspect.run(registry, {
+          environmentId,
+          input: { projectId, connectionId: tabConnection.id, scope: { kind: "databases" } },
+        }),
+      );
+      if (result.kind === "databases")
+        setDatabaseList({
+          connectionId: tabConnection.id,
+          names: result.databases.map((item) => item.name),
+        });
+    } catch (error) {
+      setNotice(databaseErrorMessage(error));
+    }
+  };
   const revision = useAtomValue(databaseState.revision(environmentId));
   const readFile = useAtomQueryRunner(projectEnvironment.readFile, { refresh: true });
   const probeFile = useAtomQueryRunner(projectEnvironment.readFile, {
@@ -141,6 +170,7 @@ function ConsoleView({
       const input = {
         projectId,
         connectionId: tabConnection.id,
+        ...(tab.database !== undefined ? { database: tab.database } : {}),
         scope,
         ...(completionContext.sessionId ? { sessionId: completionContext.sessionId } : {}),
       };
@@ -201,6 +231,7 @@ function ConsoleView({
                 projectId,
                 sessionId,
                 connectionId: tabConnection.id,
+                ...(tab.database !== undefined ? { database: tab.database } : {}),
                 queryId,
                 sql: statement.text,
               },
@@ -376,11 +407,19 @@ function ConsoleView({
   const onLoadMore = useStableCallback(() => {
     void more();
   });
-  const switchConnection = (connection: DatabaseConnection) => {
-    if (tab.loading || tab.connectionId === connection.id) return;
+  const switchConnection = (connection: DatabaseConnection, requestedDatabase?: string) => {
+    const database =
+      requestedDatabase ??
+      (connection.target.engine === "postgres"
+        ? connection.target.databaseSelection && connection.target.databaseSelection !== "all"
+          ? connection.target.databaseSelection[0]
+          : connection.target.database
+        : undefined);
+    if (tab.loading || (tab.connectionId === connection.id && databaseName === database)) return;
     void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
     updateTab(tab.id, {
       connectionId: connection.id,
+      database,
       sessionId: undefined,
       queryId: undefined,
       result: undefined,
@@ -514,6 +553,40 @@ function ConsoleView({
         >
           <FileCodeIcon />
         </DatabaseToolbarButton>
+        {tabConnection?.target.engine === "postgres" && tabConnection.target.databaseSelection && (
+          <Menu
+            onOpenChange={(open) => {
+              if (open) void loadDatabases();
+            }}
+          >
+            <MenuTrigger
+              disabled={tab.loading}
+              render={
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  aria-label={`Database: ${databaseName ?? "unavailable"}. Change database`}
+                />
+              }
+            >
+              <DatabaseIcon />
+              <span className="max-w-40 truncate">{databaseName}</span>
+              <ChevronDownIcon />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              {(databaseList?.connectionId === tabConnection.id
+                ? databaseList.names
+                : databaseName
+                  ? [databaseName]
+                  : []
+              ).map((name) => (
+                <MenuItem key={name} onClick={() => switchConnection(tabConnection, name)}>
+                  {name}
+                </MenuItem>
+              ))}
+            </MenuPopup>
+          </Menu>
+        )}
         <Menu>
           <MenuTrigger
             disabled={tab.loading}

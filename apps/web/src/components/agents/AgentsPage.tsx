@@ -5,12 +5,13 @@ import { useProjects, useThreadShells } from "../../state/entities";
 import { useEnvironments } from "../../state/environments";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { isElectron } from "../../env";
+import { useNowMinute } from "../../hooks/useNowMinute";
 import { SidebarInset } from "../ui/sidebar";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { OfficeFrame } from "./OfficeFrame";
-import { officeAgentState, officeThreadKey, type OfficeAgent } from "./officeBridge";
+import { buildOfficeRoster, filterOfficeRoster, type OfficeScope } from "./officeRoster";
 
 export function AgentsPage() {
   const threads = useThreadShells();
@@ -19,55 +20,36 @@ export function AgentsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [environment, setEnvironment] = useState("all");
-  const [scope, setScope] = useState("active");
+  const [scope, setScope] = useState<OfficeScope>("all");
   const [project, setProject] = useState("all");
+  const nowMinute = useNowMinute();
   const query = search.trim().toLowerCase();
-  const candidates = threads.filter(
-    (thread) =>
-      thread.deletedAt === null &&
-      thread.archivedAt === null &&
-      thread.isSideChat !== true &&
-      (environment === "all" || thread.environmentId === environment) &&
-      (project === "all" || `${thread.environmentId}:${thread.projectId}` === project),
-  );
-  const roster: OfficeAgent[] = candidates
-    .map((thread) => ({
-      key: officeThreadKey(thread),
-      thread,
-      projectName:
-        projects.find(
-          (item) => item.environmentId === thread.environmentId && item.id === thread.projectId,
-        )?.title ?? "Project",
-      state: officeAgentState(
-        thread,
-        environments.some(
-          (item) =>
-            item.environmentId === thread.environmentId && item.connection.phase === "connected",
-        ),
+  const roster = buildOfficeRoster(threads, {
+    now: `${nowMinute}:00Z`,
+    projectName: (thread) =>
+      projects.find(
+        (item) => item.environmentId === thread.environmentId && item.id === thread.projectId,
+      )?.title ?? "Project",
+    connected: (thread) =>
+      environments.some(
+        (item) =>
+          item.environmentId === thread.environmentId && item.connection.phase === "connected",
       ),
-    }))
-    .sort((a, b) => {
-      const priority = { waiting: 0, working: 1, error: 2, idle: 3, offline: 4 };
-      return (
-        priority[a.state] - priority[b.state] ||
-        b.thread.updatedAt.localeCompare(a.thread.updatedAt)
-      );
-    })
-    .filter(
-      (agent) =>
-        !query ||
+  }).filter(
+    (agent) =>
+      (environment === "all" || agent.thread.environmentId === environment) &&
+      (project === "all" ||
+        `${agent.thread.environmentId}:${agent.thread.projectId}` === project) &&
+      (!query ||
         `${agent.thread.title} ${agent.projectName} ${agent.thread.modelSelection.model}`
           .toLowerCase()
-          .includes(query),
-    );
-  const agents =
-    scope === "active"
-      ? roster.filter((agent) => agent.state === "working" || agent.state === "waiting")
-      : scope === "all"
-        ? roster
-        : roster.filter(
-            (agent, index) => (agent.state !== "idle" && agent.state !== "offline") || index < 20,
-          );
+          .includes(query) ||
+        agent.subagents.some((child) => child.title.toLowerCase().includes(query))),
+  );
+  const agents = filterOfficeRoster(roster, scope);
+  const working = agents.filter((agent) => agent.state === "working").length;
+  const snoozed = agents.filter((agent) => agent.state === "snoozed").length;
+  const subagentCount = agents.reduce((count, agent) => count + agent.subagents.length, 0);
   const openThread = (thread: EnvironmentThreadShell) => {
     void navigate({
       to: "/$environmentId/$threadId",
@@ -79,7 +61,11 @@ export function AgentsPage() {
     <SidebarInset className="h-dvh min-h-0 overflow-hidden">
       <WorkspacePageHeader electron={isElectron}>
         <h1 className="min-w-0 flex-1 truncate text-sm font-medium">Agent office</h1>
-        <span className="text-xs text-muted-foreground">{agents.length} threads</span>
+        <span className="text-xs text-muted-foreground">
+          {agents.length} threads · {working} working
+          {snoozed > 0 && ` · ${snoozed} snoozed`}
+          {subagentCount > 0 && ` · ${subagentCount} subagent${subagentCount === 1 ? "" : "s"}`}
+        </span>
       </WorkspacePageHeader>
       <div className="grid grid-cols-2 items-center gap-2 border-b px-4 py-2 sm:flex sm:flex-wrap">
         <div className="min-w-0 sm:w-48">
@@ -142,20 +128,20 @@ export function AgentsPage() {
           </Select>
         </div>
         <div className="min-w-0 sm:w-44">
-          <Select value={scope} onValueChange={(value) => setScope(value ?? "active")}>
+          <Select value={scope} onValueChange={(value) => setScope(value ?? "all")}>
             <SelectTrigger size="sm" aria-label="Threads to show">
               <SelectValue>
                 {scope === "active"
-                  ? "Active threads"
+                  ? "Working + needs input"
                   : scope === "all"
-                    ? "All threads"
-                    : "Active + recent"}
+                    ? "All unsettled threads"
+                    : "Working + recent"}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup>
-              <SelectItem value="active">Active threads</SelectItem>
-              <SelectItem value="recent">Active + recent</SelectItem>
-              <SelectItem value="all">All threads</SelectItem>
+              <SelectItem value="all">All unsettled threads</SelectItem>
+              <SelectItem value="active">Working + needs input</SelectItem>
+              <SelectItem value="recent">Working + recent</SelectItem>
             </SelectPopup>
           </Select>
         </div>

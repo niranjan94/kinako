@@ -16,6 +16,7 @@ describe("database console storage", () => {
         {
           id: "console",
           connectionId,
+          database: "analytics",
           title: "Console 1",
           sql: "SELECT 1",
           filePath: "query.sql",
@@ -27,6 +28,7 @@ describe("database console storage", () => {
         {
           id: "table",
           connectionId,
+          database: "app",
           title: "public.users",
           sql: "",
           loading: false,
@@ -48,6 +50,7 @@ describe("database console storage", () => {
         {
           id: "console",
           connectionId,
+          database: "analytics",
           title: "Console 1",
           sql: "SELECT 1",
           filePath: "query.sql",
@@ -56,6 +59,7 @@ describe("database console storage", () => {
         {
           id: "table",
           connectionId,
+          database: "app",
           title: "public.users",
           sql: "",
           loading: false,
