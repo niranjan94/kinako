@@ -52,7 +52,7 @@ Agents should use the `merge-upstream` skill (`.agents/skills/merge-upstream/`),
 
 Merge conflicts come from fork changes that touch the same lines as upstream. Keep new patches out of `package.json` versions, `pnpm-lock.yaml`, upstream workflows, and busy UI files. Prefer new fork-only files and environment variables.
 
-Kinako keeps migrations 63 and 64 for additional directories and database connections. Upstream's `DropUnusedV1Projections` migration runs as 65, `CanonicalizeThreadPullRequestLinks` as 66, `CodexUsageNativeTurnIndex` as 68 and `RepairClientSettlementTimestamps` as 69 (Kinako's `SnoozeWakeIndex` is 67); give each new upstream migration the next free ID and preserve existing IDs on future merges. The mobile store promotion row is omitted until Kinako has public distribution links.
+Kinako keeps migrations 63 and 64 for additional directories and database connections. Upstream's `DropUnusedV1Projections` migration runs as 65, `CanonicalizeThreadPullRequestLinks` as 66, `CodexUsageNativeTurnIndex` as 68, `RepairClientSettlementTimestamps` as 69 and `WebhookDedupe` as 70 (Kinako's `SnoozeWakeIndex` is 67); give each new upstream migration the next free ID and preserve existing IDs on future merges. The mobile store promotion row is omitted until Kinako has public distribution links.
 
 ## Rebrand seams
 

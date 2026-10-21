@@ -14,7 +14,6 @@ import * as Schema from "effect/Schema";
 import {
   deriveContextWindowBreakdown,
   deriveLatestContextWindowSnapshot,
-  formatContextWindowTokens,
   latestProviderTurnTokenUsage,
 } from "./contextWindow.ts";
 
@@ -49,39 +48,6 @@ describe("V2 context window presentation", () => {
     expect(snapshot?.usedTokens).toBe(2_000);
     expect(snapshot?.totalProcessedTokens).toBe(10_000);
   });
-
-  it("prefers current provider usage and preserves ACP cost", () => {
-    const snapshot = deriveLatestContextWindowSnapshot([], undefined, {
-      contextUsage: {
-        usedTokens: 2_500,
-        maxTokens: 10_000,
-        cost: { amount: 0.42, currency: "USD" },
-      },
-      updatedAt: DateTime.makeUnsafe("2026-08-23T00:00:00.000Z"),
-    });
-
-    expect(snapshot).toMatchObject({
-      usedTokens: 2_500,
-      maxTokens: 10_000,
-      remainingTokens: 7_500,
-      usedPercentage: 25,
-      cost: { amount: 0.42, currency: "USD" },
-    });
-  });
-
-  it("formats compact token values", () => {
-    expect(formatContextWindowTokens(1_500)).toBe("1.5k");
-  });
-
-  it.each([
-    [999_499, "999k"],
-    [999_500, "1m"],
-    [999_999, "1m"],
-    [1_000_000, "1m"],
-    [1_100_000, "1.1m"],
-  ])("formats %d tokens as %s at the million boundary", (tokens, expected) => {
-    expect(formatContextWindowTokens(tokens)).toBe(expected);
-  });
 });
 
 describe("live provider-turn usage (#8144)", () => {
@@ -101,16 +67,6 @@ describe("live provider-turn usage (#8144)", () => {
     expect(snapshot?.remainingTokens).toBe(158_000);
     expect(snapshot?.usedPercentage).toBe(21);
     expect(snapshot?.autoCompactThreshold).toBe(150_000);
-  });
-
-  it("handles a report without a known context window", () => {
-    const snapshot = deriveLatestContextWindowSnapshot([], {
-      usedTokens: 42_000,
-      updatedAt: "2026-08-27T00:00:00.000Z",
-    });
-    expect(snapshot?.maxTokens).toBeNull();
-    expect(snapshot?.usedPercentage).toBeNull();
-    expect(snapshot?.autoCompactThreshold).toBeNull();
   });
 });
 

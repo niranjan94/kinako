@@ -17,7 +17,7 @@ import {
 import * as Schema from "effect/Schema";
 import { isKdeCaptureSession, type KdeCapturePaths } from "./KdeSnapShot.ts";
 import { isGnomeCaptureSession, readPortalPng, resizeLinuxCapture } from "./linuxCaptureSession.ts";
-export { readPortalPng, resizeLinuxCapture } from "./linuxCaptureSession.ts";
+export { readPortalPng } from "./linuxCaptureSession.ts";
 import { isHyprlandCaptureSession, type HyprlandCapturePaths } from "./HyprlandSnapShot.ts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
@@ -99,7 +99,7 @@ function unavailable(error: unknown): boolean {
 }
 
 /** One connection per operation: portal registration and request ownership stay together. */
-export class LinuxCaptureConnection {
+class LinuxCaptureConnection {
   private readonly bus: MessageBus;
   private readonly disconnected: Promise<never>;
   private uniqueName = "";

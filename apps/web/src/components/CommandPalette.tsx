@@ -1,5 +1,3 @@
-"use client";
-
 import { databaseState } from "../state/database";
 import { requestThreadWorkspaceMove } from "./ThreadWorkspaceMoveDialog";
 import { Atom } from "effect/reactivity";

@@ -185,7 +185,8 @@ jobs:
             resource_key: linux-arm64
             cli_archive: true
           - label: Windows x64
-            runner: windows-2025
+            runner: ubuntu-24.04
+            verify_runner: windows-2025
             platform: win
             target: nsis
             arch: x64
@@ -193,7 +194,8 @@ jobs:
             resource_key: win32-x64
             cli_archive: true
           - label: Windows arm64
-            runner: windows-11-arm
+            runner: ubuntu-24.04
+            verify_runner: windows-11-arm
             platform: win
             target: nsis
             arch: arm64
@@ -219,6 +221,7 @@ jobs:
       rust_target: ${{ matrix.rust_target }}
       resource_key: ${{ matrix.resource_key }}
       cli_archive: ${{ matrix.cli_archive }}
+      verify_runner: ${{ matrix.verify_runner || '' }}
 
   release:
     if: inputs.cli_release_version == ''

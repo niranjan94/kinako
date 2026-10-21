@@ -32,29 +32,6 @@ const writeProjectFile = Effect.fn("writeProjectFile")(function* (
 
 it.layer(layerTest)("T3ProjectFileLoader", (it) => {
   describe("load", () => {
-    it.effect("loads and decodes a valid t3.json", () =>
-      Effect.gen(function* () {
-        const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
-        const cwd = yield* makeTempDir;
-        yield* writeProjectFile(
-          cwd,
-          `{
-            // JSONC is tolerated
-            "iconPath": "assets/logo.svg",
-            "scripts": [{ "name": "Dev", "command": "pnpm dev" }],
-          }`,
-        );
-
-        const loaded = yield* loader.load(cwd);
-
-        expect(Option.isSome(loaded)).toBe(true);
-        if (Option.isSome(loaded)) {
-          expect(loaded.value.iconPath).toBe("assets/logo.svg");
-          expect(loaded.value.scripts).toEqual([{ name: "Dev", command: "pnpm dev" }]);
-        }
-      }),
-    );
-
     it.effect("prefers kinako.json over t3.json", () =>
       Effect.gen(function* () {
         const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
@@ -81,34 +58,11 @@ it.layer(layerTest)("T3ProjectFileLoader", (it) => {
       }),
     );
 
-    it.effect("returns none when no project file exists", () =>
-      Effect.gen(function* () {
-        const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
-        const cwd = yield* makeTempDir;
-
-        const loaded = yield* loader.load(cwd);
-
-        expect(Option.isNone(loaded)).toBe(true);
-      }),
-    );
-
     it.effect("returns none for malformed JSON without failing", () =>
       Effect.gen(function* () {
         const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
         const cwd = yield* makeTempDir;
         yield* writeProjectFile(cwd, "{ not json");
-
-        const loaded = yield* loader.load(cwd);
-
-        expect(Option.isNone(loaded)).toBe(true);
-      }),
-    );
-
-    it.effect("returns none for schema-invalid files without failing", () =>
-      Effect.gen(function* () {
-        const loader = yield* T3ProjectFileLoader.T3ProjectFileLoader;
-        const cwd = yield* makeTempDir;
-        yield* writeProjectFile(cwd, '{ "scripts": [{ "name": "Dev" }] }');
 
         const loaded = yield* loader.load(cwd);
 

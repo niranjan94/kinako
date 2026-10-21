@@ -113,7 +113,7 @@ function suggestedPackageSpec(version: string): string {
   return channel === undefined ? FORK_NPM_PACKAGE_NAME : `${FORK_NPM_PACKAGE_NAME}@${channel}`;
 }
 
-export function formatCliCommand(input: {
+function formatCliCommand(input: {
   readonly subcommand: string;
   readonly entryPath: string;
   readonly version: string;

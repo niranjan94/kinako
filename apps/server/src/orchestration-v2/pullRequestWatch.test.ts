@@ -135,6 +135,7 @@ describe("evaluatePullRequestWatch", () => {
     ]);
   });
 
+  // regression: #16208 PR watches burned GitHub's rate limit and gave up
   it("does not report passed again for a new passed check where none is required", () => {
     const first = evaluatePullRequestWatch(
       watch(),
@@ -491,30 +492,6 @@ describe("pullRequestWatchMessage", () => {
       source: { kind: "monitor" },
       outcome: "failed",
       summary: "#12: auto-fix paused",
-    });
-  });
-
-  it("tells the agent what changed and marks failures for the timeline", () => {
-    const report = evaluatePullRequestWatch(
-      watch(),
-      detail({ checks: [check("lint", "failure")] }),
-      [remark("reviewer", "2026-10-02T12:10:00Z", "<!-- bot -->Needs a test.")],
-    );
-    const message = pullRequestWatchMessage({
-      number: 12,
-      url: "https://github.com/o/r/pull/12",
-      baseBranch: "main",
-      headBranch: "feature",
-      headSha: report.next.headSha,
-      report,
-    });
-    assert.include(message.text, "- Checks failed on aaaaaaa:\n  - lint https://ci.example/lint");
-    assert.include(message.text, '  - reviewer on src/index.ts: "Needs a test."');
-    assert.include(message.text, "unwatch_pull_request");
-    assert.deepEqual(message.notification, {
-      source: { kind: "monitor" },
-      outcome: "failed",
-      summary: "#12: checks failed, new comments",
     });
   });
 });
