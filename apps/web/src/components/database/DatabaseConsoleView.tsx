@@ -407,14 +407,14 @@ function ConsoleView({
   const onLoadMore = useStableCallback(() => {
     void more();
   });
-  const switchConnection = (
-    connection: DatabaseConnection,
-    database = connection.target.engine === "postgres"
-      ? connection.target.databaseSelection && connection.target.databaseSelection !== "all"
-        ? connection.target.databaseSelection[0]
-        : connection.target.database
-      : undefined,
-  ) => {
+  const switchConnection = (connection: DatabaseConnection, requestedDatabase?: string) => {
+    const database =
+      requestedDatabase ??
+      (connection.target.engine === "postgres"
+        ? connection.target.databaseSelection && connection.target.databaseSelection !== "all"
+          ? connection.target.databaseSelection[0]
+          : connection.target.database
+        : undefined);
     if (tab.loading || (tab.connectionId === connection.id && databaseName === database)) return;
     void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
     updateTab(tab.id, {
