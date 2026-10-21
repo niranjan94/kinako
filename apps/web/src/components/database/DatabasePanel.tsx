@@ -61,10 +61,9 @@ export default function DatabasePanel({
     persistDatabaseWorkspace(key, registry.get(workspaceAtom));
     return registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(key, next));
   }, [key, registry, workspaceAtom]);
-  const newQuery = (
-    connection: DatabaseConnection,
-    database = connection.id === activeConnectionId ? activeDatabase : undefined,
-  ) => {
+  const newQuery = (connection: DatabaseConnection, requestedDatabase?: string) => {
+    const database =
+      requestedDatabase ?? (connection.id === activeConnectionId ? activeDatabase : undefined);
     databasePanelIntent.consume(threadRef);
     void newDatabaseConsole(scope, connection, database);
     revealDrawer();
