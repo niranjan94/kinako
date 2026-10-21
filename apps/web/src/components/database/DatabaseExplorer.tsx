@@ -32,38 +32,41 @@ function DatabaseNode({
   environmentId,
   projectId,
   connection,
+  database,
   scope,
   label,
   level,
   objectType = "table",
   filter,
   onTable,
+  onQuery,
 }: {
   environmentId: EnvironmentId;
   projectId: ProjectId;
   connection: DatabaseConnection;
+  database?: string;
   scope: DatabaseIntrospectScope;
   label: string;
   level: number;
   objectType?: DatabaseObjectType;
   filter: string;
-  onTable: (connection: DatabaseConnection, schema: string, object: string) => void;
+  onTable: (
+    connection: DatabaseConnection,
+    schema: string,
+    object: string,
+    database?: string,
+  ) => void;
+  onQuery: (connection: DatabaseConnection, database?: string) => void;
 }) {
   const registry = useContext(RegistryContext);
   const revision = useAtomValue(databaseState.revision(environmentId));
   const kind = scope.kind;
-  const schema = scope.kind === "schemas" ? "" : scope.schema;
-  const object = scope.kind === "columns" ? scope.object : "";
-  const input = (() => ({
+  const input = {
     connectionId: connection.id,
     projectId,
-    scope:
-      kind === "schemas"
-        ? { kind }
-        : kind === "objects"
-          ? { kind, schema }
-          : { kind, schema, object },
-  }))();
+    ...(database !== undefined ? { database } : {}),
+    scope,
+  };
   const metadata = useAtomValue(
     databaseState.metadata(databaseCacheKey(environmentId, { ...input, revision })),
   );
@@ -72,7 +75,9 @@ function DatabaseNode({
   const [error, setError] = useState<string | null>(null);
   // Filtering searches the schemas of connections already loaded; it never opens a new connection.
   const open =
-    expanded || (!!filter && (kind === "objects" || (kind === "schemas" && metadata !== null)));
+    expanded ||
+    (!!filter &&
+      (kind === "objects" || ((kind === "schemas" || kind === "databases") && metadata !== null)));
   useEffect(() => {
     if (!open || metadata) return;
     let active = true;
@@ -89,7 +94,7 @@ function DatabaseNode({
     };
   }, [open, metadata, environmentId, input, registry]);
   const Icon =
-    kind === "schemas"
+    kind === "schemas" || kind === "databases"
       ? DatabaseIcon
       : kind === "objects"
         ? FolderIcon
@@ -97,63 +102,76 @@ function DatabaseNode({
           ? Table2Icon
           : EyeIcon;
   const description =
-    kind === "schemas"
-      ? `${connection.name} · ${connection.target.engine === "sqlite" ? "SQLite" : "PostgreSQL"}${connection.readOnly ? " · Read-only" : ""}`
+    kind === "schemas" || kind === "databases"
+      ? `${connection.name}${database ? ` · ${database}` : ""} · ${connection.target.engine === "sqlite" ? "SQLite" : "PostgreSQL"}${connection.readOnly ? " · Read-only" : ""}`
       : kind === "columns" && objectType !== "table"
         ? `${label} · ${objectType === "view" ? "View" : "Materialized view"}`
         : label;
   return (
     <div className="min-w-0" role="none">
-      <DatabaseHint label={description}>
-        <button
-          data-database-tree-row
-          role="treeitem"
-          aria-expanded={open}
-          // The child group renders beside this button, so ownership has to be explicit.
-          aria-owns={open ? groupId : undefined}
-          aria-level={level}
-          tabIndex={-1}
-          className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs outline-none hover:bg-accent focus:bg-accent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-          aria-label={label}
-          aria-description={
-            kind === "columns" ? `${description}. Press Enter to open its rows.` : description
-          }
-          onClick={() => setExpanded(!open)}
-          onDoubleClick={() => {
-            if (scope.kind === "columns") onTable(connection, scope.schema, scope.object);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && scope.kind === "columns") {
-              event.preventDefault();
-              onTable(connection, scope.schema, scope.object);
-            } else if (event.key === "ArrowRight") {
-              event.preventDefault();
-              setExpanded(true);
-            } else if (event.key === "ArrowLeft") {
-              event.preventDefault();
-              if (open) setExpanded(false);
-              else
-                event.currentTarget.parentElement
-                  ?.closest<HTMLElement>("[role=group]")
-                  ?.parentElement?.querySelector<HTMLElement>("[data-database-tree-row]")
-                  ?.focus();
-            }
-          }}
-        >
-          {open ? (
-            <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
-          )}
-          <Icon
-            className={`size-3.5 shrink-0 ${kind === "schemas" ? "text-primary" : "text-muted-foreground"}`}
-          />
-          <span className="truncate">{label}</span>
-          {kind === "schemas" && connection.readOnly && (
-            <FileKey2Icon className="ml-auto size-3 shrink-0 text-muted-foreground" />
-          )}
-        </button>
-      </DatabaseHint>
+      <div className="flex items-center" role="none">
+        <div className="min-w-0 flex-1" role="none">
+          <DatabaseHint label={description}>
+            <button
+              data-database-tree-row
+              role="treeitem"
+              aria-expanded={open}
+              // The child group renders beside this button, so ownership has to be explicit.
+              aria-owns={open ? groupId : undefined}
+              aria-level={level}
+              tabIndex={-1}
+              className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs outline-none hover:bg-accent focus:bg-accent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+              aria-label={label}
+              aria-description={
+                kind === "columns" ? `${description}. Press Enter to open its rows.` : description
+              }
+              onClick={() => setExpanded(!open)}
+              onDoubleClick={() => {
+                if (scope.kind === "columns")
+                  onTable(connection, scope.schema, scope.object, database);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && scope.kind === "columns") {
+                  event.preventDefault();
+                  onTable(connection, scope.schema, scope.object, database);
+                } else if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  setExpanded(true);
+                } else if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  if (open) setExpanded(false);
+                  else
+                    event.currentTarget.parentElement
+                      ?.closest<HTMLElement>("[role=group]")
+                      ?.parentElement?.querySelector<HTMLElement>("[data-database-tree-row]")
+                      ?.focus();
+                }
+              }}
+            >
+              {open ? (
+                <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
+              )}
+              <Icon
+                className={`size-3.5 shrink-0 ${kind === "schemas" ? "text-primary" : "text-muted-foreground"}`}
+              />
+              <span className="truncate">{label}</span>
+              {kind === "schemas" && connection.readOnly && (
+                <FileKey2Icon className="ml-auto size-3 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+          </DatabaseHint>
+        </div>
+        {kind === "schemas" && database !== undefined && (
+          <DatabaseToolbarButton
+            label={`New query console for ${database}`}
+            onClick={() => onQuery(connection, database)}
+          >
+            <SquareTerminalIcon />
+          </DatabaseToolbarButton>
+        )}
+      </div>
       {open && (
         <div id={groupId} className="ml-4" role="group">
           {error && !metadata ? (
@@ -162,11 +180,34 @@ function DatabaseNode({
             </p>
           ) : !metadata ? (
             <p className="px-2 py-1 text-xs text-muted-foreground">Loading…</p>
+          ) : metadata.kind === "databases" ? (
+            metadata.databases.length ? (
+              metadata.databases.map((item) => (
+                <DatabaseNode
+                  key={item.name}
+                  {...{ environmentId, projectId, connection, onTable, onQuery, filter }}
+                  database={item.name}
+                  scope={{ kind: "schemas" }}
+                  label={item.name}
+                  level={level + 1}
+                />
+              ))
+            ) : (
+              <p className="px-2 py-1 text-xs text-muted-foreground">No databases available.</p>
+            )
           ) : metadata.kind === "schemas" ? (
             metadata.schemas.map((schema) => (
               <DatabaseNode
                 key={schema.name}
-                {...{ environmentId, projectId, connection, onTable, filter }}
+                {...{
+                  environmentId,
+                  projectId,
+                  connection,
+                  onTable,
+                  onQuery,
+                  filter,
+                  ...(database !== undefined ? { database } : {}),
+                }}
                 scope={{ kind: "objects", schema: schema.name }}
                 label={schema.name}
                 level={level + 1}
@@ -178,12 +219,21 @@ function DatabaseNode({
                 (object) =>
                   !filter ||
                   object.name.toLowerCase().includes(filter) ||
-                  connection.name.toLowerCase().includes(filter),
+                  connection.name.toLowerCase().includes(filter) ||
+                  database?.toLowerCase().includes(filter),
               )
               .map((object) => (
                 <DatabaseNode
                   key={object.name}
-                  {...{ environmentId, projectId, connection, onTable, filter }}
+                  {...{
+                    environmentId,
+                    projectId,
+                    connection,
+                    onTable,
+                    onQuery,
+                    filter,
+                    ...(database !== undefined ? { database } : {}),
+                  }}
                   scope={{ kind: "columns", schema: scope.schema, object: object.name }}
                   label={object.name}
                   level={level + 1}
@@ -256,8 +306,13 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
   environmentId: EnvironmentId;
   projectId: ProjectId;
   filter: string;
-  onTable: (connection: DatabaseConnection, schema: string, object: string) => void;
-  onQuery: (connection: DatabaseConnection) => void;
+  onTable: (
+    connection: DatabaseConnection,
+    schema: string,
+    object: string,
+    database?: string,
+  ) => void;
+  onQuery: (connection: DatabaseConnection, database?: string) => void;
   onEdit: (connection: DatabaseConnection) => void;
 }) {
   const canEdit = useAtomValue(databaseState.saveConnection.permissionAtom(environmentId));
@@ -313,9 +368,15 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
                 <div className="flex items-start" role="none">
                   <div className="min-w-0 flex-1" role="none">
                     <DatabaseNode
-                      {...{ environmentId, projectId, connection, onTable }}
+                      {...{ environmentId, projectId, connection, onTable, onQuery }}
                       level={1}
-                      scope={{ kind: "schemas" }}
+                      scope={{
+                        kind:
+                          connection.target.engine === "postgres" &&
+                          connection.target.databaseSelection
+                            ? "databases"
+                            : "schemas",
+                      }}
                       filter={filter.toLowerCase()}
                       label={connection.name}
                     />

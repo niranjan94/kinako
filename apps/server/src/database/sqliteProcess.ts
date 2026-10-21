@@ -5,6 +5,8 @@ const quote = (identifier: string) => `"${identifier.replaceAll('"', '""')}"`;
 
 function introspect(db: NodeSqlite.DatabaseSync, scope: DatabaseIntrospectScope) {
   switch (scope.kind) {
+    case "databases":
+      return { kind: "databases" as const, databases: [] };
     case "schemas": {
       const rows = db.prepare("PRAGMA database_list").all() as Array<{ name: string }>;
       return {

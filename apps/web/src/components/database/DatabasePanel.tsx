@@ -46,6 +46,10 @@ export default function DatabasePanel({
     workspaceAtom,
     (workspace) => workspace.tabs.find((tab) => tab.id === workspace.activeId)?.connectionId,
   );
+  const activeDatabase = useAtomValue(
+    workspaceAtom,
+    (workspace) => workspace.tabs.find((tab) => tab.id === workspace.activeId)?.database,
+  );
   const selected =
     connections.find((connection) => connection.id === activeConnectionId) ?? connections[0];
   // In the sheet layout the explorer covers the bottom drawer the new tab opens in.
@@ -57,16 +61,19 @@ export default function DatabasePanel({
     persistDatabaseWorkspace(key, registry.get(workspaceAtom));
     return registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(key, next));
   }, [key, registry, workspaceAtom]);
-  const newQuery = (connection: DatabaseConnection) => {
+  const newQuery = (
+    connection: DatabaseConnection,
+    database = connection.id === activeConnectionId ? activeDatabase : undefined,
+  ) => {
     databasePanelIntent.consume(threadRef);
-    void newDatabaseConsole(scope, connection);
+    void newDatabaseConsole(scope, connection, database);
     revealDrawer();
   };
   const onNewQuery = useStableCallback(newQuery);
   const onOpenTable = useStableCallback(
-    (connection: DatabaseConnection, schema: string, object: string) => {
+    (connection: DatabaseConnection, schema: string, object: string, database?: string) => {
       databasePanelIntent.consume(threadRef);
-      openDatabaseTable(scope, connection, schema, object);
+      openDatabaseTable(scope, connection, schema, object, database);
       revealDrawer();
     },
   );

@@ -88,7 +88,10 @@ export function createDatabaseState<R, ER>(
             result,
           );
           const atom = completion(
-            databaseCacheKey(target.environmentId, { connectionId: target.input.connectionId }),
+            databaseCacheKey(target.environmentId, {
+              connectionId: target.input.connectionId,
+              ...(target.input.database !== undefined ? { database: target.input.database } : {}),
+            }),
           );
           const previous = registry.get(atom);
           const scope = target.input.scope;
@@ -228,6 +231,7 @@ export async function releaseDatabaseResources(
 }
 
 export interface DatabaseWorkspaceTab {
+  database?: string | undefined;
   id: string;
   connectionId: DatabaseConnectionId;
   title: string;

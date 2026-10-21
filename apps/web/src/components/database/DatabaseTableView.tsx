@@ -81,6 +81,7 @@ function TableView({
           input: {
             projectId,
             connectionId: start.connectionId,
+            ...(start.database !== undefined ? { database: start.database } : {}),
             schema: table.schema,
             object: table.object,
             where: table.where,
@@ -137,6 +138,7 @@ function TableView({
       databaseCacheKey(environmentId, {
         projectId,
         connectionId: tab.connectionId,
+        ...(tab.database !== undefined ? { database: tab.database } : {}),
         scope: { kind: "columns", schema: tab.table.schema, object: tab.table.object },
         revision: registry.get(databaseState.revision(environmentId)),
       }),

@@ -75,6 +75,7 @@ interface OpenQuery {
 }
 
 interface EditorSession {
+  readonly database: string | undefined;
   lastUsedMs: number;
   readonly connectionId: DatabaseConnectionId;
   readonly projectId: ProjectId | undefined;
@@ -163,6 +164,29 @@ const make = Effect.gen(function* () {
   const sqliteInvocation = yield* resolveSelfInvocation();
   const queries = new Map<DatabaseQueryId, OpenQuery>();
   const editors = new Map<DatabaseSessionId, EditorSession>();
+
+  const selectDatabase = Effect.fn("DatabaseService.selectDatabase")(function* (
+    credentials: DatabaseConnections.DatabaseConnectionCredentials,
+    requested: string | undefined,
+  ) {
+    const { target } = credentials.connection;
+    if (target.engine === "sqlite") {
+      if (requested !== undefined)
+        return yield* new DatabaseRequestError({ failure: "database-not-selected" });
+      return credentials;
+    }
+    const selection = target.databaseSelection;
+    const database =
+      requested ?? (selection && selection !== "all" ? selection[0]! : target.database);
+    const allowed =
+      selection === "all" ||
+      (selection !== undefined ? selection.includes(database) : database === target.database);
+    if (!allowed) return yield* new DatabaseRequestError({ failure: "database-not-selected" });
+    return {
+      ...credentials,
+      connection: { ...credentials.connection, target: { ...target, database } },
+    };
+  });
 
   const missingSqliteFile = (credentials: DatabaseConnections.DatabaseConnectionCredentials) => {
     const { target } = credentials.connection;
@@ -290,12 +314,19 @@ const make = Effect.gen(function* () {
   const openSession = Effect.fn("DatabaseService.openSession")(function* (
     input: DatabaseOpenSessionInput,
   ) {
-    const credentials = yield* connections.get(input.connectionId, input.projectId);
+    const credentials = yield* selectDatabase(
+      yield* connections.get(input.connectionId, input.projectId),
+      input.database,
+    );
     if (editors.has(input.sessionId))
       return yield* new DatabaseRequestError({ failure: "session-id-in-use" });
     if (editors.size >= MAX_EDITOR_SESSIONS)
       return yield* new DatabaseRequestError({ failure: "too-many-open-sessions" });
     const editor: EditorSession = {
+      database:
+        credentials.connection.target.engine === "postgres"
+          ? credentials.connection.target.database
+          : undefined,
       lastUsedMs: yield* Clock.currentTimeMillis,
       connectionId: input.connectionId,
       projectId: input.projectId,
@@ -379,7 +410,19 @@ const make = Effect.gen(function* () {
 
   const introspect = Effect.fn("DatabaseService.introspect")(
     function* (input: DatabaseIntrospectInput) {
-      const credentials = yield* connections.get(input.connectionId, input.projectId);
+      const saved = yield* connections.get(input.connectionId, input.projectId);
+      if (input.scope.kind === "databases") {
+        const target = saved.connection.target;
+        if (target.engine === "sqlite") return { kind: "databases" as const, databases: [] };
+        if (target.databaseSelection !== "all") {
+          const names = target.databaseSelection ?? [target.database];
+          return {
+            kind: "databases" as const,
+            databases: [...new Set(names)].map((name) => ({ name })),
+          };
+        }
+        return yield* withSession(saved, (session) => session.introspect(input.scope));
+      }
       const editor = input.sessionId ? editors.get(input.sessionId) : undefined;
       if (input.sessionId && (!editor || editor.closed))
         return yield* new DatabaseRequestError({ failure: "session-not-found" });
@@ -388,6 +431,13 @@ const make = Effect.gen(function* () {
         if (editor.connectionId !== input.connectionId)
           return yield* new DatabaseRequestError({ failure: "project-mismatch" });
       }
+      const credentials = yield* selectDatabase(saved, input.database ?? editor?.database);
+      if (
+        editor &&
+        credentials.connection.target.engine === "postgres" &&
+        editor.database !== credentials.connection.target.database
+      )
+        return yield* new DatabaseRequestError({ failure: "database-not-selected" });
       // Metadata uses an independent connection so an unread console cursor cannot block it.
       const result = yield* withSession(credentials, (session) => session.introspect(input.scope));
       return result.kind === "schemas" && editor?.searchPath !== undefined
@@ -422,14 +472,22 @@ const make = Effect.gen(function* () {
       queries.set(input.queryId, query);
 
       return yield* Effect.gen(function* () {
-        const credentials = yield* connections.get(input.connectionId, input.projectId);
         const editor = input.sessionId === undefined ? undefined : editors.get(input.sessionId);
+        const credentials = yield* selectDatabase(
+          yield* connections.get(input.connectionId, input.projectId),
+          input.database ?? editor?.database,
+        );
         if (input.sessionId !== undefined && (!editor || editor.closed || !editor.session))
           return yield* new DatabaseRequestError({ failure: "session-not-found" });
         if (editor) {
           yield* assertProject(editor.projectId, input.projectId);
           if (editor.connectionId !== input.connectionId)
             return yield* new DatabaseRequestError({ failure: "project-mismatch" });
+          if (
+            credentials.connection.target.engine === "postgres" &&
+            editor.database !== credentials.connection.target.database
+          )
+            return yield* new DatabaseRequestError({ failure: "database-not-selected" });
           if (editor.busy) return yield* new DatabaseRequestError({ failure: "session-busy" });
           editor.busy = true;
           editor.lastUsedMs = yield* Clock.currentTimeMillis;
@@ -628,7 +686,10 @@ const make = Effect.gen(function* () {
   const browseTable = Effect.fn("DatabaseService.browseTable")(function* (
     input: DatabaseBrowseTableInput,
   ) {
-    const credentials = yield* connections.get(input.connectionId, input.projectId);
+    const credentials = yield* selectDatabase(
+      yield* connections.get(input.connectionId, input.projectId),
+      input.database,
+    );
     const pageSize = input.pageSize ?? DATABASE_PAGE_SIZE_DEFAULT;
     const offset = input.offset ?? 0;
     return yield* withSession(

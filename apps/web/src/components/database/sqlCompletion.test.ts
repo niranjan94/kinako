@@ -71,6 +71,7 @@ describe("SQL metadata completion", () => {
 
   it("uses the session search path in order, including fallback schemas", async () => {
     const source = createSqlSchemaCompletion("postgres", async (scope) => {
+      if (scope.kind === "databases") return { kind: "databases", databases: [] };
       if (scope.kind === "schemas")
         return {
           kind: "schemas",
@@ -115,6 +116,7 @@ describe("SQL metadata completion", () => {
 
   it("preserves literal dots in schema and table names", async () => {
     const source = createSqlSchemaCompletion("postgres", async (scope) => {
+      if (scope.kind === "databases") return { kind: "databases", databases: [] };
       if (scope.kind === "schemas")
         return { kind: "schemas", schemas: [{ name: "tenant.one" }], searchPath: ["tenant.one"] };
       if (scope.kind === "objects")
