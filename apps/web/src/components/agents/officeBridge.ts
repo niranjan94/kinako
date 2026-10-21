@@ -1,6 +1,7 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
 import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
+import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 
 export type OfficeMessage = { type: string; [key: string]: unknown };
 export type OfficeSeat = {
@@ -12,13 +13,22 @@ export interface OfficeAgent {
   key: string;
   thread: EnvironmentThreadShell;
   projectName: string;
-  state: "working" | "waiting" | "idle" | "error" | "offline";
+  state: "working" | "waiting" | "idle" | "snoozed" | "error" | "offline";
+  subagents: readonly OfficeSubagent[];
+}
+export interface OfficeSubagent {
+  key: string;
+  title: string;
+  state: "working" | "waiting";
+  approval: boolean;
 }
 
 export function officeAgentState(
   thread: EnvironmentThreadShell,
   connected = true,
+  now = new Date().toISOString(),
 ): OfficeAgent["state"] {
+  if (effectiveSnoozed(thread, { now })) return "snoozed";
   if (!connected) return "offline";
   if (
     thread.hasPendingApprovals ||
@@ -32,7 +42,7 @@ export function officeAgentState(
   return "idle";
 }
 
-export function officeThreadKey(thread: EnvironmentThreadShell) {
+export function officeThreadKey(thread: Pick<EnvironmentThreadShell, "environmentId" | "id">) {
   return threadKey({ environmentId: thread.environmentId, threadId: thread.id });
 }
 
@@ -41,6 +51,7 @@ export class OfficeBridge {
   private ids = new Map<string, number>();
   private previous = new Map<string, { metadata: string; activity: string }>();
   private agents = new Map<number, OfficeAgent>();
+  private subagents = new Map<string, readonly OfficeSubagent[]>();
 
   constructor(private send: (message: OfficeMessage) => void) {}
 
@@ -62,6 +73,7 @@ export class OfficeBridge {
       this.agents.delete(id);
       this.ids.delete(agent.key);
       this.previous.delete(agent.key);
+      this.subagents.delete(agent.key);
     }
     const additions: { id: number; agent: OfficeAgent }[] = [];
     for (const agent of roster) {
@@ -92,22 +104,70 @@ export class OfficeBridge {
         agent.thread.title,
         agent.projectName,
         agent.thread.lineage,
+        agent.state === "snoozed",
       ]);
-      const activity = JSON.stringify([agent.state, agent.thread.hasPendingApprovals]);
+      const activity = JSON.stringify([
+        agent.state,
+        agent.thread.hasPendingApprovals,
+        agent.thread.snoozedUntil,
+        agent.subagents,
+      ]);
       const previous = this.previous.get(agent.key);
       this.previous.set(agent.key, { metadata, activity });
       if (previous?.metadata !== metadata) {
         this.send({
           type: "agentTeamInfo",
           id,
-          agentName: agent.thread.title,
+          agentName: `${agent.state === "snoozed" ? "Zzz · " : ""}${agent.thread.title}`,
           teamName: agent.projectName,
           isTeamLead: false,
         });
       }
+      if (previous?.metadata !== metadata || previous?.activity !== activity) {
+        this.send({
+          type: "kinakoAgentState",
+          id,
+          state: agent.state,
+          approval: agent.thread.hasPendingApprovals,
+          title: agent.thread.title,
+          snoozedUntil: agent.thread.snoozedUntil,
+          subagentCount: agent.subagents.length,
+        });
+      }
       if (previous?.activity === activity) continue;
+      const previousChildren = this.subagents.get(agent.key) ?? [];
+      for (const child of previousChildren) {
+        if (!agent.subagents.some((current) => current.key === child.key)) {
+          this.send({ type: "subagentClear", id, parentToolId: child.key });
+        }
+      }
+      // Native subagent activity survives agentToolsClear; otherwise a parent
+      // changing state would despawn children that are still working.
+      for (const child of agent.subagents) {
+        const old = previousChildren.find((current) => current.key === child.key);
+        if (old && JSON.stringify(old) === JSON.stringify(child)) continue;
+        if (old) this.send({ type: "subagentClear", id, parentToolId: child.key });
+        this.send({
+          type: "subagentToolStart",
+          id,
+          parentToolId: child.key,
+          toolId: "kinako:activity",
+          status: `${child.state === "waiting" ? "Waiting for input" : "Working"}: ${child.title}`,
+        });
+        if (child.state === "waiting") {
+          this.send({
+            type: "subagentToolDone",
+            id,
+            parentToolId: child.key,
+            toolId: "kinako:activity",
+          });
+        }
+        if (child.approval)
+          this.send({ type: "subagentToolPermission", id, parentToolId: child.key });
+      }
+      this.subagents.set(agent.key, agent.subagents);
       this.send({ type: "agentToolsClear", id });
-      if (agent.state !== "idle") {
+      if (agent.state !== "idle" && agent.state !== "snoozed") {
         this.send({
           type: "agentToolStart",
           id,
@@ -128,19 +188,8 @@ export class OfficeBridge {
         id,
         // The pinned frontend treats other status strings as inactive without a
         // successful-completion bubble or sound.
-        status:
-          agent.state === "working"
-            ? "active"
-            : agent.state === "error" || agent.state === "offline"
-              ? agent.state
-              : "waiting",
+        status: agent.state === "working" ? "active" : agent.state,
         awaitingInput: agent.state === "waiting",
-      });
-      this.send({
-        type: "kinakoAgentState",
-        id,
-        state: agent.state,
-        approval: agent.thread.hasPendingApprovals,
       });
       if (agent.thread.hasPendingApprovals) this.send({ type: "agentToolPermission", id });
     }
