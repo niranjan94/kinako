@@ -1,6 +1,7 @@
 import {
   OrchestrationDispatchCommandError,
   CoreWsRpcGroup,
+  OrchestrationRpcGroup,
   DatabaseRpcGroup,
   VcsRpcGroup,
   FollowUpRpcGroup,
@@ -560,6 +561,7 @@ const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 // Middleware added later wraps middleware added earlier, so instrumentation wraps authorization.
 const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
 const CoreServerWsRpcGroup = CoreWsRpcGroup.middleware(RpcInstrumentation);
+const OrchestrationServerRpcGroup = OrchestrationRpcGroup.middleware(RpcInstrumentation);
 const DatabaseServerRpcGroup = DatabaseRpcGroup.middleware(RpcInstrumentation);
 const VcsServerRpcGroup = VcsRpcGroup.middleware(RpcInstrumentation);
 const FollowUpServerRpcGroup = FollowUpRpcGroup.middleware(RpcInstrumentation);
@@ -1206,7 +1208,7 @@ export const layerWsRpc = (
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
 ) =>
-  CoreServerWsRpcGroup.toLayer(
+  Layer.unwrap(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
       const sql = yield* SqlClient.SqlClient;
@@ -1822,7 +1824,7 @@ export const layerWsRpc = (
         return result;
       });
 
-      const handlers = CoreServerWsRpcGroup.of({
+      const orchestrationHandlers = OrchestrationServerRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -2075,6 +2077,8 @@ export const layerWsRpc = (
               Effect.as(commandOutputHub.subscribe(input)),
             ),
           ),
+      });
+      const handlers = CoreServerWsRpcGroup.of({
         [WS_METHODS.scheduledTasksList]: (_input) =>
           scheduledTasks.list().pipe(Effect.map(withVisibleWebhookUrls)),
         [WS_METHODS.scheduledTasksSubscribe]: (_input) =>
@@ -3151,7 +3155,10 @@ export const layerWsRpc = (
             ),
           ),
       });
-      return handlers;
+      return Layer.merge(
+        CoreServerWsRpcGroup.toLayer(handlers),
+        OrchestrationServerRpcGroup.toLayer(orchestrationHandlers),
+      );
     }),
   );
 
