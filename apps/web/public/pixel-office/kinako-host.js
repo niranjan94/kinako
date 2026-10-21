@@ -91,12 +91,12 @@
   ];
   const adaptControls = () => {
     // The upstream card only distinguishes working, idle, and attention.
-    // Keep Kinako failures and disconnected environments visibly distinct.
+    // Keep host lifecycle states visible without changing the pinned frontend.
     for (const card of document.querySelectorAll('[title^="Agent "]')) {
       const id = Number(/^Agent (\d+)/.exec(card.title)?.[1]);
       const activity = agentStates.get(id);
       if (!activity) continue;
-      const label =
+      const stateLabel =
         activity.state === "working"
           ? "Working"
           : activity.state === "error"
@@ -107,8 +107,11 @@
                 ? activity.approval
                   ? "Needs approval"
                   : "Waiting for input"
-                : "Idle";
-      card.title = `Agent ${id}: ${label}`;
+                : activity.state === "snoozed"
+                  ? `Snoozed until ${new Date(activity.snoozedUntil).toLocaleString()}`
+                  : "Idle";
+      const label = `${stateLabel}${activity.subagentCount > 0 ? ` · ${activity.subagentCount} subagent${activity.subagentCount === 1 ? "" : "s"}` : ""}`;
+      card.title = `Agent ${id}: ${activity.title} — ${label}`;
       card.setAttribute("aria-label", card.title);
       card.dataset.kinakoState = activity.state;
       const dot = card.querySelector("span.size-6");
@@ -120,7 +123,20 @@
               ? "var(--color-status-permission)"
               : activity.state === "working"
                 ? "var(--color-accent-bright)"
-                : "var(--color-status-success)";
+                : activity.state === "snoozed"
+                  ? "var(--color-text-muted)"
+                  : "var(--color-status-success)";
+      let snoozeBadge = card.querySelector("[data-kinako-snooze]");
+      if (activity.state === "snoozed" && !snoozeBadge) {
+        card.style.position = "relative";
+        snoozeBadge = document.createElement("span");
+        snoozeBadge.dataset.kinakoSnooze = "";
+        snoozeBadge.className = "absolute bottom-0 right-0 text-xs bg-bg text-text px-2";
+        snoozeBadge.textContent = "Zzz";
+        card.append(snoozeBadge);
+      } else if (activity.state !== "snoozed") {
+        snoozeBadge?.remove();
+      }
       const overlay = document.querySelector(
         `[data-testid="agent-overlay"][data-agent-id="${id}"]`,
       );
