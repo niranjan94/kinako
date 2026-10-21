@@ -2292,6 +2292,9 @@ export const CoreWsRpcGroup = RpcGroup.make(
   WsSubscribeAuthAccessRpc,
   WsSubscribeBackgroundPolicyRpc,
   WsSubscribeResourceTelemetryRpc,
+).middleware(RpcScopeAuthorization);
+
+export const OrchestrationRpcGroup = RpcGroup.make(
   WsOrchestrationV2DispatchCommandRpc,
   WsOrchestrationV2GetWorkflowScriptRpc,
   WsOrchestrationV2StopWorkflowRpc,
@@ -2344,4 +2347,9 @@ export const FollowUpRpcGroup = RpcGroup.make(
   WsFollowUpsSetDismissedRpc,
 ).middleware(RpcScopeAuthorization);
 
-export const WsRpcGroup = CoreWsRpcGroup.merge(DatabaseRpcGroup, VcsRpcGroup, FollowUpRpcGroup);
+export const WsRpcGroup = CoreWsRpcGroup.merge(
+  OrchestrationRpcGroup,
+  DatabaseRpcGroup,
+  VcsRpcGroup,
+  FollowUpRpcGroup,
+);
