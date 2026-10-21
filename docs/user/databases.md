@@ -5,6 +5,14 @@ from the database explorer. The environment opens the database, so a remote
 browser or phone can reach databases available only on that machine. SQLite
 paths refer to existing files on the environment.
 
+For a Postgres server with multiple databases, set **Databases to show** to
+**All databases** or **Selected databases** in its connection settings. Enter one
+name per line for a selected subset. The initial database is used to connect
+and discover databases; all databases shows non-template databases your user
+can connect to. Expand a database to browse its schemas, or open a query console
+for it. Consoles also let you change databases from the editor toolbar. Existing
+connections show only their configured database until you change this setting.
+
 Choose where a connection is **Available in**:
 
 - **This project** makes it available to one project on one environment.

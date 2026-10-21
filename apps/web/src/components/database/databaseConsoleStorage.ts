@@ -14,6 +14,7 @@ const WRITE_DELAY_MS = 300;
 const StoredTab = Schema.Struct({
   id: Schema.String,
   connectionId: DatabaseConnectionId,
+  database: Schema.optionalKey(Schema.String),
   title: Schema.String,
   sql: Schema.String,
   filePath: Schema.optionalKey(Schema.String),
@@ -99,6 +100,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
 const storedTab = (tab: DatabaseWorkspaceTab): typeof StoredTab.Type => ({
   id: tab.id,
   connectionId: tab.connectionId,
+  ...(tab.database !== undefined ? { database: tab.database } : {}),
   title: tab.title,
   sql: tab.sql,
   ...(tab.filePath !== undefined ? { filePath: tab.filePath } : {}),

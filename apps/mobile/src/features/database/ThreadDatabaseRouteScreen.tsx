@@ -85,6 +85,7 @@ function DatabaseScreen({
   const status = presentation?.connection.phase;
   const [connection, setConnection] = useState<DatabaseConnection | null>(null);
   const [metadata, setMetadata] = useState<DatabaseIntrospectResult | null>(null);
+  const [databaseName, setDatabaseName] = useState<string | undefined>(undefined);
   const [scope, setScope] = useState<DatabaseIntrospectScope>({ kind: "schemas" });
   const [sql, setSql] = useState("SELECT 1");
   const [result, setResult] = useState<DatabaseExecuteResult | null>(null);
@@ -129,17 +130,34 @@ function DatabaseScreen({
       );
     };
   }, [environmentId, projectId, registry]);
-  const describe = async (next: DatabaseIntrospectScope, nextConnection = connection) => {
+  const describe = async (
+    next: DatabaseIntrospectScope,
+    nextConnection = connection,
+    nextDatabase = nextConnection?.id === connection?.id ? databaseName : undefined,
+  ) => {
     if (!nextConnection || running.current) return;
     running.current = true;
     setBusy(true);
     setError(null);
     setScope(next);
+    setMetadata(null);
+    if (next.kind === "databases") {
+      nextDatabase = undefined;
+      setDatabaseName(undefined);
+      setResult(null);
+      setTablePage(null);
+    } else setDatabaseName(nextDatabase);
     try {
+      if (next.kind === "databases") await closeResult();
       const data = value(
         await databaseState.introspect.run(registry, {
           environmentId,
-          input: { projectId, connectionId: nextConnection.id, scope: next },
+          input: {
+            projectId,
+            connectionId: nextConnection.id,
+            ...(nextDatabase !== undefined ? { database: nextDatabase } : {}),
+            scope: next,
+          },
         }),
       );
       if (mounted.current) setMetadata(data);
@@ -161,7 +179,7 @@ function DatabaseScreen({
     queryId.current = undefined;
   };
   const execute = async () => {
-    if (!connection || running.current || !sql.trim()) return;
+    if (!connection || running.current || !sql.trim() || scope.kind === "databases") return;
     running.current = true;
     setBusy(true);
     setError(null);
@@ -173,7 +191,14 @@ function DatabaseScreen({
       const data = value(
         await databaseState.execute.run(registry, {
           environmentId,
-          input: { projectId, connectionId: connection.id, queryId: id, sql, forceReadOnly: true },
+          input: {
+            projectId,
+            connectionId: connection.id,
+            ...(databaseName !== undefined ? { database: databaseName } : {}),
+            queryId: id,
+            sql,
+            forceReadOnly: true,
+          },
         }),
       );
       if (mounted.current) setResult(data);
@@ -198,6 +223,7 @@ function DatabaseScreen({
           input: {
             projectId,
             connectionId: connection.id,
+            ...(databaseName !== undefined ? { database: databaseName } : {}),
             schema,
             object,
             offset: more ? (tablePage?.offset ?? 0) : 0,
@@ -255,7 +281,11 @@ function DatabaseScreen({
             label: scope.schema,
             scope: { kind: "objects", schema: scope.schema } as const,
           }
-        : null;
+        : scope.kind === "schemas" &&
+            connection?.target.engine === "postgres" &&
+            connection.target.databaseSelection
+          ? { label: "All databases", scope: { kind: "databases" } as const }
+          : null;
   const resultColumns = useMemo(
     () =>
       result?.kind === "rows"
@@ -287,7 +317,17 @@ function DatabaseScreen({
                 onPress={() => {
                   setConnection(item);
                   setResult(null);
-                  void describe({ kind: "schemas" }, item);
+                  setDatabaseName(undefined);
+                  void describe(
+                    {
+                      kind:
+                        item.target.engine === "postgres" && item.target.databaseSelection
+                          ? "databases"
+                          : "schemas",
+                    },
+                    item,
+                    undefined,
+                  );
                 }}
               />
             ))}
@@ -320,7 +360,8 @@ function DatabaseScreen({
                 }}
               />
               <AppText className="self-center font-t3-medium">
-                {connection.name} · Read-only
+                {connection.name}
+                {databaseName ? ` · ${databaseName}` : ""} · Read-only
               </AppText>
             </View>
             <ScrollView style={result ? { maxHeight: "40%" } : { flex: 1 }}>
@@ -331,6 +372,18 @@ function DatabaseScreen({
                   accessibilityLabel={`Back to ${parent.label}`}
                   onPress={() => void describe(parent.scope)}
                 />
+              )}
+              {metadata?.kind === "databases" &&
+                metadata.databases.map((item) => (
+                  <DatabaseRow
+                    key={item.name}
+                    busy={busy}
+                    label={item.name}
+                    onPress={() => void describe({ kind: "schemas" }, connection, item.name)}
+                  />
+                ))}
+              {metadata?.kind === "databases" && metadata.databases.length === 0 && (
+                <AppText className="p-4">No databases available.</AppText>
               )}
               {metadata?.kind === "schemas" &&
                 metadata.schemas.map((schema) => (
@@ -383,7 +436,7 @@ function DatabaseScreen({
                 <Button
                   label="Run read-only query"
                   loading={busy}
-                  disabled={!allowed || !sql.trim()}
+                  disabled={!allowed || !sql.trim() || scope.kind === "databases"}
                   onPress={() => void execute()}
                 />
                 <Button

@@ -35,6 +35,7 @@ import {
   DialogPanel,
   DialogFooter,
 } from "../ui/dialog";
+import { Textarea } from "../ui/textarea";
 import { DatabaseSelect } from "./DatabaseSelect";
 import { databaseErrorMessage, databaseValue } from "./databaseHooks";
 
@@ -67,6 +68,16 @@ export function DatabaseConnectionDialog({
   const [host, setHost] = useState(pg?.host ?? "localhost");
   const [port, setPort] = useState(String(pg?.port ?? 5432));
   const [database, setDatabase] = useState(pg?.database ?? "");
+  const [databaseMode, setDatabaseMode] = useState<"single" | "all" | "selected">(
+    pg?.databaseSelection === undefined
+      ? "single"
+      : pg.databaseSelection === "all"
+        ? "all"
+        : "selected",
+  );
+  const [selectedDatabases, setSelectedDatabases] = useState(
+    pg?.databaseSelection && pg.databaseSelection !== "all" ? pg.databaseSelection.join("\n") : "",
+  );
   const [user, setUser] = useState(pg?.user ?? "");
   const [sslMode, setSslMode] = useState<DatabasePostgresSslMode>(pg?.sslMode ?? "prefer");
   const auth = pg?.auth;
@@ -128,7 +139,30 @@ export function DatabaseConnectionDialog({
       target:
         engine === "sqlite"
           ? { engine, path }
-          : { engine, host, port: Number(port), database, user, sslMode, ...postgresAuth() },
+          : {
+              engine,
+              host,
+              port: Number(port),
+              database,
+              user,
+              sslMode,
+              ...postgresAuth(),
+              ...(databaseMode === "single"
+                ? {}
+                : {
+                    databaseSelection:
+                      databaseMode === "all"
+                        ? "all"
+                        : [
+                            ...new Set(
+                              selectedDatabases
+                                .split("\n")
+                                .map((name) => name.trim())
+                                .filter(Boolean),
+                            ),
+                          ],
+                  }),
+            },
       readOnly,
       ...(engine === "postgres" && !usesPassword
         ? {}
@@ -312,7 +346,9 @@ export function DatabaseConnectionDialog({
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex min-w-0 flex-col gap-1.5">
-                      <Label htmlFor={`${id}-database`}>Database</Label>
+                      <Label htmlFor={`${id}-database`}>
+                        {databaseMode === "single" ? "Database" : "Initial database"}
+                      </Label>
                       <Input
                         id={`${id}-database`}
                         value={database}
@@ -329,6 +365,41 @@ export function DatabaseConnectionDialog({
                       />
                     </div>
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`${id}-database-mode`}>Databases to show</Label>
+                    <DatabaseSelect
+                      id={`${id}-database-mode`}
+                      label="Databases to show"
+                      value={databaseMode}
+                      options={[
+                        { value: "single", label: "Only the initial database" },
+                        { value: "all", label: "All databases" },
+                        { value: "selected", label: "Selected databases" },
+                      ]}
+                      onChange={setDatabaseMode}
+                    />
+                    {databaseMode !== "single" && (
+                      <p className="text-xs text-muted-foreground">
+                        The initial database is used to connect to the server. All databases lists
+                        those your user can connect to.
+                      </p>
+                    )}
+                  </div>
+                  {databaseMode === "selected" && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor={`${id}-selected-databases`}>Database names</Label>
+                      <Textarea
+                        id={`${id}-selected-databases`}
+                        value={selectedDatabases}
+                        onChange={(event) => setSelectedDatabases(event.target.value)}
+                        placeholder={"app\nanalytics\nreporting"}
+                        rows={3}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter one database name per line. New query consoles use the first database.
+                      </p>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor={`${id}-auth`}>Authentication</Label>
                     <DatabaseSelect

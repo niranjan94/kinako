@@ -36,8 +36,12 @@ const list = Tool.make("db_list_connections", {
 const describe = Tool.make("db_describe", {
   ...shared,
   description:
-    "Browse a database one level at a time: schemas, objects in a schema, or columns of an object. Only this thread's project connections are accessible.",
-  parameters: Schema.Struct({ connectionId: DatabaseConnectionId, scope: DatabaseIntrospectScope }),
+    "Browse a database one level at a time: databases on a server, schemas, objects in a schema, or columns of an object. Pass database to choose a database from the server. Only this thread's project connections are accessible.",
+  parameters: Schema.Struct({
+    connectionId: DatabaseConnectionId,
+    database: DatabaseExecuteInput.fields.database,
+    scope: DatabaseIntrospectScope,
+  }),
   success: DatabaseIntrospectResult,
 })
   .annotate(Tool.Readonly, true)
@@ -48,6 +52,7 @@ const query = Tool.make("db_query", {
     "Run one SQL statement in a fresh read-only session on this environment. Returns at most rowCap rows (default 200, maximum 500), with bounded text cells. hasMore means rows were omitted; the result is already closed. Read-only is an accident guard; use a SELECT-only database role for a real boundary.",
   parameters: Schema.Struct({
     connectionId: DatabaseConnectionId,
+    database: DatabaseExecuteInput.fields.database,
     sql: DatabaseExecuteInput.fields.sql,
     rowCap: Schema.optionalKey(PositiveInt.check(Schema.isLessThanOrEqualTo(500))),
   }),

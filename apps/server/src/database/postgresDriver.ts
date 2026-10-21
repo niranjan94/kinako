@@ -144,6 +144,15 @@ const RELKIND_TYPES = {
 
 async function introspect(client: pg.Client, scope: DatabaseIntrospectScope) {
   switch (scope.kind) {
+    case "databases": {
+      const result = await client.query<{ name: string }>(
+        `SELECT datname AS name FROM pg_database
+         WHERE datallowconn AND NOT datistemplate
+           AND has_database_privilege(oid, 'CONNECT')
+         ORDER BY datname`,
+      );
+      return { kind: "databases" as const, databases: result.rows };
+    }
     case "schemas": {
       const result = await client.query<{ name: string }>(
         `SELECT nspname AS name FROM pg_namespace

@@ -1,3 +1,4 @@
+import pg from "pg";
 import * as NodeURL from "node:url";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
@@ -111,6 +112,159 @@ const seedOrders = (connection: DatabaseConnection) =>
 
 layer("DatabaseService", (it) => {
   if (process.env.T3_TEST_POSTGRES_PORT) {
+    it.effect(
+      "discovers sibling databases and routes metadata, tables, queries and sessions to their database",
+      () =>
+        Effect.gen(function* () {
+          const database = yield* DatabaseService.DatabaseService;
+          const names = [
+            `selection_app_${process.pid}`,
+            `selection_analytics_${process.pid}`,
+          ] as const;
+          const config = {
+            host: "127.0.0.1",
+            port: Number(process.env.T3_TEST_POSTGRES_PORT),
+            user: "postgres",
+            password: "kinako-issue15-test",
+          };
+          const admin = yield* Effect.acquireRelease(
+            Effect.promise(async () => {
+              const client = new pg.Client({ ...config, database: "postgres" });
+              await client.connect();
+              return client;
+            }),
+            (client) => Effect.promise(() => client.end()),
+          );
+          yield* Effect.acquireRelease(
+            Effect.promise(async () => {
+              for (const [index, name] of names.entries()) {
+                await admin.query(`CREATE DATABASE "${name}"`);
+                const client = new pg.Client({ ...config, database: name });
+                await client.connect();
+                try {
+                  await client.query(
+                    `CREATE TABLE orders (id integer PRIMARY KEY, value text${index ? ", report text" : ""})`,
+                  );
+                  await client.query("INSERT INTO orders (id, value) VALUES (1, $1)", [name]);
+                } finally {
+                  await client.end();
+                }
+              }
+            }),
+            () =>
+              Effect.promise(async () => {
+                for (const name of names) await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+              }),
+          );
+          const connection = yield* database.saveConnection({
+            level: "environment",
+            name: "multi-database",
+            readOnly: true,
+            target: {
+              engine: "postgres",
+              ...config,
+              database: "postgres",
+              sslMode: "disable",
+              databaseSelection: "all",
+            },
+            password: config.password,
+          });
+          const discovered = yield* database.introspect({
+            connectionId: connection.id,
+            scope: { kind: "databases" },
+          });
+          assert.strictEqual(discovered.kind, "databases");
+          if (discovered.kind !== "databases") return;
+          for (const name of names)
+            assert.include(
+              discovered.databases.map((item) => item.name),
+              name,
+            );
+          assert.notInclude(
+            discovered.databases.map((item) => item.name),
+            "template1",
+          );
+          for (const name of names) {
+            const metadata = yield* database.introspect({
+              connectionId: connection.id,
+              database: name,
+              scope: { kind: "columns", schema: "public", object: "orders" },
+            });
+            assert.strictEqual(metadata.kind, "columns");
+            if (metadata.kind === "columns")
+              assert.deepStrictEqual(
+                metadata.columns.map((column) => column.name),
+                name === names[0] ? ["id", "value"] : ["id", "value", "report"],
+              );
+            const rows = yield* database.browseTable({
+              connectionId: connection.id,
+              database: name,
+              schema: "public",
+              object: "orders",
+            });
+            assert.deepStrictEqual(rows.rows[0]?.slice(0, 2), [1, name]);
+            const queried = expectKind(
+              yield* database.queryReadOnly({
+                connectionId: connection.id,
+                database: name,
+                sql: "SELECT current_database()",
+              }),
+              "rows",
+            );
+            assert.deepStrictEqual(queried.rows, [[name]]);
+          }
+          const sessionId = DatabaseSessionId.make("database-routing");
+          yield* database.openSession({
+            connectionId: connection.id,
+            database: names[1]!,
+            sessionId,
+          });
+          const result = expectKind(
+            yield* database.execute({
+              connectionId: connection.id,
+              sessionId,
+              queryId: nextQueryId(),
+              sql: "SELECT current_database()",
+            }),
+            "rows",
+          );
+          assert.deepStrictEqual(result.rows, [[names[1]]]);
+          const mismatch = yield* database
+            .execute({
+              connectionId: connection.id,
+              database: names[0]!,
+              sessionId,
+              queryId: nextQueryId(),
+              sql: "SELECT current_database()",
+            })
+            .pipe(Effect.flip);
+          assert.strictEqual(mismatch.failure, "database-not-selected");
+          yield* database.closeSession({ sessionId });
+          const selected = yield* database.saveConnection({
+            id: connection.id,
+            level: "environment",
+            name: connection.name,
+            readOnly: connection.readOnly,
+            target: {
+              ...connection.target,
+              engine: "postgres",
+              ...config,
+              database: "postgres",
+              sslMode: "disable",
+              databaseSelection: [names[1]!],
+            },
+          });
+          const defaultQuery = expectKind(
+            yield* database.queryReadOnly({
+              connectionId: selected.id,
+              sql: "SELECT current_database()",
+            }),
+            "rows",
+          );
+          assert.deepStrictEqual(defaultQuery.rows, [[names[1]]]);
+          yield* database.deleteConnection({ id: connection.id });
+        }),
+    );
     it.effect("uses console search_path for completion while a result cursor is open", () =>
       Effect.gen(function* () {
         const database = yield* DatabaseService.DatabaseService;
@@ -170,6 +324,72 @@ layer("DatabaseService", (it) => {
       }),
     );
   }
+  it.effect("persists a selected subset and rejects databases outside it before connecting", () =>
+    Effect.gen(function* () {
+      const database = yield* DatabaseService.DatabaseService;
+      const connection = yield* database.saveConnection({
+        level: "environment",
+        name: "selected",
+        readOnly: true,
+        target: {
+          engine: "postgres",
+          host: "localhost",
+          port: 5432,
+          user: "reader",
+          database: "postgres",
+          sslMode: "disable",
+          databaseSelection: ["analytics", "app", "analytics"],
+        },
+      });
+      assert.deepStrictEqual(
+        (yield* database.listConnections()).connections.find((item) => item.id === connection.id)
+          ?.target,
+        connection.target,
+      );
+      assert.deepStrictEqual(
+        yield* database.introspect({ connectionId: connection.id, scope: { kind: "databases" } }),
+        { kind: "databases", databases: [{ name: "analytics" }, { name: "app" }] },
+      );
+      const input = { connectionId: connection.id, database: "excluded" };
+      for (const operation of [
+        database.introspect({ ...input, scope: { kind: "schemas" } }),
+        database.openSession({ ...input, sessionId: DatabaseSessionId.make("excluded") }),
+        database.browseTable({ ...input, schema: "public", object: "orders" }),
+        database.queryReadOnly({ ...input, sql: "SELECT 1" }),
+      ]) {
+        const error = yield* operation.pipe(Effect.flip);
+        assert.strictEqual(error.failure, "database-not-selected");
+      }
+      yield* database.deleteConnection({ id: connection.id });
+    }),
+  );
+  it.effect("keeps legacy connections limited to the configured database", () =>
+    Effect.gen(function* () {
+      const database = yield* DatabaseService.DatabaseService;
+      const connection = yield* database.saveConnection({
+        level: "environment",
+        name: "legacy",
+        readOnly: true,
+        target: {
+          engine: "postgres",
+          host: "localhost",
+          port: 5432,
+          user: "reader",
+          database: "app",
+          sslMode: "disable",
+        },
+      });
+      assert.deepStrictEqual(
+        yield* database.introspect({ connectionId: connection.id, scope: { kind: "databases" } }),
+        { kind: "databases", databases: [{ name: "app" }] },
+      );
+      const error = yield* database
+        .queryReadOnly({ connectionId: connection.id, database: "other", sql: "SELECT 1" })
+        .pipe(Effect.flip);
+      assert.strictEqual(error.failure, "database-not-selected");
+      yield* database.deleteConnection({ id: connection.id });
+    }),
+  );
   it.effect("keeps passwords on the server and edits them only when asked", () =>
     Effect.gen(function* () {
       const database = yield* DatabaseService.DatabaseService;
