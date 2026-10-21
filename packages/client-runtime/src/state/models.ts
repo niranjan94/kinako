@@ -7,6 +7,7 @@ import type {
   OrchestrationProjectShell,
   OrchestrationV2ProviderGoal,
   OrchestrationV2RunStatus,
+  OrchestrationV2TurnRecap,
   OrchestrationV2ProviderFailureClass,
   OrchestrationV2ThreadProjection,
   OrchestrationV2ThreadShell,
@@ -43,6 +44,7 @@ export interface ThreadRunSummary {
   readonly startedAt: string | null;
   readonly completedAt: string | null;
   readonly assistantMessageId: MessageId | null;
+  readonly recap?: OrchestrationV2TurnRecap;
   /**
    * The run is still open, but its provider turn already ended, so nothing is
    * generating while the server settles it.

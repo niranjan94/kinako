@@ -31,6 +31,10 @@ import { forkParked } from "../serverActivation.ts";
 
 export const OrchestrationEffectRequestV2 = Schema.Union([
   Schema.Struct({
+    type: Schema.Literal("run-recap.generate"),
+    runId: RunId,
+  }),
+  Schema.Struct({
     type: Schema.Literal("provider-runtime.continue"),
     sourceRunId: RunId,
   }),
@@ -138,6 +142,7 @@ export const REPLAY_SAFE_EFFECT_TYPES_AFTER_PROCESS_LOSS = [
   "attachment.cleanup",
   "thread-title.generate",
   "thread-summary.generate",
+  "run-recap.generate",
   "delegated-tasks.stop",
 ] as const satisfies ReadonlyArray<OrchestrationEffectRequestV2["type"]>;
 
@@ -338,6 +343,15 @@ export const layer: Layer.Layer<EffectOutboxV2, never, SqlClient.SqlClient> = La
             : sql`candidate.available_at <= ${availableBefore}`
         }
         AND candidate.status = 'pending'
+        -- Recaps share the four-worker pool with starts, interrupts, and approvals.
+        -- Claim at most one across all threads so generation cannot occupy the pool.
+        AND (
+          candidate.effect_type != 'run-recap.generate'
+          OR NOT EXISTS (
+            SELECT 1 FROM orchestration_v2_effect_outbox AS recap
+            WHERE recap.effect_type = 'run-recap.generate' AND recap.status = 'running'
+          )
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM orchestration_v2_effect_outbox AS active
@@ -356,13 +370,13 @@ export const layer: Layer.Layer<EffectOutboxV2, never, SqlClient.SqlClient> = La
             )
             AND (
               (
-                candidate.effect_type = 'thread-title.generate'
-                AND active.effect_type = 'thread-title.generate'
+                candidate.effect_type IN ('thread-title.generate', 'run-recap.generate')
+                AND active.effect_type = candidate.effect_type
               )
               OR
               (
-                candidate.effect_type != 'thread-title.generate'
-                AND active.effect_type != 'thread-title.generate'
+                candidate.effect_type NOT IN ('thread-title.generate', 'run-recap.generate')
+                AND active.effect_type NOT IN ('thread-title.generate', 'run-recap.generate')
               )
             )
         )

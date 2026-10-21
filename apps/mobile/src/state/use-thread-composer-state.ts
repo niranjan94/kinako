@@ -409,7 +409,7 @@ export function useThreadComposerState() {
         latestRun: selectedThreadActivityRun,
         runtime: selectedThreadRuntime,
         pendingRequests: selectedThreadPendingRequests,
-        messages: selectedThreadProjection.projection.messages,
+        pendingBackgroundTasks: selectedThread?.pendingBackgroundTasks ?? [],
         checkpoints: selectedThreadCheckpointSummaries,
       })
     : null;

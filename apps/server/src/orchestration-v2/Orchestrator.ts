@@ -1,3 +1,4 @@
+import { turnRecapEffects } from "./TurnRecap.ts";
 import type {
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -500,6 +501,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "checkpoint.rollback":
     case "checkpoint.rollback.fail":
     case "thread.summarize":
+    case "run.recap.complete":
     case "thread.summarize.complete":
     case "thread.summarize.fail":
     case "thread.summary.restore":
@@ -10773,6 +10775,39 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     ]);
   });
 
+  const dispatchRunRecapComplete = Effect.fn("orchestrationV2.dispatch.runRecapComplete")(
+    function* (
+      command: Extract<OrchestrationV2InternalCommand, { readonly type: "run.recap.complete" }>,
+      events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    ) {
+      const { thread, runs } = yield* projectionStore
+        .getThreadRecords(command.threadId, ["runs"], {
+          runIds: [command.runId],
+          turnItemTypes: [],
+        })
+        .pipe(mapDispatchError(command));
+      const run = runs[0];
+      if (
+        thread.deletedAt !== null ||
+        run === undefined ||
+        run.recap !== undefined ||
+        (run.status !== "completed" && run.status !== "failed")
+      )
+        return;
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "run.recap-updated",
+        threadId: command.threadId,
+        runId: run.id,
+        providerInstanceId: run.providerInstanceId,
+        occurredAt: yield* DateTime.now,
+        payload: { runId: run.id, recap: command.recap },
+      });
+    },
+  );
+
   /**
    * Replaces the covered runs in provider context with the generated summary.
    * A thread that changed while the summary was written records the failure
@@ -12472,6 +12507,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.summarize":
         yield* dispatchThreadSummarize(command, events, effects);
         break;
+      case "run.recap.complete":
+        yield* dispatchRunRecapComplete(command, events);
+        break;
       case "thread.summarize.complete":
         yield* dispatchThreadSummarizeComplete(command, events, effects);
         break;
@@ -12512,9 +12550,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       default:
         return yield* dispatchUnsupported(command);
     }
+    const decidedEvents = yield* Ref.get(events);
     return {
-      events: yield* Ref.get(events),
-      effects: yield* Ref.get(effects),
+      events: decidedEvents,
+      effects: [...(yield* Ref.get(effects)), ...turnRecapEffects(decidedEvents)],
       ...(cancelUnsettledEffects === undefined ? {} : { cancelUnsettledEffects }),
     };
   });
@@ -12594,6 +12633,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     const plan = yield* dispatchOnce(command).pipe(
       Effect.flatMap((planned) =>
         planned.events.length > 0 ||
+        command.type === "run.recap.complete" ||
         command.type === "thread.snooze.wake-announce" ||
         command.type === "thread.background-work.settle" ||
         command.type === "thread.stop" ||

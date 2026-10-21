@@ -1,3 +1,4 @@
+import { turnRecapEffects } from "./TurnRecap.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
@@ -382,6 +383,7 @@ export const layer: Layer.Layer<
             activeAttemptId: attempt.id,
             expectedStatus: "starting",
             events,
+            effects: turnRecapEffects(events),
           });
         },
       );

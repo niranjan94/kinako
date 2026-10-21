@@ -1,3 +1,4 @@
+import { turnRecapPreview } from "@t3tools/client-runtime/state/turn-recap";
 import * as Dialog from "../../components/ui/Dialog";
 import type { ThreadRowProviderInstance } from "./thread-provider-instance";
 import {
@@ -1148,6 +1149,19 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       >
         {thread.title}
       </Text>
+      {turnRecapPreview(thread) ? (
+        <Text
+          className={cn(
+            "mt-1 text-xs",
+            selected
+              ? selectedThreadRowColors.mutedForegroundClassName
+              : rowAppearance.mutedForegroundClassName,
+          )}
+          numberOfLines={1}
+        >
+          {turnRecapPreview(thread)}
+        </Text>
+      ) : null}
       {props.searchMatch ? (
         <View className="mt-1">
           <ThreadSearchMatchExcerpt

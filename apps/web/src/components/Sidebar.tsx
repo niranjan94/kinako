@@ -1,3 +1,4 @@
+import { turnRecapPreview } from "@t3tools/client-runtime/state/turn-recap";
 import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "./ThreadHoverCard";
@@ -1035,6 +1036,7 @@ function SidebarThreadTooltip({
     .filter((instanceId) => instanceId !== modelInstanceId)
     .map((instanceId) => providerEntryByInstanceId.get(instanceId)?.displayName ?? instanceId);
   const supportsMultiplePullRequests = useSupportsMultiplePullRequests(thread.environmentId);
+  const recapPreview = turnRecapPreview(thread);
   return (
     <ThreadHoverCardPopup side="right" align="start" sideOffset={4}>
       <ThreadHoverCard
@@ -1047,6 +1049,7 @@ function SidebarThreadTooltip({
           ) : null
         }
       >
+        {recapPreview ? <p className="wrap-break-word text-foreground/85">{recapPreview}</p> : null}
         {projectDisplayName ? (
           <div className="flex min-w-0 items-center gap-2">
             {project ? <ProjectFavicon project={project} className="size-3 shrink-0" /> : null}
@@ -2122,6 +2125,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         {thread.title}
       </span>
     );
+  const recapPreview = turnRecapPreview(thread);
   const accessibleTitle = isRenaming ? null : <span className="sr-only">{thread.title}</span>;
 
   const prBadgeShape = supportsMultiplePullRequests
@@ -2248,6 +2252,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             </span>
             {draftIndicator}
             {title}
+            {recapPreview ? (
+              <span className="min-w-0 flex-1 truncate text-xs text-secondary-label">
+                {recapPreview}
+              </span>
+            ) : null}
             {pinIndicator}
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
@@ -2566,6 +2575,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               ) : null}
             </div>
             <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-secondary-label text-xs">
+              {recapPreview ? (
+                <span className="min-w-0 flex-2 truncate text-secondary-label">{recapPreview}</span>
+              ) : null}
               {thread.branch ? (
                 <>
                   <ThreadWorktreeIndicator thread={thread} />

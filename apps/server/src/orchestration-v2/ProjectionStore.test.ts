@@ -5735,3 +5735,78 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
     }),
   );
 });
+
+it.effect.each([
+  ["memory", ProjectionStore.layerMemory],
+  ["SQL", layerTest],
+] as const)(
+  "%s persists recaps without marking the thread unread or leaking them into a newer run",
+  ([, layer]) =>
+    Effect.gen(function* () {
+      const store = yield* ProjectionStore.ProjectionStoreV2;
+      const threadId = yield* addRolledBackRecoveryCandidate("recap");
+      const initial = yield* store.getThreadProjection(threadId);
+      const run = {
+        ...initial.runs[0]!,
+        status: "completed" as const,
+        completedAt: initial.updatedAt,
+      };
+      yield* store.apply({
+        id: EventId.make("recap:complete"),
+        type: "run.updated",
+        threadId,
+        occurredAt: initial.updatedAt,
+        payload: run,
+      });
+      const recap = {
+        outcome: "waiting" as const,
+        summary: "Reran failed CI checks; watching PR #56.",
+        verification: "SQLite test failed.",
+        remainingWork: "Await the rerun.",
+        nextAction: null,
+        showCard: false,
+      };
+      yield* store.apply({
+        id: EventId.make("recap:generated"),
+        type: "run.recap-updated",
+        threadId,
+        runId: run.id,
+        occurredAt: DateTime.add(initial.updatedAt, { minutes: 5 }),
+        payload: { runId: run.id, recap },
+      });
+      // A late lifecycle snapshot cannot erase a separately generated recap.
+      yield* store.apply({
+        id: EventId.make("recap:stale-run"),
+        type: "run.updated",
+        threadId,
+        occurredAt: initial.updatedAt,
+        payload: run,
+      });
+      assert.deepEqual((yield* store.getThreadProjection(threadId)).runs[0]?.recap, recap);
+      for (const shell of [
+        yield* store.getThreadShell(threadId),
+        (yield* store.getShellSnapshot()).threads[0],
+      ]) {
+        assert.equal(shell?.latestRunRecapSummary, recap.summary);
+        assert.equal(
+          DateTime.formatIso(shell!.updatedAt),
+          DateTime.formatIso(initial.thread.updatedAt),
+        );
+      }
+      yield* store.apply({
+        id: EventId.make("recap:new-run"),
+        type: "run.created",
+        threadId,
+        occurredAt: initial.updatedAt,
+        payload: {
+          ...run,
+          id: RunId.make("recap:new-run"),
+          ordinal: 2,
+          status: "running",
+          completedAt: null,
+        },
+      });
+      assert.isUndefined((yield* store.getThreadShell(threadId))?.latestRunRecapSummary);
+      assert.isUndefined((yield* store.getShellSnapshot()).threads[0]?.latestRunRecapSummary);
+    }).pipe(Effect.provide(layer)),
+);

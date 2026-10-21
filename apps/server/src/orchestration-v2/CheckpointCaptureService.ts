@@ -1,3 +1,4 @@
+import { turnRecapEffect } from "./TurnRecap.ts";
 import {
   CheckpointScopeId,
   CommandId,
@@ -139,7 +140,7 @@ export const layer: Layer.Layer<
         threadId: input.threadId,
         commandType: "checkpoint.capture",
         acceptedAt: capturedAt,
-        effects: [],
+        effects: stopped ? [] : [turnRecapEffect(input.threadId, run.id)],
         events: [
           ...(threadStartCheckpoint === null
             ? []

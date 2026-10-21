@@ -58,6 +58,7 @@ function summarizeThreadRun(
     : undefined;
   return {
     runId: run.id,
+    ...(run.recap === undefined ? {} : { recap: run.recap }),
     status: run.status,
     requestedAt: DateTime.formatIso(run.requestedAt),
     startedAt: run.startedAt === null ? null : DateTime.formatIso(run.startedAt),

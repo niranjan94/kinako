@@ -254,9 +254,25 @@ export function applyOrchestrationV2ProjectionEvent(
       return { ...projection, thread: event.payload };
     case "run.created":
     case "run.updated": {
-      const next = { ...base, runs: upsertEntity(base.runs, event.payload) };
+      const current = base.runs.find((run) => run.id === event.payload.id);
+      const next = {
+        ...base,
+        runs: upsertEntity(base.runs, {
+          ...event.payload,
+          ...(event.payload.recap === undefined && current?.recap !== undefined
+            ? { recap: current.recap }
+            : {}),
+        }),
+      };
       return { ...next, visibleTurnItems: activeVisibleTurnItems(next) };
     }
+    case "run.recap-updated":
+      return {
+        ...projection,
+        runs: projection.runs.map((run) =>
+          run.id === event.payload.runId ? { ...run, recap: event.payload.recap } : run,
+        ),
+      };
     case "run.background-work-cancelled":
       return {
         ...base,

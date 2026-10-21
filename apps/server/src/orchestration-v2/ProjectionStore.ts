@@ -1,3 +1,4 @@
+import { OrchestrationV2TurnRecap } from "@t3tools/contracts";
 import { applyThreadPullRequestLinkUpdate } from "@t3tools/shared/threadPullRequests";
 import { projectTurnItemForWire } from "./WireProjection.ts";
 import * as Stream from "effect/Stream";
@@ -705,6 +706,7 @@ function preserveRunRecordedFields(
   if (current === undefined) return next;
   return {
     ...next,
+    ...(next.recap === undefined && current.recap !== undefined ? { recap: current.recap } : {}),
     ...(next.delegatedCompletion === undefined && current.delegatedCompletion !== undefined
       ? { delegatedCompletion: current.delegatedCompletion }
       : {}),
@@ -827,6 +829,13 @@ export function applyToProjection(
           ),
         ),
       });
+    case "run.recap-updated":
+      return {
+        ...projection,
+        runs: projection.runs.map((run) =>
+          run.id === event.payload.runId ? { ...run, recap: event.payload.recap } : run,
+        ),
+      };
     case "run.background-work-cancelled":
       return {
         ...base,
@@ -1064,6 +1073,7 @@ type ShellThreadRow = {
   readonly latest_run_requested_at: string | null;
   readonly latest_run_started_at: string | null;
   readonly latest_run_completed_at: string | null;
+  readonly latest_run_recap_summary: string | null;
   readonly latest_run_stop_requested: number;
   readonly active_run_id: string | null;
   readonly active_run_status: string | null;
@@ -1129,6 +1139,7 @@ const encodeThreadPayload = Schema.encodeEffect(
 const encodeThreadUpdatedAt = Schema.encodeEffect(
   OrchestrationV2AppThreadJsonSchema.fields.updatedAt,
 );
+const encodeTurnRecap = Schema.encodeEffect(Schema.fromJsonString(OrchestrationV2TurnRecap));
 const encodeRunPayload = Schema.encodeEffect(Schema.fromJsonString(OrchestrationV2RunJsonSchema));
 const encodeRestartCancelledBackgroundWork = Schema.encodeEffect(
   Schema.fromJsonString(OrchestrationV2RunJsonSchema.fields.restartCancelledBackgroundWork),
@@ -1612,6 +1623,7 @@ export function threadShellFromProjection(
     latestRunRequestedAt: latestRun?.requestedAt ?? null,
     latestRunStartedAt: latestRun?.startedAt ?? null,
     latestRunCompletedAt: latestRun?.completedAt ?? null,
+    ...(latestRun?.recap === undefined ? {} : { latestRunRecapSummary: latestRun.recap.summary }),
     latestRunStopRequested:
       latestRun != null &&
       projection.turnItems.some(
@@ -1745,6 +1757,7 @@ type ShellThreadState = {
   readonly latestRunRequestedAt: DateTime.Utc | null;
   readonly latestRunStartedAt: DateTime.Utc | null;
   readonly latestRunCompletedAt: DateTime.Utc | null;
+  readonly latestRunRecapSummary: string | undefined;
   readonly latestRunStopRequested: boolean;
   readonly activeRunId: RunId | null;
   readonly blockedOnThreadWait: boolean;
@@ -1906,6 +1919,9 @@ function shellFromState(input: {
     latestRunRequestedAt: input.state.latestRunRequestedAt,
     latestRunStartedAt: input.state.latestRunStartedAt,
     latestRunCompletedAt: input.state.latestRunCompletedAt,
+    ...(input.state.latestRunRecapSummary === undefined
+      ? {}
+      : { latestRunRecapSummary: input.state.latestRunRecapSummary }),
     latestRunStopRequested: input.state.latestRunStopRequested,
     activeRunId: input.state.activeRunId,
     blockedOnThreadWait: input.state.blockedOnThreadWait,
@@ -2094,10 +2110,22 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 requested_at = excluded.requested_at,
                 completed_at = excluded.completed_at,
                 payload_json = ${keepRecordedRunField(
-                  keepRecordedRunField(sql`excluded.payload_json`, "$.delegatedCompletion"),
+                  keepRecordedRunField(
+                    keepRecordedRunField(sql`excluded.payload_json`, "$.recap"),
+                    "$.delegatedCompletion",
+                  ),
                   "$.restartCancelledBackgroundWork",
                 )}
             `;
+              break;
+            }
+            case "run.recap-updated": {
+              const recapJson = yield* encodeTurnRecap(event.payload.recap);
+              yield* sql`
+                UPDATE orchestration_v2_projection_runs
+                SET payload_json = json_set(payload_json, '$.recap', json(${recapJson}))
+                WHERE run_id = ${event.payload.runId} AND thread_id = ${event.threadId}
+              `;
               break;
             }
             case "run.background-work-cancelled": {
@@ -2832,6 +2860,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             event.type !== "thread.visited" &&
             event.type !== "thread.marked-unread" &&
             event.type !== "thread.group-set" &&
+            event.type !== "run.recap-updated" &&
             event.type !== "thread.metadata-updated" &&
             event.type !== "thread.pull-request-synced" &&
             event.type !== "thread.pull-request-link-updated" &&
@@ -5728,6 +5757,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               presented.requested_at AS latest_run_requested_at,
               json_extract(presented.payload_json, '$.startedAt') AS latest_run_started_at,
               presented.completed_at AS latest_run_completed_at,
+              json_extract(presented.payload_json, '$.recap.summary') AS latest_run_recap_summary,
               EXISTS (
                 SELECT 1 FROM orchestration_v2_projection_turn_items stop_request
                 WHERE stop_request.thread_id = t.thread_id AND stop_request.run_id = presented.run_id
@@ -6327,6 +6357,10 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           latestRunRequestedAt,
           latestRunStartedAt,
           latestRunCompletedAt,
+          latestRunRecapSummary:
+            latestRunId === row.latest_run_id
+              ? (row.latest_run_recap_summary ?? undefined)
+              : undefined,
           latestRunStopRequested,
           activeRunId: row.active_run_id === null ? null : RunId.make(row.active_run_id),
           blockedOnThreadWait: deriveBlockedOnThreadWait({
