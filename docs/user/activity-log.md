@@ -17,3 +17,14 @@ Failed calls do not count as successful messages or creations. Waiting on a thre
 it finished, and an interrupt or cancellation request does not mean the thread stopped. When tool
 details are unavailable, summaries use a broader description instead of guessing how many threads
 were affected.
+
+## Catching up on a thread
+
+After a turn ends, a short generated summary helps you scan the thread list. Longer or more
+complicated work can also get a recap in the conversation, covering the outcome, checks, unfinished
+work, and next action. Simple answers and acknowledgements usually do not need another card.
+A turn ending does not mean the task is finished: a recap can describe progress, waiting, or a blocker.
+
+Recaps use the model selected in **Settings → Source Control → Text generation**. They appear when
+ready and do not prevent you from sending another message. If generation is unavailable, the final
+answer remains available; opening a thread does not retry generation.

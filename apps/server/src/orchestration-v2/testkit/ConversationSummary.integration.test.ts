@@ -15,7 +15,10 @@ import {
   TurnItemId,
 } from "@t3tools/contracts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import type { ConversationSummaryGenerationInput } from "@t3tools/provider-core/server/textGeneration";
+import type {
+  ConversationSummaryGenerationInput,
+  TurnRecapGenerationInput,
+} from "@t3tools/provider-core/server/textGeneration";
 import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -231,7 +234,9 @@ function makeAdapter(input: {
 
 function makeTextGeneration(
   requests: Ref.Ref<ReadonlyArray<ConversationSummaryGenerationInput>>,
+  recapRequests: Ref.Ref<ReadonlyArray<TurnRecapGenerationInput>>,
   fail = false,
+  failRecap = false,
 ): TextGeneration.TextGeneration["Service"] {
   const unused = (operation: string) => () =>
     Effect.die(new Error(`${operation} is unused in conversation summary tests`));
@@ -241,6 +246,23 @@ function makeTextGeneration(
     generateBranchName: unused("generateBranchName"),
     generateThreadTitle: unused("generateThreadTitle"),
     generateReviewGuide: unused("generateReviewGuide"),
+    generateTurnRecap: (input) =>
+      Ref.update(recapRequests, (requests) => [...requests, input]).pipe(
+        Effect.andThen(
+          failRecap
+            ? Effect.fail(
+                new TextGenerationError({ operation: "generateTurnRecap", detail: "Unavailable" }),
+              )
+            : Effect.succeed({
+                outcome: "progress" as const,
+                summary: "Recorded the release marker.",
+                verification: null,
+                remainingWork: null,
+                nextAction: null,
+                showCard: false,
+              }),
+        ),
+      ),
     generateConversationSummary: (input) =>
       Ref.update(requests, (existing) => [...existing, input]).pipe(
         Effect.andThen(
@@ -261,6 +283,7 @@ interface Harness {
   readonly turns: Ref.Ref<ReadonlyArray<CapturedTurn>>;
   readonly rollbacks: Ref.Ref<number>;
   readonly summaryRequests: Ref.Ref<ReadonlyArray<ConversationSummaryGenerationInput>>;
+  readonly recapRequests: Ref.Ref<ReadonlyArray<TurnRecapGenerationInput>>;
 }
 
 const runWithHarness = <A, E>(
@@ -268,6 +291,7 @@ const runWithHarness = <A, E>(
   options: {
     readonly capabilities?: OrchestrationV2ProviderCapabilities;
     readonly failGeneration?: boolean;
+    readonly failRecapGeneration?: boolean;
     readonly rollbackMode?: RollbackMode;
   },
   body: (
@@ -281,6 +305,7 @@ const runWithHarness = <A, E>(
         turns: yield* Ref.make<ReadonlyArray<CapturedTurn>>([]),
         rollbacks: yield* Ref.make(0),
         summaryRequests: yield* Ref.make<ReadonlyArray<ConversationSummaryGenerationInput>>([]),
+        recapRequests: yield* Ref.make<ReadonlyArray<TurnRecapGenerationInput>>([]),
       };
       const layerRegistry = ProviderAdapterRegistry.layerFromAdapters([
         makeAdapter({
@@ -305,7 +330,9 @@ const runWithHarness = <A, E>(
             {
               textGeneration: makeTextGeneration(
                 harness.summaryRequests,
+                harness.recapRequests,
                 options.failGeneration === true,
+                options.failRecapGeneration === true,
               ),
             },
           ),
@@ -660,3 +687,84 @@ describe("orchestration v2 conversation summary", () => {
     ),
   );
 });
+
+it.live("generates and saves a recap once per settled run without changing provider context", () =>
+  runWithHarness("saved-turn-recap", {}, (harness) =>
+    Effect.gen(function* () {
+      yield* createThread;
+      yield* send(1);
+      const current = yield* projection;
+      assert.equal(current.runs[0]?.recap?.summary, "Recorded the release marker.");
+      assert.equal(current.runs[0]?.recap?.showCard, false);
+      assert.equal(current.runs[0]?.status, "completed");
+      assert.isUndefined(current.thread.summarize);
+      assert.isFalse(current.turnItems.some((item) => item.type === "compaction"));
+      const requests = yield* Ref.get(harness.recapRequests);
+      assert.equal(requests.length, 1);
+      assert.include(requests[0]!.transcript, PROMPTS[1]);
+      yield* projection;
+      yield* projection;
+      assert.equal((yield* Ref.get(harness.recapRequests)).length, 1);
+      yield* send(2);
+      const after = yield* projection;
+      assert.equal(after.runs.filter((run) => run.recap !== undefined).length, 2);
+      const second = (yield* Ref.get(harness.recapRequests))[1]!;
+      assert.include(second.transcript, PROMPTS[2]);
+      assert.notInclude(second.transcript, PROMPTS[1]);
+    }),
+  ),
+);
+
+it.live("a failed recap generation leaves the turn usable and is not retried on opening", () =>
+  runWithHarness("failed-turn-recap", { failRecapGeneration: true }, (harness) =>
+    Effect.gen(function* () {
+      yield* createThread;
+      yield* send(1);
+      const current = yield* projection;
+      assert.equal(current.runs[0]?.status, "completed");
+      assert.isUndefined(current.runs[0]?.recap);
+      assert.equal((yield* Ref.get(harness.recapRequests)).length, 1);
+      yield* EffectWorker.OrchestrationEffectWorkerV2.use((worker) => worker.drain());
+      yield* projection;
+      assert.equal((yield* Ref.get(harness.recapRequests)).length, 1);
+      yield* send(2);
+      assert.equal((yield* projection).runs[1]?.status, "completed");
+    }),
+  ),
+);
+
+it.live("ignores a recap that arrives after its turn was rolled back", () =>
+  runWithHarness("rolled-back-turn-recap", { failRecapGeneration: true }, () =>
+    Effect.gen(function* () {
+      yield* createThread;
+      yield* send(1);
+      const run = (yield* projection).runs[0]!;
+      yield* summarize(1, "from_here");
+      yield* awaitStoredEvent(
+        (event) =>
+          event.type === "run.updated" &&
+          event.payload.id === run.id &&
+          event.payload.status === "rolled_back",
+      );
+      yield* Orchestrator.OrchestratorV2.use((orchestrator) =>
+        orchestrator.dispatch({
+          type: "run.recap.complete",
+          commandId: CommandId.make("recap:late-result"),
+          threadId,
+          runId: run.id,
+          recap: {
+            outcome: "completed",
+            summary: "An obsolete result.",
+            verification: null,
+            remainingWork: null,
+            nextAction: null,
+            showCard: true,
+          },
+        }),
+      );
+      const restored = (yield* projection).runs.find((candidate) => candidate.id === run.id)!;
+      assert.equal(restored.status, "rolled_back");
+      assert.isUndefined(restored.recap);
+    }),
+  ),
+);

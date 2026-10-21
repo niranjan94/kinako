@@ -7,6 +7,8 @@ import {
 import {
   CheckCircle2Icon,
   CircleAlertIcon,
+  CircleDotIcon,
+  ClockIcon,
   FileDiffIcon,
   GaugeIcon,
   MessageCircleQuestionIcon,
@@ -20,6 +22,9 @@ import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 
 const OUTCOME_PRESENTATION = {
   completed: { variant: "success", Icon: CheckCircle2Icon },
+  progress: { variant: "secondary", Icon: CircleDotIcon },
+  waiting: { variant: "warning", Icon: ClockIcon },
+  blocked: { variant: "warning", Icon: CircleAlertIcon },
   input: { variant: "warning", Icon: MessageCircleQuestionIcon },
   approval: { variant: "warning", Icon: ShieldAlertIcon },
   failed: { variant: "error", Icon: CircleAlertIcon },
@@ -36,8 +41,7 @@ export const TurnRecapCard = memo(function TurnRecapCard(props: {
   const { variant, Icon } = OUTCOME_PRESENTATION[recap.outcome];
   const { runId } = recap;
   const changes = changesShownAbove ? null : recap.changes;
-  const finalMessage = recap.finalMessage?.elided ? recap.finalMessage.text : null;
-  if (recap.outcome === "completed" && changes === null && finalMessage === null) return null;
+  const generated = recap.generated;
 
   return (
     <div className="mb-3 px-1">
@@ -85,10 +89,22 @@ export const TurnRecapCard = memo(function TurnRecapCard(props: {
             {recap.request}
           </p>
         ) : null}
-        {finalMessage ? (
-          <p className="line-clamp-3 wrap-break-word leading-relaxed text-muted-foreground">
-            {finalMessage}
-          </p>
+        {generated ? (
+          <>
+            <p className="wrap-break-word leading-relaxed text-foreground">{generated.summary}</p>
+            {[
+              ["Checks", generated.verification],
+              ["Remaining", generated.remainingWork],
+              ["Next", generated.nextAction],
+            ].map(([label, text]) =>
+              text ? (
+                <p key={label} className="wrap-break-word leading-relaxed text-muted-foreground">
+                  <span className="font-medium">{label}: </span>
+                  {text}
+                </p>
+              ) : null,
+            )}
+          </>
         ) : null}
       </section>
     </div>

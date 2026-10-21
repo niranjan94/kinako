@@ -1,10 +1,22 @@
-import type { MessageId, ProviderRequestKind, RunId } from "@t3tools/contracts";
+import type {
+  OrchestrationV2PendingBackgroundTask,
+  OrchestrationV2TurnRecap,
+  OrchestrationV2ThreadShell,
+  ProviderRequestKind,
+  RunId,
+} from "@t3tools/contracts";
+
+import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 
 import type { ThreadRunSummary, ThreadRuntimeSummary } from "./models.ts";
 import type { ThreadCheckpointSummary } from "./threadCheckpoints.ts";
 import type { PendingThreadRequests } from "./threadRequests.ts";
 
-export type TurnRecapOutcome = "completed" | "input" | "approval" | "failed" | "limited";
+export type TurnRecapOutcome =
+  | OrchestrationV2TurnRecap["outcome"]
+  | "approval"
+  | "failed"
+  | "limited";
 
 export interface TurnRecapChanges {
   readonly fileCount: number;
@@ -12,23 +24,20 @@ export interface TurnRecapChanges {
   readonly deletions: number;
 }
 
-export interface TurnRecapExcerpt {
-  readonly text: string;
-  /** The message says more than the excerpt, so the excerpt adds a summary rather than a copy. */
-  readonly elided: boolean;
-}
-
 export interface TurnRecap {
   readonly runId: RunId | null;
   readonly outcome: TurnRecapOutcome;
   /** What the agent is waiting on: the approval detail or the first question. */
   readonly request: string | null;
-  readonly finalMessage: TurnRecapExcerpt | null;
+  readonly generated: OrchestrationV2TurnRecap | null;
   readonly changes: TurnRecapChanges | null;
 }
 
 export const TURN_RECAP_OUTCOME_LABELS: Record<TurnRecapOutcome, string> = {
   completed: "Completed",
+  progress: "Progress made",
+  waiting: "Waiting",
+  blocked: "Blocked",
   input: "Needs input",
   approval: "Needs approval",
   failed: "Failed",
@@ -42,43 +51,6 @@ const APPROVAL_KIND_LABELS: Record<ProviderRequestKind, string> = {
   "mcp-elicitation": "App access approval",
   permission: "App permission approval",
 };
-
-const FINAL_MESSAGE_EXCERPT_MAX_LENGTH = 280;
-const FENCED_CODE_BLOCK = /```[\s\S]*?(?:```|$)/g;
-const MARKDOWN_LINK = /!?\[([^\]\n]*)\]\([^)\n]*\)/g;
-const HEADING_LINE = /^\s*#{1,6}\s/;
-const LINE_MARKER = /^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/;
-const INLINE_EMPHASIS = /\*\*|__|`/g;
-
-/** The opening prose of an assistant message as plain text, capped for a one-glance read. */
-export function turnRecapMessageExcerpt(text: string): TurnRecapExcerpt | null {
-  const paragraphs = text
-    .replace(FENCED_CODE_BLOCK, "\n\n")
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.split("\n").filter((line) => line.trim() !== ""))
-    .filter((paragraph) => paragraph.length > 0);
-  // Headings like "## Summary" say nothing about the turn, so prefer the prose under them.
-  const proseLines =
-    paragraphs
-      .map((paragraph) => paragraph.filter((line) => !HEADING_LINE.test(line)))
-      .find((paragraph) => paragraph.length > 0) ?? paragraphs[0];
-  if (proseLines === undefined) return null;
-  const plain = proseLines
-    .map((line) => line.replace(LINE_MARKER, ""))
-    .join(" ")
-    .replace(MARKDOWN_LINK, "$1")
-    .replace(INLINE_EMPHASIS, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (plain === "") return null;
-  if (plain.length > FINAL_MESSAGE_EXCERPT_MAX_LENGTH) {
-    return {
-      text: `${plain.slice(0, FINAL_MESSAGE_EXCERPT_MAX_LENGTH - 1).trimEnd()}…`,
-      elided: true,
-    };
-  }
-  return { text: plain, elided: paragraphs.length > 1 || text.includes("```") };
-}
 
 function pendingRequestRecap(
   pendingRequests: PendingThreadRequests | null,
@@ -97,54 +69,43 @@ function pendingRequestRecap(
   return null;
 }
 
-function settledRunOutcome(
-  latestRun: Pick<ThreadRunSummary, "status">,
-  runtime: Pick<ThreadRuntimeSummary, "lastErrorClass"> | null,
-): TurnRecapOutcome | null {
-  if (latestRun.status === "completed") return "completed";
-  if (latestRun.status === "failed") {
-    return runtime?.lastErrorClass === "usage_limit" ? "limited" : "failed";
-  }
-  return null;
-}
-
-/**
- * Summarizes the latest turn once it stops for the user. Interrupted, cancelled,
- * and still-running turns have no recap: the user either caused the stop or the
- * agent is not waiting on them yet.
- */
+/** Current requests and background work outrank the model's saved interpretation. */
 export function deriveTurnRecap(input: {
-  /** Work is underway, including a just-sent message whose run does not exist yet. */
   readonly working: boolean;
-  readonly latestRun: Pick<ThreadRunSummary, "runId" | "status" | "assistantMessageId"> | null;
+  readonly latestRun: Pick<ThreadRunSummary, "runId" | "status" | "recap"> | null;
   readonly runtime: Pick<ThreadRuntimeSummary, "lastErrorClass"> | null;
   readonly pendingRequests: PendingThreadRequests | null;
-  readonly messages: ReadonlyArray<{ readonly id: MessageId; readonly text: string }>;
+  readonly pendingBackgroundTasks?: ReadonlyArray<OrchestrationV2PendingBackgroundTask>;
   readonly checkpoints: ReadonlyArray<Pick<ThreadCheckpointSummary, "runId" | "files">>;
 }): TurnRecap | null {
   const { latestRun } = input;
   const pending = pendingRequestRecap(input.pendingRequests);
-  const outcome =
-    pending?.outcome ??
-    (latestRun === null || input.working ? null : settledRunOutcome(latestRun, input.runtime));
-  if (outcome === null) return null;
-
+  const settled =
+    !input.working && (latestRun?.status === "completed" || latestRun?.status === "failed");
+  const generated = settled ? (latestRun?.recap ?? null) : null;
+  let outcome: TurnRecapOutcome;
+  if (pending) outcome = pending.outcome;
+  else if (!settled) return null;
+  else if (latestRun?.status === "failed") {
+    outcome = input.runtime?.lastErrorClass === "usage_limit" ? "limited" : "failed";
+  } else {
+    if (!generated?.showCard) return null;
+    outcome = backgroundWorkHoldsCompletion(input.pendingBackgroundTasks ?? [])
+      ? "waiting"
+      : generated.outcome === "completed" && generated.remainingWork !== null
+        ? "progress"
+        : generated.outcome;
+  }
   const runId = latestRun?.runId ?? null;
-  const assistantMessageId = latestRun?.assistantMessageId ?? null;
-  const finalMessageText =
-    assistantMessageId === null
-      ? undefined
-      : input.messages.findLast((message) => message.id === assistantMessageId)?.text;
   const files =
     runId === null
       ? []
       : (input.checkpoints.findLast((checkpoint) => checkpoint.runId === runId)?.files ?? []);
-
   return {
     runId,
     outcome,
     request: pending?.request ?? null,
-    finalMessage: finalMessageText === undefined ? null : turnRecapMessageExcerpt(finalMessageText),
+    generated: pending ? null : generated,
     changes:
       files.length === 0
         ? null
@@ -154,4 +115,24 @@ export function deriveTurnRecap(input: {
             deletions: files.reduce((total, file) => total + file.deletions, 0),
           },
   };
+}
+
+export function turnRecapPreview(thread: {
+  readonly latestRun: Pick<ThreadRunSummary, "status"> | null;
+  readonly source: Pick<OrchestrationV2ThreadShell, "latestRunRecapSummary">;
+  readonly runtime: Pick<ThreadRuntimeSummary, "status"> | null;
+  readonly hasPendingApprovals: boolean;
+  readonly hasPendingUserInput: boolean;
+}): string | null {
+  if (
+    thread.hasPendingApprovals ||
+    thread.hasPendingUserInput ||
+    (thread.runtime &&
+      ["preparing", "starting", "running", "waiting"].includes(thread.runtime.status))
+  )
+    return null;
+  const run = thread.latestRun;
+  return run?.status === "completed" || run?.status === "failed"
+    ? (thread.source.latestRunRecapSummary ?? null)
+    : null;
 }

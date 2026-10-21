@@ -154,6 +154,11 @@ function selectOpenCodeRuntimeTextGeneration(
         v1: v1.generateThreadTitle(input),
         v2: v2.generateThreadTitle(input),
       }),
+    generateTurnRecap: (input) =>
+      byOpenCodeRuntime(probe.get, {
+        v1: v1.generateTurnRecap(input),
+        v2: v2.generateTurnRecap(input),
+      }),
     generateConversationSummary: (input) =>
       byOpenCodeRuntime(probe.get, {
         v1: v1.generateConversationSummary(input),

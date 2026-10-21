@@ -592,6 +592,17 @@ export type OrchestrationV2ThreadLaunchWorkspaceStrategy =
 
 export const ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE = "workspace_preparation_failed";
 
+export const OrchestrationV2TurnRecap = Schema.Struct({
+  outcome: Schema.Literals(["completed", "progress", "waiting", "input", "blocked"]),
+  summary: TrimmedNonEmptyString.check(Schema.isMaxLength(240)),
+  verification: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(400))),
+  remainingWork: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(400))),
+  nextAction: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(400))),
+  /** Whether a separate card helps beyond the final answer already on screen. */
+  showCard: Schema.Boolean,
+});
+export type OrchestrationV2TurnRecap = typeof OrchestrationV2TurnRecap.Type;
+
 export const OrchestrationV2Run = Schema.Struct({
   id: RunId,
   threadId: ThreadId,
@@ -603,6 +614,7 @@ export const OrchestrationV2Run = Schema.Struct({
   rootNodeId: Schema.NullOr(NodeId),
   activeAttemptId: Schema.NullOr(RunAttemptId),
   status: OrchestrationV2RunStatus,
+  recap: Schema.optional(OrchestrationV2TurnRecap),
   queuePosition: Schema.optional(Schema.NullOr(PositiveInt)),
   queueHeld: Schema.optional(Schema.Boolean),
   requestedAt: Schema.DateTimeUtc,
@@ -1755,6 +1767,11 @@ export const OrchestrationV2DomainEvent = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2EventBase.fields,
+    type: Schema.Literal("run.recap-updated"),
+    payload: Schema.Struct({ runId: RunId, recap: OrchestrationV2TurnRecap }),
+  }),
+  Schema.Struct({
+    ...OrchestrationV2EventBase.fields,
     type: Schema.Literal("run.background-work-cancelled"),
     payload: OrchestrationV2RunBackgroundWorkCancelled,
   }),
@@ -1948,6 +1965,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   latestRunRequestedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   latestRunStartedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   latestRunCompletedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
+  latestRunRecapSummary: Schema.optional(OrchestrationV2TurnRecap.fields.summary),
   latestRunStopRequested: Schema.optional(Schema.Boolean),
   activeRunId: Schema.NullOr(RunId),
   activityRunStartedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
@@ -2601,6 +2619,11 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2JsonEventBaseFields,
+    type: Schema.Literal("run.recap-updated"),
+    payload: Schema.Struct({ runId: RunId, recap: OrchestrationV2TurnRecap }),
+  }),
+  Schema.Struct({
+    ...OrchestrationV2JsonEventBaseFields,
     type: Schema.Literal("run.background-work-cancelled"),
     payload: OrchestrationV2RunBackgroundWorkCancelled,
   }),
@@ -3219,6 +3242,13 @@ const OrchestrationV2InternalCommand = Schema.Union([
     requestId: CommandId,
     message: TrimmedNonEmptyString,
     summary: Schema.optional(OrchestrationV2ConversationSummaryRollback),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("run.recap.complete"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    recap: OrchestrationV2TurnRecap,
   }),
   /** Applies the summary generated for summarize request `requestId`. */
   Schema.Struct({

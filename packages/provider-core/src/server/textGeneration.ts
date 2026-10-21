@@ -3,6 +3,7 @@ import type {
   ChatAttachment,
   ModelSelection,
   PullRequestReviewGuide,
+  OrchestrationV2TurnRecap,
   TextGenerationError,
 } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
@@ -69,6 +70,14 @@ export interface ThreadTitleGenerationResult {
   needsRefinement?: boolean | undefined;
 }
 
+export interface TurnRecapGenerationInput {
+  cwd: string;
+  transcript: string;
+  finalAnswer: string;
+  backgroundWork: string;
+  modelSelection: ModelSelection;
+}
+
 export interface ConversationSummaryGenerationInput {
   cwd: string;
   /** The part of the conversation to summarize, rendered as a transcript. */
@@ -111,6 +120,10 @@ export type ReviewGuideGenerationResult = Omit<
 >;
 
 export interface ProviderTextGeneration {
+  readonly generateTurnRecap: (
+    input: TurnRecapGenerationInput,
+  ) => Effect.Effect<OrchestrationV2TurnRecap, TextGenerationError>;
+
   readonly generateCommitMessage: (
     input: CommitMessageGenerationInput,
   ) => Effect.Effect<CommitMessageGenerationResult, TextGenerationError>;

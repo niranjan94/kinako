@@ -1,3 +1,4 @@
+import { turnRecapEffects } from "./TurnRecap.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as ServerSettings from "../serverSettings.ts";
@@ -22,8 +23,10 @@ import {
   ProviderInstanceId,
   ProviderSessionId,
   ProviderThreadId,
+  ProviderTurnId,
   RunAttemptId,
   RunId,
+  RuntimeRequestId,
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
@@ -3217,4 +3220,133 @@ it.effect.each(["events", "receipts"] as const)(
         assert.deepEqual(retained, [{ id: "pending" }]);
       }).pipe(Effect.provide(maintenanceLayer));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect(
+  "durably deduplicates turn recaps and lets the next turn start while one is running",
+  () =>
+    Effect.gen(function* () {
+      const sink = yield* EventSink.EventSinkV2;
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("thread:recap-outbox");
+      const runId = RunId.make("run:recap-outbox");
+      const run: OrchestrationV2Run = {
+        id: runId,
+        threadId,
+        ordinal: 1,
+        providerInstanceId,
+        modelSelection,
+        providerThreadId: null,
+        userMessageId: MessageId.make("recap:user"),
+        rootNodeId: null,
+        activeAttemptId: null,
+        status: "completed",
+        requestedAt: now,
+        startedAt: now,
+        completedAt: now,
+        checkpointId: null,
+        contextHandoffId: null,
+      };
+      const events: ReadonlyArray<OrchestrationV2DomainEvent> = [
+        threadCreatedEvent({ id: "recap:thread", thread: makeThread(threadId, now), now }),
+        {
+          id: EventId.make("recap:run-created"),
+          type: "run.created",
+          threadId,
+          occurredAt: now,
+          payload: { ...run, status: "running", completedAt: null },
+        },
+        {
+          id: EventId.make("recap:run-completed"),
+          type: "run.updated",
+          threadId,
+          occurredAt: now,
+          payload: run,
+        },
+      ];
+      yield* sink.writeWithEffects({ events, effects: turnRecapEffects(events) });
+      yield* sink.writeWithEffects({ events: [], effects: turnRecapEffects(events) });
+      const commandId = CommandId.make(`command:run-recap.generate:${runId}`);
+      assert.equal((yield* outbox.listByCommandId(commandId)).length, 1);
+      const recap = yield* outbox.claimNext({ workerId: "recap", leaseDurationMs: 30_000 });
+      assert.isTrue(Option.isSome(recap));
+      if (Option.isNone(recap)) return;
+      assert.equal(recap.value.request.type, "run-recap.generate");
+      yield* outbox.enqueue([
+        {
+          id: "recap:next-turn",
+          commandId: CommandId.make("recap:next-turn"),
+          threadId,
+          request: { type: "provider-turn.start", runId: RunId.make("recap:next") },
+        },
+      ]);
+      const next = yield* outbox.claimNext({ workerId: "turn", leaseDurationMs: 30_000 });
+      assert.isTrue(Option.isSome(next));
+      if (Option.isSome(next)) assert.equal(next.value.id, "recap:next-turn");
+      yield* outbox.reconcileAfterProcessLoss;
+      const recovered = yield* outbox.get(recap.value.id);
+      assert.isTrue(Option.isSome(recovered));
+      if (Option.isSome(recovered)) assert.equal(recovered.value.status, "pending");
+    }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("caps recap claims across threads so starts, interrupts, and approvals can proceed", () =>
+  Effect.gen(function* () {
+    const outbox = yield* EffectOutbox.EffectOutboxV2;
+    const recaps = Array.from({ length: 4 }, (_, index) => ({
+      id: `recap:capacity:${index}`,
+      commandId: CommandId.make(`recap:capacity:${index}`),
+      threadId: ThreadId.make(`recap:capacity:${index}`),
+      request: {
+        type: "run-recap.generate" as const,
+        runId: RunId.make(`recap:capacity:${index}`),
+      },
+    }));
+    yield* outbox.enqueue(recaps);
+    const claim = () => outbox.claimNext({ workerId: "capacity-worker", leaseDurationMs: 30_000 });
+    const claimedRecaps = (yield* Effect.all(Array.from({ length: 4 }, claim), {
+      concurrency: "unbounded",
+    })).flatMap((result) => (Option.isSome(result) ? [result.value] : []));
+    assert.lengthOf(claimedRecaps, 1);
+    // Blocked recap jobs must not make the idle workers continually probe an already-due deadline.
+    assert.isTrue(Option.isNone(yield* outbox.nextClaimableAt));
+
+    const requests: ReadonlyArray<EffectOutbox.OrchestrationEffectRequestV2> = [
+      { type: "provider-turn.start", runId: RunId.make("recap:foreground") },
+      {
+        type: "provider-turn.interrupt",
+        providerSessionId: ProviderSessionId.make("recap:session"),
+        providerThreadId: ProviderThreadId.make("recap:provider-thread"),
+        providerTurnId: ProviderTurnId.make("recap:provider-turn"),
+      },
+      {
+        type: "runtime-request.respond",
+        providerSessionId: ProviderSessionId.make("recap:session"),
+        requestId: RuntimeRequestId.make("recap:approval"),
+      },
+    ];
+    yield* outbox.enqueue(
+      requests.map((request, index) => ({
+        id: `recap:foreground:${index}`,
+        commandId: CommandId.make(`recap:foreground:${index}`),
+        threadId: recaps[index]!.threadId,
+        request,
+      })),
+    );
+    const foreground = (yield* Effect.all(Array.from({ length: 3 }, claim), {
+      concurrency: "unbounded",
+    })).flatMap((result) => (Option.isSome(result) ? [result.value] : []));
+    assert.sameMembers(
+      foreground.map((effect) => effect.request.type),
+      requests.map((request) => request.type),
+    );
+    yield* outbox.succeed({ effectId: claimedRecaps[0]!.id, workerId: "capacity-worker" });
+    const resumed = yield* claim();
+    assert.isTrue(Option.isSome(resumed));
+    if (Option.isSome(resumed)) {
+      assert.equal(resumed.value.request.type, "run-recap.generate");
+      assert.notEqual(resumed.value.id, claimedRecaps[0]!.id);
+    }
+  }).pipe(Effect.provide(layerIsolatedOutbox)),
 );

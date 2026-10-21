@@ -5522,7 +5522,7 @@ export default function ChatView(props: ChatViewProps) {
           latestRun: activeLatestRun,
           runtime: activeRuntime,
           pendingRequests: { approvals: pendingApprovals, userInputs: pendingUserInputs },
-          messages: serverProjection.messages,
+          pendingBackgroundTasks,
           checkpoints: turnDiffSummaries,
         });
   const activeThreadHasCompactableConversation = serverVisibleTurnItems.some(

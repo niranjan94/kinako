@@ -486,7 +486,10 @@ export function layerWithRegistry<Error>(
     options.textGeneration === undefined
       ? Layer.succeed(
           ThreadSummaryService.ThreadSummaryService,
-          ThreadSummaryService.ThreadSummaryService.of({ execute: () => Effect.void }),
+          ThreadSummaryService.ThreadSummaryService.of({
+            execute: () => Effect.void,
+            executeRecap: () => Effect.void,
+          }),
         )
       : ThreadSummaryService.layer.pipe(
           Layer.provide(

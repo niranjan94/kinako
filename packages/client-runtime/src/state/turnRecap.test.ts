@@ -1,133 +1,177 @@
 import { describe, expect, it } from "vite-plus/test";
+import {
+  RunId,
+  type OrchestrationV2TurnRecap,
+  type OrchestrationV2RunStatus,
+} from "@t3tools/contracts";
 
-import { deriveTurnRecap, turnRecapMessageExcerpt } from "./turnRecap.ts";
+import { deriveTurnRecap, turnRecapPreview } from "./turnRecap.ts";
 
-const run = (status: string) =>
-  ({ runId: "run-1", status, assistantMessageId: "message-1" }) as never;
-
+const generated: OrchestrationV2TurnRecap = {
+  outcome: "completed",
+  summary: "Fixed reconnect failures after sleep.",
+  verification: "Reconnect tests pass.",
+  remainingWork: null,
+  nextAction: null,
+  showCard: true,
+};
 const baseInput = {
   working: false,
-  latestRun: run("completed"),
+  latestRun: {
+    runId: RunId.make("run-1"),
+    status: "completed" as OrchestrationV2RunStatus,
+    recap: generated,
+  },
   runtime: null,
   pendingRequests: null,
-  messages: [{ id: "message-1", text: "Fixed the flaky test." }] as never,
   checkpoints: [],
 };
 
 describe("deriveTurnRecap", () => {
-  it("recaps a completed turn with its final message and diff totals", () => {
+  it("shows a saved synthesis with the turn's change totals", () => {
     const recap = deriveTurnRecap({
       ...baseInput,
       checkpoints: [
         {
-          runId: "run-1",
+          runId: RunId.make("run-1"),
           files: [
             { path: "a.ts", kind: "modified", additions: 3, deletions: 1 },
             { path: "b.ts", kind: "added", additions: 10, deletions: 0 },
           ],
         },
-      ] as never,
+      ],
     });
-
-    expect(recap).toEqual({
-      runId: "run-1",
-      outcome: "completed",
-      request: null,
-      finalMessage: { text: "Fixed the flaky test.", elided: false },
-      changes: { fileCount: 2, additions: 13, deletions: 1 },
-    });
+    expect(recap?.generated).toEqual(generated);
+    expect(recap?.changes).toEqual({ fileCount: 2, additions: 13, deletions: 1 });
   });
 
-  it("puts a pending approval ahead of the run status", () => {
+  it("does not label an ended provider turn completed while a summary is absent", () => {
+    expect(
+      deriveTurnRecap({
+        ...baseInput,
+        latestRun: { runId: RunId.make("run-1"), status: "completed" },
+      }),
+    ).toBeNull();
+  });
+
+  it("omits a redundant branch-switch recap even when the checkpoint has changes", () => {
+    const recap = {
+      ...generated,
+      summary: "Switched to PR #2237; working tree clean.",
+      showCard: false,
+    };
+    expect(
+      deriveTurnRecap({
+        ...baseInput,
+        latestRun: { ...baseInput.latestRun, recap },
+        checkpoints: [
+          {
+            runId: RunId.make("run-1"),
+            files: [{ path: "branch.ts", kind: "modified", additions: 4700, deletions: 4900 }],
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("uses the task outcome even though the provider run completed", () => {
+    for (const outcome of ["progress", "waiting", "input", "blocked"] as const) {
+      expect(
+        deriveTurnRecap({
+          ...baseInput,
+          latestRun: { ...baseInput.latestRun, recap: { ...generated, outcome } },
+        })?.outcome,
+      ).toBe(outcome);
+    }
+  });
+
+  it("does not show completed when the generated recap still lists unfinished work", () => {
+    expect(
+      deriveTurnRecap({
+        ...baseInput,
+        latestRun: {
+          ...baseInput.latestRun,
+          recap: { ...generated, remainingWork: "Fix the SQLite failure." },
+        },
+      })?.outcome,
+    ).toBe("progress");
+  });
+
+  it("cannot show completed while a PR monitor is still active", () => {
+    expect(
+      deriveTurnRecap({
+        ...baseInput,
+        pendingBackgroundTasks: [
+          { taskId: "pr:56", kind: "monitor", description: "Watching PR #56" },
+        ],
+      })?.outcome,
+    ).toBe("waiting");
+  });
+
+  it("puts pending approvals ahead of generated outcomes and pending questions", () => {
     const recap = deriveTurnRecap({
       ...baseInput,
       working: true,
-      latestRun: run("running"),
       pendingRequests: {
         approvals: [{ requestKind: "command", detail: "pnpm test" }],
         userInputs: [{ questions: [{ question: "Which branch?" }] }],
       } as never,
     });
-
     expect(recap?.outcome).toBe("approval");
     expect(recap?.request).toBe("pnpm test");
+    expect(recap?.generated).toBeNull();
   });
 
-  it("falls back to the approval kind when the request has no detail", () => {
+  it("shows pending questions immediately without waiting for generation", () => {
     const recap = deriveTurnRecap({
       ...baseInput,
-      pendingRequests: { approvals: [{ requestKind: "file-change" }], userInputs: [] } as never,
-    });
-
-    expect(recap?.request).toBe("File change approval");
-  });
-
-  it("names the first pending question", () => {
-    const recap = deriveTurnRecap({
-      ...baseInput,
-      latestRun: run("waiting"),
+      latestRun: { runId: RunId.make("run-1"), status: "waiting" },
       pendingRequests: {
         approvals: [],
-        userInputs: [{ questions: [{ question: "Which branch?" }, { question: "Rebase?" }] }],
+        userInputs: [{ questions: [{ question: "Which branch?" }] }],
       } as never,
     });
-
     expect(recap?.outcome).toBe("input");
     expect(recap?.request).toBe("Which branch?");
   });
 
-  it("separates usage limits from other failures", () => {
-    expect(deriveTurnRecap({ ...baseInput, latestRun: run("failed") })?.outcome).toBe("failed");
-    expect(
-      deriveTurnRecap({
-        ...baseInput,
-        latestRun: run("failed"),
-        runtime: { lastErrorClass: "usage_limit" },
-      })?.outcome,
-    ).toBe("limited");
+  it("keeps provider failures authoritative over generated success", () => {
+    const input = {
+      ...baseInput,
+      latestRun: { ...baseInput.latestRun, status: "failed" as const },
+    };
+    expect(deriveTurnRecap(input)?.outcome).toBe("failed");
+    expect(deriveTurnRecap({ ...input, runtime: { lastErrorClass: "usage_limit" } })?.outcome).toBe(
+      "limited",
+    );
   });
 
-  it("has no recap while working or after the user stopped the turn", () => {
-    for (const status of ["running", "interrupted", "cancelled", "rolled_back"]) {
-      expect(deriveTurnRecap({ ...baseInput, latestRun: run(status) })).toBeNull();
+  it("hides recaps while working, after a new send, and after user stops or rollback", () => {
+    for (const status of ["running", "interrupted", "cancelled", "rolled_back"] as const) {
+      expect(
+        deriveTurnRecap({ ...baseInput, latestRun: { ...baseInput.latestRun, status } }),
+      ).toBeNull();
     }
     expect(deriveTurnRecap({ ...baseInput, latestRun: null })).toBeNull();
     expect(deriveTurnRecap({ ...baseInput, working: true })).toBeNull();
   });
 });
 
-describe("turnRecapMessageExcerpt", () => {
-  it("keeps the opening prose paragraph as plain text", () => {
-    expect(
-      turnRecapMessageExcerpt(
-        "```ts\nconst x = 1;\n```\n\n## Done\n**Updated** the [parser](src/parser.ts) and `lexer`.\n\nMore detail.",
-      ),
-    ).toEqual({ text: "Updated the parser and lexer.", elided: true });
+describe("turnRecapPreview", () => {
+  const thread = {
+    source: { latestRunRecapSummary: generated.summary },
+    latestRun: { ...baseInput.latestRun, recap: { ...generated, showCard: false } },
+    runtime: null,
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+  };
+  it("keeps useful list previews for turns that do not need another conversation card", () => {
+    expect(turnRecapPreview(thread)).toBe(generated.summary);
   });
-
-  it("marks a single short paragraph as the whole message", () => {
-    expect(turnRecapMessageExcerpt("**Done.** Tests pass.")).toEqual({
-      text: "Done. Tests pass.",
-      elided: false,
-    });
-  });
-
-  it("skips a heading-only opening paragraph", () => {
-    expect(turnRecapMessageExcerpt("## Summary\n\n- Renamed the flag\n- Added tests")?.text).toBe(
-      "Renamed the flag Added tests",
-    );
-    expect(turnRecapMessageExcerpt("# All done")?.text).toBe("All done");
-  });
-
-  it("caps long paragraphs", () => {
-    const excerpt = turnRecapMessageExcerpt("word ".repeat(200));
-    expect(excerpt?.text.length).toBe(280);
-    expect(excerpt?.text.endsWith("…")).toBe(true);
-    expect(excerpt?.elided).toBe(true);
-  });
-
-  it("returns null for messages without prose", () => {
-    expect(turnRecapMessageExcerpt("```\ncode only\n```")).toBeNull();
-    expect(turnRecapMessageExcerpt("   ")).toBeNull();
+  it("hides a stale preview when new work or a request needs attention", () => {
+    expect(turnRecapPreview({ ...thread, runtime: { status: "running" } })).toBeNull();
+    expect(turnRecapPreview({ ...thread, hasPendingUserInput: true })).toBeNull();
+    expect(turnRecapPreview({ ...thread, hasPendingApprovals: true })).toBeNull();
+    expect(turnRecapPreview({ ...thread, latestRun: { status: "rolled_back" } })).toBeNull();
   });
 });

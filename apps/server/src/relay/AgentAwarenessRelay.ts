@@ -117,6 +117,7 @@ function shouldPublishAgentAwarenessEvent(
     case "thread.marked-unread":
     case "thread.runtime-mode-updated":
     case "thread.interaction-mode-updated":
+    case "run.recap-updated":
     case "run.background-work-cancelled":
     case "run-attempt.created":
     case "run-attempt.updated":

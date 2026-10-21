@@ -4,6 +4,7 @@ import {
   type ServerSettingsError,
   TextGenerationError,
   type ThreadId,
+  type RunId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -24,6 +25,8 @@ import * as ProjectStore from "./ProjectStore.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 
+import { renderTurnRecapTranscript } from "./TurnRecap.ts";
+
 const SUMMARY_FAILED_MESSAGE = "The summary could not be generated.";
 
 export class ThreadSummaryGenerationError extends Schema.TaggedError<ThreadSummaryGenerationError>()(
@@ -41,6 +44,10 @@ const isTextGenerationError = Schema.is(TextGenerationError);
 export class ThreadSummaryService extends Context.Service<
   ThreadSummaryService,
   {
+    readonly executeRecap: (input: {
+      readonly threadId: ThreadId;
+      readonly runId: RunId;
+    }) => Effect.Effect<void>;
     /**
      * Generates the summary for summarize request `requestId` and hands it to
      * the orchestrator. The last failed attempt records the failure instead.
@@ -186,7 +193,65 @@ const make = Effect.gen(function* () {
     );
   });
 
-  return ThreadSummaryService.of({ execute });
+  const executeRecap = Effect.fn("ThreadSummaryService.executeRecap")(
+    function* (input: { readonly threadId: ThreadId; readonly runId: RunId }) {
+      const projection = yield* projections.getThreadRecords(
+        input.threadId,
+        ["runs", "turnItems"],
+        { runIds: [input.runId], turnItemRunIds: [input.runId] },
+      );
+      const run = projection.runs[0];
+      if (
+        projection.thread.deletedAt !== null ||
+        run === undefined ||
+        run.recap !== undefined ||
+        (run.status !== "completed" && run.status !== "failed")
+      )
+        return;
+      const transcript = renderTurnRecapTranscript(projection.turnItems);
+      if (transcript.length === 0) return;
+      const settings = resolveProjectSettings(
+        yield* serverSettings.getSettings,
+        projection.thread.projectId,
+      ).settings;
+      const cwd =
+        (yield* runtimePolicy.resolve({
+          thread: projection.thread,
+          modelSelection: settings.textGenerationModelSelection,
+        })).cwd ??
+        Option.getOrUndefined(yield* projects.get(projection.thread.projectId))?.workspaceRoot;
+      if (cwd === undefined) return;
+      const shell = yield* projections.getThreadShell(input.threadId);
+      const finalMessage = projection.turnItems.findLast(
+        (item) => item.type === "assistant_message",
+      );
+      const recap = yield* textGeneration.generateTurnRecap({
+        cwd,
+        transcript,
+        finalAnswer:
+          finalMessage?.type === "assistant_message" ? finalMessage.text.slice(0, 8_000) : "",
+        backgroundWork: (shell?.latestRunId === run.id ? (shell.pendingBackgroundTasks ?? []) : [])
+          .map((task) => `${task.kind}: ${task.description ?? task.taskId}`)
+          .join("\n"),
+        modelSelection: settings.textGenerationModelSelection,
+      });
+      yield* threads.dispatch({
+        type: "run.recap.complete",
+        commandId: CommandId.make(`command:run-recap.complete:${input.runId}`),
+        threadId: input.threadId,
+        runId: input.runId,
+        recap,
+      });
+    },
+    // A catch-up aid must not turn a successful run into a failure or consume repeated generations.
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.interrupt
+        : Effect.logWarning("Turn recap generation failed", { cause }),
+    ),
+  );
+
+  return ThreadSummaryService.of({ execute, executeRecap });
 });
 
 export const layer = Layer.effect(ThreadSummaryService, make);

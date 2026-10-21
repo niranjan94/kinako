@@ -11,6 +11,9 @@ import { PullRequestDiffStats } from "../pull-requests/PullRequestPresentation";
 
 const OUTCOME_TONE: Record<TurnRecapOutcome, string> = {
   completed: "text-adaptive-emerald-600-400",
+  progress: "text-foreground-secondary",
+  waiting: "text-warning-foreground",
+  blocked: "text-warning-foreground",
   input: "text-warning-foreground",
   approval: "text-warning-foreground",
   failed: "text-danger-foreground",
@@ -20,8 +23,7 @@ const OUTCOME_TONE: Record<TurnRecapOutcome, string> = {
 export function TurnRecapCard(props: { readonly recap: TurnRecap }) {
   const { recap } = props;
   const { changes } = recap;
-  const finalMessage = recap.finalMessage?.elided ? recap.finalMessage.text : null;
-  if (recap.outcome === "completed" && changes === null && finalMessage === null) return null;
+  const generated = recap.generated;
   return (
     <View
       accessibilityLabel="Turn recap"
@@ -54,10 +56,23 @@ export function TurnRecapCard(props: { readonly recap: TurnRecap }) {
           {recap.request}
         </Text>
       ) : null}
-      {finalMessage ? (
-        <Text className="font-sans text-sm leading-normal text-foreground-muted" numberOfLines={3}>
-          {finalMessage}
-        </Text>
+      {generated ? (
+        <>
+          <Text className="font-sans text-sm leading-normal text-foreground">
+            {generated.summary}
+          </Text>
+          {[
+            ["Checks", generated.verification],
+            ["Remaining", generated.remainingWork],
+            ["Next", generated.nextAction],
+          ].map(([label, text]) =>
+            text ? (
+              <Text key={label} className="font-sans text-sm leading-normal text-foreground-muted">
+                {label}: {text}
+              </Text>
+            ) : null,
+          )}
+        </>
       ) : null}
     </View>
   );

@@ -24,6 +24,7 @@ import {
   buildConversationSummaryPrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
+  buildTurnRecapPrompt,
 } from "@t3tools/provider-core/server/textGenerationPrompts";
 import {
   sanitizeCommitSubject,
@@ -361,7 +362,17 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
     });
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = () =>
     Effect.fail(investigationUnsupported("generateReviewGuide", "Muse Code"));
+  const generateTurnRecap: ProviderTextGeneration["generateTurnRecap"] = Effect.fn(
+    "MuseTextGeneration.generateTurnRecap",
+  )(function* (input) {
+    return yield* runMuseJson({
+      operation: "generateTurnRecap",
+      ...buildTurnRecapPrompt(input),
+      modelSelection: input.modelSelection,
+    });
+  });
   return {
+    generateTurnRecap,
     generateCommitMessage,
     generatePrContent,
     generateBranchName,

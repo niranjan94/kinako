@@ -529,6 +529,11 @@ export const layerExecutor: Layer.Layer<
                     }),
                 ),
               );
+          case "run-recap.generate":
+            return threadSummary.executeRecap({
+              threadId: effect.threadId,
+              runId: effect.request.runId,
+            });
           case "thread-summary.generate":
             return threadSummary
               .execute({ threadId: effect.threadId, requestId: effect.commandId, willRetry })

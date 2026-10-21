@@ -360,6 +360,7 @@ function createTextGeneration(
       Effect.succeed({
         title: "Update workflow",
       }),
+    generateTurnRecap: () => Effect.die("Unexpected recap generation"),
     generateConversationSummary: () => Effect.succeed({ summary: "Summary" }),
     generateReviewGuide: () => Effect.succeed({ stops: [] }),
     ...overrides,
@@ -410,6 +411,7 @@ function createTextGeneration(
             }),
         ),
       ),
+    generateTurnRecap: (input) => implementation.generateTurnRecap(input),
     generateConversationSummary: (input) => implementation.generateConversationSummary(input),
     generateReviewGuide: (input) => implementation.generateReviewGuide(input),
   };

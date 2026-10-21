@@ -13,6 +13,7 @@ import {
   buildPrContentPrompt,
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
+  buildTurnRecapPrompt,
 } from "./textGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
@@ -188,7 +189,19 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     });
   });
 
+  const generateTurnRecap: ProviderTextGeneration["generateTurnRecap"] = Effect.fn(
+    `${name}.generateTurnRecap`,
+  )(function* (input) {
+    return yield* run({
+      operation: "generateTurnRecap",
+      cwd: input.cwd,
+      modelSelection: input.modelSelection,
+      ...buildTurnRecapPrompt(input),
+    });
+  });
+
   return {
+    generateTurnRecap,
     generateCommitMessage,
     generatePrContent,
     generateBranchName,

@@ -1,3 +1,4 @@
+import { turnRecapEffects } from "./TurnRecap.ts";
 import { makeAssistantStreamingFilter } from "./assistantStreaming.ts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import {
@@ -831,6 +832,10 @@ export const layer: Layer.Layer<
             },
           ],
         } satisfies Parameters<typeof eventSink.writeWithEffects>[0];
+        const finalizationEffects = [
+          ...finalization.effects,
+          ...turnRecapEffects(finalization.events),
+        ];
         if (input.writeIfRunCurrent !== undefined) {
           const result = yield* eventSink.writeIfRunCurrent({
             threadId: input.run.threadId,
@@ -838,13 +843,13 @@ export const layer: Layer.Layer<
             activeAttemptId: input.writeIfRunCurrent.activeAttemptId,
             expectedStatus: input.writeIfRunCurrent.expectedStatus,
             events: finalization.events,
-            effects: finalization.effects,
+            effects: finalizationEffects,
           });
           if (!result.committed) {
             return;
           }
         } else {
-          yield* eventSink.writeWithEffects(finalization);
+          yield* eventSink.writeWithEffects({ ...finalization, effects: finalizationEffects });
         }
         yield* input.refreshAfterTurn;
       },
