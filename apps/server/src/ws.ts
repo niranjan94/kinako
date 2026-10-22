@@ -2835,6 +2835,9 @@ export const layerWsRpc = (
             return yield* issueAssetUrl({
               resource: input.resource,
               workspaceRoot: thread.thread.worktreePath ?? project.value.workspaceRoot,
+              ...(thread.thread.worktreePath
+                ? { fallbackWorkspaceRoot: project.value.workspaceRoot }
+                : {}),
             });
           }),
         [WS_METHODS.assetsPersistChatAttachments]: (input) =>

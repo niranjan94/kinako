@@ -685,6 +685,52 @@ describe("AssetAccess", () => {
     }).pipe(Effect.provide(layerTest)),
   );
 
+  it.effect("falls back to the project root for files missing from the thread worktree", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const worktree = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-asset-worktree-" });
+      const projectRoot = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-asset-project-",
+      });
+      const outside = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-asset-outside-" });
+      yield* fileSystem.makeDirectory(path.join(projectRoot, "out"));
+      const projectPdf = path.join(projectRoot, "out", "report.pdf");
+      yield* fileSystem.writeFileString(projectPdf, "%PDF-1.7");
+      yield* fileSystem.writeFileString(path.join(outside, "report.pdf"), "%PDF-1.7");
+      const canonicalPdf = yield* fileSystem.realPath(projectPdf);
+
+      const issue = (requestedPath: string) =>
+        issueAssetUrl({
+          resource: {
+            _tag: "workspace-file",
+            threadId: ThreadId.make("thread-1"),
+            path: requestedPath,
+          },
+          workspaceRoot: worktree,
+          fallbackWorkspaceRoot: projectRoot,
+        });
+      for (const requestedPath of [
+        path.join(worktree, "out", "report.pdf"),
+        projectPdf,
+        "out/report.pdf",
+      ]) {
+        const result = yield* issue(requestedPath);
+        const suffix = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+        const token = suffix.slice(0, suffix.indexOf("/"));
+        expect(yield* resolveAsset(token, "report.pdf")).toEqual({
+          kind: "file",
+          path: canonicalPdf,
+        });
+      }
+
+      const missing = yield* issue(path.join(worktree, "out", "absent.pdf")).pipe(Effect.flip);
+      expect(missing._tag).toBe("AssetWorkspaceAssetNotFoundError");
+      const outsideError = yield* issue(path.join(outside, "report.pdf")).pipe(Effect.flip);
+      expect(outsideError._tag).toBe("AssetWorkspacePathValidationError");
+    }).pipe(Effect.provide(layerTest)),
+  );
+
   it.effect("previews workspace files with literal fragment characters in their paths", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

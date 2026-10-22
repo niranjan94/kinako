@@ -60,6 +60,7 @@ import * as ServerConfig from "../config.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
+import { isWithinRoot } from "../workspace/KnownWorkspaces.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { extractIcnsPng } from "./icns.ts";
@@ -492,6 +493,8 @@ const finalizeWorkspaceFileAsset = Effect.fn("AssetAccess.finalizeWorkspaceFileA
 export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (input: {
   readonly resource: AssetResource;
   readonly workspaceRoot?: string;
+  /** Checked when a workspace file is missing from `workspaceRoot`, e.g. the project root behind a thread worktree. */
+  readonly fallbackWorkspaceRoot?: string;
   readonly projectFaviconPath?: string;
   /** Where a cloned project's checkout stands, while the clone tracker still knows it. */
   readonly projectCheckout?: "pending" | "cloned";
@@ -538,21 +541,40 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
           resource: input.resource,
         });
       }
-      const workspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.workspaceRoot).pipe(
-        Effect.mapError(
-          (cause) =>
-            new AssetWorkspaceRootNormalizationError({
-              resource: input.resource,
-              cause,
+      const resource = input.resource;
+      const normalizeRoot = (root: string) =>
+        workspacePaths
+          .normalizeWorkspaceRoot(root)
+          .pipe(
+            Effect.mapError(
+              (cause) => new AssetWorkspaceRootNormalizationError({ resource, cause }),
+            ),
+          );
+      const workspaceRoot = yield* normalizeRoot(input.workspaceRoot);
+      const fallbackWorkspaceRoot = input.fallbackWorkspaceRoot
+        ? yield* normalizeRoot(input.fallbackWorkspaceRoot).pipe(Effect.orElseSucceed(() => null))
+        : null;
+      const fallbackRoot = fallbackWorkspaceRoot !== workspaceRoot ? fallbackWorkspaceRoot : null;
+      // Worktree threads often link files that exist only in the main checkout (gitignored
+      // outputs), so an absolute path is made relative to whichever root holds it and then
+      // looked up in both.
+      const containingRoot = path.isAbsolute(resource.path)
+        ? [workspaceRoot, fallbackRoot].find(
+            (root) => root !== null && isWithinRoot(path, resource.path, root),
+          )
+        : null;
+      const requestedPath = containingRoot
+        ? path.relative(containingRoot, resource.path)
+        : resource.path;
+      const finalizeIn = (root: string) =>
+        finalizeWorkspaceFileAsset({ workspaceRoot: root, requestedPath, resource, expiresAt });
+      const finalized = yield* fallbackRoot
+        ? finalizeIn(workspaceRoot).pipe(
+            Effect.catchTags({
+              AssetWorkspaceAssetNotFoundError: () => finalizeIn(fallbackRoot),
             }),
-        ),
-      );
-      const finalized = yield* finalizeWorkspaceFileAsset({
-        workspaceRoot,
-        requestedPath: input.resource.path,
-        resource: input.resource,
-        expiresAt,
-      });
+          )
+        : finalizeIn(workspaceRoot);
       claims = finalized.claims;
       fileName = finalized.fileName;
       imageDimensions = finalized.imageDimensions;
