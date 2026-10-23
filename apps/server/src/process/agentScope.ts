@@ -306,7 +306,7 @@ export const make = Effect.gen(function* () {
   );
 
   const stop = Effect.fn("AgentScope.stop")(function* (unit: string) {
-    if (!unit.startsWith("t3code-") || !unit.endsWith(".scope")) return;
+    if (!unit.startsWith(`${FORK_SERVICE_NAME}-`) || !unit.endsWith(".scope")) return;
     const scope = yield* systemd;
     if (scope === undefined) return;
     const state = yield* readScope(scope.systemctl, unit);
