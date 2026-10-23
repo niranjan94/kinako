@@ -83,10 +83,12 @@ It omits tool activity and attachments. For Codex, it omits generated setup
 context only when a canonical user event and a valid shared turn ID identify the
 same user turn. Ambiguous legacy or response-only context stays in the imported
 conversation so T3 Code does not remove user text. It reads one conversation at
-a time and skips files larger than 16 MiB. It ignores malformed records and skips
+a time and skips files larger than 4 GiB. It also skips a conversation when the
+message text and metadata it keeps need more than 32 MiB of memory. Tool output
+does not count toward that limit. It ignores malformed records and skips
 unreadable or unparseable conversations.
 
-Each project imports its conversations from the last 30 days, leaving out conversations that may still be open in a terminal. Completed conversations are not imported again. To bring in older history or pick individual conversations later, use **Import CLI history** from the command palette.
+Each project imports its conversations from the last 30 days, leaving out conversations that may still be open in a terminal. Each import attempt reads up to 100 conversation files and 4 GiB per project, with up to 100,000 input records. Run import again to continue a large batch. Completed conversations are not imported again. To bring in older history or pick individual conversations later, use **Import CLI history** from the command palette.
 
 You can continue without configuring agents or importing projects, or return to an earlier step
 using the setup progress bar. Navigation pauses while an import is running.

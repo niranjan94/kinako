@@ -182,13 +182,15 @@ function watchesEqual(left: ThreadPullRequestWatch, right: ThreadPullRequestWatc
     left.failedChecks.join("\n") === right.failedChecks.join("\n") &&
     left.passed === right.passed &&
     left.passedChecks.join("\n") === right.passedChecks.join("\n") &&
+    (left.owedChecks ?? []).join("\n") === (right.owedChecks ?? []).join("\n") &&
     left.remarksThrough === right.remarksThrough &&
     left.remarkIds.join("\n") === right.remarkIds.join("\n") &&
     left.conflicting === right.conflicting &&
     left.wakes === right.wakes &&
     left.autoFix?.attempts === right.autoFix?.attempts &&
     left.autoFix?.pausedReason === right.autoFix?.pausedReason &&
-    left.autoFix?.fixMessageId === right.autoFix?.fixMessageId
+    left.autoFix?.fixMessageId === right.autoFix?.fixMessageId &&
+    left.checksAwaitedSince === right.checksAwaitedSince
   );
 }
 
@@ -592,7 +594,7 @@ export const make = Effect.gen(function* () {
         const wakeMessageId = MessageId.make(
           `message:pr-watch:${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`,
         );
-        const report = evaluatePullRequestWatch(target.watch, detail, remarks, {
+        const report = evaluatePullRequestWatch(target.watch, detail, remarks, now, {
           wakeMessageId,
           fixTurnEnded: fixesEnded.get(watchKey(target)) ?? false,
         });

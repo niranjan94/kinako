@@ -88,9 +88,8 @@ export function useIssueHandoff() {
           )
             throw new Error("Couldn't attach the issue to a new draft.");
         }
-        navigation.navigate("NewTaskSheet", {
-          screen: "NewTaskDraft",
-          params: {
+        navigation.navigate("Thread", {
+          draft: {
             draftId: draftKey,
             title: mode === "ask" ? `Ask about #${issue.number}` : `Issue #${issue.number}`,
           },

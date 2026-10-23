@@ -1,6 +1,6 @@
 import packageJson from "../../package.json" with { type: "json" };
 import { SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_REPOSITORY } from "@t3tools/shared/forkBrand";
 
 export type ServicePreflightResult =
   | {
@@ -24,7 +24,14 @@ export function runServicePreflight(input: {
     return {
       status: "blocked",
       version,
-      reason: `This release requires a newer ${FORK_DISPLAY_NAME} service launcher. Update it on the server machine.`,
+      // A stale `kinako` earlier on PATH (an old npm/nvm global) makes `kinako service install`
+      // reinstall itself and report success, so name the exact install and the path check.
+      reason: [
+        `The installed service launcher speaks protocol ${input.launcherProtocol}, but ${FORK_CLI_NAME}@${version} requires protocol ${SERVICE_LAUNCHER_PROTOCOL}.`,
+        `On the server machine, install this exact CLI: \`curl -fsSL https://raw.githubusercontent.com/${FORK_REPOSITORY}/main/scripts/install.sh | T3CODE_VERSION=${version} sh\`.`,
+        `Check that \`${FORK_CLI_NAME} --version\` prints ${version} and that \`which -a ${FORK_CLI_NAME}\` lists no older ${FORK_CLI_NAME} (such as an npm or nvm install) first, then run \`~/.local/bin/${FORK_CLI_NAME} service install\` (the installer's default path).`,
+        `Updating the desktop app does not update this CLI, and \`${FORK_CLI_NAME} service update\` only repairs the service with whichever CLI runs it.`,
+      ].join(" "),
     };
   }
 

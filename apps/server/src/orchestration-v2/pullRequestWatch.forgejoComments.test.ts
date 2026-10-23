@@ -1,4 +1,4 @@
-import type { ThreadPullRequestWatch } from "@t3tools/contracts";
+import { SourceControlProviderKind, type ThreadPullRequestWatch } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import {
@@ -6,7 +6,14 @@ import {
   forgejoComment,
 } from "@t3tools/source-control-forgejo/server/forgejoPullRequestJson";
 
-import { evaluatePullRequestWatch } from "./pullRequestWatch.ts";
+import { evaluatePullRequestWatch as evaluate } from "./pullRequestWatch.ts";
+
+// These cases read the head once or at one moment, so the no-checks notice never comes due.
+const evaluatePullRequestWatch = (
+  watch: ThreadPullRequestWatch,
+  detail: Parameters<typeof evaluate>[1],
+  remarks: Parameters<typeof evaluate>[2],
+) => evaluate(watch, detail, remarks, 0);
 
 const decodeForgejoComment = Schema.decodeSync(ForgejoComment);
 
@@ -25,6 +32,7 @@ describe("Forgejo comment watch boundary", () => {
     wakes: 2,
   } satisfies ThreadPullRequestWatch;
   const finalDetail = {
+    provider: SourceControlProviderKind.make("forgejo"),
     headSha: seen.headSha,
     checks: [],
     mergeability: "mergeable",

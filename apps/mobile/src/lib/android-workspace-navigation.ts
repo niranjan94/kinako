@@ -83,12 +83,13 @@ export function parentThreadIsBelow(
   state: NavigationState,
   parent: ReactNavigation.RootParamList["Thread"],
 ) {
+  if (!parent?.environmentId || !parent.threadId) return false;
   const previous = state.routes[state.index - 1];
   const params = previous?.params as ReactNavigation.RootParamList["Thread"] | undefined;
   return (
     previous?.name === "Thread" &&
     params?.environmentId === parent.environmentId &&
-    params.threadId === parent.threadId
+    params?.threadId === parent.threadId
   );
 }
 

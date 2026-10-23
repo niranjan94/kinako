@@ -34,6 +34,7 @@ import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { isDraftThreadRoute } from "./thread-route-state";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 type ImportCliSessionRouteParams = {
@@ -169,7 +170,13 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
   const state = response?.requestKey === requestKey ? response.result : null;
 
   const openThread = (threadId: ThreadId) => {
-    (navigation.getParent() ?? navigation).dispatch(
+    const stack = navigation.getParent() ?? navigation;
+    const state = stack.getState();
+    // The draft screen that opened this import is the Thread route below; replace it too.
+    if (isDraftThreadRoute(state?.routes[state.index - 1])) {
+      stack.dispatch(StackActions.pop(1));
+    }
+    stack.dispatch(
       StackActions.replace("Thread", {
         environmentId: String(environmentId),
         threadId: String(threadId),

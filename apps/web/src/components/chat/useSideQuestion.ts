@@ -46,7 +46,9 @@ export function useSideQuestionActions() {
     /** Follows up in the open side chat, or forks a new one from the last finished turn. */
     ask: async (
       parentRef: ScopedThreadRef,
-      parent: OrchestrationV2ThreadProjection,
+      parent: Pick<OrchestrationV2ThreadProjection, "runs"> & {
+        readonly thread: Pick<OrchestrationV2ThreadProjection["thread"], "title">;
+      },
       question: string,
     ) => {
       const context = threadContextRecord(parentRef, parent.thread.title);

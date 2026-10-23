@@ -99,7 +99,7 @@ import {
 import { observeResize } from "~/lib/observeResize";
 import { APP_BASE_NAME } from "~/branding";
 
-interface RightPanelTabsProps {
+export interface RightPanelTabsProps {
   mode: PreviewPanelMode;
   maximized?: boolean;
   open?: boolean;

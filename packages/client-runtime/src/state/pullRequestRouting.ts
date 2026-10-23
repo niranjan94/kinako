@@ -65,7 +65,9 @@ const writes = new Set<string>([
 // An issue shares a pull request's reference and number sequence, but its state is not one.
 const issueMethods = new Set<string>([WS_METHODS.issuesDetail, WS_METHODS.issuesComment]);
 const isRef = Schema.is(PullRequestRef);
-const hasState = Schema.is(Schema.Struct({ state: PullRequestState }));
+const hasState = Schema.is(
+  Schema.Struct({ state: PullRequestState, isDraft: Schema.optional(Schema.Boolean) }),
+);
 const isInvalidation = Schema.is(PullRequestInvalidateInput);
 const readTimeout = (environmentId: EnvironmentId) =>
   Effect.timeoutOrElse({
@@ -227,14 +229,13 @@ const invalidateTarget = Effect.fn("PullRequestRouting.invalidateTarget")(functi
  */
 const reportState = (
   { allowStale: _allowStale, expectedAccountId: _expectedAccountId, ...reference }: PullRequestRef,
-  state: PullRequestState,
+  status: { readonly state: PullRequestState; readonly isDraft?: boolean | undefined },
 ) =>
-  request(WS_METHODS.pullRequestsReportState, { reference, state }).pipe(
-    Effect.timeoutOption("5 seconds"),
-    Effect.ignore,
-    Effect.forkDetach,
-    Effect.asVoid,
-  );
+  request(WS_METHODS.pullRequestsReportState, {
+    reference,
+    state: status.state,
+    ...(status.isDraft === undefined ? {} : { isDraft: status.isDraft }),
+  }).pipe(Effect.timeoutOption("5 seconds"), Effect.ignore, Effect.forkDetach, Effect.asVoid);
 
 /** Credentials stay on their environments. Only a verified host and account cross the wire. */
 export function createPullRequestRouter() {
@@ -382,7 +383,7 @@ export function createPullRequestRouter() {
       ).pipe(
         Effect.tap((result) =>
           id !== origin.target.environmentId && !issueMethods.has(tag) && hasState(result)
-            ? reportState(ref, result.state)
+            ? reportState(ref, result)
             : Effect.void,
         ),
         Effect.tap(() =>
