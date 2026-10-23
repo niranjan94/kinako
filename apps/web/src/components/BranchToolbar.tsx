@@ -347,12 +347,26 @@ const RunContextSelector = memo(function RunContextSelector({
 
   if (isLocked) {
     if (onMoveWorkspace && !forceNewWorktree) {
+      const moveLabel = activeWorktreePath ? "Move to local" : "Move to worktree";
+      if (isPanel) {
+        return (
+          <ThreadDetailsControl
+            part="select"
+            onClick={onMoveWorkspace}
+            onContextMenu={handleContextMenu}
+            aria-label={moveLabel}
+            data-composer-context-control
+          >
+            {triggerContent}
+          </ThreadDetailsControl>
+        );
+      }
       return (
         <ComposerControl
           size="xs"
           onClick={onMoveWorkspace}
           onContextMenu={handleContextMenu}
-          aria-label={activeWorktreePath ? "Move to local" : "Move to worktree"}
+          aria-label={moveLabel}
           data-composer-context-control
         >
           {triggerContent}
