@@ -27,7 +27,10 @@ import { scopedThreadKey } from "../../lib/scopedEntities";
 import { pullRequestListKey } from "../pull-requests/pullRequestList";
 import { WorkspaceTabsProvider, useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
 import { WorkspaceNativeTabs } from "../workspace/WorkspaceNativeTabs.ios";
-import { isDuoDevice } from "../../lib/device-type";
+import { workspaceUsesColumns } from "../workspace/workspace-tabs-state";
+import { isSettingsRoute, settingsOpenIn } from "../settings/settings-navigation";
+import { workspaceRoutesOf } from "./workspace-overlay-routes";
+import { useWorkspaceSidebarHeaderItem } from "./useWorkspaceSidebarHeaderItem";
 import { useDeviceType, useNativeLayoutMetrics } from "../../native/native-layout-metrics";
 
 import { useAdaptiveWorkspaceLayout } from "./AdaptiveWorkspaceLayout";
@@ -56,6 +59,8 @@ import {
   NativePrimaryColumnContext,
   NativeWorkspaceInspectorContext,
   NativeWorkspaceModeContext,
+  WorkspaceSlotOptionsContext,
+  slotScreenOptions,
 } from "../../native/v5-workspace-context";
 
 type ViewProps = ComponentProps<typeof NativeStackView>;
@@ -68,6 +73,16 @@ const isPullRequestRoute = (route: Route) =>
   route.name === "PullRequestFiles" ||
   route.name === "Issue";
 
+/** Only these screens follow the sidebar's state; a thread's header draws its own toggle. */
+function SidebarToggleHeader(props: ComponentProps<typeof V5StackHeader>) {
+  const sidebarItem = useWorkspaceSidebarHeaderItem();
+  const options = {
+    ...props.options,
+    unstable_headerLeftItems: () => [sidebarItem],
+  } as AppNativeStackNavigationOptions as typeof props.options;
+  return <V5StackHeader {...props} options={options} />;
+}
+
 function ColumnScreen(props: {
   readonly descriptor: Descriptor;
   readonly primary?: boolean;
@@ -77,18 +92,30 @@ function ColumnScreen(props: {
   readonly onDismiss: (routeKey: string, native: boolean) => void;
   readonly onAppearance: (type: "willAppear" | "didAppear" | "willDisappear", key: string) => void;
   readonly onCompose?: () => void;
+  /** Settings pages don't draw their own sidebar toggle, unlike threads and pull requests. */
+  readonly sidebarToggle?: boolean;
   readonly navigation: ViewProps["navigation"];
 }) {
   const { descriptor } = props;
+  // Options a screen set inside this workspace tab slot, over its route's.
+  const options = slotScreenOptions(
+    use(WorkspaceSlotOptionsContext),
+    descriptor.route.key,
+    descriptor.options,
+  );
+  const Header =
+    props.sidebarToggle && !options.unstable_headerLeftItems ? SidebarToggleHeader : V5StackHeader;
+  const [presented, setPresented] = useState(false);
   const primaryColumn = useMemo(
     () =>
       props.primary
         ? {
+            presented,
             selectedThreadKey: props.selectedThreadKey ?? null,
             selectedPullRequestKey: props.selectedPullRequestKey ?? null,
           }
         : null,
-    [props.primary, props.selectedThreadKey, props.selectedPullRequestKey],
+    [props.primary, props.selectedThreadKey, props.selectedPullRequestKey, presented],
   );
   const key = descriptor.route.key;
   return (
@@ -103,10 +130,12 @@ function ColumnScreen(props: {
         props.navigation.emit({ type: "transitionStart", target: key, data: { closing: false } });
       }}
       onDidAppear={() => {
+        setPresented(true);
         props.onAppearance("didAppear", key);
         props.navigation.emit({ type: "transitionEnd", target: key, data: { closing: false } });
       }}
       onWillDisappear={() => {
+        setPresented(false);
         props.onAppearance("willDisappear", key);
         props.navigation.emit({ type: "transitionStart", target: key, data: { closing: true } });
       }}
@@ -116,8 +145,8 @@ function ColumnScreen(props: {
     >
       <NavigationContext value={descriptor.navigation}>
         <NavigationRouteContext value={descriptor.route}>
-          <V5StackHeader
-            options={descriptor.options}
+          <Header
+            options={options}
             canGoBack={!props.primary}
             column={props.primary ? "primary" : "detail"}
             onCompose={
@@ -131,7 +160,7 @@ function ColumnScreen(props: {
           <ColumnContent
             primary={props.primary}
             insetHorizontally={
-              (descriptor.options as AppNativeStackNavigationOptions).nativeContentInsetHorizontally
+              (options as AppNativeStackNavigationOptions).nativeContentInsetHorizontally
             }
           >
             <NativePrimaryColumnContext value={primaryColumn}>
@@ -147,8 +176,15 @@ function ColumnScreen(props: {
 function WorkspaceColumns(
   props: ViewProps & { readonly primary: Route; readonly detail: Route[] },
 ) {
-  const { layout, panes, togglePrimarySidebar, toggleAuxiliaryPane, startNewTask } =
-    useAdaptiveWorkspaceLayout();
+  const {
+    layout,
+    panes,
+    togglePrimarySidebar,
+    setPrimarySidebarVisible,
+    toggleAuxiliaryPane,
+    startNewTask,
+    openWorkspaceTab,
+  } = useAdaptiveWorkspaceLayout();
   const deviceType = useDeviceType();
   // Split screens must remain mounted while UIKit animates a detached route away.
   const [screens, setScreens] = useState({
@@ -178,14 +214,16 @@ function WorkspaceColumns(
     });
   }
 
-  const selectedTab = useWorkspaceTabs()?.state.selectedTab;
+  const workspaceTabs = useWorkspaceTabs();
+  const selectedTab = workspaceTabs?.state.selectedTab;
+  const settingsOpen = workspaceTabs?.settingsOpen ?? false;
   const openNewTask = startNewTask;
-  // The Duo keeps compose in the detail column's bar, which is its vertical bar in landscape
-  // and folded, so it sits with the column's other actions whichever screen is shown. Pull
-  // requests leave it out, including one opened from a thread; their bar is already full of
-  // review actions.
+  // The cover detail rail needs room for thread tools above the fixed tabs.
+  // The unfolded Duo keeps compose in its detail bar.
   const detailCompose =
-    isDuoDevice(deviceType) && selectedTab !== "pullRequests" ? openNewTask : undefined;
+    deviceType === "duo-unfolded" && selectedTab !== "pullRequests" && !settingsOpen
+      ? openNewTask
+      : undefined;
   const inspector = use(NativeWorkspaceInspectorContext);
   const hostRef = useRef<SplitHostCommands>(null);
   const activeDetailKey = props.detail.at(-1)?.key;
@@ -263,7 +301,8 @@ function WorkspaceColumns(
     <Split.Host
       ref={hostRef}
       testID="adaptive-workspace-layout"
-      preferredSplitBehavior="tile"
+      preferredSplitBehavior={layout.primarySidebarOverlaysContent ? "overlay" : "tile"}
+      primaryBackgroundStyle={deviceType === "pad" ? "none" : "default"}
       topColumnForCollapsing={compactColumn}
       onCollapse={() => {
         collapsed.current = true;
@@ -271,15 +310,33 @@ function WorkspaceColumns(
       }}
       onExpand={() => {
         collapsed.current = false;
+        // Native callbacks can outlive the render that created them, so decide from the live
+        // router state. An expanded split has columns, so its tab gets a page beside the list.
+        const live = props.navigation.getState();
+        const { workspace } = workspaceRoutesOf(live.routes.slice(0, live.index + 1));
+        if (workspace.some((route) => route.name !== "Home" && route.name !== "Settings")) return;
+        const tab = workspace.some((route) => route.name === "Settings")
+          ? "settings"
+          : (["threads", "pullRequests", "usage"] as const).find((candidate) =>
+              workspaceTabs?.isTabActive(candidate),
+            );
+        openWorkspaceTab(tab ?? "threads", { columns: true });
       }}
       preferredDisplayMode={
         // UIKit applies the mode as a collapsed split expands, before the new width reaches JS, so a
         // collapsed split already carries the sidebar the expanded one will show.
         (layout.usesSplitView ? panes.primarySidebarVisible : panes.primarySidebarWhenExpanded) ||
         (!layout.usesSplitView && !activeDetailKey)
-          ? "oneBesideSecondary"
+          ? layout.primarySidebarOverlaysContent
+            ? "oneOverSecondary"
+            : "oneBesideSecondary"
           : "secondaryOnly"
       }
+      onDisplayModeWillChange={({ nativeEvent }) => {
+        if (!layout.primarySidebarOverlaysContent) return;
+        if (nativeEvent.nextDisplayMode === "oneOverSecondary") setPrimarySidebarVisible(true);
+        else if (nativeEvent.nextDisplayMode === "secondaryOnly") setPrimarySidebarVisible(false);
+      }}
       displayModeButtonVisibility="never"
       presentsWithGesture
       showInspector={inspector.visible}
@@ -331,7 +388,7 @@ function WorkspaceColumns(
             />
             <ColumnContent>
               <WorkspaceEmptyDetail
-                tab={selectedTab}
+                tab={settingsOpen ? "settings" : selectedTab}
                 onStartNewTask={
                   // Duo provides compose in the detail bar; iPad uses the empty-state action.
                   detailCompose ? undefined : openNewTask
@@ -345,6 +402,11 @@ function WorkspaceColumns(
               <ColumnScreen
                 key={route.key}
                 descriptor={descriptor}
+                sidebarToggle={
+                  layout.usesSplitView &&
+                  props.detail[0]?.key === route.key &&
+                  isSettingsRoute(route.name)
+                }
                 attached={props.detail.some((current) => current.key === route.key)}
                 onDismiss={handleNativeDismiss}
                 onAppearance={followCollapsedSplit}
@@ -368,7 +430,8 @@ function WorkspaceColumns(
 }
 
 function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean }) {
-  const { layout, startNewTask } = useAdaptiveWorkspaceLayout();
+  const { layout } = useAdaptiveWorkspaceLayout();
+  const workspace = useWorkspaceTabs()!;
   // Native dismiss commits the route pop after the transition. Restore the dock
   // when the primary screen starts appearing, including interactive back gestures.
   const [primaryVisible, setPrimaryVisible] = useState(false);
@@ -377,37 +440,31 @@ function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean
     const presentation = props.descriptors[route.key]?.options.presentation;
     return presentation !== undefined && presentation !== "card";
   });
-  // Linking normally restores Home via initialRouteName. A detail-only history
-  // must stay a single stack: placeholder descriptors cannot own an interactive
-  // sidebar because React Navigation rejects their actions and setOptions.
+  // Detail-only histories must stay single-stack: placeholder descriptors cannot own sidebar actions or setOptions.
   const primaryRoute = projection.primary;
   if (!primaryRoute) return <V5StackView {...props} />;
   const primaryDescriptor = props.descriptors[primaryRoute.key]!;
   const descriptors = props.descriptors;
   const baseRoute = { key: `${props.state.key}:workspace`, name: "Workspace" };
   const visibleRoute = projection.detail.at(-1) ?? primaryRoute;
+  const workspacePage = !workspaceUsesColumns(workspace.state.selectedTab, workspace.settingsOpen);
   const baseDescriptor: Descriptor = {
     ...primaryDescriptor,
     navigation: props.descriptors[visibleRoute.key]!.navigation,
-    // The native envelope keeps a stable key, but its NavigationProvider must
-    // identify the real visible route or useIsFocused closes media viewers.
+    // Identify the real visible route under the stable envelope key, or useIsFocused closes media viewers.
     route: visibleRoute,
     options: { headerShown: false },
     render: () => (
       <WorkspaceNativeTabs
-        onNewTask={startNewTask}
         hidden={
+          !workspacePage &&
           projection.detail.length > 0 &&
           !primaryVisible &&
           !layout.usesSplitView &&
           (metrics?.verticalBarEdge ?? "none") === "none"
         }
-        onSelect={() => {
-          if (props.state.index > 0)
-            props.navigation.dispatch({ type: "POP_TO_TOP", target: props.state.key });
-        }}
       >
-        {props.nativeColumns ? (
+        {props.nativeColumns && !workspacePage ? (
           <WorkspaceColumns
             {...props}
             descriptors={descriptors}
@@ -506,10 +563,16 @@ function WorkspaceStackNavigator({
     UNSTABLE_router,
   });
   if (!nativeWorkspaceColumnsReady) return null;
+  const settingsOpen = settingsOpenIn(
+    state.routes.slice(0, state.index + 1).filter((route) => {
+      const presentation = descriptors[route.key]?.options.presentation;
+      return presentation === undefined || presentation === "card";
+    }),
+  );
   return (
     <NativeWorkspaceModeContext value={usesNativeWorkspaceColumns}>
       <NavigationContent>
-        <WorkspaceTabsProvider>
+        <WorkspaceTabsProvider settingsOpen={settingsOpen}>
           <WorkspaceStackView
             nativeColumns={usesNativeWorkspaceColumns}
             {...rest}

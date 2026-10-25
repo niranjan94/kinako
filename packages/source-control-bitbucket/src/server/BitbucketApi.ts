@@ -18,10 +18,9 @@ import {
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { sanitizeBranchFragment } from "@t3tools/shared/git";
 import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
-import {
-  detectSourceControlProviderFromRemoteUrl,
-  isSshRemoteUrl,
-} from "@t3tools/shared/sourceControl";
+import { isSshRemoteUrl } from "@t3tools/shared/sourceControl";
+import { recognizeRemoteWith } from "@t3tools/source-control-core/shared/definition";
+import { definition } from "../shared/definition.ts";
 
 import {
   BitbucketPullRequestListSchema,
@@ -32,9 +31,9 @@ import {
 import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
 import * as SourceControlProvider from "@t3tools/source-control-core/server/SourceControlProvider";
 import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
-import { readSourceControlHostSettings } from "@t3tools/source-control-core/client/definition";
+import { readSourceControlHostSettings } from "@t3tools/source-control-core/shared/definition";
 
-import * as BitbucketClient from "../client/definition.ts";
+import * as BitbucketClient from "../shared/definition.ts";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 
 const DEFAULT_API_BASE_URL = "https://api.bitbucket.org/2.0";
@@ -76,6 +75,10 @@ export class BitbucketRepositoryLocatorError extends Schema.TaggedError<Bitbucke
   static readonly detail = "Bitbucket repositories must be specified as workspace/repository.";
 
   get detail(): string {
+    return BitbucketRepositoryLocatorError.detail;
+  }
+
+  get userFacingDetail(): string {
     return BitbucketRepositoryLocatorError.detail;
   }
 
@@ -234,15 +237,11 @@ export class BitbucketCheckoutError extends Schema.TaggedError<BitbucketCheckout
   }
 }
 
-/**
- * Refused rather than followed, because the request carries the account's credentials and a url
- * that came back in a response — a pagination cursor, or the target of a redirect — is not this
- * server's to trust.
- */
+/** Reject response-supplied URLs that could leak credentials. */
 export class BitbucketUntrustedUrlError extends Schema.TaggedError<BitbucketUntrustedUrlError>()(
   "BitbucketUntrustedUrlError",
   {
-    /** The host only. A rejected hop is often a signed url, whose query carries a credential. */
+    /** Host only; signed URL queries can contain credentials. */
     host: Schema.String,
   },
 ) {
@@ -537,10 +536,7 @@ type BitbucketCredential =
   | { readonly kind: "access-token"; readonly accessToken: string }
   | { readonly kind: "api-token"; readonly email: string; readonly apiToken: string };
 
-/**
- * A value the HTTP stack rejects makes it throw an error quoting the whole header, and that
- * error travels to clients as a cause, so an unusable token is treated as unset.
- */
+/** Invalid header values can throw errors containing credentials; treat them as unset. */
 const HEADER_SAFE = /^[\x21-\x7e]+$/u;
 
 function credentialFrom(input: {
@@ -636,7 +632,7 @@ const responseError = Effect.fn("BitbucketApi.responseError")(function* (
   });
 });
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const config = yield* BitbucketApiEnvConfig;
   const host = yield* SourceControlHost.SourceControlHost;
@@ -792,7 +788,7 @@ export const make = Effect.gen(function* () {
     );
 
     for (const remote of remotes.remotes) {
-      if (detectSourceControlProviderFromRemoteUrl(remote.url)?.kind !== "bitbucket") continue;
+      if (recognizeRemoteWith(definition, remote.url) === null) continue;
       const parsed = parseBitbucketRemoteUrl(remote.url);
       if (parsed) return parsed;
     }
@@ -901,11 +897,7 @@ export const make = Effect.gen(function* () {
     return origin !== null && origin === apiOrigin ? value : null;
   };
 
-  /**
-   * Redirects are followed here rather than by the client, which forwards every header to
-   * whatever host it is sent to. A pull request diff, diffstat and conflicts are all served as
-   * redirects, so they have to be followed — but only back to the same Bitbucket.
-   */
+  /** Redirects forward auth headers; restrict them to the configured Bitbucket. */
   const send = (input: {
     readonly method: "GET" | "POST" | "PUT" | "DELETE";
     readonly url: string;
@@ -926,7 +918,7 @@ export const make = Effect.gen(function* () {
           : input.method === "DELETE"
             ? HttpClientRequest.make("DELETE")(url)
             : HttpClientRequest.put(url);
-    // No `Accept: application/json`: the diff endpoints answer with a patch, not JSON.
+    // Diff endpoints return patches, not JSON.
     const withBody =
       input.body === undefined
         ? base

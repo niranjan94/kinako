@@ -279,10 +279,7 @@ export function IssueRouteScreen({ route }: StaticScreenProps<IssueParams>) {
   const openComment = () => navigation.navigate("IssueComment", params);
   const providerLabel = identity ? openOnProviderLabel(identity.provider) : null;
   return (
-    <PullRequestMarkdownRepository
-      params={params}
-      value={issue?.provider === "github" ? issue.url : null}
-    >
+    <PullRequestMarkdownRepository params={params} changeRequest={issue}>
       <View className={Platform.OS === "android" ? "flex-1 bg-header" : "flex-1 bg-screen"}>
         <NativeStackScreenOptions
           options={{

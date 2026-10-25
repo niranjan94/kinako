@@ -9,17 +9,7 @@ import * as Ref from "effect/Ref";
 import { readChromiumLocalStorage } from "./chromiumLocalStorage.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
-/**
- * Carries the renderer's localStorage (prompt stash, unsent drafts, layout,
- * theme) over from the profiles in `V1_PROFILE_NAMES`. Kinako lists none: the
- * profiles upstream T3 Code uses belong to that app, and Kinako never imports
- * from them.
- *
- * `load` runs before the window opens; the preload takes the items once,
- * merges them into the new profile, and calls `complete`, which writes a
- * marker so later launches skip the read. A failed read or merge, or a window
- * that never completes, leaves no marker and retries next launch.
- */
+/** Kinako lists no V1 profiles: upstream T3 Code's profiles belong to that app and are never imported. */
 export class DesktopLegacyLocalStorage extends Context.Service<
   DesktopLegacyLocalStorage,
   {

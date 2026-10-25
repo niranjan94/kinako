@@ -1,16 +1,5 @@
 #!/usr/bin/env node
-/**
- * Builds the `kinako-cli` npm package behind `npx kinako-cli` / `npm i -g kinako-cli`: a launcher
- * with no dependencies that downloads this exact version's CLI archive from
- * the GitHub Release on first run (scripts/npm-launcher/t3.mjs).
- * The executables are not published to npm. npm's publish-time scanning held
- * 250 MB platform packages back for up to an hour after the launcher went
- * live, and every install in that window ran a launcher with nothing to
- * launch.
- *
- * Output: `<output-dir>/kinako-cli/` (the package tree) and `<output-dir>/kinako-cli.tgz`,
- * which is what gets published.
- */
+// GitHub archives avoid npm scanning delays; output <output-dir>/kinako-cli/ and publishable kinako-cli.tgz.
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -38,11 +27,9 @@ import { windowsSystemTar } from "./lib/windows-tar.ts";
 export const NPM_LAUNCHER_PACKAGE_NAME = FORK_NPM_PACKAGE_NAME;
 
 /**
- * Upstream's launcher source, rebranded at build time so the file itself
- * stays identical to upstream's and merges cleanly. Every literal must still
- * be present: a miss means upstream changed the launcher and this list needs
- * updating, which the build reports instead of shipping a launcher that
- * downloads upstream's release.
+ * Upstream's launcher source, rebranded at build time so the file stays identical to upstream's.
+ * Every literal must still be present: a miss means upstream changed the launcher, and the build
+ * fails instead of shipping a launcher that downloads upstream's release.
  */
 const LAUNCHER_REBRAND: ReadonlyArray<readonly [string, string]> = [
   ['path.join(os.homedir(), ".t3")', `path.join(os.homedir(), "${FORK_HOME_DIR_NAME}")`],
@@ -85,7 +72,7 @@ export class NpmLauncherCommandFailedError extends Schema.TaggedError<NpmLaunche
   }
 }
 
-/** package.json for the launcher. `engines` asks for `import.meta.dirname` and `fetch`. */
+/** engines requires import.meta.dirname and fetch. */
 export function npmLauncherPackageManifest(version: string) {
   return {
     name: NPM_LAUNCHER_PACKAGE_NAME,

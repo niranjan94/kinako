@@ -1,3 +1,7 @@
+import {
+  sourceControlClients,
+  type ChangeRequestTerminology,
+} from "@t3tools/client-runtime/source-control-clients";
 import type { PullRequestDetail, PullRequestLinkedThreadsResult } from "@t3tools/contracts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
@@ -18,21 +22,25 @@ export function pullRequestAgentThread(
   return threads.length === 1 ? threads[0] : undefined;
 }
 
-export function pullRequestAgentPrompt(task: PullRequestAgentTask): string {
+export function pullRequestAgentPrompt(
+  task: PullRequestAgentTask,
+  terminology: ChangeRequestTerminology,
+): string {
+  const { shortLabel, singular } = terminology;
   switch (task) {
     case "ask":
     case "question":
       return "";
     case "explain":
-      return "Explain this pull request. Read the diff and walk through its purpose, the changes, the risks, and what I should read closely before approving. Do not change any code.";
+      return `Explain this ${singular}. Read the diff and walk through its purpose, the changes, the risks, and what I should read closely before approving. Do not change any code.`;
     case "feedback":
-      return "Address the actionable feedback and failing checks on this pull request. Fetch the latest review threads and check results, skip resolved feedback, and verify each finding before changing code. First confirm this thread is on the PR's branch; if it isn't, prepare the PR in its own worktree. Keep the fixes focused and run the relevant checks.";
+      return `Address the actionable feedback and failing checks on this ${singular}. Fetch the latest review threads and check results, skip resolved feedback, and verify each finding before changing code. First confirm this thread is on the ${shortLabel}'s branch; if it isn't, prepare the ${shortLabel} in its own worktree. Keep the fixes focused and run the relevant checks.`;
     case "conflicts":
-      return "Resolve this pull request's conflicts with its base branch. First confirm this thread is on the PR's branch; if it isn't, prepare the PR in its own worktree. Bring it up to date using this repository's convention, preserve the intent of both sides, and run the relevant checks before pushing.";
+      return `Resolve this ${singular}'s conflicts with its base branch. First confirm this thread is on the ${shortLabel}'s branch; if it isn't, prepare the ${shortLabel} in its own worktree. Bring it up to date using this repository's convention, preserve the intent of both sides, and run the relevant checks before pushing.`;
     case "watch":
-      return `Watch this pull request for check results, new feedback, and conflicts using ${FORK_DISPLAY_NAME}'s pull request watch. End the turn once the watch is armed. When it wakes you, assess what changed and report what needs attention.`;
+      return `Watch this ${singular} for check results, new feedback, and conflicts using ${FORK_DISPLAY_NAME}'s pull request watch. End the turn once the watch is armed. When it wakes you, assess what changed and report what needs attention.`;
     case "auto-fix":
-      return `Turn on Auto-fix CI for this pull request: call watch_pull_request with autoFix set to true, then end the turn. When ${FORK_DISPLAY_NAME} wakes you with failing checks, fix them as the wake describes.`;
+      return `Turn on Auto-fix CI for this ${singular}: call watch_pull_request with autoFix set to true, then end the turn. When ${FORK_DISPLAY_NAME} wakes you with failing checks, fix them as the wake describes.`;
   }
 }
 
@@ -41,6 +49,7 @@ export function pullRequestAgentActions(
   canWatch: boolean,
   canAutoFix: boolean,
 ) {
+  const { shortLabel } = sourceControlClients.get(pr.provider).changeRequest;
   return [
     { task: "ask", title: "Work on PR", icon: "bubble.left.and.bubble.right", disabled: false },
     {
@@ -49,7 +58,7 @@ export function pullRequestAgentActions(
       icon: "bubble.left.and.text.bubble.right",
       disabled: false,
     },
-    { task: "explain", title: "Explain this PR", icon: "book", disabled: false },
+    { task: "explain", title: `Explain this ${shortLabel}`, icon: "book", disabled: false },
     {
       task: "feedback",
       title: "Address feedback",
@@ -62,7 +71,12 @@ export function pullRequestAgentActions(
       icon: "arrow.triangle.branch",
       disabled: pr.state !== "open" || pr.mergeability !== "conflicting",
     },
-    { task: "watch", title: "Watch PR", icon: "eye", disabled: pr.state !== "open" || !canWatch },
+    {
+      task: "watch",
+      title: `Watch ${shortLabel}`,
+      icon: "eye",
+      disabled: pr.state !== "open" || !canWatch,
+    },
     {
       task: "auto-fix",
       title: "Auto-fix CI",
@@ -75,9 +89,10 @@ export function pullRequestAgentActions(
 export function appendPullRequestAgentPrompt(
   text: string,
   task: PullRequestAgentTask,
+  terminology: ChangeRequestTerminology,
   previousPrompt?: string,
 ): string {
-  const prompt = pullRequestAgentPrompt(task);
+  const prompt = pullRequestAgentPrompt(task, terminology);
   const kept = !previousPrompt
     ? text
     : text === previousPrompt

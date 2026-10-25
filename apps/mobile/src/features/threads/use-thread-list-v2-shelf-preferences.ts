@@ -20,8 +20,7 @@ export function useThreadListV2ShelfPreferences() {
     ? (preferencesResult.value.threadListCollapsedGroups ?? NO_COLLAPSED_GROUPS)
     : NO_COLLAPSED_GROUPS;
 
-  // A transform reads the optimistic value, so two presses before the next
-  // render still toggle twice instead of writing the same value.
+  // Transforms read optimistic state so same-frame presses toggle twice.
   const toggleSnoozedShelf = () => {
     if (!loaded) return;
     savePreferences({

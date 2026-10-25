@@ -10,7 +10,6 @@ import type {
 import { BotIcon, ExternalLinkIcon, SendIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { changeRequestRepositoryUrl } from "~/lib/openPullRequestLink";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { pullRequestEnvironment } from "~/state/pullRequests";
@@ -160,12 +159,20 @@ export function IssueDetailPanel({
     void refreshFromHost();
   }, [refreshToken, refreshFromHost]);
   const hostClient = sourceControlClients.get(detail?.provider);
-  const repositoryUrl = detail === null ? null : changeRequestRepositoryUrl(detail.url);
-  const markdownContext = (() => ({
-    repositoryUrl:
-      repositoryUrl === null ? null : hostClient.referenceAutolinkRepositoryUrl(repositoryUrl),
-    threadRef,
-  }))();
+  const repositoryUrl =
+    detail === null
+      ? null
+      : (sourceControlClients.parseIssueUrl(detail.url)?.link.repositoryUrl ?? null);
+  const markdownContext = (() => {
+    const find = hostClient.referenceAutolinks;
+    return {
+      autolinks:
+        find === undefined || repositoryUrl === null
+          ? null
+          : (text: string) => find(text, repositoryUrl),
+      threadRef,
+    };
+  })();
 
   if (detail === null) {
     return (

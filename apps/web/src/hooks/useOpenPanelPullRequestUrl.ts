@@ -5,8 +5,8 @@ import {
   readPullRequestDetailSnapshot,
   resolvePullRequestReferenceHost,
 } from "../components/pullRequest/pullRequestDetail.logic";
+import { projectChangeRequestUrl } from "@t3tools/client-runtime/change-request-links";
 import { issueReference } from "../components/pullRequest/issue.logic";
-import { gitHubPullRequestBrowserUrl } from "../lib/openPullRequestLink";
 import { selectActiveRightPanelSurface, useRightPanelStore } from "../rightPanelStore";
 import { useProject } from "../state/entities";
 import { pullRequestEnvironment } from "../state/pullRequests";
@@ -66,9 +66,7 @@ export function useOpenPanelPullRequestUrl(threadRef: ScopedThreadRef | null) {
     supportsMultiplePullRequests,
     project?.repositoryIdentity,
   );
-  // Everything that reads reference or the project runs before the query hook; a plain
-  // call on either after it would leave reference, and the detail atom it keys, uncached.
-  // The snapshot is already checked against reference, so live detail just wins below.
+  // Keep all reference/project reads before the query hook to preserve caching of reference and its detail atom.
   const cachedDetail =
     reference && environmentId
       ? readPullRequestDetailSnapshot(
@@ -79,11 +77,7 @@ export function useOpenPanelPullRequestUrl(threadRef: ScopedThreadRef | null) {
       : null;
   const fallbackUrl = reference
     ? (requestedReference?.url ??
-      gitHubPullRequestBrowserUrl(
-        project?.repositoryIdentity,
-        reference.repository,
-        reference.number,
-      ))
+      projectChangeRequestUrl(project?.repositoryIdentity, reference.repository, reference.number))
     : undefined;
   const detail = useEnvironmentQuery(
     reference && environmentId

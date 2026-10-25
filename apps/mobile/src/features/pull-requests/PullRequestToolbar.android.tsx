@@ -10,6 +10,7 @@ import { WorkspaceListToolbarRow } from "../workspace/WorkspaceListToolbarRow";
 import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { usePullRequestFilterMenu } from "./PullRequestFilterMenuContext";
+import { openSettings } from "../settings/settings-navigation";
 
 /** PR search shares the thread list's Android header row. */
 export function PullRequestToolbar(props: { readonly onRequestVisibility?: () => void }) {
@@ -72,12 +73,7 @@ export function PullRequestToolbar(props: { readonly onRequestVisibility?: () =>
         onOpenSearch={openSearch}
         searchAccessibilityLabel="Search pull requests"
         titleAccessibilityLabel={`${FORK_DISPLAY_NAME}, Pull requests`}
-        onOpenEnvironments={() =>
-          navigation.navigate("SettingsSheet", {
-            screen: "SettingsContent",
-            params: { screen: "SettingsEnvironments" },
-          })
-        }
+        onOpenEnvironments={() => openSettings(navigation, "SettingsEnvironments")}
         filter={
           filters ? (
             <AndroidAnchoredMenu

@@ -4,9 +4,7 @@ import { Argument, Command } from "effect/cli";
 import { runAcpMcpCliFastPath } from "../mcp/AcpMcpStdioBridge.ts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
-/**
- * The credential stays in the environment, never on the command line.
- */
+/** The credential stays in the environment, never on the command line. */
 export const acpMcpBridgeCommand = Command.make("acp-mcp-bridge").pipe(
   Command.withDescription(`Bridge ${FORK_DISPLAY_NAME}'s MCP endpoint to stdio for ACP agents.`),
   Command.unlisted,

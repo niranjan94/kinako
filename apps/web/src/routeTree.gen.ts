@@ -13,6 +13,7 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PairRouteImport } from './routes/pair'
+import { Route as GuestRouteImport } from './routes/guest'
 import { Route as ConnectAgentRouteImport } from './routes/connect-agent'
 import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as AgentsRouteImport } from './routes/agents'
@@ -31,6 +32,7 @@ import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagnostics'
 import { Route as SettingsDatabasesRouteImport } from './routes/settings.databases'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
+import { Route as SettingsBetaRouteImport } from './routes/settings.beta'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$projectKey'
@@ -57,6 +59,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const PairRoute = PairRouteImport.update({
   id: '/pair',
   path: '/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuestRoute = GuestRouteImport.update({
+  id: '/guest',
+  path: '/guest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectAgentRoute = ConnectAgentRouteImport.update({
@@ -149,6 +156,11 @@ const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsBetaRoute = SettingsBetaRouteImport.update({
+  id: '/beta',
+  path: '/beta',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
   id: '/archived',
   path: '/archived',
@@ -191,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/agents': typeof AgentsRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
+  '/guest': typeof GuestRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
@@ -200,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/beta': typeof SettingsBetaRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/databases': typeof SettingsDatabasesRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -220,6 +234,7 @@ export interface FileRoutesByTo {
   '/agents': typeof AgentsRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
+  '/guest': typeof GuestRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
@@ -229,6 +244,7 @@ export interface FileRoutesByTo {
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/beta': typeof SettingsBetaRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/databases': typeof SettingsDatabasesRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -252,6 +268,7 @@ export interface FileRoutesById {
   '/agents': typeof AgentsRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
+  '/guest': typeof GuestRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
@@ -261,6 +278,7 @@ export interface FileRoutesById {
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/beta': typeof SettingsBetaRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/databases': typeof SettingsDatabasesRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
@@ -285,6 +303,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/connect'
     | '/connect-agent'
+    | '/guest'
     | '/pair'
     | '/settings'
     | '/usage'
@@ -294,6 +313,7 @@ export interface FileRouteTypes {
     | '/projects/$projectKey'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/beta'
     | '/settings/connections'
     | '/settings/databases'
     | '/settings/diagnostics'
@@ -314,6 +334,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/connect'
     | '/connect-agent'
+    | '/guest'
     | '/pair'
     | '/settings'
     | '/usage'
@@ -323,6 +344,7 @@ export interface FileRouteTypes {
     | '/projects/$projectKey'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/beta'
     | '/settings/connections'
     | '/settings/databases'
     | '/settings/diagnostics'
@@ -345,6 +367,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/connect'
     | '/connect-agent'
+    | '/guest'
     | '/pair'
     | '/settings'
     | '/usage'
@@ -354,6 +377,7 @@ export interface FileRouteTypes {
     | '/projects/$projectKey'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/beta'
     | '/settings/connections'
     | '/settings/databases'
     | '/settings/diagnostics'
@@ -377,6 +401,7 @@ export interface RootRouteChildren {
   AgentsRoute: typeof AgentsRoute
   ConnectRoute: typeof ConnectRoute
   ConnectAgentRoute: typeof ConnectAgentRoute
+  GuestRoute: typeof GuestRoute
   PairRoute: typeof PairRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   UsageRoute: typeof UsageRoute
@@ -412,6 +437,13 @@ declare module '@tanstack/react-router' {
       path: '/pair'
       fullPath: '/pair'
       preLoaderRoute: typeof PairRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guest': {
+      id: '/guest'
+      path: '/guest'
+      fullPath: '/guest'
+      preLoaderRoute: typeof GuestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/connect-agent': {
@@ -540,6 +572,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsConnectionsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/beta': {
+      id: '/settings/beta'
+      path: '/beta'
+      fullPath: '/settings/beta'
+      preLoaderRoute: typeof SettingsBetaRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/archived': {
       id: '/settings/archived'
       path: '/archived'
@@ -613,6 +652,7 @@ const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
   SettingsArchivedRoute: typeof SettingsArchivedRoute
+  SettingsBetaRoute: typeof SettingsBetaRoute
   SettingsConnectionsRoute: typeof SettingsConnectionsRoute
   SettingsDatabasesRoute: typeof SettingsDatabasesRoute
   SettingsDiagnosticsRoute: typeof SettingsDiagnosticsRoute
@@ -631,6 +671,7 @@ interface SettingsRouteChildren {
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
   SettingsArchivedRoute: SettingsArchivedRoute,
+  SettingsBetaRoute: SettingsBetaRoute,
   SettingsConnectionsRoute: SettingsConnectionsRoute,
   SettingsDatabasesRoute: SettingsDatabasesRoute,
   SettingsDiagnosticsRoute: SettingsDiagnosticsRoute,
@@ -655,6 +696,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgentsRoute: AgentsRoute,
   ConnectRoute: ConnectRoute,
   ConnectAgentRoute: ConnectAgentRoute,
+  GuestRoute: GuestRoute,
   PairRoute: PairRoute,
   SettingsRoute: SettingsRouteWithChildren,
   UsageRoute: UsageRoute,

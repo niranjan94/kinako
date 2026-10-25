@@ -51,6 +51,7 @@ describe("V2 preview upgrade", () => {
         [69, "RepairClientSettlementTimestamps"],
         [70, "WebhookDedupe"],
         [71, "ShellStopRequestIndex"],
+        [72, "ThreadMessageSearch"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -145,6 +146,7 @@ describe("V2 preview upgrade", () => {
         [69, "RepairClientSettlementTimestamps"],
         [70, "WebhookDedupe"],
         [71, "ShellStopRequestIndex"],
+        [72, "ThreadMessageSearch"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

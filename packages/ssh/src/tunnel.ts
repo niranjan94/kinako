@@ -54,21 +54,15 @@ const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const TUNNEL_STDERR_TAIL_CHARS = 16_384;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
 const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
-// The service launcher gives its server five seconds to exit before killing
-// it, so stopping one waits past that, in 100 ms ticks.
+// The service launcher gives its server five seconds to exit, so stopping waits past that in 100 ms ticks.
 const REMOTE_STOP_WAIT_TICKS = 100;
-// Every route to a host shares one record of the server SSH started there.
-// Route state directories are named by hex digests, so this cannot collide.
+// Every route to a host shares one server record; route state directories are hex digests, so no collision.
 const REMOTE_SERVER_RECORD_DIR = "server";
-// Lives with the shared server record, so every route to the host agrees on
-// how the server binds instead of restarting it back and forth.
+// Shared with the server record so every route agrees on how the server binds instead of restarting it.
 const REMOTE_NETWORK_ACCESS_FILE = "network-access";
-// A cold archive launch also downloads and unpacks a ~70 MB release archive
-// and may wait on another installer's lock. The budgets nest: the checksum
-// file is tiny and the archive download is bounded; a waiter outlasts both
-// downloads plus extraction so it can reuse the result; and the SSH command
-// outlasts an install (own or waited-for) plus readiness, with slack for
-// verification and extraction, which have no timeout of their own.
+// Cold archive launches download and extract ~70 MB and may wait on an install lock.
+// Lock waits must outlast both downloads and extraction; SSH must outlast install or wait plus readiness.
+// Leave slack for verification and extraction, which have no timeout.
 const REMOTE_ARCHIVE_CHECKSUMS_SECONDS = 30;
 const REMOTE_ARCHIVE_DOWNLOAD_SECONDS = 240;
 const REMOTE_ARCHIVE_LOCK_WAIT_SECONDS = 360;

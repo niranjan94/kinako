@@ -2,11 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
-/**
- * The server picks the location in its managed worktrees folder.
- * Moves require an idle thread. The server detaches its provider sessions and
- * restores the conversation at the destination on the next run.
- */
+/** Uses the managed worktree folder; moves need an idle thread and restore the conversation on its next run. */
 export const WorktreeMcpHandoffInput = Schema.Struct({
   target: Schema.optional(Schema.Literals(["local", "worktree"])),
   expectedWorktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),

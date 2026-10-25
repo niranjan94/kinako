@@ -69,6 +69,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `apps/web/index.html` (title and splash), `apps/web/src/lib/bootError.ts` (copied standalone by a test, so it cannot import): display name.
 - `packages/contracts/src/settings.ts`: default SnapShot shortcut (contracts do not depend on shared).
 - `scripts/setup-worktree.ts`: the worktree-local `.kinako` directory for setup markers (it runs before `vp i`, so only Node built-ins exist).
+- `scripts/seed-issue-21397.py` and its test: the live `~/.kinako` home it refuses to write into, and the worktree-local `.kinako` source database.
 - `.github/workflows/fork-release.yml`, `.github/workflows/release-desktop.yml`: `kinako-*` archive globs.
 - `scripts/npm-launcher/t3.mjs` stays byte-identical to upstream's. `LAUNCHER_REBRAND` in `scripts/build-npm-launcher.ts` swaps its home directory, archive stem, release URL, executable name, and messages at build time; the generated package names its launcher `bin/kinako.mjs` and updates the `dist/bin.mjs` compatibility import, and the build fails if upstream changed one of those literals. Add new upstream literals to that list.
 - `AGENTS.md`: the Kinako paragraph under the introduction, and the live database path in rule 2 and Test data.
