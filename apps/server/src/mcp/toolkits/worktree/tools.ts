@@ -27,7 +27,7 @@ const WorktreeToolFailure = Schema.Union([WorktreeMcpFailure, OrchestratorMcpFai
 
 const WorktreeHandoffTool = Tool.make("t3_worktree_handoff", {
   description:
-    "Move this thread's workspace with tracked and non-ignored untracked changes preserved. Requires a thread credential, an idle unarchived thread, and a clean destination. Set target:local to return to the project checkout (detached at the worktree commit when needed); target:worktree creates a branch or reuses its existing worktree. Omit branch to reuse the associated worktree. Existing worktrees must match the source commit. The associated worktree is retained after returning to local. The server owns session detachment; the next turn uses the new cwd. For safe retries pass the original expectedWorktreePath, including null for local. continuationPrompt queues work after the move. For a separate conversation use t3_thread_launch with workspaceStrategy.",
+    "Move THIS thread's workspace, keeping tracked and non-ignored untracked changes. Needs an idle thread and a clean destination. `target:worktree` creates a branch or reuses its worktree (must match the source commit); omit `branch` to reuse the associated one. `target:local` returns to the project checkout, keeping the worktree. Runs the setup script by default. Retries: pass the original `expectedWorktreePath` (null for local). Call last in your turn. The move ends the live session. `continuationPrompt` resumes work there next turn. Without it, the thread waits. A separate agent in a worktree: `t3_thread_launch` with `workspaceStrategy`.",
   parameters: WorktreeMcpHandoffInput,
   success: WorktreeMcpHandoffResult,
   failure: WorktreeToolFailure,
@@ -42,8 +42,11 @@ const WorktreeHandoffTool = Tool.make("t3_worktree_handoff", {
 
 const WorktreeStatusTool = Tool.make("t3_worktree_status", {
   description:
-    "Needs an agent running inside a T3 thread. Report this agent thread's worktree binding: whether it is attached to a git worktree, the worktree path and branch, the project's main workspace root, and the server default for t3_worktree_handoff's startFromOrigin. Call this before t3_worktree_handoff to check whether a handoff is possible or has already happened.",
-  // Empty Struct emits object|array, making MCP clients reject the server; use EmptyParams for an object schema.
+    "Report this thread's worktree: attached or not, path, branch, project root, and the `startFromOrigin` default. Check before `t3_worktree_handoff`.",
+  // No `parameters`: Tool.make defaults to Tool.EmptyParams, which serializes
+  // to a top-level `type: "object"` JSON Schema. An explicit empty
+  // Schema.Struct({}) serializes to `anyOf: [object, array]`, which is not a
+  // valid MCP tool input schema and makes clients reject the whole server.
   success: WorktreeMcpStatusResult,
   failure: WorktreeToolFailure,
   failureMode: "return",
@@ -57,7 +60,7 @@ const WorktreeStatusTool = Tool.make("t3_worktree_status", {
 
 const WorktreeListTool = Tool.make("t3_worktree_list", {
   description:
-    "List branch refs and their associated checkout paths for a thread's workspace (omit threadId for this thread) using the app's ref inventory. Detached worktrees without a branch are not included. Use t3_worktree_status for the thread binding and t3_worktree_handoff to create a new worktree.",
+    "List branch refs and checkout paths for a thread's workspace. Omit `threadId` for this thread. Detached worktrees with no branch are left out.",
   parameters: Schema.Struct({
     threadId: Schema.optional(ThreadId),
     query: VcsListRefsInput.fields.query,

@@ -55,7 +55,7 @@ import {
 } from "./pullRequestList";
 import { useDebouncedValue } from "../../state/queries";
 import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
-import { useAndroidWorkspaceSelection } from "../workspace/useAndroidWorkspaceSelection";
+import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 
 function PullRequestScrollView(props: ScrollViewProps) {
   return (
@@ -122,7 +122,7 @@ export function PullRequestsScreen(
   const environmentId = environments.some((item) => item.environmentId === selectedEnvironmentId)
     ? selectedEnvironmentId
     : null;
-  const selectAndroidWorkspace = useAndroidWorkspaceSelection();
+  const selectDetail = useSelectWorkspaceDetail();
   const selectPullRequest = useCallback(
     (item: EnvironmentPullRequestListEntry) => {
       Keyboard.dismiss();
@@ -134,10 +134,9 @@ export function PullRequestsScreen(
         host: item.host,
         initialSummary: item,
       };
-      if (Platform.OS === "android") selectAndroidWorkspace({ name: "PullRequest", params });
-      else navigation.navigate("PullRequest", params);
+      selectDetail({ name: "PullRequest", params });
     },
-    [navigation, selectAndroidWorkspace],
+    [selectDetail],
   );
   const allProjects = useProjects();
   const savedControls = listControls.controlsFor(environmentId);

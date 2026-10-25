@@ -1,8 +1,8 @@
-import { CommonActions, useNavigation, useRoute, StackActions } from "@react-navigation/native";
+import { useNavigation, useRoute, StackActions } from "@react-navigation/native";
 import { nativePullRequestDestination } from "../lib/pullRequestNavigation";
 import { useCallback } from "react";
 import { Platform } from "react-native";
-import { resetAndroidWorkspace } from "../lib/android-workspace-navigation";
+import { useSelectWorkspaceDetail } from "../features/workspace/useSelectWorkspaceDetail";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { useProjects, useThreadShell } from "../state/entities";
 import { tryOpenExternalUrl } from "../lib/openExternalUrl";
@@ -14,6 +14,7 @@ type PullRequestContext = { readonly environmentId: string; readonly projectId: 
 // Avoid useRoute so layouts without route context can open any thread's pull requests.
 export function useNavigateToPullRequest(options?: { readonly replace?: boolean }) {
   const navigation = useNavigation();
+  const selectDetail = useSelectWorkspaceDetail();
   const projects = useProjects();
   const replace = options?.replace;
   return useCallback(
@@ -27,13 +28,14 @@ export function useNavigateToPullRequest(options?: { readonly replace?: boolean 
         (environmentId) => serverConfigs.get(environmentId)?.environment.capabilities,
       );
       if (!destination) return tryOpenExternalUrl(url, "pull-request");
-      if (Platform.OS === "android") resetAndroidWorkspace(navigation, destination);
+      // Android shows one page at a time; iOS opens it over the current page, so Back returns.
+      if (Platform.OS === "android") selectDetail(destination);
       else if (replace)
         navigation.dispatch(StackActions.replace(destination.name, destination.params));
-      else navigation.dispatch(CommonActions.navigate(destination));
+      else navigation.dispatch(StackActions.push(destination.name, destination.params));
       return true;
     },
-    [navigation, projects, replace],
+    [navigation, projects, replace, selectDetail],
   );
 }
 

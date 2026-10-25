@@ -20,6 +20,8 @@ import { SymbolView } from "../../components/ui/AppSymbol";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { environmentThreadShells } from "../../state/threads";
+import { sortSettledThreads } from "@t3tools/client-runtime/state/thread-sort";
+import { useOlderSettledShelf, useOlderSettledShelfGrowth } from "../../state/olderSettledShelf";
 import {
   pendingThreadOrderAtom,
   threadDropBusyAtom,
@@ -32,7 +34,12 @@ import {
   threadDragAction,
   type ThreadMoveDestination,
 } from "./threadOrder";
-import { getThreadListV2OrderedSection, threadListInboxReturns } from "./threadListV2";
+import {
+  getThreadListV2OrderedSection,
+  THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
+  THREAD_LIST_V2_SETTLED_PAGE_COUNT,
+  threadListInboxReturns,
+} from "./threadListV2";
 import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
 
 const ROW_HEIGHT = 56;
@@ -47,6 +54,8 @@ type Row = {
   /** Active rows and headers carry their group; moves stay inside it. */
   group?: string | null;
   label?: string;
+  /** The Settled section's "Show more" row. */
+  more?: true;
   offset: number;
   height: number;
 };
@@ -167,6 +176,15 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
   const { workingShelfEnabled } = useThreadListV2ShelfPreferences();
   const [now, setNow] = useState(() => new Date().toISOString());
   const [expanded, setExpanded] = useState({ snoozed: false, settled: false });
+  const [settledVisibleCount, setSettledVisibleCount] = useState(
+    THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
+  );
+  // Older settled threads load in pages, as in the thread list.
+  const olderSettledShelf = useOlderSettledShelf({
+    scopes: [...configs.keys()].map((environmentId) => ({ environmentId, projectIds: null })),
+    expanded: expanded.settled,
+    visibleCount: settledVisibleCount,
+  });
   useEffect(() => {
     const wakeAt = Math.min(
       ...threads.flatMap((thread) => {
@@ -213,9 +231,13 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
       pinned,
       active: [...ungrouped, ...groups.flatMap((entry) => entry.threads)],
       snoozed: parked.filter((thread) => effectiveSnoozed(thread, { now })),
-      settled: parked.filter((thread) => !effectiveSnoozed(thread, { now })),
+      settled: sortSettledThreads(parked.filter((thread) => !effectiveSnoozed(thread, { now }))),
     };
   }, [threads, configs, now, queuedThreadKeys, pendingOrder, workingShelfEnabled]);
+  const listedSettled = sections.settled.filter(olderSettledShelf.isListed);
+  useOlderSettledShelfGrowth(olderSettledShelf, listedSettled);
+  const visibleSettled = listedSettled.slice(0, settledVisibleCount);
+  const settledCount = sections.settled.length + olderSettledShelf.unloadedCount(threads);
   const planners = useMemo(() => {
     const planner = (section: "pinned" | "active", group?: string | null) =>
       createThreadMovePlanner({
@@ -258,7 +280,7 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
       offset += HEADER_HEIGHT;
       if ((section === "snoozed" || section === "settled") && !expanded[section]) continue;
       let group: string | null = null;
-      for (const thread of sections[section]) {
+      for (const thread of section === "settled" ? visibleSettled : sections[section]) {
         if (section === "active" && groupOf(thread) !== group) {
           group = groupOf(thread);
           const count = sections.active.filter((row) => groupOf(row) === group).length;
@@ -282,9 +304,13 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
         });
         offset += ROW_HEIGHT;
       }
+      if (section === "settled" && settledCount > visibleSettled.length) {
+        result.push({ key: "settled-more", section, more: true, offset, height: ROW_HEIGHT });
+        offset += ROW_HEIGHT;
+      }
     }
     return result;
-  }, [sections, expanded]);
+  }, [sections, expanded, visibleSettled, settledCount]);
   const list = useRef<FlatList<Row>>(null);
   const geometry = useRef({ height: 0, offset: 0 });
   const drag = useRef<Drag | null>(null);
@@ -562,6 +588,25 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
                               }}
                             />
                           </>
+                        ) : item.more ? (
+                          <Pressable
+                            disabled={olderSettledShelf.loading}
+                            className="flex-1 justify-center self-stretch"
+                            onPress={() => {
+                              olderSettledShelf.retry();
+                              setSettledVisibleCount(
+                                (count) => count + THREAD_LIST_V2_SETTLED_PAGE_COUNT,
+                              );
+                            }}
+                          >
+                            <Text className="text-sm text-foreground-muted">
+                              {olderSettledShelf.loading
+                                ? "Loading"
+                                : olderSettledShelf.failed
+                                  ? "Could not load older threads. Retry"
+                                  : `Show more (${settledCount - visibleSettled.length} settled hidden)`}
+                            </Text>
+                          </Pressable>
                         ) : (
                           <Pressable
                             disabled={item.section === "pinned" || item.section === "active"}
@@ -574,7 +619,11 @@ export function ThreadArrangementSheet(props: { onClose: () => void }) {
                           >
                             <Text className="text-sm font-t3-semibold text-foreground-muted">
                               {item.label ??
-                                `${item.section[0]!.toUpperCase() + item.section.slice(1)} (${sections[item.section].length})`}
+                                `${item.section[0]!.toUpperCase() + item.section.slice(1)} (${
+                                  item.section === "settled"
+                                    ? settledCount
+                                    : sections[item.section].length
+                                })`}
                             </Text>
                           </Pressable>
                         )}

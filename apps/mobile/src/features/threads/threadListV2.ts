@@ -343,6 +343,8 @@ export interface ThreadListV2Layout {
   readonly items: ThreadListV2Item[];
   readonly groups: ReadonlyArray<ThreadListV2GroupLayout>;
   readonly hiddenSettledCount: number;
+  /** The settled rows the shelf may list, before its visible limit. */
+  readonly listedSettledThreads: ReadonlyArray<EnvironmentThreadShell>;
   readonly workingCount: number;
   readonly workingShelfHeaderIndex: number | null;
   readonly snoozedCount: number;
@@ -680,12 +682,17 @@ export function buildThreadListV2Items(input: {
   readonly now: string;
   readonly workingShelfEnabled?: boolean;
   readonly workingShelfExpanded?: boolean;
+  readonly isWorking?: (thread: EnvironmentThreadShell) => boolean;
   readonly inboxReturnAt?: (thread: EnvironmentThreadShell) => number | undefined;
   readonly snoozedShelfExpanded?: boolean;
   readonly settledShelfExpanded?: boolean;
   readonly selectedThreadKey?: string | null;
   readonly queuedThreadKeys?: ReadonlySet<string>;
   readonly collapsedGroups?: ReadonlyArray<string>;
+  /** Whether the shelf may list a settled row yet; older settled rows load in pages. */
+  readonly isListedSettled?: (thread: EnvironmentThreadShell) => boolean;
+  /** Settled threads in scope that are not local (older settled threads not loaded). */
+  readonly unloadedSettledCount?: number;
 }): ThreadListV2Layout {
   const now = input.now;
   const pending =
@@ -764,7 +771,7 @@ export function buildThreadListV2Items(input: {
       settled.push(thread);
     } else if (thread.pinnedAt != null) {
       pinned.push(thread);
-    } else if (workingShelfEnabled && isThreadWorking(thread)) {
+    } else if (workingShelfEnabled && (input.isWorking ?? isThreadWorking)(thread)) {
       working.push(thread);
     } else {
       active.push(thread);
@@ -799,6 +806,7 @@ export function buildThreadListV2Items(input: {
         isLast: index === results.length - 1,
       })),
       hiddenSettledCount: 0,
+      listedSettledThreads: [],
       workingCount: 0,
       workingShelfHeaderIndex: null,
       snoozedCount: 0,
@@ -834,15 +842,21 @@ export function buildThreadListV2Items(input: {
           (thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey,
         );
   const orderedSettled = sortSettledThreadsReusingLast(settled);
+  const listedSettled =
+    input.isListedSettled === undefined
+      ? orderedSettled
+      : orderedSettled.filter(input.isListedSettled);
+  const settledTotal = orderedSettled.length + (input.unloadedSettledCount ?? 0);
   const settledLimit = input.settledLimit ?? Number.POSITIVE_INFINITY;
   const limitedSettled =
-    orderedSettled.length > settledLimit ? orderedSettled.slice(0, settledLimit) : orderedSettled;
+    listedSettled.length > settledLimit ? listedSettled.slice(0, settledLimit) : listedSettled;
   const selectedSettled =
-    selectedThreadKey === null
+    selectedThreadKey === null ||
+    limitedSettled.some((thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey)
       ? undefined
-      : orderedSettled
-          .slice(limitedSettled.length)
-          .find((thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey);
+      : orderedSettled.find(
+          (thread) => `${thread.environmentId}:${thread.id}` === selectedThreadKey,
+        );
   const pagedSettled =
     selectedSettled === undefined ? limitedSettled : [...limitedSettled, selectedSettled];
   const visibleSettled =
@@ -916,7 +930,7 @@ export function buildThreadListV2Items(input: {
       isLast: false,
     });
   }
-  const settledShelfHeaderIndex = orderedSettled.length > 0 ? items.length : null;
+  const settledShelfHeaderIndex = settledTotal > 0 ? items.length : null;
   for (const thread of visibleSettled) {
     items.push({
       thread,
@@ -934,12 +948,13 @@ export function buildThreadListV2Items(input: {
   return {
     items,
     groups,
-    hiddenSettledCount: orderedSettled.length - pagedSettled.length,
+    hiddenSettledCount: Math.max(0, settledTotal - pagedSettled.length),
+    listedSettledThreads: listedSettled,
     workingCount: orderedWorking.length,
     workingShelfHeaderIndex,
     snoozedCount: orderedSnoozed.length,
     snoozedShelfHeaderIndex,
-    settledCount: orderedSettled.length,
+    settledCount: settledTotal,
     settledShelfHeaderIndex,
     nextSnoozeWakeAt,
     contentOnlyThreadKeys,

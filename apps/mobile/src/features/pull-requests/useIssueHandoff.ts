@@ -1,8 +1,9 @@
-import { useNavigation } from "@react-navigation/native";
+import { StackActions, useNavigation } from "@react-navigation/native";
 import { sendIssueToAgentPrompt } from "@t3tools/client-runtime/issue-handoff";
 import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
 import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 import * as Dialog from "../../components/ui/Dialog";
 import { issueComposerContext } from "../../lib/composerContext";
 import { uuidv4 } from "../../lib/uuid";
@@ -16,6 +17,7 @@ import {
   waitForComposerDraftsLoaded,
 } from "../../state/use-composer-drafts";
 import { useWorkspaceEnvironments } from "../../state/workspace";
+import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 import {
   issueHandoffProjects,
   type HandoffIssueItem,
@@ -28,6 +30,7 @@ import {
  */
 export function useIssueHandoff() {
   const navigation = useNavigation();
+  const selectDetail = useSelectWorkspaceDetail();
   const projects = useProjects();
   const environments = useWorkspaceEnvironments();
   const operable = useEnvironmentsWithScope(environments, AuthOrchestrationOperateScope);
@@ -88,12 +91,15 @@ export function useIssueHandoff() {
           )
             throw new Error("Couldn't attach the issue to a new draft.");
         }
-        navigation.navigate("Thread", {
+        const destination = {
           draft: {
             draftId: draftKey,
             title: mode === "ask" ? `Ask about #${issue.number}` : `Issue #${issue.number}`,
           },
-        });
+        };
+        // Android shows one page at a time; iOS opens the draft over the issue, so Back returns.
+        if (Platform.OS === "android") selectDetail({ name: "Thread", params: destination });
+        else navigation.dispatch(StackActions.push("Thread", destination));
       } catch (cause) {
         Dialog.alert(
           "Couldn't start a task",
@@ -104,7 +110,7 @@ export function useIssueHandoff() {
         setBusy(false);
       }
     },
-    [canStart, projectsFor, navigation],
+    [canStart, projectsFor, navigation, selectDetail],
   );
   return { busy, canStart, projectsFor, start };
 }

@@ -1,4 +1,3 @@
-import { useNavigation } from "@react-navigation/native";
 import { parseScopedThreadKey, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
 import {
@@ -28,6 +27,7 @@ import {
   threadEnvironment,
 } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 import { withParentThreadReference } from "./sideQuestionCommand";
 
 export const latestSideChatAtom = Atom.family((parentKey: string) =>
@@ -51,7 +51,7 @@ function readOpenSideChat(parentRef: ScopedThreadRef) {
 const COMMAND_OPTIONS = { reportFailure: false } as const;
 
 export function useSideQuestionActions() {
-  const navigation = useNavigation();
+  const selectDetail = useSelectWorkspaceDetail();
   const ask = useAtomCommand(threadEnvironment.askSideQuestion, COMMAND_OPTIONS);
   const settle = useAtomCommand(threadEnvironment.settle, COMMAND_OPTIONS);
   const unsettle = useAtomCommand(threadEnvironment.unsettle, COMMAND_OPTIONS);
@@ -123,9 +123,12 @@ export function useSideQuestionActions() {
           input: { threadId: sideRef.threadId, isSideChat: false },
         }),
       );
-      navigation.navigate("Thread", {
-        environmentId: String(sideRef.environmentId),
-        threadId: String(sideRef.threadId),
+      selectDetail({
+        name: "Thread",
+        params: {
+          environmentId: String(sideRef.environmentId),
+          threadId: String(sideRef.threadId),
+        },
       });
     },
     join: async (parentRef: ScopedThreadRef, side: OrchestrationV2ThreadProjection) => {

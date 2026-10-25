@@ -312,7 +312,7 @@ function closingLine(input: {
       "T3 Code keeps watching and wakes you with the result, so end your turn after pushing. Handle any other items above as your task requires.",
     ].join(" ");
   }
-  return "Look into each item and act on it as your task requires. T3 Code keeps watching and wakes you on the next change, so end your turn when you are done. When you hand the work back to the user, call unwatch_pull_request first so the thread returns to their inbox.";
+  return "Look into each item and act on it as your task requires. This PR stays linked and watched, so do not link, watch, or list it again. End your turn when you are done, and T3 Code wakes you on the next change. When you hand the work back to the user, call unwatch_pull_request first so the thread returns to their inbox.";
 }
 
 export function pullRequestWatchMessage(input: {

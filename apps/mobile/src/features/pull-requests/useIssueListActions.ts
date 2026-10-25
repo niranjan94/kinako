@@ -1,9 +1,8 @@
-import { useNavigation } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
 import { useCallback } from "react";
 import { Keyboard, Linking, Platform, Share } from "react-native";
 import type { MenuProps } from "../../components/ui/Menu.types";
-import { useAndroidWorkspaceSelection } from "../workspace/useAndroidWorkspaceSelection";
+import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 import {
   issueHandoffMenuAction,
   parseIssueHandoffEvent,
@@ -24,18 +23,15 @@ export function issueRouteParams(item: EnvironmentIssueListEntry) {
   };
 }
 
-/** Opens an issue the way a pull request opens: Android keeps one detail slot beside the list. */
+/** Opens an issue the way a pull request opens: as the workspace's detail page. */
 export function useOpenIssue() {
-  const navigation = useNavigation();
-  const selectAndroidWorkspace = useAndroidWorkspaceSelection();
+  const selectDetail = useSelectWorkspaceDetail();
   return useCallback(
     (item: EnvironmentIssueListEntry) => {
       Keyboard.dismiss();
-      const params = issueRouteParams(item);
-      if (Platform.OS === "android") selectAndroidWorkspace({ name: "Issue", params });
-      else navigation.navigate("Issue", params);
+      selectDetail({ name: "Issue", params: issueRouteParams(item) });
     },
-    [navigation, selectAndroidWorkspace],
+    [selectDetail],
   );
 }
 
