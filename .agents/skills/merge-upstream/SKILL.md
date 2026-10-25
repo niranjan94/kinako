@@ -122,21 +122,28 @@ The first command looks only at lines the merge added. `--drift` lists files who
 
 Done when every section 4 line, every added-line hit and every drift entry has a decision.
 
-## 6. Verify
+## 6. Verify with CI's scope
 
-Run `check:changed` (format, lint, knip, affected typecheck, tests beside the changes) with the ground rules' environment cleared:
+A merge changes behaviour under files it never touched: a new upstream lint rule applies to fork-only files, and an upstream semantics change breaks fork tests that sit beside unchanged code. `check:changed` only looks at changed files, so a merge runs what CI runs, repo-wide. This is the developer's standing exception to AGENTS.md's "no repo-wide checks" for upstream merges.
 
 ```bash
-env -u T3_SERVICE_LAUNCHER_CONTEXT -u T3CODE_HOME -u T3CODE_PORT -u T3CODE_HOST -u T3CODE_NO_BROWSER \
-  PATH="$PWD/node_modules/.bin:$PATH" node scripts/check-changed.ts > "$S/check.log" 2>&1
+export PATH="$PWD/node_modules/.bin:$PATH"
+clean="env -u T3_SERVICE_LAUNCHER_CONTEXT -u T3CODE_HOME -u T3CODE_PORT -u T3CODE_HOST -u T3CODE_NO_BROWSER"
+vp fmt --check > "$S/fmt.log" 2>&1; echo "fmt=$?"
+vp lint > "$S/lint.log" 2>&1; echo "lint=$?"
+vp run knip:check > "$S/knip.log" 2>&1; echo "knip=$?"
+$clean vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test > "$S/test-packages.log" 2>&1; echo "packages=$?"
+$clean vp run --filter @t3tools/web test > "$S/test-web.log" 2>&1; echo "web=$?"
+$clean vp run --filter t3 test > "$S/test-server.log" 2>&1; echo "server=$?"
 ```
 
-It compares against `origin/main`, so it covers the whole merge and takes about ten minutes. Its typecheck step uses the package shims and can fail for the reason in step 4; trust your step 4 results instead.
+These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/ci.yml`); if CI's commands change, follow them. Run them in the background where you can; the server suite is the long one. Typecheck is step 4's job, since `vp check` typechecks through the package shims.
 
-- Lint failures on comments are the four-line cap: shorten the comment, keeping the constraint.
-- For each failing test, rerun its file alone. If it still fails, run it on pre-merge `main` in a temporary sibling worktree (`git worktree add --detach ../kinako-premerge HEAD^1`, `pnpm install`, run, `git worktree remove --force`) before blaming the merge. These fail on some machines regardless of the merge: `apps/server/src/process/externalLauncher.test.ts` (depends on installed VS Code builds), `apps/server/src/cloud/pinnedRuntime.test.ts` "keeps a runtime a process runs through a symlink", and `apps/server/src/provider/acp/AcpSessionRuntime.processTree.test.ts` "preserves exact argv…".
+- Lint errors (`grep -E "Found [0-9]+ error|  × " "$S/lint.log"`) on comments are the four-line cap: shorten the comment, keeping the constraint. Warnings are not failures.
+- A fork test that fails beside unchanged code usually means upstream changed the behaviour or data shape under it. Read the upstream commit that changed the code under test, then update the fixture if the fork's behaviour still holds in practice, or fix the fork code if it does not.
+- For each other failing test, rerun its file alone. If it still fails, run it on pre-merge `main` in a temporary sibling worktree (`git worktree add --detach ../kinako-premerge HEAD^1`, `pnpm install`, run, `git worktree remove --force`) before blaming the merge. These fail on some machines regardless of the merge: `apps/server/src/process/externalLauncher.test.ts` (depends on installed VS Code builds), `apps/server/src/cloud/pinnedRuntime.test.ts` "keeps a runtime a process runs through a symlink", `apps/server/src/provider/acp/AcpSessionRuntime.processTree.test.ts` "preserves exact argv…", and `apps/desktop/scripts/browser-secret-native.test.mjs` (needs `libsecret-1-dev` and `pkg-config`, which CI installs).
 
-Done when format, lint and knip pass and every remaining test failure is shown to fail on pre-merge `main` too.
+Done when format, lint and knip pass and every remaining test failure is shown to fail on pre-merge `main` too. Any edit after this point reruns the affected command before committing.
 
 ## 7. Commit and report
 
