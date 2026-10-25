@@ -102,10 +102,21 @@ describe("deriveTurnRecap", () => {
       deriveTurnRecap({
         ...baseInput,
         pendingBackgroundTasks: [
-          { taskId: "pr:56", kind: "monitor", description: "Watching PR #56" },
+          { taskId: "pr:56", kind: "monitor", description: "Watching PR #56", awaited: true },
         ],
       })?.outcome,
     ).toBe("waiting");
+  });
+
+  it("completes while only a monitor the agent does not wait on is running", () => {
+    expect(
+      deriveTurnRecap({
+        ...baseInput,
+        pendingBackgroundTasks: [
+          { taskId: "dev-server", kind: "monitor", description: "Watch dev server" },
+        ],
+      })?.outcome,
+    ).toBe("completed");
   });
 
   it("puts pending approvals ahead of generated outcomes and pending questions", () => {

@@ -1,10 +1,7 @@
 /**
- * Identity this fork ships under. Call sites import from here instead of
- * carrying literals, so upstream merges only conflict on one-line imports.
- * Every name differs from upstream's so both apps can be installed and run on
- * one machine. Shell and PowerShell installers, the Electron launcher, and the
- * GNOME extension cannot import TypeScript and repeat these values; FORK.md
- * lists them.
+ * Identity this fork ships under, imported instead of literals so upstream merges conflict only on
+ * one-line imports. Every name differs from upstream's so both apps install side by side. Files
+ * that cannot import TypeScript repeat these values; FORK.md lists them.
  */
 
 export const FORK_DISPLAY_NAME = "Kinako";
