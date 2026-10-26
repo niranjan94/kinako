@@ -2491,8 +2491,10 @@ it("mounts a bounded set of saved notebook outputs as the reader scrolls", async
       />
     </div>,
   );
-  await vi.waitFor(() =>
-    expect(screen.container.querySelectorAll("iframe").length).toBeGreaterThan(0),
+  // Parsing 2,000 outputs outlasts waitFor's 1 s default on the fork's half-core CI runners.
+  await vi.waitFor(
+    () => expect(screen.container.querySelectorAll("iframe").length).toBeGreaterThan(0),
+    { timeout: 10_000 },
   );
   expect(screen.container.querySelectorAll("iframe").length).toBeLessThanOrEqual(16);
   const first = screen.container.querySelector("iframe")!;

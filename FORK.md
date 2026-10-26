@@ -108,6 +108,8 @@ perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-24.04/ || s/blacksmith-
 perl -pi -e 's/^(        run: vp run --filter \@t3tools\/web test)$/$1 --testTimeout=30000 --hookTimeout=30000/' .github/workflows/ci.yml
 ```
 
+`vi.waitFor` keeps its own 1 s default regardless of those flags, so the notebook test in `apps/web/src/components/files/AttachmentFilePreview.browser.test.tsx` ("mounts a bounded set of saved notebook outputs") passes its first wait a longer timeout. Keep it when merging upstream changes to that file.
+
 CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does not support Ubuntu 26.04 yet, so the server browser tests cannot install Chromium there. Linux release artifacts also link against the build machine's glibc, so a 26.04 build would not start on older distributions.
 
 ## One-time setup
