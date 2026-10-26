@@ -151,7 +151,7 @@ Open a thread's menu and choose **Move to group** to file it under an existing g
 
 A group exists as long as it has threads, and threads with the same group name are listed together, even when they come from different environments. Right-click a group header on web and desktop, or long-press it on mobile, to **Rename group** or **Ungroup threads**. Choose **Remove from group** in a thread's menu to take out one thread.
 
-Grouping only affects active threads. Pinned, working, snoozed, and settled threads stay in their own sections and return to their group when they become active again. Within a group, drag or use **Move up** and **Move down** to change the order. On mobile, threads move between groups only through **Move to group**. Agents can group threads too. Groups need a current server in each environment.
+Grouping only affects active threads. Pinned, working, snoozed, and settled threads stay in their own sections and return to their group when they become active again. With the Working section turned off, drag or use **Move up** and **Move down** to change the order within a group; while it is on, threads in a group follow the active list's order. On mobile, threads move between groups only through **Move to group**. Agents can group threads too. Groups need a current server in each environment.
 
 ## Settle finished work
 
