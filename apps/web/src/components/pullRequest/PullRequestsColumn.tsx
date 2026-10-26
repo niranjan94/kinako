@@ -123,7 +123,7 @@ export function PullRequestsColumn({
   listBody: ReactNode;
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
-  const title = issues ? "Issues" : "Pull Requests";
+  const title = issues ? "Issues" : "Pull requests";
   const markerRef = useRef<HTMLDivElement | null>(null);
   const [condensed, setCondensed] = useState(false);
   useEffect(() => {

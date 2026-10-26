@@ -485,10 +485,9 @@ const make = Effect.gen(function* () {
       source: session.value.source,
       generation,
     }).pipe(
-      Effect.flatMap((result) =>
-        result === null
-          ? Effect.fail(new AgentSessionNativeThreadOwnedError())
-          : Effect.succeed(result),
+      Effect.filterOrFail(
+        (result) => result !== null,
+        () => new AgentSessionNativeThreadOwnedError(),
       ),
       Effect.mapError(
         (cause) =>

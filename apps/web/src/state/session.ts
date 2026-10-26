@@ -46,7 +46,7 @@ export function useEnvironmentSessionScopes(
   return session?.authenticated ? (session.permissions ?? session.scopes ?? null) : null;
 }
 
-function sessionHasScope(
+export function sessionHasScope(
   result: AsyncResult.AsyncResult<AuthSessionState, unknown>,
   scope: AuthEnvironmentScope,
 ): boolean {

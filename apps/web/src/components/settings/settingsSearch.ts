@@ -10,6 +10,9 @@ import {
 } from "@t3tools/client-runtime/source-control-clients";
 import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import * as Schema from "effect/Schema";
+import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
+import { writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import { commandLabel } from "./KeybindingsSettings.logic";
 import {
   validateSettingsScopeSearch,
@@ -61,7 +64,6 @@ export interface SettingsSearchItem {
   readonly localEnvironmentOnly?: boolean;
   readonly wslAvailableOnly?: boolean;
   readonly managedTunnelOnly?: boolean;
-  readonly redesignOnly?: boolean;
   readonly secondary?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
 }
@@ -76,7 +78,6 @@ export interface SettingsSearchAvailability {
   readonly isWslSettingsRowVisible: boolean;
   readonly hasThreadAutoSettlement: boolean;
   readonly managedTunnelActive?: boolean;
-  readonly redesignEnabled?: boolean;
 }
 
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
@@ -88,8 +89,8 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/snap-shot": "SnapShots",
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
-  "/settings/scheduled-tasks": "Scheduled Tasks",
-  "/settings/source-control": "Source Control",
+  "/settings/scheduled-tasks": "Scheduled tasks",
+  "/settings/source-control": "Source control",
   "/settings/storage": "Storage",
   "/settings/connections": "Connections",
   "/settings/databases": "Databases",
@@ -306,13 +307,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["compact comfortable spacious spacing padding rows tight roomy"],
   },
   {
-    id: "sidebar-project-icon-colors",
-    title: "Colored project icons",
-    to: "/settings/appearance",
-    searchTerms: ["sidebar favicon logo grayscale gray color"],
-    redesignOnly: true,
-  },
-  {
     id: "math-rendering",
     title: "Render math",
     to: "/settings/appearance",
@@ -400,7 +394,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "new-design",
     title: "New design",
     to: "/settings/beta",
-    searchTerms: ["beta redesign look style sidebar composer gray quieter classic"],
+    searchTerms: ["beta redesign look style sidebar composer black quieter classic"],
   },
   {
     id: "working-shelf",
@@ -1227,8 +1221,7 @@ export function filterAvailableSettingsSearchItems(
       (!item.localEnvironmentOnly || !availability.localEnvironmentDisabled) &&
       (!item.wslAvailableOnly || availability.isWslSettingsRowVisible) &&
       (!item.requiresThreadAutoSettlement || availability.hasThreadAutoSettlement) &&
-      (!item.managedTunnelOnly || availability.managedTunnelActive === true) &&
-      (!item.redesignOnly || availability.redesignEnabled === true),
+      (!item.managedTunnelOnly || availability.managedTunnelActive === true),
   );
 }
 
@@ -1286,4 +1279,29 @@ export function searchSettings(
         left.index - right.index,
     )
     .map(({ item }) => item);
+}
+
+// Font smoothing only renders on macOS, so a search jump to it elsewhere
+// must not flip the section - the target would never mount to be scrolled to.
+const ADVANCED_TYPOGRAPHY_TARGET_IDS: ReadonlySet<string> = new Set([
+  "prompt-font",
+  "terminal-font",
+  ...(typeof navigator !== "undefined" && isMacPlatform(navigator.platform)
+    ? ["font-smoothing"]
+    : []),
+]);
+
+export function isAdvancedTypographyTarget(targetId: string): boolean {
+  return ADVANCED_TYPOGRAPHY_TARGET_IDS.has(targetId);
+}
+
+/**
+ * Opens the persisted section a search result lives in before jumping to it, so
+ * its row is mounted to scroll to. The terminal reads the same flag, so it must
+ * stay on after the jump.
+ */
+export function revealSettingsSearchTarget(targetId: string): void {
+  if (isAdvancedTypographyTarget(targetId)) {
+    writeLocalStorageValue(TYPOGRAPHY_ADVANCED_STORAGE_KEY, true, false, Schema.Boolean);
+  }
 }

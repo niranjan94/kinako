@@ -161,12 +161,12 @@ const make = Effect.gen(function* () {
 
   const findDraft = (draft: DatabaseConnectionDraft) =>
     draft.id === undefined
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : find(draft.id).pipe(
           Effect.catchTags({
             DatabaseRequestError: (error) =>
               error.failure === "connection-not-found" && draft.level === "global"
-                ? Effect.succeed(undefined)
+                ? Effect.undefined
                 : Effect.fail(error),
           }),
         );
@@ -213,11 +213,9 @@ const make = Effect.gen(function* () {
   });
 
   const remove = Effect.fn("DatabaseConnections.remove")(function* (id: DatabaseConnectionId) {
-    yield* sql`DELETE FROM database_connections WHERE id = ${id}`.pipe(
-      Effect.mapError(storageFailed),
-    );
-    yield* secrets.remove(passwordSecretName(id)).pipe(Effect.mapError(storageFailed));
-  });
+    yield* sql`DELETE FROM database_connections WHERE id = ${id}`;
+    yield* secrets.remove(passwordSecretName(id));
+  }, Effect.mapError(storageFailed));
 
   const resolveDraft = Effect.fn("DatabaseConnections.resolveDraft")(function* (
     draft: DatabaseConnectionDraft,

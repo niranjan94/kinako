@@ -1,4 +1,4 @@
-import { PermissionUpdateNotice } from "./features/connection/PermissionUpdateNotice";
+import { installPermissionUpdateNotice } from "./features/connection/permissionUpdateNotice";
 import * as Linking from "expo-linking";
 import {
   FORK_DEV_URL_SCHEME,
@@ -36,6 +36,12 @@ import { environmentThreadShells } from "./state/threads";
 import { environmentShell } from "./state/shell";
 import { OverlayPortalHost } from "./components/ui/OverlayPortal";
 import { shouldHandleAppLink, restoreDraftLinkState } from "./lib/appLinking";
+import { hasCloudPublicConfig } from "./features/cloud/publicConfig";
+import { takeScheduledTaskNewLink } from "./features/settings/scheduled-task-editor-state";
+import {
+  disposeOnFoundationReplace,
+  type FoundationHotModule,
+} from "./lib/foundation-fast-refresh";
 import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
 import { useUiRuntimeMemoryWarningGc } from "./lib/useUiRuntimeMemoryWarningGc";
 import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
@@ -68,7 +74,7 @@ const appLinking = {
     `${FORK_PREVIEW_URL_SCHEME}://`,
   ],
   config: { initialRouteName: "Home" },
-  filter: shouldHandleAppLink,
+  filter: (url: string) => shouldHandleAppLink(url, hasCloudPublicConfig()),
   getInitialURL: async () => (await Linking.getInitialURL()) ?? (await launchWorkspaceURL()),
   getActionFromState: (
     state: Parameters<typeof getActionFromState>[0],
@@ -78,14 +84,24 @@ const appLinking = {
     (workspaceDetailLinkAction(state) as ReturnType<typeof getActionFromState>) ??
     getActionFromState(state, options),
   getStateFromPath: (path: string, options: Parameters<typeof getStateFromPath>[1]) =>
-    restoreSettingsLinkState(
-      restoreDraftLinkState(getStateFromPath(path, options), path),
-      settingsLinkPage(),
+    takeScheduledTaskNewLink(
+      restoreSettingsLinkState(
+        restoreDraftLinkState(getStateFromPath(path, options), path),
+        settingsLinkPage(),
+      ),
     ),
 };
 
 const Navigation = createStaticNavigation(RootStack);
 const navigationRef = createNavigationContainerRef();
+
+declare const module: { readonly hot?: FoundationHotModule } | undefined;
+
+const disposePermissionUpdateNotice = installPermissionUpdateNotice();
+disposeOnFoundationReplace(
+  typeof module === "undefined" ? undefined : module.hot,
+  disposePermissionUpdateNotice,
+);
 
 function SplashScreenCoordinator() {
   const { isReady } = useAppearancePreferences();
@@ -129,7 +145,6 @@ function AppContent() {
     <>
       <SplashScreenCoordinator />
       <SubscriptionUsageCoordinator />
-      <PermissionUpdateNotice />
       <GestureHandlerRootView className="flex-1">
         <KeyboardProvider statusBarTranslucent>
           <SafeAreaProvider>

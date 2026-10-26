@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { shouldHandleAppLink, restoreDraftLinkState } from "./appLinking";
+import { findLinkedRoute, restoreDraftLinkState, shouldHandleAppLink } from "./appLinking";
 
 describe("shouldHandleAppLink", () => {
   it.each(["kinako://", "kinako:///", "kinako-dev://", "kinako-preview://"])(
     "ignores scheme-only URL %s",
     (url) => {
-      expect(shouldHandleAppLink(url)).toBe(false);
+      expect(shouldHandleAppLink(url, true)).toBe(false);
     },
   );
 
@@ -15,15 +15,39 @@ describe("shouldHandleAppLink", () => {
     "kinako://pair?pairingUrl=x",
     "kinako-dev://settings/usage?tab=limits",
   ])("handles path-bearing URL %s", (url) => {
-    expect(shouldHandleAppLink(url)).toBe(true);
+    expect(shouldHandleAppLink(url, true)).toBe(true);
   });
 
   it.each(["kinako://expo-development-client/?url=x", "kinako://expo-sharing/anything"])(
     "ignores lifecycle URL %s",
     (url) => {
-      expect(shouldHandleAppLink(url)).toBe(false);
+      expect(shouldHandleAppLink(url, true)).toBe(false);
     },
   );
+});
+
+describe("cloud-only deep links", () => {
+  it.each([
+    "kinako://connect-onboarding",
+    "kinako-dev://connect-onboarding/?source=x",
+    "kinako://settings/waitlist",
+    "kinako://settings/auth",
+    "exp://192.168.1.2:8081/--/settings/auth",
+  ])("ignores %s without cloud config", (url) => {
+    expect(shouldHandleAppLink(url, false)).toBe(false);
+    expect(shouldHandleAppLink(url, true)).toBe(true);
+  });
+
+  it.each([
+    "kinako://settings",
+    "kinako://settings/authors",
+    "kinako://pair?next=settings/auth",
+    "kinako://threads/env/thread/files/scripts/connect-onboarding",
+    "kinako://new/draft/files/settings/auth",
+    "exp://192.168.1.2:8081/--/threads/env/thread/files/settings/waitlist",
+  ])("still handles %s without cloud config", (url) => {
+    expect(shouldHandleAppLink(url, false)).toBe(true);
+  });
 });
 
 describe("draft deep links", () => {
@@ -63,5 +87,30 @@ describe("draft deep links", () => {
     expect(restoreDraftLinkState(state, "/threads/env-1/thread-1")).toBe(state);
     expect(restoreDraftLinkState(state, "/new")).toBe(state);
     expect(restoreDraftLinkState(undefined, "/new/draft")).toBeUndefined();
+  });
+});
+
+describe("nested link routes", () => {
+  const settingsLink = {
+    routes: [
+      { name: "Home" },
+      {
+        name: "SettingsSheet",
+        state: {
+          routes: [
+            { name: "Settings" },
+            { name: "SettingsEnvironmentNew", params: { pairingUrl: "x", autoConnect: "1" } },
+          ],
+        },
+      },
+    ],
+  };
+
+  it("finds a route the link opens inside a nested navigator", () => {
+    expect(findLinkedRoute(settingsLink, ["SettingsEnvironmentNew"])?.params).toEqual({
+      pairingUrl: "x",
+      autoConnect: "1",
+    });
+    expect(findLinkedRoute(settingsLink, ["ConnectionsNew"])).toBeUndefined();
   });
 });

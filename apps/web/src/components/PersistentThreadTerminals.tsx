@@ -9,7 +9,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
-import { memo, useContext, useEffect, useState } from "react";
+import { memo, useContext, useEffect } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
 import type { TerminalContextSelection } from "../lib/terminalContext";

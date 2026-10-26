@@ -14,22 +14,17 @@ const metroConfig: Promise<{ transformer: { babelTransformerPath: string } }> =
 
 // Remove bailout entries and manual memoization when compilation starts; this check rejects stale entries.
 const KNOWN_BAILOUTS: Record<string, string> = {
+  "src/components/ui/Menu.tsx": "ref read during render",
   "src/features/database/ThreadDatabaseRouteScreen.tsx": "try/finally",
+  "src/features/diffs/nativeReviewDiffSurface.ts": "ref read during render",
+  "src/features/home/thread-swipe-actions.tsx": "ref read during render",
   "src/features/pull-requests/IssueCommentSheet.tsx": "try/finally, throw inside try",
   "src/features/pull-requests/useIssueHandoff.ts": "try/finally, throw inside try",
   "src/features/settings/ProjectAdditionalDirectoriesSection.tsx": "unsupported logical test block",
   "src/features/threads/ImportCliSessionRouteScreen.tsx": "try without catch",
-  "src/components/ComposerAttachmentStrip.tsx": "unsupported syntax",
-  "src/components/ui/AndroidAnchoredMenu.tsx": "ref read during render",
-  "src/components/ui/Menu.tsx": "ref read during render",
-  "src/features/diffs/nativeReviewDiffSurface.ts": "ref read during render",
-  "src/features/home/thread-swipe-actions.tsx": "ref read during render",
-  "src/features/terminal/ThreadTerminalRouteScreen.tsx": "ref read during render",
-  "src/features/threads/PendingUserInputCard.tsx": "mutates a frozen value",
   "src/features/threads/ThreadArrangementSheet.tsx": "ref read during render",
   "src/features/voice-input/VoiceInputProvider.tsx": "ref read during render",
   "src/features/voice-input/useVoiceInputController.ts": "ref read during render",
-  "src/native/StackHeader.tsx": "ref read during render",
   "src/native/T3ComposerEditor.ios.tsx": "ref read during render",
   "src/native/T3ComposerEditor.native.tsx": "ref read during render",
 };

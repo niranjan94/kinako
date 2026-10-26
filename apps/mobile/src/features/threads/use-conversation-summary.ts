@@ -108,6 +108,7 @@ export function useConversationSummary(input: {
     if (pending === null || projection === null) return;
     const outcome = conversationSummaryOutcome(projection, pending);
     if (outcome === null) return;
+    // oxlint-disable-next-line react/set-state-in-effect -- The outcome arrives in server state; clearing the request keeps its alert and draft restore from repeating.
     setPending(null);
     if (outcome.type === "failed") {
       Dialog.alert("Could not summarize", outcome.message);

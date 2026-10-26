@@ -568,22 +568,22 @@ const make = Effect.gen(function* () {
             }),
           ),
           Effect.catchTags({
-            DatabaseEngineError: (error) =>
-              Effect.gen(function* () {
-                query.running = false;
-                if (editor && query.cancelled && query.session?.cancelClosesSession)
-                  editor.closed = true;
-                yield* release(input.queryId);
-                if (editor?.closed && input.sessionId) yield* closeEditor(input.sessionId);
-                return {
-                  kind: "failed",
-                  message: error.engineMessage,
-                  code: error.code,
-                  position: error.position,
-                  cancelled: error.cancelled || query.cancelled,
-                  durationMs: yield* elapsed,
-                } satisfies DatabaseExecuteResult;
-              }),
+            // The enclosing operation owns the span for this inline handler.
+            DatabaseEngineError: Effect.fnUntraced(function* (error) {
+              query.running = false;
+              if (editor && query.cancelled && query.session?.cancelClosesSession)
+                editor.closed = true;
+              yield* release(input.queryId);
+              if (editor?.closed && input.sessionId) yield* closeEditor(input.sessionId);
+              return {
+                kind: "failed",
+                message: error.engineMessage,
+                code: error.code,
+                position: error.position,
+                cancelled: error.cancelled || query.cancelled,
+                durationMs: yield* elapsed,
+              } satisfies DatabaseExecuteResult;
+            }),
           }),
         );
       }).pipe(Effect.tapError(() => release(input.queryId)));

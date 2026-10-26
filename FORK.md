@@ -66,7 +66,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `apps/desktop/gnome-extension/`: extension UUID, D-Bus name and path, allowed client names (mirrored in `apps/desktop/src/snapShot/LinuxSnapShot.ts`).
 - `apps/desktop/resources/linux/io.niranjan.kinako.metainfo.xml`, `apps/desktop/package.json` (`productName`).
 - `apps/mobile/src/widgets/AgentActivity.tsx`, `apps/mobile/src/widgets/SubscriptionUsage.tsx`, `apps/mobile/src/widgets/SubscriptionUsage.android.tsx`: widget deep link scheme and widget text (widgets are serialized, so they cannot import).
-- `apps/web/index.html` (title and splash), `apps/web/src/lib/bootError.ts` (copied standalone by a test, so it cannot import): display name.
+- `apps/web/index.html` (title and splash), `apps/web/src/lib/bootError.ts` (copied standalone by a test, so it cannot import): display name, `kinako` and `npx kinako-cli` triage commands, and the fork repository's issue and release URLs.
 - `packages/contracts/src/settings.ts`: default SnapShot shortcut (contracts do not depend on shared).
 - `scripts/setup-worktree.ts`: the worktree-local `.kinako` directory for setup markers (it runs before `vp i`, so only Node built-ins exist).
 - `scripts/seed-issue-21397.py` and its test: the live `~/.kinako` home it refuses to write into, and the worktree-local `.kinako` source database.

@@ -48,6 +48,7 @@ import * as ProviderTurnControlService from "../ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "../ProviderTurnStartService.ts";
 import * as ProviderTurnStartServiceTestkit from "../ProviderTurnStartService.testkit.ts";
 import * as McpAppModelContext from "../../mcpApps/McpAppModelContext.ts";
+import * as PreviewAgentActivity from "../../preview/PreviewAgentActivity.ts";
 import * as RunExecutionService from "../RunExecutionService.ts";
 import * as RunFinalizationService from "../RunFinalizationService.ts";
 import * as TextGeneration from "../../textGeneration/TextGeneration.ts";
@@ -383,6 +384,7 @@ export function layerWithRegistry<Error>(
     Layer.provide(
       Layer.mergeAll(
         McpAppModelContext.layerEmpty,
+        PreviewAgentActivity.layer,
         layerCheckpointServiceProvided,
         layerEventSinkProvided,
         IdAllocator.layer,
@@ -447,7 +449,9 @@ export function layerWithRegistry<Error>(
   const layerThreadTitleRegenerationTest = Layer.succeed(
     ThreadTitleRegenerationService.ThreadTitleRegenerationService,
     ThreadTitleRegenerationService.ThreadTitleRegenerationService.of({
-      execute: () => Effect.void,
+      execute: Effect.fn("ThreadTitleRegenerationService.execute")(function () {
+        return Effect.void;
+      }),
     }),
   );
   const layerOrchestratorProvided = Orchestrator.layer.pipe(
@@ -485,8 +489,12 @@ export function layerWithRegistry<Error>(
       ? Layer.succeed(
           ThreadSummaryService.ThreadSummaryService,
           ThreadSummaryService.ThreadSummaryService.of({
-            execute: () => Effect.void,
-            executeRecap: () => Effect.void,
+            execute: Effect.fn("ThreadSummaryService.execute")(function () {
+              return Effect.void;
+            }),
+            executeRecap: Effect.fn("ThreadSummaryService.executeRecap")(function () {
+              return Effect.void;
+            }),
           }),
         )
       : ThreadSummaryService.layer.pipe(

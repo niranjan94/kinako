@@ -12,7 +12,6 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
@@ -76,13 +75,11 @@ function harness(worktreePath: string | null = null, fails = false) {
     Layer.provide(
       Layer.succeed(ProjectService.ProjectService, {
         getById: () =>
-          Effect.succeed(
-            Option.some({
-              id: projectId,
-              workspaceRoot: "/repo",
-              scripts: [],
-            } as unknown as Project),
-          ),
+          Effect.succeedSome({
+            id: projectId,
+            workspaceRoot: "/repo",
+            scripts: [],
+          } as unknown as Project),
       } as unknown as ProjectService.ProjectService["Service"]),
     ),
     Layer.provide(

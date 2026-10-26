@@ -2,7 +2,7 @@ import { SettingsGroup } from "./SettingsGroup";
 import { NotificationSettings } from "./NotificationSettings";
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   type DesktopUpdateChannel,
   IDLE_COMPACTION_MODES,
@@ -418,9 +418,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.mathRenderingEnabled !== DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled
       ? ["Render math"]
       : []),
-    ...(settings.sidebarProjectIconColors !== DEFAULT_UNIFIED_SETTINGS.sidebarProjectIconColors
-      ? ["Colored project icons"]
-      : []),
     ...(settings.redesignEnabled !== DEFAULT_UNIFIED_SETTINGS.redesignEnabled
       ? ["New design"]
       : []),
@@ -600,7 +597,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
       uiDensity: DEFAULT_UNIFIED_SETTINGS.uiDensity,
       mathRenderingEnabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled,
-      sidebarProjectIconColors: DEFAULT_UNIFIED_SETTINGS.sidebarProjectIconColors,
       redesignEnabled: DEFAULT_UNIFIED_SETTINGS.redesignEnabled,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
@@ -728,17 +724,12 @@ function LegacyFeaturesSection() {
   const [open, setOpen] = useState(false);
   const searchTargetId = useSettingsSearchTargetId();
   const targetRef = useSettingsSearchTarget<HTMLElement>("legacy-features");
-  const lastExpandedTargetRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (searchTargetId === null) {
-      lastExpandedTargetRef.current = null;
-      return;
-    }
-    if (!LEGACY_FEATURE_TARGET_IDS.has(searchTargetId)) return;
-    if (lastExpandedTargetRef.current === searchTargetId) return;
-    lastExpandedTargetRef.current = searchTargetId;
-    setOpen(true);
-  }, [searchTargetId]);
+  // A search jump to a legacy setting opens the fold before its row mounts.
+  const [seenSearchTargetId, setSeenSearchTargetId] = useState<string | null>(null);
+  if (seenSearchTargetId !== searchTargetId) {
+    setSeenSearchTargetId(searchTargetId);
+    if (searchTargetId !== null && LEGACY_FEATURE_TARGET_IDS.has(searchTargetId)) setOpen(true);
+  }
 
   return (
     <section id="legacy-features" ref={targetRef} tabIndex={-1} className="space-y-2.5">

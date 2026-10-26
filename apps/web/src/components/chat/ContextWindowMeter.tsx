@@ -40,17 +40,17 @@ function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }
         role="img"
         aria-label="Context window usage by category"
       >
-        {rows.map((row, index) => (
+        {rows.map((row) => (
           <div
-            key={index}
+            key={`${row.kind}:${row.label}`}
             className="h-full"
             style={{ width: `${share(row.tokens)}%`, backgroundColor: row.color }}
           />
         ))}
       </div>
       <dl className="flex flex-col gap-0.5 text-2xs leading-4">
-        {rows.map((row, index) => (
-          <div key={`segment-${index}`} className="flex items-center gap-2">
+        {rows.map((row) => (
+          <div key={`${row.kind}:${row.label}`} className="flex items-center gap-2">
             <span
               aria-hidden="true"
               className="size-2 shrink-0 rounded-xs"
@@ -65,8 +65,8 @@ function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }
             </dd>
           </div>
         ))}
-        {deferred.map((row, index) => (
-          <div key={`deferred-${index}`} className="flex items-center gap-2 opacity-70">
+        {deferred.map((row) => (
+          <div key={row.label} className="flex items-center gap-2 opacity-70">
             <span aria-hidden="true" className="size-2 shrink-0" />
             <dt className="min-w-0 flex-1 truncate text-secondary-label">{row.label}</dt>
             <dd className="tabular-nums text-secondary-label">

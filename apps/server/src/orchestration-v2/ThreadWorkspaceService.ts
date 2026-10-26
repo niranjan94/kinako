@@ -364,7 +364,7 @@ const make = Effect.gen(function* () {
                   stdin: sourceSnapshot.stagedPatch,
                 });
               return false;
-            }).pipe(Effect.catch(() => Effect.succeed(true)));
+            }).pipe(Effect.orElseSucceed(() => true));
             const cleanupPending = yield* cleanup;
             yield* Effect.forEach(
               [source, target],

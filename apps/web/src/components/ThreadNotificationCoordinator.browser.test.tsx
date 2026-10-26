@@ -1,16 +1,16 @@
+import type { AnyRouter } from "@tanstack/react-router";
 import type { ClientSettings } from "@t3tools/contracts/settings";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
+import { Atom, AtomRegistry } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { render, stubGlobal, type Screen } from "../../test/render";
+import { stubGlobal } from "../../test/render";
 
 const state = vi.hoisted(() => ({
   mode: "off" as ClientSettings["notificationMode"],
   active: { environmentId: "env-1", threadId: "other-thread" },
   focused: true,
-  live: true,
-  wakeAt: null as string | null,
   add: vi.fn(
     (_toast: { title: string; description: string; actionProps: { onClick: () => void } }) =>
       "toast-1",
@@ -23,9 +23,60 @@ const state = vi.hoisted(() => ({
   }),
 }));
 
-const SHELL_NOW = DateTime.makeUnsafe("2026-09-13T09:00:00.000Z");
+vi.mock(import("../state/shell"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    environmentShell: {
+      ...actual.environmentShell,
+      stateValueAtom: ((id: string) => shellAtom(id)) as never,
+    },
+  };
+});
+vi.mock(import("../state/presentation"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    environmentSummaries: {
+      ...actual.environmentSummaries,
+      // Read lazily: the factory runs before this module's own bindings exist.
+      get environmentIdsAtom() {
+        return environmentIdsAtom as never;
+      },
+    },
+  };
+});
+vi.mock(import("../hooks/useSettings"), async (original) => ({
+  ...(await original()),
+  subscribeClientSettings: (() => () => undefined) as never,
+  getClientSettings: (() => ({
+    notificationMode: state.mode,
+    inAppNotificationsEnabled: true,
+  })) as never,
+}));
+vi.mock(import("../threadNotifications"), async (original) => ({
+  ...(await original()),
+  playNotificationSound: state.sound,
+  unlockNotificationAudio: vi.fn(),
+  setNotificationBadge: vi.fn(),
+}));
+vi.mock(import("./ui/toast"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    toastManager: { ...actual.toastManager, add: state.add as never, close: state.close },
+  };
+});
 
-function mockThreadShell() {
+import { startThreadNotifications } from "./ThreadNotificationCoordinator";
+
+const shellAtom = Atom.family((_id: string) => Atom.make<unknown>(null));
+const environmentIdsAtom = Atom.make<ReadonlyArray<string>>([]);
+
+const SHELL_NOW = DateTime.makeUnsafe("2026-09-13T09:00:00.000Z");
+const WAKE_AT = "2026-09-13T10:00:00.000Z";
+
+function threadShell(wakeAt: string | null) {
   return {
     id: "thread-1",
     projectId: "project-1",
@@ -57,7 +108,7 @@ function mockThreadShell() {
     latestRunRequestedAt: SHELL_NOW,
     latestRunStartedAt: SHELL_NOW,
     latestRunCompletedAt: undefined,
-    snoozeWakeNotifiedAt: state.wakeAt ? DateTime.makeUnsafe(state.wakeAt) : null,
+    snoozeWakeNotifiedAt: wakeAt ? DateTime.makeUnsafe(wakeAt) : null,
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
@@ -66,70 +117,39 @@ function mockThreadShell() {
   };
 }
 
-vi.mock(import("@effect/atom-react"), async (original) => ({
-  ...(await original()),
-  useAtomValue: (() => ({
-    status: state.live ? "live" : "disconnected",
-    snapshot: Option.some({ threads: [mockThreadShell()] }),
-  })) as never,
-}));
-vi.mock(import("@tanstack/react-router"), async (original) => ({
-  ...(await original()),
-  useNavigate: (() => state.navigate) as never,
-  useParams: (() => state.active) as never,
-}));
-vi.mock(import("../hooks/useSettings"), async (original) => ({
-  ...(await original()),
-  useClientSettings: ((
-    select: (
-      settings: Pick<ClientSettings, "notificationMode" | "inAppNotificationsEnabled">,
-    ) => unknown,
-  ) => select({ notificationMode: state.mode, inAppNotificationsEnabled: true })) as never,
-  getClientSettings: (() => ({ notificationMode: state.mode })) as never,
-}));
-vi.mock(import("../state/environments"), async (original) => ({
-  ...(await original()),
-  useEnvironmentIds: (() => ["env-1"]) as never,
-}));
-vi.mock(import("../threadNotifications"), async (original) => ({
-  ...(await original()),
-  playNotificationSound: state.sound,
-  setNotificationBadge: vi.fn(),
-}));
-vi.mock(import("./ui/toast"), async (original) => {
-  const actual = await original();
-  return {
-    ...actual,
-    toastManager: { ...actual.toastManager, add: state.add as never, close: state.close },
-  };
+const liveShell = (wakeAt: string | null) => ({
+  status: "live",
+  snapshot: Option.some({ threads: [threadShell(wakeAt)] }),
 });
 
-import { ThreadNotificationCoordinator } from "./ThreadNotificationCoordinator";
-
-// The mocked modules read `state`, so every test starts by resetting all of it. The first
-// render is left to the test because some tests change state before the coordinator mounts.
+// The mocked modules read `state`, so every test resets it before starting the service.
 function setup() {
   vi.clearAllMocks();
   Object.assign(state, {
     mode: "off",
     active: { environmentId: "env-1", threadId: "other-thread" },
     focused: true,
-    live: true,
-    wakeAt: null,
   });
   const stack = new AsyncDisposableStack();
+  const registry = AtomRegistry.make();
+  stack.defer(() => registry.dispose());
+  registry.set(environmentIdsAtom, ["env-1"]);
   stack.use(vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible"));
   stack.use(vi.spyOn(document, "hasFocus").mockImplementation(() => state.focused));
   stack.use(
     stubGlobal("Notification", Object.assign(state.notification, { permission: "granted" })),
   );
-  let screen: Screen | undefined;
-  const renderCoordinator = async () => {
-    if (screen) await screen.rerender(<ThreadNotificationCoordinator />);
-    else screen = stack.use(await render(<ThreadNotificationCoordinator />));
-  };
+  const router = {
+    get state() {
+      return { matches: [{ params: state.active }] };
+    },
+    navigate: state.navigate,
+  } as unknown as AnyRouter;
   return {
-    render: renderCoordinator,
+    start: () => {
+      stack.defer(startThreadNotifications(registry, router));
+    },
+    setShell: (value: unknown) => registry.set(shellAtom("env-1"), value),
     [Symbol.asyncDispose]: () => stack.disposeAsync(),
   };
 }
@@ -140,10 +160,10 @@ describe("snooze reminders", () => {
     async (mode) => {
       await using app = setup();
       state.mode = mode;
-      await app.render();
-      state.wakeAt = "2026-09-13T10:00:00.000Z";
-      await app.render();
-      await app.render();
+      app.setShell(liveShell(null));
+      app.start();
+      app.setShell(liveShell(WAKE_AT));
+      app.setShell(liveShell(WAKE_AT));
       expect(state.add).toHaveBeenCalledTimes(1);
       expect(state.add.mock.calls[0]?.[0].title).toBe("Snooze ended");
       expect(state.sound).toHaveBeenCalledTimes(
@@ -162,9 +182,9 @@ describe("snooze reminders", () => {
       await using app = setup();
       state.mode = mode;
       state.focused = false;
-      await app.render();
-      state.wakeAt = "2026-09-13T10:00:00.000Z";
-      await app.render();
+      app.setShell(liveShell(null));
+      app.start();
+      app.setShell(liveShell(WAKE_AT));
       expect(state.add).not.toHaveBeenCalled();
       expect(state.notification).toHaveBeenCalledTimes(
         mode === "notifications" || mode === "notifications-and-sound" ? 1 : 0,
@@ -175,21 +195,19 @@ describe("snooze reminders", () => {
     await using app = setup();
     state.mode = "notifications-and-sound";
     state.active.threadId = "thread-1";
-    await app.render();
-    state.wakeAt = "2026-09-13T10:00:00.000Z";
-    await app.render();
+    app.setShell(liveShell(null));
+    app.start();
+    app.setShell(liveShell(WAKE_AT));
     expect(state.add).not.toHaveBeenCalled();
     expect(state.sound).not.toHaveBeenCalled();
     expect(state.notification).not.toHaveBeenCalled();
   });
   it("does not replay a persisted announcement on load or reconnect", async () => {
     await using app = setup();
-    state.wakeAt = "2026-09-13T10:00:00.000Z";
-    await app.render();
-    state.live = false;
-    await app.render();
-    state.live = true;
-    await app.render();
+    app.setShell(liveShell(WAKE_AT));
+    app.start();
+    app.setShell({ status: "disconnected", snapshot: Option.none() });
+    app.setShell(liveShell(WAKE_AT));
     expect(state.add).not.toHaveBeenCalled();
   });
 });

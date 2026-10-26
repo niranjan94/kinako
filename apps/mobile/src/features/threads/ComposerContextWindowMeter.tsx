@@ -98,9 +98,9 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
       </View>
       {rows.length > 0 ? (
         <View className="h-2 flex-row gap-px overflow-hidden rounded-full bg-subtle">
-          {rows.map((row, index) => (
+          {rows.map((row) => (
             <View
-              key={index}
+              key={`${row.kind}:${row.label}`}
               className={cn("h-full", row.className)}
               style={{ width: `${share(row.tokens)}%` }}
             />
@@ -109,8 +109,8 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
       ) : null}
       {rows.length > 0 || (breakdown?.deferred.length ?? 0) > 0 ? (
         <View className="gap-2">
-          {rows.map((row, index) => (
-            <View key={`segment-${index}`} className="flex-row items-center gap-3">
+          {rows.map((row) => (
+            <View key={`${row.kind}:${row.label}`} className="flex-row items-center gap-3">
               <View className={cn("size-2.5 rounded-xs", row.className)} />
               <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
                 {row.label}
@@ -123,8 +123,8 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
               </Text>
             </View>
           ))}
-          {breakdown?.deferred.map((row, index) => (
-            <View key={`deferred-${index}`} className="flex-row items-center gap-3 opacity-70">
+          {breakdown?.deferred.map((row) => (
+            <View key={row.label} className="flex-row items-center gap-3 opacity-70">
               <View className="size-2.5" />
               <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
                 {row.label}

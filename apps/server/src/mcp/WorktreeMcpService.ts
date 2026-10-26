@@ -193,12 +193,10 @@ const make = Effect.gen(function* () {
               status: "scheduled",
               delivery: sent.delivery,
             })),
-            Effect.catch(() =>
-              Effect.succeed<WorktreeMcpContinuationStatus>({
-                status: "failed",
-                detail: "Could not queue the continuation.",
-              }),
-            ),
+            Effect.orElseSucceed((): WorktreeMcpContinuationStatus => ({
+              status: "failed",
+              detail: "Could not queue the continuation.",
+            })),
           );
       }
       return {
