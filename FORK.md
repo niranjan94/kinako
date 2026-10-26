@@ -17,7 +17,7 @@ git push origin main
 Resolving conflicts:
 
 - `pnpm-lock.yaml`: never hand-merge it. Take upstream's copy (`git checkout --theirs pnpm-lock.yaml`), then run `pnpm install` to regenerate it.
-- `.github/workflows/ci.yml`: take upstream's copy (`git checkout --theirs .github/workflows/ci.yml`), then rerun the runner substitution below.
+- `.github/workflows/ci.yml`: take upstream's copy (`git checkout --theirs .github/workflows/ci.yml`), then rerun the CI substitutions below.
 - `README.md`: keep this fork's copy (`git checkout --ours README.md`), then port anything from upstream's change that still applies, such as new providers or docs links.
 
 Agents should use the `merge-upstream` skill (`.agents/skills/merge-upstream/`), which scans upstream for changes that touch Kinako's identity before merging and lists the known resolutions.
@@ -101,10 +101,11 @@ Nothing migrates automatically: Kinako never reads `~/.t3` or upstream's desktop
 
 ## CI
 
-Upstream's `ci.yml` runs unchanged except for its runners. GitHub's standard runners are free for public repositories but have half the cores of upstream's Blacksmith machines, so job timeouts are doubled. The substitution is safe to rerun:
+Upstream's `ci.yml` runs unchanged except for its runners. GitHub's standard runners are free for public repositories but have half the cores of upstream's Blacksmith machines, so job timeouts are doubled, and so is the web suite's 15 s per-test timeout, which the heaviest browser tests otherwise hit on these runners. The substitutions are safe to rerun:
 
 ```bash
 perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-24.04/ || s/blacksmith-\d+vcpu-macos-26/macos-26/) { $d = 1; next } if ($d && s/^(    timeout-minutes: )(\d+)$/$1 . $2 * 2/e) { $d = 0 }' .github/workflows/ci.yml
+perl -pi -e 's/^(        run: vp run --filter \@t3tools\/web test)$/$1 --testTimeout=30000 --hookTimeout=30000/' .github/workflows/ci.yml
 ```
 
 CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does not support Ubuntu 26.04 yet, so the server browser tests cannot install Chromium there. Linux release artifacts also link against the build machine's glibc, so a 26.04 build would not start on older distributions.
