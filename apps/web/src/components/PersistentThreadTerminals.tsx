@@ -13,6 +13,7 @@ import { memo, useContext, useEffect, useState } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
 import type { TerminalContextSelection } from "../lib/terminalContext";
+import { focusActiveDrawerTerminal, focusTerminal } from "../lib/terminalFocus";
 import { cn } from "~/lib/utils";
 import {
   selectThreadRightPanelState,
@@ -82,7 +83,6 @@ interface PersistentThreadTerminalDrawerProps {
   active: boolean;
   composerHeight: number;
   launchContext: PersistentTerminalLaunchContext | null;
-  focusRequestId: number;
   splitShortcutLabel: string | undefined;
   splitVerticalShortcutLabel: string | undefined;
   newShortcutLabel: string | undefined;
@@ -97,7 +97,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   active,
   composerHeight,
   launchContext,
-  focusRequestId,
   splitShortcutLabel,
   splitVerticalShortcutLabel,
   newShortcutLabel,
@@ -185,7 +184,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     }
     reconcileTerminalIds(threadRef, serverOrderedTerminalIds);
   }, [reconcileTerminalIds, serverOrderedTerminalIds, terminalUiState.terminalIds, threadRef]);
-  const [localFocusRequestId, setLocalFocusRequestId] = useState(0);
   const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const effectiveWorktreePath = launchContext !== null ? launchContext.worktreePath : worktreePath;
   const cwd =
@@ -203,13 +201,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
       })
     : {};
 
-  const bumpFocusRequestId = () => {
-    if (!visible) {
-      return;
-    }
-    setLocalFocusRequestId((value) => value + 1);
-  };
-
   const setTerminalHeight = (height: number) => {
     storeSetTerminalHeight(threadRef, height);
   };
@@ -222,7 +213,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     });
     if (!launched) return;
     showDatabaseTab(registry, threadRef, null);
-    bumpFocusRequestId();
+    if (visible) focusTerminal(threadRef, launched.terminalId);
     void launched.result;
   };
   const splitTerminal = useStableCallback(() =>
@@ -237,7 +228,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
 
   const activateTerminal = (terminalId: string) => {
     storeSetActiveTerminal(threadRef, terminalId);
-    bumpFocusRequestId();
+    if (visible) focusTerminal(threadRef, terminalId);
   };
 
   const closeTerminal = useStableCallback((terminalId: string) => {
@@ -246,7 +237,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     storeCloseTerminal(threadRef, terminalId);
     // Closing the last terminal would otherwise hide the database tabs sharing the drawer.
     if (hasDatabaseTabsOpen && terminalUiState.terminalOpen) storeRevealTerminalDrawer(threadRef);
-    bumpFocusRequestId();
+    if (visible) focusActiveDrawerTerminal(threadRef);
   });
 
   const handleAddTerminalContext = (selection: TerminalContextSelection) => {
@@ -285,7 +276,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
           activeTerminalId={terminalUiState.activeTerminalId}
           terminalGroups={terminalUiState.terminalGroups}
           activeTerminalGroupId={terminalUiState.activeTerminalGroupId}
-          focusRequestId={focusRequestId + localFocusRequestId + (visible ? 1 : 0)}
           onSplitTerminal={splitTerminal}
           onSplitTerminalVertical={splitTerminalVertical}
           onNewTerminal={createNewTerminal}
@@ -331,7 +321,6 @@ export interface PersistentThreadTerminalPanelProps {
   threadRef: ScopedThreadRef;
   surface: Extract<RightPanelSurface, { kind: "terminal" }>;
   launchContext: PersistentTerminalLaunchContext | null;
-  focusRequestId: number;
   keybindings: ResolvedKeybindingsConfig;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   onSplitTerminal: () => void;
@@ -350,7 +339,6 @@ export const PersistentThreadTerminalPanel = memo(function PersistentThreadTermi
   threadRef,
   surface,
   launchContext,
-  focusRequestId,
   keybindings,
   onAddTerminalContext,
   onSplitTerminal,
@@ -442,7 +430,6 @@ export const PersistentThreadTerminalPanel = memo(function PersistentThreadTermi
         },
       ]}
       activeTerminalGroupId={surface.id}
-      focusRequestId={focusRequestId}
       onSplitTerminal={onSplitTerminal}
       onSplitTerminalVertical={onSplitTerminalVertical}
       onNewTerminal={onNewTerminal}

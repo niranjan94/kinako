@@ -991,6 +991,9 @@ export const OrchestrationV2ProviderThreadNativeMetadata = Schema.Struct({
   /** Native session this provider thread was imported with, whose history predates the thread. */
   importedNativeThreadId: Schema.optional(TrimmedNonEmptyString),
   forkHeadMessageId: Schema.optional(TrimmedNonEmptyString),
+  claudeAttachmentBudget: Schema.optional(
+    Schema.Struct({ bytesUsed: NonNegativeInt, pagesUsed: NonNegativeInt }),
+  ),
 });
 export type OrchestrationV2ProviderThreadNativeMetadata =
   typeof OrchestrationV2ProviderThreadNativeMetadata.Type;
@@ -2054,8 +2057,6 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   latestRunCompletedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   latestRunRecapSummary: Schema.optional(OrchestrationV2TurnRecap.fields.summary),
   latestRunStopRequested: Schema.optional(Schema.Boolean),
-  /** Suppress routine notifications for idle compaction; failures still notify. */
-  latestRunSilent: Schema.optional(Schema.Boolean),
   activeRunId: Schema.NullOr(RunId),
   activityRunStartedAt: Schema.optional(Schema.NullOr(Schema.DateTimeUtc)),
   activityRunStatus: Schema.optional(

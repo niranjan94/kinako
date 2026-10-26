@@ -414,7 +414,7 @@ export const make = Effect.gen(function* () {
         { path: `/users/${encodeURIComponent(handle)}` },
         User,
       ).pipe(
-        Effect.map(Option.some),
+        Effect.asSome,
         Effect.catchTags({
           PullRequestProviderError: (error) =>
             error.reason === "unauthenticated" || error.reason === "rate-limited"
@@ -769,7 +769,7 @@ export const make = Effect.gen(function* () {
             { path: "/auth/principal" },
             Principal,
           ).pipe(
-            Effect.map(Option.some),
+            Effect.asSome,
             Effect.catchTags({
               PullRequestProviderError: (error) =>
                 error.reason === "unauthenticated" || error.reason === "rate-limited"
@@ -861,6 +861,10 @@ export const make = Effect.gen(function* () {
         };
       },
     ),
+    getChangeRequestPreview: (input) =>
+      readPull("getChangeRequestPreview", input).pipe(
+        Effect.map((pull) => Json.toChangeRequest(pull, input)),
+      ),
     getChangeRequestSummary: Effect.fn("GitCafePullRequestProvider.getChangeRequestSummary")(
       function* (input) {
         const pull = yield* readPull("getChangeRequestSummary", input);

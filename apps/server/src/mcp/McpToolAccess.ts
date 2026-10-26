@@ -121,7 +121,7 @@ export const readsDatabase = <P, A, E, R>(
 export const actsAsCaller = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>) =>
   declare((params: P) =>
     requireThreadCaller.pipe(
-      Effect.flatMap(() => writingCaller),
+      Effect.andThen(writingCaller),
       Effect.flatMap(() => handle(params)),
     ),
   );

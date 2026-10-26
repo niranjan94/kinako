@@ -297,8 +297,7 @@ function EnvironmentNotifications({
       // A snooze wake stands in for a completion seen in the same update.
       pendingCompletions.observe(state.thread.id, prior, state, {
         archived,
-        quiet:
-          wake || state.raw.latestRunStopRequested === true || state.raw.latestRunSilent === true,
+        quiet: wake || state.raw.latestRunStopRequested === true,
       });
       if (wake) present(state.thread.id, "wake");
     }
