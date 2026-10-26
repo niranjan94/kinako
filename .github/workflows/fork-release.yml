@@ -380,7 +380,9 @@ jobs:
         run: vp install --frozen-lockfile --filter=@t3tools/scripts...
 
       - name: Test the npm launcher
-        run: vp test run scripts/build-npm-launcher.test.ts
+        # From the repo root, vitest loads every package's config, and only scripts' deps are installed.
+        working-directory: scripts
+        run: vp test run --config ../vite.config.ts --dir . build-npm-launcher.test.ts
 
       - name: Build the npm launcher
         env:
