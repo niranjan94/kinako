@@ -269,6 +269,14 @@ vi.mock("../features/layout/AdaptiveWorkspaceLayout", () => ({
   useAdaptiveWorkspaceLayout: () => ({ fileInspector: { supported: false } }),
 }));
 vi.mock("../features/threads/thread-workflow-opening", () => ({ useWorkflowOpening: () => null }));
+vi.mock("../features/threads/FollowUpCard", () => ({ FollowUpCard: () => null }));
+vi.mock("../features/threads/TurnRecapCard", () => ({ TurnRecapCard: () => null }));
+vi.mock("../features/threads/WorkflowRunCard", () => ({ WorkflowRunCard: () => null }));
+vi.mock("../features/threads/thread-conversation-summary", () => ({
+  ConversationSummaryDivider: () => null,
+  conversationSummaryItem: () => null,
+  UserMessageSummarizeButton: () => null,
+}));
 vi.mock("../features/threads/useFileChipShare", () => ({ useFileChipShare: () => vi.fn() }));
 vi.mock("../features/threads/ThreadMarkdownImage", async () => {
   const { createContext } = await import("react");
