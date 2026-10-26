@@ -18,7 +18,7 @@ Merge often. Conflict count grows with the gap, not with upstream's activity: a 
 ## Ground rules
 
 - Merge, never rebase. `main` is published and other clones track it (FORK.md "Syncing with upstream").
-- Leave the merge commit local and report; the developer pushes after reviewing.
+- Leave the merge commit local and report; the developer pushes after reviewing. If the developer asks you to push, the merge is not done until CI is green on the pushed commit (step 8).
 - The checkout may be shared with other sessions. Check `git status` and `git branch --show-current` right before merging and again before committing, and stop if either changed under you.
 - Use `pnpm`; run project tools with `pnpm exec` or from `node_modules/.bin`.
 - Write long test, typecheck and install output to a file in the scratchpad (`$S` below) and grep that file.
@@ -130,16 +130,18 @@ A merge changes behaviour under files it never touched: a new upstream lint rule
 
 ```bash
 export PATH="$PWD/node_modules/.bin:$PATH"
-clean="env -u T3_SERVICE_LAUNCHER_CONTEXT -u T3CODE_HOME -u T3CODE_PORT -u T3CODE_HOST -u T3CODE_NO_BROWSER"
+clean=(env -u T3_SERVICE_LAUNCHER_CONTEXT -u T3CODE_HOME -u T3CODE_PORT -u T3CODE_HOST -u T3CODE_NO_BROWSER PATH="$PATH")
 vp fmt --check > "$S/fmt.log" 2>&1; echo "fmt=$?"
 vp lint > "$S/lint.log" 2>&1; echo "lint=$?"
 vp run knip:check > "$S/knip.log" 2>&1; echo "knip=$?"
-$clean vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test > "$S/test-packages.log" 2>&1; echo "packages=$?"
-$clean vp run --filter @t3tools/web test > "$S/test-web.log" 2>&1; echo "web=$?"
-$clean vp run --filter t3 test > "$S/test-server.log" 2>&1; echo "server=$?"
+"${clean[@]}" vp run --parallel --concurrency-limit 4 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test > "$S/test-packages.log" 2>&1; echo "packages=$?"
+"${clean[@]}" vp run --filter @t3tools/web test > "$S/test-web.log" 2>&1; echo "web=$?"
+"${clean[@]}" vp run --filter t3 test > "$S/test-server.log" 2>&1; echo "server=$?"
 ```
 
-These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/ci.yml`); if CI's commands change, follow them. Run them in the background where you can; the server suite is the long one. Typecheck is step 4's job, since `vp check` typechecks through the package shims.
+These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/ci.yml`); if CI's commands change, follow them. Run them in the background where you can; the server suite is the long one. Typecheck is step 4's job, since `vp check` typechecks through the package shims. `clean` is an array because zsh does not word-split a string variable; an exit code of 127 means the suite never ran.
+
+`vp run` stops launching packages after the first failure, so a single known failure hides every package that had not started yet. Check the `vp run: N/M successful` line: every one of the M tasks must have printed a `Test Files` summary. If a known machine failure (below) stopped the run, rerun with that package excluded (for example `--filter '!./apps/desktop'`) until all the others report.
 
 - Lint errors (`grep -E "Found [0-9]+ error|  × " "$S/lint.log"`) on comments are the four-line cap: shorten the comment, keeping the constraint. Warnings are not failures.
 - A fork test that fails beside unchanged code usually means upstream changed the behaviour or data shape under it. Read the upstream commit that changed the code under test, then update the fixture if the fork's behaviour still holds in practice, or fix the fork code if it does not.
@@ -162,3 +164,18 @@ Report:
 - Anything that needs a human decision.
 
 Then stop. Pushing is the developer's call.
+
+## 8. After a push to main
+
+Only when the developer asked you to push. Push with `git push origin HEAD:main` (a fast-forward; never force), then wait for the `CI` run on that exact commit to finish:
+
+```bash
+sha=$(git rev-parse HEAD)
+run=$(gh run list -R niranjan94/kinako --branch main --workflow CI --commit "$sha" --json databaseId --jq '.[0].databaseId')
+gh run watch "$run" -R niranjan94/kinako --exit-status > "$S/ci-watch.log" 2>&1; echo "ci=$?"
+```
+
+The run can take a few seconds to appear after the push. Run the watch in the background; it takes as long as the server shards.
+
+- Green: report the run as passed. Only now is `main` ready for **Fork release** (FORK.md "Releasing"), and only if the developer asked for one.
+- Red: `gh run view "$run" -R niranjan94/kinako --log-failed > "$S/ci-fail.log"`, find the failing test, reproduce it locally, fix it, rerun its package's full suite, push the fix as its own conventional commit, and watch CI again. Never start a release or report the merge as done on a red `main`.
