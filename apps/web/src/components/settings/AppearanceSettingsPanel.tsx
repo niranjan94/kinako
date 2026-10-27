@@ -11,9 +11,7 @@ import {
   MIN_APPEARANCE_CONTRAST,
   MIN_GLASS_OPACITY,
   MIN_PANEL_ANIMATION_DURATION_MS,
-  UiDensity,
 } from "@t3tools/contracts/settings";
-import * as Schema from "effect/Schema";
 import {
   resolveEnvironmentIdentificationPillLabel,
   useEnvironmentStageLabel,
@@ -46,13 +44,6 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   wide: "Wide",
   full: "Full",
 };
-
-const UI_DENSITY_LABELS: Record<UiDensity, string> = {
-  compact: "Compact",
-  comfortable: "Comfortable",
-  spacious: "Spacious",
-};
-const isUiDensity = Schema.is(UiDensity);
 
 export function AppearanceSettingsPanel() {
   const {
@@ -235,38 +226,6 @@ export function AppearanceSettingsPanel() {
                   <SelectItem value="comfortable">Comfortable (default)</SelectItem>
                   <SelectItem value="wide">Wide</SelectItem>
                   <SelectItem value="full">Full</SelectItem>
-                </SelectPopup>
-              </Select>
-            </div>
-          }
-        />
-
-        <SettingsRow
-          {...searchableSetting("ui-density")}
-          description="Set how much padding sits around sidebar rows, settings, the chat column, and the composer."
-          resetAction={
-            settings.uiDensity !== DEFAULT_UNIFIED_SETTINGS.uiDensity ? (
-              <SettingResetButton
-                label="density"
-                onClick={() => updateSettings({ uiDensity: DEFAULT_UNIFIED_SETTINGS.uiDensity })}
-              />
-            ) : null
-          }
-          control={
-            <div className="w-full sm:w-40">
-              <Select
-                value={settings.uiDensity}
-                onValueChange={(value) => {
-                  if (isUiDensity(value)) updateSettings({ uiDensity: value });
-                }}
-              >
-                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Density">
-                  <SelectValue>{UI_DENSITY_LABELS[settings.uiDensity]}</SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem value="compact">Compact</SelectItem>
-                  <SelectItem value="comfortable">Comfortable (default)</SelectItem>
-                  <SelectItem value="spacious">Spacious</SelectItem>
                 </SelectPopup>
               </Select>
             </div>
