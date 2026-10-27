@@ -1434,6 +1434,50 @@ it.effect(
     }).pipe(Effect.provide(NodeServices.layer)),
 );
 
+it.effect("names an additional worktree on its own when the thread has no worktree", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const sibling = yield* fs.makeTempDirectoryScoped();
+    const harness = makeHarness({
+      createWorktree: (input) =>
+        Effect.succeed({
+          worktree: { path: `${input.cwd}-worktree`, refName: input.newRefName, headSha: "abc" },
+        } as never),
+      git: { isRepository: () => Effect.succeed(true) },
+    });
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const launched = yield* launches.launch({
+        ...launchInput({
+          command: "command:launch:additional-only",
+          thread: "thread:launch:additional-only",
+          message: "Change the sibling repository",
+        }),
+        additionalDirectories: [{ path: sibling, mode: "worktree" }],
+      });
+      const renamed = yield* launchEventCommitted(
+        launched.threadId,
+        "command:launch:additional-only:additional-branch-rename",
+      );
+      const [additional] = harness.createWorktree.mock.calls.map(([input]) => input);
+      assert.equal(additional?.cwd, sibling);
+      assert.deepEqual(harness.renameBranch.mock.calls[0]?.[0], {
+        cwd: `${sibling}-worktree`,
+        oldBranch: additional!.newRefName!,
+        newBranch: "generated-branch",
+      });
+      assert.deepEqual(renamed.thread.additionalDirectories, [
+        {
+          path: sibling,
+          mode: "worktree",
+          branch: "generated-branch",
+          worktreePath: `${sibling}-worktree`,
+        },
+      ]);
+    }).pipe(Effect.provide(harness.layer));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
 it.effect("fails the launch when an additional worktree directory is not a repository", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

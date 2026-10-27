@@ -682,85 +682,80 @@ const make = Effect.gen(function* () {
           isTemporaryWorktreeBranch(directory.branch),
       );
 
-      const primaryRename =
+      if (
         reused === undefined &&
         worktreePath !== null &&
         branch !== null &&
+        initialMessage !== undefined &&
         isTemporaryWorktreeBranch(branch)
-          ? { oldBranch: branch, worktreeCwd: worktreePath }
-          : null;
-      const nameCwd = primaryRename?.worktreeCwd ?? additionalRenames[0]?.worktreePath ?? null;
-      if (initialMessage !== undefined && nameCwd !== null) {
-        branchRename = yield* generateBranchNameFor(nameCwd, initialMessage).pipe(
-          Effect.flatMap((generated) =>
+      ) {
+        const oldBranch = branch;
+        const worktreeCwd = worktreePath;
+        branchRename = yield* generateBranchNameFor(worktreeCwd, initialMessage).pipe(
+          Effect.flatMap(({ branch: newBranch, exactName }) =>
+            git.renameBranch({
+              cwd: worktreeCwd,
+              oldBranch,
+              newBranch,
+              ...(exactName ? { exactName: true } : {}),
+            }),
+          ),
+          Effect.flatMap((renamed) =>
             Effect.gen(function* () {
-              let newBranch = generated.branch;
-              let exactName = generated.exactName;
-              if (primaryRename !== null) {
-                const { oldBranch, worktreeCwd } = primaryRename;
-                const renamed = yield* git.renameBranch({
-                  cwd: worktreeCwd,
-                  oldBranch,
-                  newBranch,
-                  ...(exactName ? { exactName: true } : {}),
-                });
-                yield* threads
-                  .dispatch({
-                    type: "thread.metadata.update",
-                    commandId: CommandId.make(`${input.commandId}:branch-rename`),
-                    threadId,
-                    branch: renamed.branch,
-                    worktreePath: worktreeCwd,
-                    expectedBranch: oldBranch,
-                    expectedWorktreePath: worktreeCwd,
-                  })
-                  .pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.logWarning("Parent thread worktree branch update failed", {
-                        threadId,
-                        cause,
-                      }),
-                    ),
-                  );
-                // Update parents first so children inherit names; reread each pass for newly updated descendants.
-                const visited = new Set([threadId]);
-                while (true) {
-                  const snapshot = yield* threads.getShellSnapshot();
-                  const sharing = [...snapshot.threads, ...snapshot.archivedThreads].filter(
-                    (thread) =>
-                      !visited.has(thread.id) &&
-                      thread.worktreePath === worktreeCwd &&
-                      thread.branch === oldBranch,
-                  );
-                  if (sharing.length === 0) break;
-                  for (const thread of sharing) {
-                    visited.add(thread.id);
-                    yield* threads
-                      .dispatch({
-                        type: "thread.metadata.update",
-                        commandId: CommandId.make(`${input.commandId}:branch-rename:${thread.id}`),
-                        threadId: thread.id,
-                        branch: renamed.branch,
-                        expectedBranch: oldBranch,
-                        expectedWorktreePath: worktreeCwd,
-                      })
-                      .pipe(
-                        Effect.catchCause((cause) =>
-                          Effect.logWarning("Shared thread worktree branch update failed", {
-                            threadId: thread.id,
-                            cause,
-                          }),
-                        ),
-                      );
-                  }
+              yield* threads
+                .dispatch({
+                  type: "thread.metadata.update",
+                  commandId: CommandId.make(`${input.commandId}:branch-rename`),
+                  threadId,
+                  branch: renamed.branch,
+                  worktreePath: worktreeCwd,
+                  expectedBranch: oldBranch,
+                  expectedWorktreePath: worktreeCwd,
+                })
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning("Parent thread worktree branch update failed", {
+                      threadId,
+                      cause,
+                    }),
+                  ),
+                );
+              // Update parents first so children inherit names; reread each pass for newly updated descendants.
+              const visited = new Set([threadId]);
+              while (true) {
+                const snapshot = yield* threads.getShellSnapshot();
+                const sharing = [...snapshot.threads, ...snapshot.archivedThreads].filter(
+                  (thread) =>
+                    !visited.has(thread.id) &&
+                    thread.worktreePath === worktreeCwd &&
+                    thread.branch === oldBranch,
+                );
+                if (sharing.length === 0) break;
+                for (const thread of sharing) {
+                  visited.add(thread.id);
+                  yield* threads
+                    .dispatch({
+                      type: "thread.metadata.update",
+                      commandId: CommandId.make(`${input.commandId}:branch-rename:${thread.id}`),
+                      threadId: thread.id,
+                      branch: renamed.branch,
+                      expectedBranch: oldBranch,
+                      expectedWorktreePath: worktreeCwd,
+                    })
+                    .pipe(
+                      Effect.catchCause((cause) =>
+                        Effect.logWarning("Shared thread worktree branch update failed", {
+                          threadId: thread.id,
+                          cause,
+                        }),
+                      ),
+                    );
                 }
-                // Additional worktrees follow the primary's final name exactly.
-                newBranch = renamed.branch;
-                exactName = true;
               }
+              // Additional worktrees follow the primary's final name exactly.
               yield* renameAdditionalBranches(input, threadId, additionalRenames, {
-                newBranch,
-                exactName,
+                newBranch: renamed.branch,
+                exactName: true,
               });
             }),
           ),
@@ -768,7 +763,28 @@ const make = Effect.gen(function* () {
             Effect.logWarning("Thread worktree branch rename failed", {
               commandId: input.commandId,
               threadId,
-              oldBranch: primaryRename?.oldBranch ?? additionalRenames[0]?.branch,
+              oldBranch,
+              cause,
+            }),
+          ),
+          Effect.forkIn(preparationScope),
+        );
+      }
+
+      const additionalNameCwd = additionalRenames[0]?.worktreePath ?? null;
+      if (branchRename === null && initialMessage !== undefined && additionalNameCwd !== null) {
+        branchRename = yield* generateBranchNameFor(additionalNameCwd, initialMessage).pipe(
+          Effect.flatMap((generated) =>
+            renameAdditionalBranches(input, threadId, additionalRenames, {
+              newBranch: generated.branch,
+              exactName: generated.exactName,
+            }),
+          ),
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Thread worktree branch rename failed", {
+              commandId: input.commandId,
+              threadId,
+              oldBranch: additionalRenames[0]?.branch,
               cause,
             }),
           ),
