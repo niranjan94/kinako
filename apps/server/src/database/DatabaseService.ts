@@ -2,7 +2,6 @@ import {
   DATABASE_PAGE_SIZE_DEFAULT,
   DatabaseRequestError,
   DatabaseQueryId,
-  type DatabaseReadOnlyQueryInput,
   type DatabaseCell,
   type DatabaseProjectContext,
   type DatabaseOpenSessionInput,
@@ -25,7 +24,6 @@ import {
   type DatabaseQueryInput,
   type DatabaseTestConnectionResult,
 } from "@t3tools/contracts";
-import * as Crypto from "effect/Crypto";
 import * as Clock from "effect/Clock";
 import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
 import * as Context from "effect/Context";
@@ -112,9 +110,6 @@ export class DatabaseService extends Context.Service<
     readonly browseTable: (
       input: DatabaseBrowseTableInput,
     ) => Effect.Effect<DatabaseBrowseTableResult, DatabaseRequestError>;
-    readonly queryReadOnly: (
-      input: DatabaseReadOnlyQueryInput,
-    ) => Effect.Effect<DatabaseExecuteResult, DatabaseRequestError>;
     readonly execute: (
       input: DatabaseExecuteInput,
     ) => Effect.Effect<DatabaseExecuteResult, DatabaseRequestError>;
@@ -157,7 +152,6 @@ function splitByWeight(rows: ReadonlyArray<Row>): readonly [Row[], Row[]] {
 }
 
 const make = Effect.gen(function* () {
-  const crypto = yield* Crypto.Crypto;
   const connections = yield* DatabaseConnections.DatabaseConnections;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -776,26 +770,7 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const queryReadOnly = Effect.fn("DatabaseService.queryReadOnly")(function* (
-    input: DatabaseReadOnlyQueryInput,
-  ) {
-    const queryId = DatabaseQueryId.make(
-      yield* crypto
-        .randomUUIDv4()
-        .pipe(
-          Effect.mapError((cause) => new DatabaseRequestError({ failure: "engine-failed", cause })),
-        ),
-    );
-    return yield* execute({
-      ...input,
-      queryId,
-      pageSize: Math.max(1, Math.min(input.rowCap ?? 200, 500)),
-      forceReadOnly: true,
-    }).pipe(Effect.ensuring(release(queryId)));
-  });
-
   return DatabaseService.of({
-    queryReadOnly,
     openSession,
     closeSession,
     browseTable,

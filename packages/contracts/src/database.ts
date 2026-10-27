@@ -367,12 +367,3 @@ export const DatabaseBrowseTableResult = Schema.Struct({
   ),
 });
 export type DatabaseBrowseTableResult = typeof DatabaseBrowseTableResult.Type;
-
-export const DatabaseReadOnlyQueryInput = Schema.Struct({
-  ...DatabaseProjectContext.fields,
-  connectionId: DatabaseConnectionId,
-  database: Schema.optionalKey(Identifier),
-  sql: DatabaseExecuteInput.fields.sql,
-  rowCap: Schema.optionalKey(PageSize),
-});
-export type DatabaseReadOnlyQueryInput = typeof DatabaseReadOnlyQueryInput.Type;

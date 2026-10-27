@@ -204,9 +204,10 @@ layer("DatabaseService", (it) => {
             });
             assert.deepStrictEqual(rows.rows[0]?.slice(0, 2), [1, name]);
             const queried = expectKind(
-              yield* database.queryReadOnly({
+              yield* database.execute({
                 connectionId: connection.id,
                 database: name,
+                queryId: nextQueryId(),
                 sql: "SELECT current_database()",
               }),
               "rows",
@@ -255,8 +256,9 @@ layer("DatabaseService", (it) => {
             },
           });
           const defaultQuery = expectKind(
-            yield* database.queryReadOnly({
+            yield* database.execute({
               connectionId: selected.id,
+              queryId: nextQueryId(),
               sql: "SELECT current_database()",
             }),
             "rows",
@@ -355,7 +357,7 @@ layer("DatabaseService", (it) => {
         database.introspect({ ...input, scope: { kind: "schemas" } }),
         database.openSession({ ...input, sessionId: DatabaseSessionId.make("excluded") }),
         database.browseTable({ ...input, schema: "public", object: "orders" }),
-        database.queryReadOnly({ ...input, sql: "SELECT 1" }),
+        database.execute({ ...input, queryId: nextQueryId(), sql: "SELECT 1" }),
       ]) {
         const error = yield* operation.pipe(Effect.flip);
         assert.strictEqual(error.failure, "database-not-selected");
@@ -384,7 +386,12 @@ layer("DatabaseService", (it) => {
         { kind: "databases", databases: [{ name: "app" }] },
       );
       const error = yield* database
-        .queryReadOnly({ connectionId: connection.id, database: "other", sql: "SELECT 1" })
+        .execute({
+          connectionId: connection.id,
+          database: "other",
+          queryId: nextQueryId(),
+          sql: "SELECT 1",
+        })
         .pipe(Effect.flip);
       assert.strictEqual(error.failure, "database-not-selected");
       yield* database.deleteConnection({ id: connection.id });
@@ -796,41 +803,6 @@ layer("DatabaseService", (it) => {
           .saveConnection({ name: "bad", level: "global", target: local.target, readOnly: true })
           .pipe(Effect.flip)).failure,
         "invalid-connection-level",
-      );
-    }),
-  );
-  it.effect("caps agent output, always closes it and refuses writes on a writable connection", () =>
-    Effect.gen(function* () {
-      const database = yield* DatabaseService.DatabaseService;
-      const connection = yield* sqliteConnection();
-      yield* seedOrders(connection);
-      const result = expectKind(
-        yield* database.queryReadOnly({
-          connectionId: connection.id,
-          sql: "SELECT id FROM orders ORDER BY id",
-          rowCap: 7,
-        }),
-        "rows",
-      );
-      assert.lengthOf(result.rows, 7);
-      assert.isTrue(result.hasMore);
-      const refused = expectKind(
-        yield* database.queryReadOnly({ connectionId: connection.id, sql: "DELETE FROM orders" }),
-        "failed",
-      );
-      assert.match(refused.message, /read.?only/i);
-      // The capped read released its lock; an independent write can complete immediately.
-      expectKind(
-        (yield* run(connection, "UPDATE orders SET note = 'available' WHERE id = 1")).result,
-        "command",
-      );
-      assert.strictEqual(
-        (yield* database.queryReadOnly({
-          connectionId: connection.id,
-          projectId: ProjectId.make("other"),
-          sql: "SELECT 1",
-        })).kind,
-        "rows",
       );
     }),
   );
