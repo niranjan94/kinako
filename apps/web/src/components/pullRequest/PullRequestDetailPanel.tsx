@@ -793,7 +793,7 @@ export function PullRequestDetailPanel({
   const startAsk = async (
     kind: string,
     task: ThreadTask,
-    options?: { readonly keepGuide?: boolean; readonly question?: boolean },
+    options?: { readonly keepGuide?: boolean },
   ) => {
     if (!detail || handoff !== null) return;
     if (attachTarget !== null) {
@@ -812,7 +812,8 @@ export function PullRequestDetailPanel({
     const projectRef = scopeProjectRef(actingEnvironmentId, acting?.projectId ?? detail.projectId);
     const opened = await openThreadWithTask(projectRef, task);
     setHandoff(null);
-    if (opened !== null && options?.question === true) requireApprovalForDraft(opened.draftId);
+    // Questions read untrusted pull request text, so their threads ask before acting.
+    if (opened !== null && isQuestionHandoff(kind)) requireApprovalForDraft(opened.draftId);
     if (opened !== null && options?.keepGuide === true) {
       const draft = useComposerDraftStore.getState().getDraftSession(opened.draftId);
       if (draft !== null) {
@@ -964,40 +965,32 @@ export function PullRequestDetailPanel({
 
   const askAboutPullRequest = () => {
     if (!detail) return;
-    void startAsk(
-      "ask",
-      {
-        ...buildAskAboutPullRequestHandoff({
-          number: detail.number,
-          title: detail.title,
-          url: detail.url,
-          headBranch: detail.headBranch,
-          baseBranch: detail.baseBranch,
-          state: detail.state,
-          isDraft: detail.isDraft,
-        }),
-      },
-      { question: true },
-    );
+    void startAsk("ask", {
+      ...buildAskAboutPullRequestHandoff({
+        number: detail.number,
+        title: detail.title,
+        url: detail.url,
+        headBranch: detail.headBranch,
+        baseBranch: detail.baseBranch,
+        state: detail.state,
+        isDraft: detail.isDraft,
+      }),
+    });
   };
 
   const explainPullRequest = () => {
     if (!detail) return;
-    void startAsk(
-      "explain",
-      {
-        ...buildExplainPullRequestHandoff({
-          number: detail.number,
-          title: detail.title,
-          url: detail.url,
-          headBranch: detail.headBranch,
-          baseBranch: detail.baseBranch,
-          state: detail.state,
-          isDraft: detail.isDraft,
-        }),
-      },
-      { question: true },
-    );
+    void startAsk("explain", {
+      ...buildExplainPullRequestHandoff({
+        number: detail.number,
+        title: detail.title,
+        url: detail.url,
+        headBranch: detail.headBranch,
+        baseBranch: detail.baseBranch,
+        state: detail.state,
+        isDraft: detail.isDraft,
+      }),
+    });
   };
 
   const askAboutGuideStop = (stop: PullRequestReviewGuideStop, index: number, question: string) => {
@@ -1021,7 +1014,7 @@ export function PullRequestDetailPanel({
         },
         question,
       }),
-      { keepGuide: true, question: true },
+      { keepGuide: true },
     );
   };
 
@@ -1863,4 +1856,8 @@ export function PullRequestDetailPanel({
       ) : null}
     </div>
   );
+}
+
+function isQuestionHandoff(kind: string): boolean {
+  return kind === "ask" || kind === "explain" || kind.startsWith("guide-stop:");
 }
