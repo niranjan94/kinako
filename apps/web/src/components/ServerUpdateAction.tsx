@@ -223,13 +223,17 @@ export function ServerUpdateAction({
     (settings) => settings.continueThreadsAfterServerUpdate,
   );
   const update = useServerUpdate();
+  // Installs without a known npm origin get the CLI's own `update` command.
+  const copiesUpdate = installation === undefined || installation.kind === "npm-global";
   const { copyToClipboard } = useCopyToClipboard<{ command: string }>({
-    target: "update command",
+    target: copiesUpdate ? "update command" : "relaunch command",
     onCopy: ({ command }) => {
       toastManager.add({
         type: "success",
-        title: "Update command copied",
-        description: `Run \`${command}\` on ${serverLabel}, then restart ${FORK_CLI_NAME} with your usual options.`,
+        title: copiesUpdate ? "Update command copied" : "Relaunch command copied",
+        description: copiesUpdate
+          ? `Run \`${command}\` on ${serverLabel}, then restart ${FORK_CLI_NAME} with your usual options.`
+          : `Stop ${FORK_CLI_NAME} on ${serverLabel}, then relaunch with \`${command}\` using the same subcommand and options. This does not update an installed ${FORK_CLI_NAME} command.`,
       });
     },
     onError: (error) => {
@@ -279,7 +283,12 @@ export function ServerUpdateAction({
 
   const manualCommand =
     selfUpdate === null ? manualServerUpdateCommand(targetVersion, installation) : null;
-  const actionLabel = manualCommand !== null ? "Copy update command" : label;
+  const actionLabel =
+    manualCommand !== null
+      ? copiesUpdate
+        ? "Copy update command"
+        : "Copy relaunch command"
+      : label;
   const onClick =
     manualCommand !== null
       ? () => copyToClipboard(manualCommand, { command: manualCommand })
