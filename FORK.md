@@ -52,7 +52,7 @@ Agents should use the `merge-upstream` skill (`.agents/skills/merge-upstream/`),
 
 Merge conflicts come from fork changes that touch the same lines as upstream. Keep new patches out of `package.json` versions, `pnpm-lock.yaml`, upstream workflows, and busy UI files. Prefer new fork-only files and environment variables.
 
-Fork-only migrations live in `apps/server/src/persistence/Migrations/fork/` and record into their own `fork_sql_migrations` ledger (`ForkMigrations.ts`), so upstream migrations keep upstream's ids and merge without renumbering. Fork migrations run after every upstream migration; give a new one the next fork id. Builds before this split recorded fork migrations in upstream's ledger at shifted ids; `splitForkMigrationLedger` moves them once on startup, and those older builds refuse to open the database afterwards. The mobile store promotion row is omitted until Kinako has public distribution links.
+Fork-only migrations live in `apps/server/src/persistence/Migrations/fork/` and record into their own `fork_sql_migrations` ledger (`ForkMigrations.ts`), so upstream migrations keep upstream's ids and merge without renumbering. Fork migrations run after every upstream migration; give a new one the next fork id and record the latest upstream id beside it in `firstRanAfterUpstream` (`ForkMigrations.test.ts`), which checks that later upstream migrations never drop fork schema from existing databases. Builds before this split recorded fork migrations in upstream's ledger at shifted ids; `splitForkMigrationLedger` moves them once on startup, and those older builds refuse to open the database afterwards. The mobile store promotion row is omitted until Kinako has public distribution links.
 
 ## Rebrand seams
 
