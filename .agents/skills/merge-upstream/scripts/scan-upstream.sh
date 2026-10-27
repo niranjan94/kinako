@@ -10,7 +10,8 @@
 # Sections:
 #   1. Fork seam files upstream changed (expect conflicts or silent reverts).
 #   2. New upstream workflows (disable them in the fork's Actions tab).
-#   3. New upstream migrations, which must be renumbered after the fork's.
+#   3. New upstream migrations, flagged where they touch a table a fork migration
+#      alters (a table rebuild there silently drops the fork's schema).
 #   4. Lines upstream added that carry an upstream identity literal. Each one
 #      is a candidate for a forkBrand import; some are labels that stay.
 #
@@ -89,14 +90,17 @@ migrations="$(git diff --name-only --diff-filter=A "$base" "$upstream" -- apps/s
 if [ -z "$migrations" ]; then
   printf '(none)\n'
 else
-  last="$(git show "$fork:apps/server/src/persistence/Migrations.ts" \
-    | grep -oE '^  \[[0-9]+,' | tr -dc '0-9\n' | sort -n | tail -1)"
-  printf 'Fork migrations end at %s. Renumber each upstream migration after it, in order,\n' "$last"
-  printf 'renaming the file and its test and updating Migrations.ts and reconcileV2PreviewMigration.test.ts:\n'
-  next=$((last + 1))
+  fork_tables="$(git ls-tree --name-only "$fork" apps/server/src/persistence/Migrations/fork/ \
+    | while read -r f; do git show "$fork:$f"; done \
+    | grep -oE '(TABLE( IF NOT EXISTS)?|table_info\(|\bON) *[a-z][a-z0-9_]*' \
+    | grep -oE '[a-z][a-z0-9_]*$' | sort -u | paste -sd '|' -)"
+  printf 'Upstream ids stay as they are. Check each flagged one keeps the fork table'"'"'s schema:\n'
   for file in $migrations; do
-    printf '  %s -> %03d\n' "$file" "$next"
-    next=$((next + 1))
+    hits=""
+    if [ -n "$fork_tables" ]; then
+      hits="$(git show "$upstream:$file" | grep -oE "\\b($fork_tables)\\b" | sort -u | paste -sd ' ' - || true)"
+    fi
+    printf '  %s%s\n' "$file" "${hits:+  (touches $hits)}"
   done
 fi
 printf '\n'
