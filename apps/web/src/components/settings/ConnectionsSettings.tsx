@@ -304,12 +304,12 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       return;
     setIsUpdatingDesktopServerExposure(true);
     setDesktopServerExposureMutationError(null);
-    return await (async () => {
+    try {
       await desktopBridge.setServerExposureMode(checked ? "network-accessible" : "local-only");
       refreshDesktopNetworkAccessState();
       setPendingDesktopServerExposureMode(null);
       setIsUpdatingDesktopServerExposure(false);
-    })().catch(async (error: unknown) => {
+    } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to update network exposure.";
       setPendingDesktopServerExposureMode(null);
       setDesktopServerExposureMutationError(message);
@@ -321,7 +321,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
         }),
       );
       setIsUpdatingDesktopServerExposure(false);
-    });
+    }
   };
 
   const handleConfirmDesktopServerExposureChange = () => {
@@ -463,21 +463,17 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     if (confirmed === true) await removeSavedBackend(environment);
   };
 
-  const tailscaleHttpsEndpoint = (() =>
-    desktopAdvertisedEndpoints.find(isTailscaleHttpsEndpoint) ?? null)();
-  const visibleDesktopNetworkAdvertisedEndpoints = (() =>
-    isLocalBackendNetworkAccessible
-      ? desktopAdvertisedEndpoints.filter((endpoint) => !isTailscaleHttpsEndpoint(endpoint))
-      : [])();
-  const visibleDesktopAdvertisedEndpoints = (() =>
-    tailscaleHttpsEndpoint
-      ? [...visibleDesktopNetworkAdvertisedEndpoints, tailscaleHttpsEndpoint]
-      : visibleDesktopNetworkAdvertisedEndpoints)();
-  const defaultDesktopNetworkAdvertisedEndpoint = (() =>
-    selectPairingEndpoint(
-      visibleDesktopNetworkAdvertisedEndpoints,
-      defaultAdvertisedEndpointKey,
-    ))();
+  const tailscaleHttpsEndpoint = desktopAdvertisedEndpoints.find(isTailscaleHttpsEndpoint) ?? null;
+  const visibleDesktopNetworkAdvertisedEndpoints = isLocalBackendNetworkAccessible
+    ? desktopAdvertisedEndpoints.filter((endpoint) => !isTailscaleHttpsEndpoint(endpoint))
+    : [];
+  const visibleDesktopAdvertisedEndpoints = tailscaleHttpsEndpoint
+    ? [...visibleDesktopNetworkAdvertisedEndpoints, tailscaleHttpsEndpoint]
+    : visibleDesktopNetworkAdvertisedEndpoints;
+  const defaultDesktopNetworkAdvertisedEndpoint = selectPairingEndpoint(
+    visibleDesktopNetworkAdvertisedEndpoints,
+    defaultAdvertisedEndpointKey,
+  );
   const defaultDesktopAdvertisedEndpoint =
     defaultDesktopNetworkAdvertisedEndpoint ??
     selectPairingEndpoint(

@@ -457,14 +457,14 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
     handleSetWatching(link, true, autoFix);
 
   // Legend rows update only for data/extraData changes; include all external inputs.
-  const rowInputs = (() => ({
+  const rowInputs = {
     speedMode,
     environmentProjects,
     capabilities,
     supportsWatch,
     supportsAutoFix,
     thread,
-  }))();
+  };
 
   if (linkCount === 0) {
     return (

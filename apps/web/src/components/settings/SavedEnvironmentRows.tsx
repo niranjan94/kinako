@@ -211,10 +211,10 @@ function RemoteAuthorizedClients({
   const directEndpoints = useAtomValue(
     serverEnvironment.configValueAtom(environmentId),
   )?.directEndpoints;
-  const endpoints = (() =>
+  const endpoints =
     directEndpoints === undefined
       ? EMPTY_ADVERTISED_ENDPOINTS
-      : advertisedEndpointsFromDirect(directEndpoints))();
+      : advertisedEndpointsFromDirect(directEndpoints);
 
   return (
     <div id={id} className="mt-2 border-t border-border/50">
