@@ -74,6 +74,7 @@ export function DatabaseDrawerTabs({
       role="tablist"
       aria-label="Bottom panel"
       data-terminal-owner={NOT_TERMINAL}
+      data-database-drawer-tabs
       className="relative flex h-8 shrink-0 overflow-x-auto bg-muted/20 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border"
     >
       <DrawerTab
