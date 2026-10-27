@@ -1039,7 +1039,8 @@ export async function waitForRevertedMessage(
   timeoutMs = 120_000,
 ): Promise<void> {
   const threadAtom = environmentThreadDetails.stateAtom(threadRef);
-  const initial = Option.getOrNull(appAtomRegistry.get(threadAtom).data);
+  const readProjection = () => Option.getOrNull(appAtomRegistry.get(threadAtom).data);
+  const initial = readProjection();
   const providerThreadId = initial?.thread.activeProviderThreadId;
   const initialProviderThread = initial?.providerThreads.find(
     (providerThread) => providerThread.id === providerThreadId,
@@ -1060,28 +1061,54 @@ export async function waitForRevertedMessage(
   if (witness === undefined) {
     throw new Error("The thread has changed. Select a message to rewind again.");
   }
-  return waitForThreadOutcome({
-    threadRef,
-    action: revert,
-    inspect: (thread) => {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let accepted = false;
+    let unsubscribe = () => {};
+    let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (timeout !== undefined) globalThis.clearTimeout(timeout);
+      unsubscribe();
+      if (error !== undefined) reject(error);
+      else resolve();
+    };
+    const inspect = () => {
+      const thread = readProjection();
+      if (!thread) return;
       const failure = thread.thread.rollbackFailure;
-      if (failure?.requestId === requestId) return new Error(failure.message);
-      return thread.providerThreads.some(
-        (providerThread) =>
-          (providerThread.id === providerThreadId ||
-            // Claude resets to a fresh root session when rewinding to thread start.
-            (turnCount === 0 &&
-              providerThread.ownerNodeId === null &&
-              providerThread.appThreadId === initial?.thread.id &&
-              providerThread.providerInstanceId === initialProviderThread?.providerInstanceId &&
-              !initialProviderThreadIds.has(providerThread.id))) &&
-          providerThread.lastRunOrdinal === (turnCount === 0 ? null : turnCount),
-      ) && thread.runs.some((run) => run.id === witness.id && run.status === "rolled_back")
-        ? true
-        : undefined;
-    },
-    timeoutMessage: "Timed out waiting for the thread to rewind.",
-    timeoutMs,
+      if (failure?.requestId === requestId) {
+        finish(new Error(failure.message));
+        return;
+      }
+      if (
+        accepted &&
+        thread.providerThreads.some(
+          (providerThread) =>
+            (providerThread.id === providerThreadId ||
+              // Claude resets to a fresh root session when rewinding to thread start.
+              (turnCount === 0 &&
+                providerThread.ownerNodeId === null &&
+                providerThread.appThreadId === initial?.thread.id &&
+                providerThread.providerInstanceId === initialProviderThread?.providerInstanceId &&
+                !initialProviderThreadIds.has(providerThread.id))) &&
+            providerThread.lastRunOrdinal === (turnCount === 0 ? null : turnCount),
+        ) &&
+        thread.runs.some((run) => run.id === witness.id && run.status === "rolled_back")
+      )
+        finish();
+    };
+    unsubscribe = appAtomRegistry.subscribe(threadAtom, inspect);
+    timeout = globalThis.setTimeout(() => {
+      finish(new Error("Timed out waiting for the thread to rewind."));
+    }, timeoutMs);
+    Promise.resolve()
+      .then(revert)
+      .then(() => {
+        accepted = true;
+        inspect();
+      }, finish);
   });
 }
 
