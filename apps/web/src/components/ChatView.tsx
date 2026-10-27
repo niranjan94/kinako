@@ -3600,15 +3600,14 @@ export default function ChatView(props: ChatViewProps) {
                                     ? "Preparing machine"
                                     : isRevertingCheckpoint
                                       ? "Rewinding conversation"
-                                      : isSummarizing
-                                        ? "Summarizing conversation"
-                                        : feedbackUploading
-                                          ? "Sending feedback"
-                                          : threadDetailLoading
-                                            ? "Messages loading"
-                                            : worktreeSetupBlocksSend
-                                              ? "Preparing worktree"
-                                              : projectCloneSendBlockReason
+                                      : feedbackUploading
+                                        ? "Sending feedback"
+                                        : threadDetailLoading
+                                          ? "Messages loading"
+                                          : worktreeSetupBlocksSend
+                                            ? "Preparing worktree"
+                                            : (projectCloneSendBlockReason ??
+                                              (isSummarizing ? "Summarizing conversation" : null))
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               sideQuestionControl={sideQuestionControl}
