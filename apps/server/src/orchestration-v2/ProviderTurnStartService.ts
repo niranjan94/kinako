@@ -787,85 +787,7 @@ export const layer: Layer.Layer<
       });
       let effectiveHandoffs = handoffs;
       let resumeFellBack = false;
-      const prepareFreshSessionContext = Effect.fn(
-        "ProviderTurnStartService.prepareFreshSessionContext",
-      )(function* () {
-        const transferId = yield* idAllocator.allocate.contextTransfer({
-          sourceThreadId: projection.thread.id,
-          targetThreadId: projection.thread.id,
-          type: "provider_resume_fallback",
-        });
-        const createdAt = yield* DateTime.now;
-        const handoff = yield* contextHandoffService.prepareProviderHandoff({
-          threadId: projection.thread.id,
-          targetRunId: run.id,
-          transferId,
-          fromProviderThreadIds: [providerThread.id],
-          toProviderThreadId: providerThread.id,
-          fromProviderInstanceId: providerThread.providerInstanceId,
-          toProviderInstanceId: run.providerInstanceId,
-          coveredRunOrdinals: { from: 1, to: Math.max(1, run.ordinal - 1) },
-          strategy: "full_thread_summary",
-          runs: projection.runs,
-          items: (yield* projectionStore.getTurnStartHistory(input.threadId)).filter(
-            (item) =>
-              item.runId === null ||
-              projection.runs.some(
-                (source) => source.id === item.runId && source.ordinal < run.ordinal,
-              ),
-          ),
-          createdAt,
-        });
-        // Delivery ranks later handoffs as newer history. Pending handoffs from
-        // earlier runs predate this summary; handoffs for this run (provider-switch
-        // delta, merge-back) are newer and must stay last.
-        effectiveHandoffs = [
-          ...effectiveHandoffs.filter((candidate) => candidate.targetRunId !== run.id),
-          handoff,
-          ...effectiveHandoffs.filter((candidate) => candidate.targetRunId === run.id),
-        ];
-        resumeFellBack = true;
-        yield* eventSink.write({
-          events: [
-            {
-              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
-              type: "context-handoff.updated",
-              threadId: projection.thread.id,
-              runId: run.id,
-              providerInstanceId: run.providerInstanceId,
-              occurredAt: createdAt,
-              payload: handoff,
-            },
-            {
-              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
-              type: "context-transfer.updated",
-              threadId: projection.thread.id,
-              runId: run.id,
-              providerInstanceId: run.providerInstanceId,
-              occurredAt: createdAt,
-              payload: {
-                id: transferId,
-                type: "provider_handoff",
-                sourceThreadId: projection.thread.id,
-                targetThreadId: projection.thread.id,
-                sourcePoint: { threadId: projection.thread.id },
-                basePoint: null,
-                sourceProviderInstanceId: providerThread.providerInstanceId,
-                targetProviderInstanceId: run.providerInstanceId,
-                targetRunId: run.id,
-                status: "resolved_portable",
-                resolution: { strategy: "portable_context", contextHandoffId: handoff.id },
-                createdBy: "system",
-                error: null,
-                createdAt,
-                updatedAt: createdAt,
-                consumedAt: null,
-              },
-            },
-          ],
-        });
-      });
-      const loadedProviderThread = yield* Effect.gen(function* () {
+      const loadProviderThread = Effect.gen(function* () {
         if (nativeForkTransfer !== undefined) {
           const sourceProjection = yield* projectionStore.getThreadRecords(
             nativeForkTransfer.sourceThreadId,
@@ -977,6 +899,85 @@ export const layer: Layer.Layer<
         yield* prepareFreshSessionContext();
         return replacement;
       });
+      const prepareFreshSessionContext = Effect.fn(
+        "ProviderTurnStartService.prepareFreshSessionContext",
+      )(function* () {
+        const transferId = yield* idAllocator.allocate.contextTransfer({
+          sourceThreadId: projection.thread.id,
+          targetThreadId: projection.thread.id,
+          type: "provider_resume_fallback",
+        });
+        const createdAt = yield* DateTime.now;
+        const handoff = yield* contextHandoffService.prepareProviderHandoff({
+          threadId: projection.thread.id,
+          targetRunId: run.id,
+          transferId,
+          fromProviderThreadIds: [providerThread.id],
+          toProviderThreadId: providerThread.id,
+          fromProviderInstanceId: providerThread.providerInstanceId,
+          toProviderInstanceId: run.providerInstanceId,
+          coveredRunOrdinals: { from: 1, to: Math.max(1, run.ordinal - 1) },
+          strategy: "full_thread_summary",
+          runs: projection.runs,
+          items: (yield* projectionStore.getTurnStartHistory(input.threadId)).filter(
+            (item) =>
+              item.runId === null ||
+              projection.runs.some(
+                (source) => source.id === item.runId && source.ordinal < run.ordinal,
+              ),
+          ),
+          createdAt,
+        });
+        // Delivery ranks later handoffs as newer history. Pending handoffs from
+        // earlier runs predate this summary; handoffs for this run (provider-switch
+        // delta, merge-back) are newer and must stay last.
+        effectiveHandoffs = [
+          ...effectiveHandoffs.filter((candidate) => candidate.targetRunId !== run.id),
+          handoff,
+          ...effectiveHandoffs.filter((candidate) => candidate.targetRunId === run.id),
+        ];
+        resumeFellBack = true;
+        yield* eventSink.write({
+          events: [
+            {
+              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+              type: "context-handoff.updated",
+              threadId: projection.thread.id,
+              runId: run.id,
+              providerInstanceId: run.providerInstanceId,
+              occurredAt: createdAt,
+              payload: handoff,
+            },
+            {
+              id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+              type: "context-transfer.updated",
+              threadId: projection.thread.id,
+              runId: run.id,
+              providerInstanceId: run.providerInstanceId,
+              occurredAt: createdAt,
+              payload: {
+                id: transferId,
+                type: "provider_handoff",
+                sourceThreadId: projection.thread.id,
+                targetThreadId: projection.thread.id,
+                sourcePoint: { threadId: projection.thread.id },
+                basePoint: null,
+                sourceProviderInstanceId: providerThread.providerInstanceId,
+                targetProviderInstanceId: run.providerInstanceId,
+                targetRunId: run.id,
+                status: "resolved_portable",
+                resolution: { strategy: "portable_context", contextHandoffId: handoff.id },
+                createdBy: "system",
+                error: null,
+                createdAt,
+                updatedAt: createdAt,
+                consumedAt: null,
+              },
+            },
+          ],
+        });
+      });
+      const loadedProviderThread = yield* loadProviderThread;
       if (loadedProviderThread === undefined) return;
       if (!(yield* isCurrentAttemptInStatus("starting"))) {
         return;
