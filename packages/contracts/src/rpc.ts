@@ -2144,7 +2144,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 // Separate handler groups keep RPC inference within TypeScript's instantiation limit.
-export const CoreWsRpcGroup = RpcGroup.make(
+export const WsRpcGroup = RpcGroup.make(
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
@@ -2172,7 +2172,6 @@ export const CoreWsRpcGroup = RpcGroup.make(
   WsServerRemoveKeybindingRpc,
   WsServerRunStorageCleanupRpc,
   WsServerGetStorageCleanupReportRpc,
-  WsServerSubscribeKeepAwakeStatusRpc,
   WsServerGetDatabaseStorageRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
@@ -2247,9 +2246,6 @@ export const CoreWsRpcGroup = RpcGroup.make(
   WsPullRequestsRequestReviewersRpc,
   WsPullRequestsLabelCandidatesRpc,
   WsPullRequestsSetLabelsRpc,
-  WsIssuesListRpc,
-  WsIssuesDetailRpc,
-  WsIssuesCommentRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,
@@ -2271,8 +2267,6 @@ export const CoreWsRpcGroup = RpcGroup.make(
   WsFilesystemGetMetadataRpc,
   WsAgentSessionsScanRpc,
   WsAgentSessionsImportRpc,
-  WsAgentSessionsListRpc,
-  WsAgentSessionsImportSessionRpc,
   WsAssetsCreateUrlRpc,
   WsAssetsPersistChatAttachmentsRpc,
   WsAttachmentsCreateUploadUrlRpc,
@@ -2290,6 +2284,12 @@ export const CoreWsRpcGroup = RpcGroup.make(
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
   WsGitPreparePullRequestThreadRpc,
+  WsVcsListRefsRpc,
+  WsVcsCreateWorktreeRpc,
+  WsVcsRemoveWorktreeRpc,
+  WsVcsCreateRefRpc,
+  WsVcsSwitchRefRpc,
+  WsVcsInitRpc,
   WsReviewGetDiffPreviewRpc,
   WsReviewGetDiffFileContentsRpc,
   WsTerminalOpenRpc,
@@ -2329,14 +2329,10 @@ export const CoreWsRpcGroup = RpcGroup.make(
   WsSubscribeAuthAccessRpc,
   WsSubscribeBackgroundPolicyRpc,
   WsSubscribeResourceTelemetryRpc,
-).middleware(RpcScopeAuthorization);
-
-export const OrchestrationRpcGroup = RpcGroup.make(
   WsOrchestrationV2DispatchCommandRpc,
   WsOrchestrationV2GetWorkflowScriptRpc,
   WsOrchestrationV2StopWorkflowRpc,
   WsOrchestrationV2GetTurnItemRpc,
-  WsOrchestrationV2GetRunHistoryRpc,
   WsOrchestrationV2GetTurnDiffRpc,
   WsOrchestrationV2GetFullThreadDiffRpc,
   WsOrchestrationV2SearchThreadsRpc,
@@ -2352,9 +2348,14 @@ export const OrchestrationRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeShellRpc,
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
-).middleware(RpcScopeAuthorization);
-
-export const DatabaseRpcGroup = RpcGroup.make(
+  // Fork additions stay last so upstream's list merges cleanly.
+  WsServerSubscribeKeepAwakeStatusRpc,
+  WsIssuesListRpc,
+  WsIssuesDetailRpc,
+  WsIssuesCommentRpc,
+  WsAgentSessionsListRpc,
+  WsAgentSessionsImportSessionRpc,
+  WsOrchestrationV2GetRunHistoryRpc,
   WsDatabaseListConnectionsRpc,
   WsDatabaseSaveConnectionRpc,
   WsDatabaseDeleteConnectionRpc,
@@ -2367,29 +2368,10 @@ export const DatabaseRpcGroup = RpcGroup.make(
   WsDatabaseOpenSessionRpc,
   WsDatabaseCloseSessionRpc,
   WsDatabaseBrowseTableRpc,
-).middleware(RpcScopeAuthorization);
-
-export const VcsRpcGroup = RpcGroup.make(
-  WsVcsListRefsRpc,
-  WsVcsCreateWorktreeRpc,
   WsVcsMoveThreadRpc,
-  WsVcsRemoveWorktreeRpc,
-  WsVcsCreateRefRpc,
-  WsVcsSwitchRefRpc,
-  WsVcsInitRpc,
   WsVcsSubscribeWorktreeSnapshotsRpc,
   WsVcsRestoreWorktreeSnapshotRpc,
   WsVcsDeleteWorktreeSnapshotRpc,
-).middleware(RpcScopeAuthorization);
-
-export const FollowUpRpcGroup = RpcGroup.make(
   WsFollowUpsStartRpc,
   WsFollowUpsSetDismissedRpc,
 ).middleware(RpcScopeAuthorization);
-
-export const WsRpcGroup = CoreWsRpcGroup.merge(
-  OrchestrationRpcGroup,
-  DatabaseRpcGroup,
-  VcsRpcGroup,
-  FollowUpRpcGroup,
-);

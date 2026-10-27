@@ -1,11 +1,5 @@
-import {
-  OrchestrationDispatchCommandError,
-  CoreWsRpcGroup,
-  OrchestrationRpcGroup,
-  DatabaseRpcGroup,
-  VcsRpcGroup,
-  FollowUpRpcGroup,
-} from "@t3tools/contracts";
+import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 
@@ -111,7 +105,7 @@ import {
   HttpServerRespondable,
   HttpServerResponse,
 } from "effect/http";
-import { RpcSerialization, RpcServer } from "effect/rpc";
+import { RpcGroup, RpcSerialization, RpcServer } from "effect/rpc";
 
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
@@ -571,11 +565,24 @@ const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 
 // Middleware added later wraps middleware added earlier, so instrumentation wraps authorization.
 const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
-const CoreServerWsRpcGroup = CoreWsRpcGroup.middleware(RpcInstrumentation);
-const OrchestrationServerRpcGroup = OrchestrationRpcGroup.middleware(RpcInstrumentation);
-const DatabaseServerRpcGroup = DatabaseRpcGroup.middleware(RpcInstrumentation);
-const VcsServerRpcGroup = VcsRpcGroup.middleware(RpcInstrumentation);
-const FollowUpServerRpcGroup = FollowUpRpcGroup.middleware(RpcInstrumentation);
+
+// RpcGroup.toLayer derives each handler's requirements by scanning every RPC in
+// the group, so its type cost grows with handlers × RPCs. Near 200 methods that
+// crosses TypeScript's instantiation limit and the layer's requirements degrade to
+// `any`, so the handlers are registered as two disjoint, smaller groups.
+type ServerWsRpc = RpcGroup.Rpcs<typeof ServerWsRpcGroup>;
+const SPLIT_WS_RPC_PREFIXES = ["server", "pullRequests", "provider", "orchestration"] as const;
+type SplitWsRpc = Extract<
+  ServerWsRpc,
+  { readonly _tag: `${(typeof SPLIT_WS_RPC_PREFIXES)[number]}.${string}` }
+>;
+const isSplitWsRpc = (rpc: ServerWsRpc): rpc is SplitWsRpc =>
+  SPLIT_WS_RPC_PREFIXES.some((prefix) => rpc._tag.startsWith(`${prefix}.`));
+const isOtherWsRpc = (rpc: ServerWsRpc): rpc is Exclude<ServerWsRpc, SplitWsRpc> =>
+  !isSplitWsRpc(rpc);
+const serverWsRpcs = Array.from(ServerWsRpcGroup.requests.values());
+const SplitWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isSplitWsRpc));
+const OtherWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isOtherWsRpc));
 // Replaying each intervening event costs a shell refetch; past this gap a
 // single O(active-threads) snapshot is cheaper and bounded.
 const SHELL_RESUME_MAX_GAP = 1_000;
@@ -1238,7 +1245,7 @@ export const layerWsRpc = (
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
 ) =>
-  Layer.unwrap(
+  Layer.effectContext(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
       const sql = yield* SqlClient.SqlClient;
@@ -1324,6 +1331,7 @@ export const layerWsRpc = (
       const directEndpoints = yield* DirectEndpoints.DirectEndpoints;
       const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
       const review = yield* ReviewService.ReviewService;
+      const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
       const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
       const terminalManager = yield* TerminalManager.TerminalManager;
       const previewManager = yield* PreviewManager.PreviewManager;
@@ -1903,7 +1911,11 @@ export const layerWsRpc = (
         return result;
       });
 
-      const orchestrationHandlers = OrchestrationServerRpcGroup.of({
+      const threadWorkspace = yield* ThreadWorkspaceService.ThreadWorkspaceService;
+      const worktreeSnapshots = yield* WorktreeSnapshots.WorktreeSnapshots;
+      const database = yield* DatabaseService.DatabaseService;
+      const followUps = yield* FollowUpService.FollowUpService;
+      const handlers = ServerWsRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -2193,8 +2205,6 @@ export const layerWsRpc = (
               Effect.as(commandOutputHub.subscribe(input)),
             ),
           ),
-      });
-      const handlers = CoreServerWsRpcGroup.of({
         [WS_METHODS.scheduledTasksList]: (_input) =>
           scheduledTasks.list().pipe(Effect.map(withVisibleWebhookUrls)),
         [WS_METHODS.scheduledTasksSubscribe]: (_input) =>
@@ -3042,6 +3052,17 @@ export const layerWsRpc = (
           gitWorkflow
             .preparePullRequestThread(input)
             .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+        [WS_METHODS.vcsListRefs]: (input) => gitWorkflow.listRefs(input),
+        [WS_METHODS.vcsCreateWorktree]: (input) =>
+          gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+        [WS_METHODS.vcsRemoveWorktree]: (input) =>
+          gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+        [WS_METHODS.vcsCreateRef]: (input) =>
+          gitWorkflow.createRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+        [WS_METHODS.vcsSwitchRef]: (input) =>
+          gitWorkflow.switchRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+        [WS_METHODS.vcsInit]: (input) =>
+          vcsProvisioning.initRepository(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
         [WS_METHODS.reviewGetDiffPreview]: (input) => review.getDiffPreview(input),
         [WS_METHODS.reviewGetDiffFileContents]: (input) => review.getDiffFileContents(input),
         [WS_METHODS.terminalOpen]: (input) => terminalManager.open(input),
@@ -3300,77 +3321,37 @@ export const layerWsRpc = (
               Stream.concat(Stream.make(latest), changes),
             ),
           ),
+        [WS_METHODS.vcsMoveThread]: (input) => threadWorkspace.moveThread(input),
+        [WS_METHODS.vcsSubscribeWorktreeSnapshots]: () => worktreeSnapshots.snapshots,
+        [WS_METHODS.vcsRestoreWorktreeSnapshot]: (input) =>
+          worktreeSnapshots
+            .restore(input)
+            .pipe(Effect.tap((result) => refreshGitStatus(result.worktreePath))),
+        [WS_METHODS.vcsDeleteWorktreeSnapshot]: (input) => worktreeSnapshots.discard(input),
+        [WS_METHODS.databaseListConnections]: (input) => database.listConnections(input),
+        [WS_METHODS.databaseSaveConnection]: (input) => database.saveConnection(input),
+        [WS_METHODS.databaseDeleteConnection]: (input) => database.deleteConnection(input),
+        [WS_METHODS.databaseTestConnection]: (input) => database.testConnection(input),
+        [WS_METHODS.databaseIntrospect]: (input) => database.introspect(input),
+        [WS_METHODS.databaseOpenSession]: (input) => database.openSession(input),
+        [WS_METHODS.databaseCloseSession]: (input) => database.closeSession(input),
+        [WS_METHODS.databaseBrowseTable]: (input) => database.browseTable(input),
+        [WS_METHODS.databaseExecute]: (input) => database.execute(input),
+        [WS_METHODS.databaseFetchPage]: (input) => database.fetchPage(input),
+        [WS_METHODS.databaseCloseQuery]: (input) => database.closeQuery(input),
+        [WS_METHODS.databaseCancelQuery]: (input) => database.cancelQuery(input),
+        [WS_METHODS.followUpsStart]: (input) => followUps.start(input),
+        [WS_METHODS.followUpsSetDismissed]: (input) => followUps.setDismissed(input),
       });
-      return Layer.merge(
-        CoreServerWsRpcGroup.toLayer(handlers),
-        OrchestrationServerRpcGroup.toLayer(orchestrationHandlers),
+      const splitHandlers: Pick<typeof handlers, SplitWsRpc["_tag"]> = handlers;
+      const otherHandlers: Pick<typeof handlers, Exclude<ServerWsRpc, SplitWsRpc>["_tag"]> =
+        handlers;
+      return Context.merge(
+        yield* SplitWsRpcGroup.toHandlers(splitHandlers),
+        yield* OtherWsRpcGroup.toHandlers(otherHandlers),
       );
     }),
   );
-
-const vcsRpcLayer = VcsServerRpcGroup.toLayer(
-  Effect.gen(function* () {
-    const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
-    const threadWorkspace = yield* ThreadWorkspaceService.ThreadWorkspaceService;
-    const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
-    const worktreeSnapshots = yield* WorktreeSnapshots.WorktreeSnapshots;
-    const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
-    const refreshGitStatus = (cwd: string) =>
-      vcsStatusBroadcaster
-        .refreshStatus(cwd)
-        .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
-    return VcsServerRpcGroup.of({
-      [WS_METHODS.vcsListRefs]: (input) => gitWorkflow.listRefs(input),
-      [WS_METHODS.vcsMoveThread]: (input) => threadWorkspace.moveThread(input),
-      [WS_METHODS.vcsCreateWorktree]: (input) =>
-        gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-      [WS_METHODS.vcsRemoveWorktree]: (input) =>
-        gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-      [WS_METHODS.vcsCreateRef]: (input) =>
-        gitWorkflow.createRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-      [WS_METHODS.vcsSwitchRef]: (input) =>
-        gitWorkflow.switchRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-      [WS_METHODS.vcsInit]: (input) =>
-        vcsProvisioning.initRepository(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-      [WS_METHODS.vcsSubscribeWorktreeSnapshots]: () => worktreeSnapshots.snapshots,
-      [WS_METHODS.vcsRestoreWorktreeSnapshot]: (input) =>
-        worktreeSnapshots
-          .restore(input)
-          .pipe(Effect.tap((result) => refreshGitStatus(result.worktreePath))),
-      [WS_METHODS.vcsDeleteWorktreeSnapshot]: (input) => worktreeSnapshots.discard(input),
-    });
-  }),
-);
-
-const databaseRpcLayer = DatabaseServerRpcGroup.toLayer(
-  Effect.gen(function* () {
-    const database = yield* DatabaseService.DatabaseService;
-    return DatabaseServerRpcGroup.of({
-      [WS_METHODS.databaseListConnections]: (input) => database.listConnections(input),
-      [WS_METHODS.databaseSaveConnection]: (input) => database.saveConnection(input),
-      [WS_METHODS.databaseDeleteConnection]: (input) => database.deleteConnection(input),
-      [WS_METHODS.databaseTestConnection]: (input) => database.testConnection(input),
-      [WS_METHODS.databaseIntrospect]: (input) => database.introspect(input),
-      [WS_METHODS.databaseOpenSession]: (input) => database.openSession(input),
-      [WS_METHODS.databaseCloseSession]: (input) => database.closeSession(input),
-      [WS_METHODS.databaseBrowseTable]: (input) => database.browseTable(input),
-      [WS_METHODS.databaseExecute]: (input) => database.execute(input),
-      [WS_METHODS.databaseFetchPage]: (input) => database.fetchPage(input),
-      [WS_METHODS.databaseCloseQuery]: (input) => database.closeQuery(input),
-      [WS_METHODS.databaseCancelQuery]: (input) => database.cancelQuery(input),
-    });
-  }),
-);
-
-const followUpRpcLayer = FollowUpServerRpcGroup.toLayer(
-  Effect.gen(function* () {
-    const followUps = yield* FollowUpService.FollowUpService;
-    return FollowUpServerRpcGroup.of({
-      [WS_METHODS.followUpsStart]: (input) => followUps.start(input),
-      [WS_METHODS.followUpsSetDismissed]: (input) => followUps.setDismissed(input),
-    });
-  }),
-);
 
 // Default socket-level Defect frames end every pending client request.
 export const WS_RPC_SERVER_OPTIONS = {
@@ -3458,9 +3439,6 @@ export const layer = Layer.unwrap(
               previewAutomationBroker,
               serverBrowser,
             ).pipe(
-              Layer.merge(databaseRpcLayer),
-              Layer.merge(vcsRpcLayer),
-              Layer.merge(followUpRpcLayer),
               Layer.provide(
                 Layer.succeed(ThreadWorkspaceService.ThreadWorkspaceService, threadWorkspace),
               ),
