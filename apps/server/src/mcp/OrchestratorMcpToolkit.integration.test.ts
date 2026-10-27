@@ -47,7 +47,10 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 
-const layerOrchestratorToolkit = McpHttpServer.layerOrchestratorToolkit.pipe(
+const layerOrchestratorToolkit = Layer.merge(
+  McpHttpServer.layerOrchestratorToolkit,
+  McpHttpServer.layerForkToolkit,
+).pipe(
   Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),
   Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
 );

@@ -10,8 +10,6 @@ import {
   OrchestratorMcpDeleteScheduledTaskResult,
   OrchestratorMcpRequestSecretInput,
   OrchestratorMcpRequestSecretResult,
-  OrchestratorMcpSuggestFollowUpInput,
-  OrchestratorMcpSuggestFollowUpResult,
   OrchestratorMcpFailure,
   OrchestratorMcpListScheduledTasksInput,
   OrchestratorMcpListScheduledTasksResult,
@@ -188,18 +186,6 @@ const RequestSecretTool = Tool.make("request_secret", {
   .annotate(Tool.Title, "Request a secret from the user")
   .annotate(Tool.Destructive, false);
 
-const SuggestFollowUpTool = Tool.make("t3_suggest_follow_up", {
-  description:
-    "Record follow-up work you noticed but are not doing in this turn (missing tests, a related bug, a cleanup elsewhere) as a card in this thread. The user can start it as a new thread in one click or dismiss it. Call it once per distinct follow-up, and only for work worth its own thread; do not use it for steps you are about to do yourself. The new thread starts without this thread's context, so the prompt must stand alone. Returns immediately; nothing waits on the user.",
-  parameters: OrchestratorMcpSuggestFollowUpInput,
-  success: OrchestratorMcpSuggestFollowUpResult,
-  failure: OrchestratorMcpFailure,
-  failureMode: "return",
-  dependencies,
-})
-  .annotate(Tool.Title, "Suggest a follow-up thread")
-  .annotate(Tool.Destructive, false);
-
 const CreateThreadsTool = Tool.make("create_threads", {
   description:
     "Create new top-level threads in this checkout. Not delegation. One thread or its own worktree: `t3_thread_launch`. Project, branch, and worktree inherit.",
@@ -305,7 +291,6 @@ export const OrchestratorToolkit = Toolkit.make(
   ListScheduledTasksTool,
   DeleteScheduledTaskTool,
   RequestSecretTool,
-  SuggestFollowUpTool,
   CreateThreadsTool,
   ThreadListTool,
   ThreadReadTool,

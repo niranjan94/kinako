@@ -127,22 +127,6 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
       };
     }),
   ),
-  t3_thread_summarize: writesThread((input) =>
-    dispatch(input.threadId, (common) => ({
-      type: "thread.summarize",
-      ...common,
-      messageId: input.messageId,
-      direction: input.direction,
-      ...(input.instructions === undefined ? {} : { instructions: input.instructions }),
-    })),
-  ),
-  t3_thread_summary_restore: writesThread((input) =>
-    dispatch(input.threadId, (common) => ({
-      type: "thread.summary.restore",
-      ...common,
-      turnItemId: input.turnItemId,
-    })),
-  ),
   t3_thread_transfer: McpToolAccess.either(
     (input) => input.action === "status",
     McpToolAccess.reads((input) =>
