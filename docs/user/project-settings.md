@@ -37,10 +37,10 @@ machine's setting. Every other provider setting stays per machine.
 
 On mobile, open **Settings** and use the filter in its header to choose connected environments
 and a project. The filter stays available in server-setting pages. With **All projects** selected,
-the **Server settings** categories and auto-settle controls in **Thread behavior** edit the
-selected environments' defaults. Choosing a project edits its overrides on the selected
+the server-setting pages, such as Threads, Source control and Worktrees, edit the selected
+environments' defaults. Choosing a project edits its overrides on the selected
 environments. Use **Use defaults** in a page to remove that page's project overrides.
-Open **Settings → Projects & threads → Overview** to rename the project across its selected
+Open **Settings → Projects** to rename the project across its selected
 connected checkouts and see where those checkouts live.
 Settings that are environment-wide stay read-only while a project is selected. When selected
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
@@ -48,7 +48,7 @@ and other phone-only settings ignore the filter.
 
 ## Worktree branch names
 
-In **Settings → Source control → Worktree branch naming**, choose a static prefix,
+In **Settings → Worktrees → Worktree branch naming**, choose a static prefix,
 a model-selected semantic prefix such as `feat/` or `fix/`, or custom instructions
 for the complete name. The static prefix defaults to `t3/`; a trailing slash is
 optional, and an empty prefix adds nothing. Invalid characters in a static prefix
@@ -138,7 +138,7 @@ requests and the prompt each one produced.
 If the environment is offline, the sender gets an error and nothing runs;
 redeliver from the sender, such as GitHub's **Recent Deliveries**, once it is
 back. To have T3 Connect keep requests instead, turn on **Hold webhooks while
-offline** in **Settings → Connections**. T3 Connect then stores requests to a
+offline** in **Settings → Sharing & access**. T3 Connect then stores requests to a
 T3 Connect URL for up to 24 hours and delivers them when the environment
 returns. Leave it off if you don't want request bodies stored outside your
 machine. To skip requests that waited too long, set **Skip requests older
@@ -146,12 +146,12 @@ than** on the task.
 
 ## Defaults and inheritance
 
-General contains the model and workspace for new threads. Integrations controls agent browser
+Threads contains the model and workspace for new threads. Browser controls agent browser
 access. Source control contains automatic pull, the default pull request merge method and text
 generation. The same rows edit environment defaults or project overrides depending on the
 project crumb.
 
-The Project category, shown while a project is selected, holds the project's name, icon, actions,
+The Projects category, under Code, holds the project's name, icon, actions,
 checkouts and removal. Actions belong to a project: editing them creates the project's own list
 on each selected environment, and reset returns to the environment's shared list. A project's
 `kinako.json` actions can be imported there. A repository without a `kinako.json` has its
@@ -163,18 +163,18 @@ built-in default. Leave a setting on **Inherit** to let the next tier decide.
 Browser access changes apply when an agent session next starts.
 
 New worktrees initialize git submodules recursively. If that step is slow because the repository
-declares many nested submodules, set **Submodules** in **Settings → General** (with the project
+declares many nested submodules, set **Submodules** in **Settings → Worktrees** under Advanced (with the project
 selected to override it there) to **Top level only** to stop at the ones the repository declares
 itself, or **Skip** to leave them for a setup script. It resolves in the same order as the
 workspace default: a `"worktreeSubmodules"` value in the `kinako.json` of the branch being checked out
 applies when the project and environment are both on **Inherit**.
 
-New worktrees contain only tracked files, so local files such as `.env` are missing. To bring them along, list them in `.gitignore` syntax, for example `.env*` or `certs/local/**`, in **Settings → Storage → Files to copy** (with the project selected to override it there), or commit a `.worktreeinclude` file at the repository root to share the list with everyone. The file replaces the setting when both exist, and Claude Code and Conductor read the same file. When a worktree is created, files in the main checkout that match a pattern and are ignored by git are copied into it, before any setup script runs. Files git does not ignore are never copied.
+New worktrees contain only tracked files, so local files such as `.env` are missing. To bring them along, list them in `.gitignore` syntax, for example `.env*` or `certs/local/**`, in **Settings → Worktrees → Files to copy** (with the project selected to override it there), or commit a `.worktreeinclude` file at the repository root to share the list with everyone. The file replaces the setting when both exist, and Claude Code and Conductor read the same file. When a worktree is created, files in the main checkout that match a pattern and are ignored by git are copied into it, before any setup script runs. Files git does not ignore are never copied.
 
 ## Worktree location
 
 New worktrees go in the `worktrees` folder of the T3 home directory. To put them somewhere else,
-such as another drive, set **Settings → Storage → Worktree location** to an absolute path like
+such as another drive, set **Settings → Worktrees → Worktree location** to an absolute path like
 `D:\worktrees` or `~/worktrees`. The setting is per machine. Existing worktrees stay where they
 are, and cleanup covers both the default folder and the custom one.
 
@@ -196,7 +196,7 @@ Stop running turns, background tasks, and checkpoint restores first, and save or
 
 ## Storage cleanup
 
-Open **Settings → Storage** to enable automatic cleanup on one machine or all connected
+Open **Settings → Worktrees → Cleanup** to enable automatic cleanup on one machine or all connected
 environments. Policies are off by default and run on the server at startup, when changed, and
 hourly. Offline machines keep their existing policies.
 
@@ -230,7 +230,7 @@ Results also list folders in the worktree folder that no thread uses, with their
 
 With **Edited tracked files**, cleanup deletes a worktree's untracked files along with it. Turn on **Save a recovery snapshot before deleting** to keep a copy of them first; ignored files such as `.env` and build output are not saved. The other keep options never delete uncommitted work, so the setting appears only with this one. If a snapshot cannot be saved, cleanup keeps the worktree and reports the failure. The setting is off by default and can be set per project like the other rules.
 
-Saved snapshots appear under **Recovery snapshots** in **Settings → Storage**. **Restore** puts the files back into the thread's worktree as uncommitted changes, recreating the worktree from its branch first if needed. The worktree must have no uncommitted changes. If the branch has moved on, conflicting files are left with conflict markers to resolve. Restoring keeps the snapshot; choose **Discard** to delete it. Snapshots expire after 30 days, and only the 3 newest are kept per thread. They are stored as hidden git refs in the project's repository, so `git log refs/t3/worktree-snapshots` also shows them.
+Saved snapshots appear under **Recovery snapshots** in **Settings → Maintenance**. **Restore** puts the files back into the thread's worktree as uncommitted changes, recreating the worktree from its branch first if needed. The worktree must have no uncommitted changes. If the branch has moved on, conflicting files are left with conflict markers to resolve. Restoring keeps the snapshot; choose **Discard** to delete it. Snapshots expire after 30 days, and only the 3 newest are kept per thread. They are stored as hidden git refs in the project's repository, so `git log refs/t3/worktree-snapshots` also shows them.
 
 Browser captures and rotated logs have separate retention periods. Expired capture links stop
 working. Current logs, message attachments, and browser profiles are kept.

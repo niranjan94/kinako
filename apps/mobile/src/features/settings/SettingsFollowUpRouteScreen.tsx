@@ -12,6 +12,7 @@ import { DEFAULT_FOLLOW_UP_BEHAVIOR, type FollowUpBehavior } from "../../lib/fol
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { SettingsChoiceRow } from "./components/SettingsChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
+import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 
 const FOLLOW_UP_OPTIONS: ReadonlyArray<{
   readonly behavior: FollowUpBehavior;
@@ -45,7 +46,7 @@ export function SettingsFollowUpRouteScreen() {
       {Platform.OS === "android" ? (
         <>
           <NativeStackScreenOptions options={{ headerShown: false }} />
-          <AndroidScreenHeader title="Follow-ups" onBack={() => navigation.goBack()} />
+          <AndroidScreenHeader title="Chat" onBack={() => navigation.goBack()} />
         </>
       ) : null}
       <ScrollView
@@ -72,7 +73,34 @@ export function SettingsFollowUpRouteScreen() {
           Long-press the send button to use the other option for a single message. With a hardware
           keyboard, hold Command while sending.
         </Text>
+        <ComposerSettingsSection />
       </ScrollView>
+    </View>
+  );
+}
+
+/** Device-local counterpart of web's composer toggles in Settings → Chat. */
+function ComposerSettingsSection() {
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const contextWindowIndicatorEnabled =
+    !AsyncResult.isSuccess(preferences) ||
+    preferences.value.contextWindowIndicatorEnabled !== false;
+
+  return (
+    <View className="gap-3 pt-3">
+      <SettingsSection title="Composer">
+        <SettingsSwitchRow
+          icon="chart.bar.xaxis"
+          label="Context window indicator"
+          value={contextWindowIndicatorEnabled}
+          onValueChange={(value) => savePreferences({ contextWindowIndicatorEnabled: value })}
+        />
+      </SettingsSection>
+      <Text className="px-2 text-sm text-foreground-muted">
+        Show how full the thread's context window is in the composer. Tap it for a breakdown of what
+        fills the window.
+      </Text>
     </View>
   );
 }

@@ -90,6 +90,7 @@ The upstream package registries (Homebrew, winget, Scoop, AUR) and the hosted ap
 
 User and internal docs are inherited from upstream and live in [docs/](./docs). They still say "T3 Code" and use `t3` commands, which are `kinako` here, and some describe upstream-only infrastructure such as T3 Connect.
 
+- [FAQ](./docs/user/faq.md)
 - [Install and first run](./docs/user/install.md)
 - [Permission modes](./docs/user/permission-modes.md)
 - [Keyboard shortcuts](./docs/user/keybindings.md)

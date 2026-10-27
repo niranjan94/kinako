@@ -138,7 +138,8 @@ function LocalVersionStatusLabel() {
   );
 }
 
-export function ConnectionsSettings() {
+/** Environments lists the machines this app connects to; access covers who may reach this one. */
+export function ConnectionsSettings({ view }: { readonly view: "environments" | "access" }) {
   const desktopBridge = window.desktopBridge;
   const { environments } = useEnvironments();
   const primaryEnvironment = usePrimaryEnvironment();
@@ -247,16 +248,17 @@ export function ConnectionsSettings() {
   const setDefaultAdvertisedEndpointKey = useUiStateStore(
     (state) => state.setDefaultAdvertisedEndpointKey,
   );
-  const primaryAccess = useEnvironmentAccessManagement(primaryEnvironmentId);
+  const showsAccess = view === "access";
+  const primaryAccess = useEnvironmentAccessManagement(primaryEnvironmentId, showsAccess);
   const canReadRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope);
   const canMaintain = useEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope);
   const canManageRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope);
   const canManageLocalBackend = !isLocalEnvironmentDisabled() && canMaintain;
   const desktopNetworkAccess = useEnvironmentQuery(
-    canManageLocalBackend && desktopBridge ? desktopNetworkAccessStateAtom : null,
+    showsAccess && canManageLocalBackend && desktopBridge ? desktopNetworkAccessStateAtom : null,
   );
   const desktopWsl = useEnvironmentQuery(
-    canManageLocalBackend && desktopBridge ? desktopWslStateAtom : null,
+    showsAccess && canManageLocalBackend && desktopBridge ? desktopWslStateAtom : null,
   );
   const desktopWslState = desktopWsl.data;
   const desktopWslError = desktopWslMutationError ?? desktopWsl.error;
@@ -926,7 +928,6 @@ export function ConnectionsSettings() {
               ) : null
             }
           >
-            <LocalEnvironmentSetting />
             {canManageLocalBackend ? (
               <SettingsRow
                 title="Version"
@@ -1317,7 +1318,6 @@ export function ConnectionsSettings() {
             title="No environment selected"
             description="Connect an environment to view its settings and access."
           />
-          <LocalEnvironmentSetting />
           {canReadRelay || canManageRelay ? (
             <CloudLinkRow canReadRelay={canReadRelay} canManageRelay={canManageRelay} />
           ) : null}
@@ -1326,9 +1326,15 @@ export function ConnectionsSettings() {
     </>
   );
 
+  if (showsAccess) return <SettingsPageContainer>{primarySettings}</SettingsPageContainer>;
+
   return (
     <SettingsPageContainer>
-      {primarySettings}
+      {desktopBridge?.setLocalEnvironmentEnabled ? (
+        <SettingsSection id="this-app" title="This app">
+          <LocalEnvironmentSetting />
+        </SettingsSection>
+      ) : null}
       <SettingsSection
         {...searchableSetting("remote-environments")}
         title="Environments"

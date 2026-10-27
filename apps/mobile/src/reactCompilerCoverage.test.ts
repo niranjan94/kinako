@@ -23,7 +23,6 @@ const KNOWN_BAILOUTS: Record<string, string> = {
   "src/features/settings/ProjectAdditionalDirectoriesSection.tsx": "unsupported logical test block",
   "src/features/threads/ImportCliSessionRouteScreen.tsx": "try without catch",
   "src/features/threads/ThreadArrangementSheet.tsx": "ref read during render",
-  "src/features/voice-input/VoiceInputProvider.tsx": "ref read during render",
   "src/features/voice-input/useVoiceInputController.ts": "ref read during render",
   "src/native/T3ComposerEditor.ios.tsx": "ref read during render",
   "src/native/T3ComposerEditor.native.tsx": "ref read during render",

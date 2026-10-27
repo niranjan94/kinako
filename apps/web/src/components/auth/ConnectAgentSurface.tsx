@@ -234,7 +234,7 @@ export function ConnectAgentSurface() {
               value={pairingCode}
             />
             <p className="text-xs text-muted-foreground">
-              Create one in Settings → Connections, or run{" "}
+              Create one in Settings → Sharing & access, or run{" "}
               <code>{FORK_CLI_NAME} auth pairing create</code> on this machine.
             </p>
           </div>

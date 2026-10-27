@@ -127,7 +127,7 @@ function SummarizedTurns(props: {
   readonly runIds: ReadonlyArray<ConversationSummaryItem["range"]["coveredRunIds"][number]>;
   readonly markdownCwd: string | undefined;
   readonly threadRef: ScopedThreadRef | null;
-  readonly skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
+  readonly skills: ReadonlyArray<ServerProviderSkill>;
 }) {
   const history = useRunHistory({
     environmentId: props.environmentId,
@@ -175,7 +175,7 @@ export function ConversationSummaryRow(props: {
   readonly environmentId: EnvironmentId;
   readonly markdownCwd: string | undefined;
   readonly threadRef: ScopedThreadRef | null;
-  readonly skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
+  readonly skills: ReadonlyArray<ServerProviderSkill>;
   readonly disabled: boolean;
 }) {
   const { item } = props;

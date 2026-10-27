@@ -18,13 +18,12 @@ import {
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsScreen } from "./components/SettingsScreen";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 export function SettingsAboutRouteScreen() {
   const insets = useSafeAreaInsets();
 
   return (
-    <SettingsScreen title={`About ${FORK_DISPLAY_NAME}`}>
+    <SettingsScreen title="About">
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}

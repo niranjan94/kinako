@@ -92,7 +92,7 @@ separately. Signing out of T3 Connect does not stop or uninstall the service.
 
 ## Keep the computer awake
 
-A sleeping computer stops running agents and disconnects every remote client. To prevent that, open **Settings → General** and choose **Keep awake**. The setting belongs to each environment and applies to the computer that runs it, even when you change it from another device.
+A sleeping computer stops running agents and disconnects every remote client. To prevent that, open **Settings → Maintenance** and choose **Keep awake**. The setting belongs to each environment and applies to the computer that runs it, even when you change it from another device.
 
 - **While agents work** keeps the computer awake while any turn is running or waiting for your answer, and for 30 seconds after the last one ends. Scheduled tasks count too.
 - **Always** keeps it awake for as long as Kinako runs.
@@ -146,7 +146,7 @@ For failures after signing in to T3 Connect, see
 T3 Code removes superseded internal history on its own while it runs; your
 conversations are kept. Databases created before this shrank automatically
 still hold the freed space on disk until a one-time offline repair returns it
-and turns on automatic shrinking. Settings > Storage (web and desktop) or
+and turns on automatic shrinking. Settings > Maintenance (web and desktop) or
 Settings > Maintenance (mobile) suggests the repair when at least 1 GiB can be
 reclaimed.
 
