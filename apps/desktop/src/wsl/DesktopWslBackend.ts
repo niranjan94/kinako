@@ -1,3 +1,4 @@
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME, FORK_NPM_PACKAGE_NAME } from "@t3tools/shared/forkBrand";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -128,7 +129,7 @@ export const layer = Layer.effect(
                 Ref.set(
                   preflightErrorRef,
                   Option.some(
-                    "Another T3 Code server is using this distro's T3 home, or an older background service is set up for it. Stop that server or pair with it, or try `t3 update` in the distro. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI in the distro. Use `npx t3@latest` if `t3` is missing or outdated, and pass `--base-dir` with the service's T3 home to each command.",
+                    `Another ${FORK_DISPLAY_NAME} server is using this distro's T3 home, or an older background service is set up for it. Stop that server or pair with it, or try \`${FORK_CLI_NAME} update\` in the distro. If the older launcher cannot update, run \`${FORK_CLI_NAME} service uninstall\` and optionally reinstall with \`${FORK_CLI_NAME} service install\` from a current CLI in the distro. Use \`npx ${FORK_NPM_PACKAGE_NAME}@latest\` if \`${FORK_CLI_NAME}\` is missing or outdated, and pass \`--base-dir\` with the service's T3 home to each command.`,
                   ),
                 ),
               ),

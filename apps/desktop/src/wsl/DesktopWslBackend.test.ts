@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -149,7 +150,7 @@ describe("DesktopWslBackend", () => {
 
       yield* recordOwnershipFailure();
       const refusal = yield* backend.lastPreflightError;
-      assert.include(Option.getOrThrow(refusal), "Another T3 Code server");
+      assert.include(Option.getOrThrow(refusal), `Another ${FORK_DISPLAY_NAME} server`);
       yield* backend.reconcile;
       assert.equal(startCount, 1);
       assert.deepEqual(yield* backend.lastPreflightError, refusal);

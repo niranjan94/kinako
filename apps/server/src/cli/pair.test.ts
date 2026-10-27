@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - CLI integration exercises Node HTTP and filesystem boundaries.
+import { FORK_NPM_PACKAGE_NAME } from "@t3tools/shared/forkBrand";
 import { DEFAULT_TAILSCALE_SERVE_PORT } from "@t3tools/tailscale";
 import * as NodeHttp from "node:http";
 import * as NodeFS from "node:fs";
@@ -360,7 +361,10 @@ describe("kinako pair", () => {
           ]);
           assert.isTrue(Exit.isFailure(exit));
           if (Exit.isFailure(exit)) {
-            assert.include(String(Cause.squash(exit.cause)), "t3@0.0.45 pair");
+            assert.include(
+              String(Cause.squash(exit.cause)),
+              `${FORK_NPM_PACKAGE_NAME}@0.0.45 pair`,
+            );
           }
         }),
       "127.0.0.1",

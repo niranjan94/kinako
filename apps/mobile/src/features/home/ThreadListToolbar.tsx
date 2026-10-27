@@ -9,6 +9,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import type { MenuAction } from "@react-native-menu/menu";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 import { AndroidHeaderIconButton } from "../../components/ui/AndroidScreenHeader";
 import { AndroidAnchoredMenu } from "../../components/ui/AndroidAnchoredMenu";
@@ -111,7 +112,7 @@ export function ThreadListToolbar(props: {
         onCloseSearch={closeSearch}
         onOpenSearch={openSearch}
         searchAccessibilityLabel="Search threads"
-        titleAccessibilityLabel="T3 Code, Threads"
+        titleAccessibilityLabel={`${FORK_DISPLAY_NAME}, Threads`}
         onOpenEnvironments={props.onOpenEnvironments}
         filter={filterButton}
       />

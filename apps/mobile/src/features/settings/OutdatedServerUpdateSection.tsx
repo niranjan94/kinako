@@ -1,6 +1,7 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 import { View } from "react-native";
@@ -54,7 +55,7 @@ export function OutdatedServerUpdateSection({
     if (busy || !release || !targetVersion) return;
     Dialog.alert(
       `Update ${label}?`,
-      `Install T3 Code ${targetVersion}. T3 Code restarts on that machine and reconnects. Running threads may be interrupted.`,
+      `Install ${FORK_DISPLAY_NAME} ${targetVersion}. ${FORK_DISPLAY_NAME} restarts on that machine and reconnects. Running threads may be interrupted.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -73,7 +74,7 @@ export function OutdatedServerUpdateSection({
   }
 
   return (
-    <SettingsSection title="T3 Code">
+    <SettingsSection title={FORK_DISPLAY_NAME}>
       <View className="gap-1 p-4">
         <Text className="text-base text-foreground">
           {release ? `Version ${release.fromVersion}` : "Update required"}
@@ -89,7 +90,7 @@ export function OutdatedServerUpdateSection({
               ? release.targetVersion
                 ? `Version ${release.targetVersion} is available.`
                 : "No newer version is available yet."
-              : "This app needs a newer version of T3 Code on this machine."}
+              : `This app needs a newer version of ${FORK_DISPLAY_NAME} on this machine.`}
         </Text>
         {error || state.status === "failed" ? (
           <Text selectable accessibilityRole="alert" className="text-sm text-danger-foreground">

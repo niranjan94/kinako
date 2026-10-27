@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Lean self-invoked local IPC client; no auth/store graph.
 import * as NodeNet from "node:net";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
@@ -39,7 +40,7 @@ export async function runManagedChatGptTokenCli(args: ReadonlyArray<string>): Pr
   const result = await Effect.runPromiseExit(program);
   if (Exit.isFailure(result)) {
     process.stderr.write(
-      "Could not access the managed ChatGPT connection. Reconnect in T3 Code.\n",
+      `Could not access the managed ChatGPT connection. Reconnect in ${FORK_DISPLAY_NAME}.\n`,
     );
     process.exitCode = 1;
     return;

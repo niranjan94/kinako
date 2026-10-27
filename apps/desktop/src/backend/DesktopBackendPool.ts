@@ -21,7 +21,7 @@ import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME, FORK_NPM_PACKAGE_NAME } from "@t3tools/shared/forkBrand";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 
 const { logWarning: logBackendPoolWarning } =
@@ -171,7 +171,7 @@ export const layer = Layer.effect(
         electronDialog
           .showErrorBox(
             "This T3 home is unavailable",
-            "Another T3 Code server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. Use `npx t3@latest` if `t3` is missing or outdated, and pass `--base-dir` with the service's T3 home to each command. Then reopen T3 Code. You can also set a separate T3CODE_HOME and pair with the running server.",
+            `Another ${FORK_DISPLAY_NAME} server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try \`${FORK_CLI_NAME} update\`. If the older launcher cannot update, run \`${FORK_CLI_NAME} service uninstall\` and optionally reinstall with \`${FORK_CLI_NAME} service install\` from a current CLI. Use \`npx ${FORK_NPM_PACKAGE_NAME}@latest\` if \`${FORK_CLI_NAME}\` is missing or outdated, and pass \`--base-dir\` with the service's T3 home to each command. Then reopen ${FORK_DISPLAY_NAME}. You can also set a separate T3CODE_HOME and pair with the running server.`,
           )
           .pipe(Effect.andThen(electronApp.quit)),
     });
