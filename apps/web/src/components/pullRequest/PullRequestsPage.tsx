@@ -51,7 +51,6 @@ import {
   writePullRequestListPreferences,
 } from "./pullRequestListPreferences";
 import { environmentMachineIcon } from "../EnvironmentMachineIcon";
-import { PullRequestDetailPanel } from "./PullRequestDetailPanel";
 import { PullRequestOrIssueDetailPanel } from "./PullRequestOrIssueDetailPanel";
 import {
   PullRequestFiltersMenu,
