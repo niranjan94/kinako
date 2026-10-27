@@ -6,10 +6,11 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 
+import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import { readChromiumLocalStorage } from "./chromiumLocalStorage.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
-/** Kinako lists no V1 profiles: upstream T3 Code's profiles belong to that app and are never imported. */
+/** Reads the V1 profile without opening it in Chromium, even while V1 runs. */
 export class DesktopLegacyLocalStorage extends Context.Service<
   DesktopLegacyLocalStorage,
   {
@@ -19,9 +20,9 @@ export class DesktopLegacyLocalStorage extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
 
-const MARKER_FILE_NAME = "t3code-local-storage-imported";
+const MARKER_FILE_NAME = "v1-local-storage-imported";
+// Upstream T3 Code's profiles belong to that app; Kinako never imports them.
 const V1_PROFILE_NAMES: ReadonlyArray<string> = [];
-const V1_ORIGIN = "t3code://app";
 
 const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -78,7 +79,8 @@ const make = Effect.gen(function* () {
     yield* Ref.set(markerPath, Option.some(marker));
     const directory = yield* findV1LocalStorage;
     if (directory === null) return yield* writeMarker;
-    const read = yield* readChromiumLocalStorage(directory, V1_ORIGIN).pipe(
+    const origin = ElectronProtocol.getDesktopUrl(false).replace(/\/$/, "");
+    const read = yield* readChromiumLocalStorage(directory, origin).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
       Effect.tapError((error) =>
