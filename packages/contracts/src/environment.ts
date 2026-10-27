@@ -88,22 +88,17 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadAutoSettlement: Schema.optionalKey(Schema.Boolean),
   storageCleanup: Schema.optionalKey(Schema.Boolean),
   storageCleanupRun: Schema.optionalKey(Schema.Boolean),
-  worktreeSnapshots: Schema.optionalKey(Schema.Boolean),
   databaseStorage: Schema.optionalKey(Schema.Boolean),
   otlpEndpointCheck: Schema.optionalKey(Schema.Boolean),
   projectWorktreeCleanup: Schema.optionalKey(Schema.Boolean),
   settledWorktreeCleanup: Schema.optionalKey(Schema.Boolean),
   worktreesDirectory: Schema.optionalKey(Schema.Boolean),
-  /** Server copies the files `worktreeIncludePatterns` selects into new worktrees. */
-  worktreeIncludePatterns: Schema.optionalKey(Schema.Boolean),
   threadAutoSettlementScope: Schema.optionalKey(Schema.Boolean),
   threadRestartContinuation: Schema.optionalKey(Schema.Boolean),
   projectSettingsOverrides: Schema.optionalKey(Schema.Boolean),
   /** Hide the switch when absent; older servers silently drop per-project provider patches. */
   projectProviderInstanceOverrides: Schema.optionalKey(Schema.Boolean),
   threadSnooze: Schema.optionalKey(Schema.Boolean),
-  threadSnoozeWakeNotifications: Schema.optionalKey(Schema.Boolean),
-  sideChats: Schema.optionalKey(Schema.Boolean),
   /** Clear published themes when absent; older servers never send updates. */
   environmentThemes: Schema.optionalKey(Schema.Boolean),
   usageLimitSources: Schema.optionalKey(Schema.Boolean),
@@ -114,7 +109,6 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadPinning: Schema.optionalKey(Schema.Boolean),
   threadPinReorder: Schema.optionalKey(Schema.Boolean),
   threadActiveReorder: Schema.optionalKey(Schema.Boolean),
-  threadGrouping: Schema.optionalKey(Schema.Boolean),
   threadAutoSettleOptOut: Schema.optionalKey(Schema.Boolean),
   threadTitleRegeneration: Schema.optionalKey(Schema.Boolean),
   threadVisitedTracking: Schema.optionalKey(Schema.Boolean),
@@ -123,8 +117,6 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadStop: Schema.optionalKey(Schema.Boolean),
   threadPullRequests: Schema.optionalKey(Schema.Boolean),
   threadPullRequestWatch: Schema.optionalKey(Schema.Boolean),
-  /** Server understands autoFix on thread.pull-request.watch and hands failing checks to agents. */
-  threadPullRequestAutoFix: Schema.optionalKey(Schema.Boolean),
   pullRequestStackActions: Schema.optionalKey(Schema.Boolean),
   serverSelfUpdate: Schema.optionalKey(ServerSelfUpdateCapability),
   /** Manual commands must update this install, not the host's default global prefix. */
@@ -134,12 +126,6 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Only explicit false skips Live Activity seeding; older servers may still publish. */
   agentActivityPublishing: Schema.optionalKey(Schema.Boolean),
   projectCloneTracking: Schema.optionalKey(Schema.Boolean),
-  /** Server lists a project's terminal Claude and Codex sessions and imports one on request
-      (`agentSessions.list`, `agentSessions.importSession`). */
-  agentSessionImport: Schema.optionalKey(Schema.Boolean),
-  /** Server filters `agentSessions.scan` and `agentSessions.list` by age and lists a scanned
-      folder's sessions before it is a project, for importing history across folders. */
-  agentSessionHistoryImport: Schema.optionalKey(Schema.Boolean),
   /** Server answers projects.listIgnoredFiles. */
   ignoredFileListing: Schema.optionalKey(Schema.Boolean),
   environmentIcon: Schema.optionalKey(Schema.Boolean),
@@ -148,6 +134,21 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   commandOutputStreaming: Schema.optionalKey(Schema.Boolean),
   /** Hosts headless Chromium tabs streamed over /api/preview-stream for clients without a local runtime. */
   serverBrowser: Schema.optionalKey(Schema.Boolean),
+  // Fork additions stay last so upstream's list merges cleanly.
+  worktreeSnapshots: Schema.optionalKey(Schema.Boolean),
+  /** Server copies the files `worktreeIncludePatterns` selects into new worktrees. */
+  worktreeIncludePatterns: Schema.optionalKey(Schema.Boolean),
+  threadSnoozeWakeNotifications: Schema.optionalKey(Schema.Boolean),
+  sideChats: Schema.optionalKey(Schema.Boolean),
+  threadGrouping: Schema.optionalKey(Schema.Boolean),
+  /** Server understands autoFix on thread.pull-request.watch and hands failing checks to agents. */
+  threadPullRequestAutoFix: Schema.optionalKey(Schema.Boolean),
+  /** Server lists a project's terminal Claude and Codex sessions and imports one on request
+      (`agentSessions.list`, `agentSessions.importSession`). */
+  agentSessionImport: Schema.optionalKey(Schema.Boolean),
+  /** Server filters `agentSessions.scan` and `agentSessions.list` by age and lists a scanned
+      folder's sessions before it is a project, for importing history across folders. */
+  agentSessionHistoryImport: Schema.optionalKey(Schema.Boolean),
   /** This machine has a sleep-prevention helper, so the `keepAwakeMode`
       setting takes effect and `server.subscribeKeepAwakeStatus` reports it. */
   keepAwake: Schema.optionalKey(Schema.Boolean),

@@ -323,7 +323,6 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
   chatWidth: ChatWidth.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
-  uiDensity: UiDensity.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   appearanceContrast: AppearanceContrast.pipe(
@@ -482,6 +481,8 @@ export const ClientSettingsSchema = Schema.Struct({
   // Opt-in TeX typesetting in rendered Markdown. Off keeps math parsing and
   // KaTeX out of the render path entirely.
   mathRenderingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // Fork additions stay last so upstream's list merges cleanly.
+  uiDensity: UiDensity.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -1155,7 +1156,6 @@ export const ServerSettings = Schema.Struct({
   continueThreadsAfterServerUpdate: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
-  keepAwakeMode: KeepAwakeMode.pipe(Schema.withDecodingDefault(Effect.succeed("off" as const))),
 
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   projectAgentBrowserAccessOverrides: Schema.Record(ProjectId, Schema.Boolean).pipe(
@@ -1237,11 +1237,6 @@ export const ServerSettings = Schema.Struct({
   worktreeSubmodules: ForwardCompatibleNullable(WorktreeSubmodules).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
-  /**
-   * Gitignore-syntax patterns, one per line, selecting ignored files to copy
-   * into new worktrees. A repository's `.worktreeinclude` replaces them.
-   */
-  worktreeIncludePatterns: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(
@@ -1303,6 +1298,13 @@ export const ServerSettings = Schema.Struct({
   usageModelAliases: Schema.Record(TrimmedNonEmptyString, TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  // Fork additions stay last so upstream's list merges cleanly.
+  keepAwakeMode: KeepAwakeMode.pipe(Schema.withDecodingDefault(Effect.succeed("off" as const))),
+  /**
+   * Gitignore-syntax patterns, one per line, selecting ignored files to copy
+   * into new worktrees. A repository's `.worktreeinclude` replaces them.
+   */
+  worktreeIncludePatterns: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -1516,7 +1518,6 @@ export const ServerSettingsPatch = Schema.Struct({
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
-  keepAwakeMode: Schema.optionalKey(KeepAwakeMode),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
   projectAgentBrowserAccessOverrides: Schema.optionalKey(
     Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),
@@ -1571,7 +1572,6 @@ export const ServerSettingsPatch = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(Schema.NullOr(ThreadEnvMode)),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   worktreeSubmodules: Schema.optionalKey(Schema.NullOr(WorktreeSubmodules)),
-  worktreeIncludePatterns: Schema.optionalKey(TrimmedString),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   threadTitleInstructions: Schema.optionalKey(TrimmedString),
@@ -1615,6 +1615,9 @@ export const ServerSettingsPatch = Schema.Struct({
   usageModelAliases: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, Schema.NullOr(TrimmedNonEmptyString)),
   ),
+  // Fork additions stay last so upstream's list merges cleanly.
+  keepAwakeMode: Schema.optionalKey(KeepAwakeMode),
+  worktreeIncludePatterns: Schema.optionalKey(TrimmedString),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
