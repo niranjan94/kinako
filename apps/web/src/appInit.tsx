@@ -43,6 +43,7 @@ import { getRouter, type AppRouter } from "./router";
 import { appAtomRegistry } from "./rpc/atomRegistry";
 import { primaryServerConfigAtom } from "./state/server";
 import { installChatRouteCommands } from "./shortcuts/chatRouteCommands";
+import { installCommandPaletteCommands } from "./shortcuts/commandPaletteCommands";
 import { registerOpenFavoriteEditorCommand } from "./components/chat/OpenInPickerShortcut";
 import { environmentThreadShells } from "./state/threads";
 import { resolveThreadRouteTarget } from "./threadRoutes";
@@ -63,9 +64,6 @@ function startClientAppearance(): void {
     }
     if (previous?.uiDensity !== settings.uiDensity) {
       root.dataset.uiDensity = settings.uiDensity;
-    }
-    if (previous?.redesignEnabled !== settings.redesignEnabled) {
-      root.toggleAttribute("data-redesign", settings.redesignEnabled);
     }
     if (previous?.appearanceContrast !== settings.appearanceContrast) {
       applyAppearanceContrast(root, settings.appearanceContrast);
@@ -175,6 +173,7 @@ export function startAppServices(): AppRouter {
   startPreviewTitleRecording();
   startBrowserProfileReporting();
   installChatRouteCommands(router);
+  installCommandPaletteCommands(router);
   registerOpenFavoriteEditorCommand();
   startThreadOverlayRetention(router);
   // Drafts promote as their server threads arrive, wherever the user is.

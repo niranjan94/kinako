@@ -54,7 +54,6 @@ interface TimelineRewindInput {
   readonly serverProjection: ThreadStructure | null;
   readonly activeThread: EnvironmentThreadShell | undefined;
   readonly timelineMessages: ReadonlyArray<ChatMessage>;
-  readonly paintOnlyDisplayedTimeline: boolean;
   readonly canOperateThread: boolean;
   readonly phase: SessionPhase;
   readonly isConnecting: boolean;
@@ -84,7 +83,6 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     serverProjection,
     activeThread,
     timelineMessages,
-    paintOnlyDisplayedTimeline,
     canOperateThread,
     phase,
     isConnecting,
@@ -343,7 +341,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     conversationSummaryFromHereMessageIds(serverProjection))();
   const activeProviderThreadId = serverProjection?.thread.activeProviderThreadId ?? null;
   const conversationSummaryControls = ((): ConversationSummaryTimelineControls | null =>
-    paintOnlyDisplayedTimeline || !canOperateThread
+    !canOperateThread
       ? null
       : {
           onSummarize: onSummarizeMessageStable,
@@ -453,7 +451,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     readonly checkpointId: string;
     readonly scopeId: string;
   }) => {
-    if (!paintOnlyDisplayedTimeline) void onRollbackCheckpoint(input);
+    void onRollbackCheckpoint(input);
   };
   const onTimelineRollbackCheckpointStable = useStableCallback(onTimelineRollbackCheckpoint);
   const onRevertTimelineTurn = (targetTurnCount: number, messageId: MessageId) => {

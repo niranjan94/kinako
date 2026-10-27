@@ -96,13 +96,15 @@ const EMPTY_CHECKPOINT_SUMMARIES_ATOM = Atom.make<ReadonlyArray<ThreadCheckpoint
   Object.freeze([]),
 );
 
+export function useThreadWorktreePath(ref: ScopedThreadRef | null) {
+  return useAtomValue(
+    ref === null ? EMPTY_WORKTREE_PATH_ATOM : environmentThreadDetails.worktreePathAtom(ref),
+  );
+}
+
 export function useSelectedThreadWorktreePath() {
   const { selectedThreadDetailRef } = useThreadSelection();
-  return useAtomValue(
-    selectedThreadDetailRef === null
-      ? EMPTY_WORKTREE_PATH_ATOM
-      : environmentThreadDetails.worktreePathAtom(selectedThreadDetailRef),
-  );
+  return useThreadWorktreePath(selectedThreadDetailRef);
 }
 
 export function useSelectedThreadPendingRequests() {
