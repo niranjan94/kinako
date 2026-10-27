@@ -908,7 +908,7 @@ const make = Effect.gen(function* () {
       ...deletedWorktrees.filter((candidate) => !groups.has(candidate.worktreePath)),
     ];
     for (const candidate of candidates) {
-      const { thread, worktreePath, branch } = candidate;
+      const { thread, worktreePath, branch: worktreeBranch } = candidate;
       const settings = resolveWorktreeCleanup(serverSettings, thread.projectId);
       if (!worktreeCleanupEnabled(settings)) continue;
       const group = groups.get(worktreePath) ?? [];
@@ -950,9 +950,9 @@ const make = Effect.gen(function* () {
           return keep(`shared by ${members.length} threads`);
         if (project === undefined || repositoryRoot === undefined)
           return keep("project is unavailable");
-        if (branch === null || !group.every((member) => threadIdle(member.thread, now)))
+        if (worktreeBranch === null || !group.every((member) => threadIdle(member.thread, now)))
           return keep("thread is running or has pending work");
-        if (group.some((member) => member.branch !== branch))
+        if (group.some((member) => member.branch !== worktreeBranch))
           return keep("a subagent thread's branch differs from this worktree's branch");
         if (hasTerminal(worktreePath)) return keep("open terminal");
         // Compare canonical roots while allowing symlinked parents, never symlinked worktree directories.
@@ -966,7 +966,8 @@ const make = Effect.gen(function* () {
           return keep("contains a project checkout");
         if ((yield* fs.stat(path.join(worktreePath, ".git"))).type !== "File")
           return keep("not a linked worktree");
-        if (yield* branchChanged(worktreePath, branch)) return keep("repository or branch changed");
+        if (yield* branchChanged(worktreePath, worktreeBranch))
+          return keep("repository or branch changed");
         const includeFrom = (current: ServerSettings): WorktreeIncludeSource => ({
           sourceCwd: repositoryRoot,
           patterns: resolveProjectSettings(current, thread.projectId).settings
@@ -1011,13 +1012,13 @@ const make = Effect.gen(function* () {
           const repositoryCwd = path.resolve(repositoryRoot);
           const remote = yield* git.resolvePrimaryRemoteName(repositoryCwd);
           const defaultBranchKey = `${repositoryCwd}\0${remote}`;
-          let defaultBranch = defaultBranches.get(defaultBranchKey);
-          if (defaultBranch === undefined) {
-            defaultBranch = yield* git.resolveDefaultBranchName(repositoryCwd, remote);
+          let branch = defaultBranches.get(defaultBranchKey);
+          if (branch === undefined) {
+            branch = yield* git.resolveDefaultBranchName(repositoryCwd, remote);
             // Without a local HEAD ref, only the remote can identify its default;
             // a conventional name may be a feature branch.
-            if (defaultBranch === null) {
-              defaultBranch = yield* git
+            if (branch === null) {
+              branch = yield* git
                 .execute({
                   operation: "StorageCleanup.resolveDefaultBranch",
                   cwd: repositoryCwd,
@@ -1032,16 +1033,16 @@ const make = Effect.gen(function* () {
                   Effect.orElseSucceed(() => null),
                 );
             }
-            defaultBranches.set(defaultBranchKey, defaultBranch);
+            defaultBranches.set(defaultBranchKey, branch);
           }
-          if (defaultBranch === null) return keep("default branch is unavailable");
-          const defaultRef = `refs/remotes/${remote}/${defaultBranch}`;
+          if (branch === null) return keep("default branch is unavailable");
+          const defaultRef = `refs/remotes/${remote}/${branch}`;
           const refreshed = refreshedDefaultRefs.get(repositoryCwd) ?? new Set<string>();
           if (!refreshed.has(defaultRef)) {
             yield* git.fetchRemoteTrackingBranch({
               cwd: repositoryCwd,
               remoteName: remote,
-              remoteBranch: defaultBranch,
+              remoteBranch: branch,
             });
             refreshed.add(defaultRef);
             refreshedDefaultRefs.set(repositoryCwd, refreshed);
@@ -1059,14 +1060,14 @@ const make = Effect.gen(function* () {
           const integrated = ancestor.exitCode === 0;
           eligible = integrated && settings.worktreeUnchanged;
           if (eligible) removalReason = "no commits beyond the default branch";
-          if (!eligible && settings.worktreeOnMerge && branch !== null) {
+          if (!eligible && settings.worktreeOnMerge && worktreeBranch !== null) {
             const pullRequest = yield* gitManager.branchPullRequest(
-              { cwd: worktreePath, branch },
+              { cwd: worktreePath, branch: worktreeBranch },
               { refresh: true },
             );
             eligible = storageCleanupPullRequestMerged(pullRequest, {
-              branch,
-              defaultBranch,
+              branch: worktreeBranch,
+              defaultBranch: branch,
               headSha: head.commitSha,
               integrated,
             });
@@ -1126,7 +1127,7 @@ const make = Effect.gen(function* () {
               );
               return (
                 previous === undefined ||
-                member.branch !== branch ||
+                member.branch !== worktreeBranch ||
                 !Equal.equals(shell.settledAt, previous.thread.settledAt) ||
                 (shell.settledAt !== null &&
                   !Equal.equals(shell.updatedAt, previous.thread.updatedAt)) ||
@@ -1165,7 +1166,7 @@ const make = Effect.gen(function* () {
         const bytes = yield* measureWorktree(worktreePath);
         const blockedWhileMeasuring = yield* blockedSinceCheck();
         if (blockedWhileMeasuring !== null) return keep(blockedWhileMeasuring);
-        if (yield* branchChanged(worktreePath, branch))
+        if (yield* branchChanged(worktreePath, worktreeBranch))
           return keep("repository or branch changed since check");
         if (
           (yield* git.resolveCommit({ cwd: worktreePath, revision: "HEAD" })).commitSha !==
@@ -1196,7 +1197,7 @@ const make = Effect.gen(function* () {
               worktreePath,
               threadId: thread.id,
               threadTitle: thread.title,
-              branch,
+              branch: worktreeBranch,
             })
             .pipe(
               Effect.map((ref) => ({ ref })),
