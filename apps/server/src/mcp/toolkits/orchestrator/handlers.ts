@@ -133,7 +133,7 @@ const handlers = {
       return yield* service.requestSecret(scope, input);
     }),
   ),
-  suggest_follow_up: McpToolAccess.actsAsCaller((input) =>
+  t3_suggest_follow_up: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const service = yield* OrchestratorMcpService.OrchestratorMcpService;

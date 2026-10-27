@@ -188,7 +188,7 @@ const RequestSecretTool = Tool.make("request_secret", {
   .annotate(Tool.Title, "Request a secret from the user")
   .annotate(Tool.Destructive, false);
 
-const SuggestFollowUpTool = Tool.make("suggest_follow_up", {
+const SuggestFollowUpTool = Tool.make("t3_suggest_follow_up", {
   description:
     "Record follow-up work you noticed but are not doing in this turn (missing tests, a related bug, a cleanup elsewhere) as a card in this thread. The user can start it as a new thread in one click or dismiss it. Call it once per distinct follow-up, and only for work worth its own thread; do not use it for steps you are about to do yourself. The new thread starts without this thread's context, so the prompt must stand alone. Returns immediately; nothing waits on the user.",
   parameters: OrchestratorMcpSuggestFollowUpInput,

@@ -3,7 +3,6 @@ import {
   type ProviderInteractionMode,
   type RuntimeMode,
   type ThreadId,
-  type ProjectId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
@@ -99,24 +98,6 @@ export const reads = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>)
 
 export const readsAsCaller = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>) =>
   declare((params: P) => requireThreadCaller.pipe(Effect.flatMap(() => handle(params))));
-
-/** Database tools always use the live calling thread's project; callers cannot supply another. */
-export const readsDatabase = <P, A, E, R>(
-  handle: (params: P, projectId: ProjectId) => Effect.Effect<A, E, R>,
-) =>
-  declare((params: P) =>
-    Effect.gen(function* () {
-      yield* requireThreadCaller;
-      const context = yield* readCaller();
-      yield* assertLiveCaller(context);
-      if (!context.caller)
-        return yield* new OrchestratorMcpFailure({
-          code: "thread_credential_required",
-          message: "Database tools require a calling thread.",
-        });
-      return yield* handle(params, context.caller.projectId);
-    }),
-  );
 
 export const actsAsCaller = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>) =>
   declare((params: P) =>

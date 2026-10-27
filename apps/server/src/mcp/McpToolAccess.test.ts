@@ -109,7 +109,6 @@ const probe = {
 };
 const ProbeToolkit = Toolkit.make(
   Tool.make("reads", probe),
-  Tool.make("reads_database", probe),
   Tool.make("reads_as_caller", probe),
   Tool.make("acts_as_caller", probe),
   Tool.make("writes", probe),
@@ -130,9 +129,6 @@ const ProbeToolkit = Toolkit.make(
 const ran = Effect.succeed({ ran: "ran" });
 const probeHandlers: McpToolAccess.Handlers<typeof ProbeToolkit.tools> = {
   reads: McpToolAccess.reads(() => ran),
-  reads_database: McpToolAccess.readsDatabase((_input, projectId) =>
-    Effect.succeed({ ran: projectId }),
-  ),
   reads_as_caller: McpToolAccess.readsAsCaller(() => ran),
   acts_as_caller: McpToolAccess.actsAsCaller(() => ran),
   writes: McpToolAccess.writes(() => ran),
@@ -179,7 +175,6 @@ export const refusedAtCompileTime = () => {
     ProbeToolkit.toLayer({
       reads: unchecked,
       reads_as_caller: unchecked,
-      reads_database: unchecked,
       acts_as_caller: unchecked,
       writes: unchecked,
       writes_with_capability: unchecked,
@@ -236,11 +231,6 @@ const previewOnly = { ...fullAccess, capabilities: new Set(["preview"] as const)
 
 it.effect.each([
   ["reads", ended, {}, "ran"],
-  ["reads_database", supervised, {}, "project:mcp-test"],
-  ["reads_database", plan, {}, "project:mcp-test"],
-  ["reads_database", ended, {}, "parent_not_active"],
-  ["reads_database", fullAccessClient, {}, "thread_credential_required"],
-  ["reads_database", previewOnly, {}, "capability_denied"],
   ["reads", supervisedClient, {}, "ran"],
   ["reads", readOnlyClient, {}, "ran"],
 

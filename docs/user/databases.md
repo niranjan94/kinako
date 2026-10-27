@@ -42,9 +42,6 @@ read-only query. Manage connection settings from web or desktop.
 
 Database access requires the environment's terminal permission. Saving,
 deleting, and testing connections require permission to change settings.
-Agents can use `db_list_connections`, `db_describe`, and `db_query` for their
-thread's project. Agent queries use fresh read-only sessions and return at most
-500 rows; passwords are never included.
 
 Read-only mode is an accident guard, not a security boundary. For Postgres,
 connect with a role limited to SELECT on the data you want to expose. Agents

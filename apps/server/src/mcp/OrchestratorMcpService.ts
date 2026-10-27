@@ -2073,7 +2073,7 @@ const make = Effect.gen(function* () {
     }),
 
     suggestFollowUp: Effect.fn("OrchestratorMcpService.suggestFollowUp")(function* (scope, input) {
-      const { scope: threadScope, parent } = yield* loadThreadCaller(scope, "suggest_follow_up");
+      const { scope: threadScope, parent } = yield* loadThreadCaller(scope, "t3_suggest_follow_up");
       const threadId = threadScope.thread.threadId;
       const run = ThreadManagementService.latestActiveRun(parent);
       if (

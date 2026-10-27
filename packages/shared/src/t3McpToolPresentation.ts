@@ -148,6 +148,10 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "schedule-delete",
   ),
   request_secret: tool(["Ask for", "Asking for", "Asked for", "a secret"], "secret-request"),
+  t3_suggest_follow_up: tool(
+    ["Suggest", "Suggesting", "Suggested", "a follow-up"],
+    "follow-up-suggest",
+  ),
   suggest_follow_up: tool(
     ["Suggest", "Suggesting", "Suggested", "a follow-up"],
     "follow-up-suggest",

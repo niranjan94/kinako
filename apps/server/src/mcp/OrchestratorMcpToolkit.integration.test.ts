@@ -711,10 +711,10 @@ describe("orchestrator MCP toolkit", () => {
             prompt: "Write tests for the retry queue in src/retry.ts.",
             clientRequestId: "follow-up-retry-tests",
           };
-          const followUpCall = yield* invoke("suggest_follow_up", followUpInput);
+          const followUpCall = yield* invoke("t3_suggest_follow_up", followUpInput);
           expect(followUpCall.isError).toBe(false);
           const { followUpId } = followUpCall.structuredContent as { followUpId: string };
-          const retriedFollowUp = yield* invoke("suggest_follow_up", followUpInput);
+          const retriedFollowUp = yield* invoke("t3_suggest_follow_up", followUpInput);
           expect(retriedFollowUp.structuredContent).toEqual({ followUpId });
           const followUps = (yield* orchestrator.getThreadProjection(
             parentThreadId,
