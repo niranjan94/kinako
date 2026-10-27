@@ -66,7 +66,7 @@ seam_files="$(
       apps/mobile/src/widgets/AgentActivity.tsx \
       packages/contracts/src/settings.ts apps/server/package.json apps/server/src/serviceLauncher.ts \
       .github/workflows/fork-release.yml .github/workflows/release-desktop.yml \
-      .github/workflows/mobile-android-apk.yml .github/workflows/ci.yml \
+      .github/workflows/ci.yml \
       .devcontainer/devcontainer.json scripts/mobile-native-client.ts scripts/mobile-showcase.ts \
       AGENTS.md README.md FORK.md
   } | sort -u

@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: write
     env:
-      PACKAGE_NAME: io.niranjan.kinako
+      PACKAGE_NAME: com.t3tools.t3code
     steps:
       - id: credentials
         name: Check for Play credentials
