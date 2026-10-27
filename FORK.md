@@ -112,11 +112,11 @@ CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does n
 
 ## One-time setup
 
-1. **Actions:** enable Actions for the fork, then disable every upstream workflow except `ci.yml` and `release-desktop.yml`. The others expect upstream's runners, secrets, and accounts, and would otherwise queue or fail on every push. `fork-release.yml` calls `release-desktop.yml` and `fork-ios.yml`.
+1. **Actions:** enable Actions for the fork, then disable every upstream workflow except `ci.yml`, `release-desktop.yml`, and `agent-context-budget.yml`. The others expect upstream's runners, secrets, and accounts, and would otherwise queue or fail on every push. `agent-context-budget.yml` fails a pull request that grows `agentContextBudget.json` past `main`'s unless it carries the `agent-context-increase` label, so create that label in the fork. `fork-release.yml` calls `release-desktop.yml` and `fork-ios.yml`.
 
    ```bash
    gh workflow list --repo niranjan94/kinako --all --json path --jq '.[].path' \
-     | grep -v -e '/ci.yml$' -e fork-release.yml -e fork-ios.yml -e release-desktop.yml \
+     | grep -v -e '/ci.yml$' -e fork-release.yml -e fork-ios.yml -e release-desktop.yml -e agent-context-budget.yml \
      | xargs -n1 basename | xargs -I{} gh workflow disable {} --repo niranjan94/kinako
    ```
 
