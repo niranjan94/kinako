@@ -229,15 +229,11 @@ describe("ClientSettings UI density", () => {
   });
 });
 
-describe("ClientSettings context window indicator", () => {
-  it("defaults on, ignoring the retired off-by-default key", () => {
-    expect(decodeClientSettings({}).contextWindowIndicatorEnabled).toBe(true);
+describe("ClientSettings context window meter", () => {
+  it("defaults on", () => {
+    expect(decodeClientSettings({}).contextWindowMeterEnabled).toBe(true);
     expect(
-      decodeClientSettings({ contextWindowMeterEnabled: false }).contextWindowIndicatorEnabled,
-    ).toBe(true);
-    expect(
-      decodeClientSettingsPatch({ contextWindowIndicatorEnabled: false })
-        .contextWindowIndicatorEnabled,
+      decodeClientSettingsPatch({ contextWindowMeterEnabled: false }).contextWindowMeterEnabled,
     ).toBe(false);
   });
 });

@@ -490,8 +490,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
       ? ["Follow-up behavior"]
       : []),
-    ...(settings.contextWindowIndicatorEnabled !==
-    DEFAULT_UNIFIED_SETTINGS.contextWindowIndicatorEnabled
+    ...(settings.contextWindowMeterEnabled !== DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled
       ? ["Context window indicator"]
       : []),
     ...(settings.responseStreamingMode !== DEFAULT_UNIFIED_SETTINGS.responseStreamingMode
@@ -607,7 +606,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
-      contextWindowIndicatorEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowIndicatorEnabled,
+      contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
@@ -1153,14 +1152,13 @@ export function ChatSettingsPanel() {
           {...searchableSetting("context-window-indicator")}
           description="Show how full the thread's context window is next to the composer. Hover it for a breakdown of what fills the window."
           resetAction={
-            settings.contextWindowIndicatorEnabled !==
-            DEFAULT_UNIFIED_SETTINGS.contextWindowIndicatorEnabled ? (
+            settings.contextWindowMeterEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled ? (
               <SettingResetButton
                 label="context window indicator"
                 onClick={() =>
                   updateSettings({
-                    contextWindowIndicatorEnabled:
-                      DEFAULT_UNIFIED_SETTINGS.contextWindowIndicatorEnabled,
+                    contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
                   })
                 }
               />
@@ -1168,9 +1166,9 @@ export function ChatSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.contextWindowIndicatorEnabled}
+              checked={settings.contextWindowMeterEnabled}
               onCheckedChange={(checked) =>
-                updateSettings({ contextWindowIndicatorEnabled: Boolean(checked) })
+                updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
               }
               aria-label="Context window indicator"
             />

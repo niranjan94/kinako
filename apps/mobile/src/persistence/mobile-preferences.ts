@@ -114,7 +114,7 @@ export interface Preferences {
   readonly projectGroupingEnabled?: boolean;
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
   readonly planModeEnabled?: boolean;
-  /** Device-local counterpart of web's `contextWindowIndicatorEnabled`; unset means on. */
+  /** Device-local counterpart of web's `contextWindowMeterEnabled`; unset means on. */
   readonly contextWindowIndicatorEnabled?: boolean;
   readonly workingShelfEnabled?: boolean;
   readonly useLastProjectForNewThreads?: boolean;
