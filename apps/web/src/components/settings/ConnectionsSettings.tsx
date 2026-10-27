@@ -4,9 +4,14 @@ import { ChevronRightIcon, EllipsisIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
 import {
+  AuthAccessReadScope,
+  AuthAccessWriteScope,
   AuthEnvironmentMaintainScope,
   AuthRelayReadScope,
   AuthRelayWriteScope,
+  type AuthClientSession,
+  type AuthPairingLink,
+  type AuthPairingCredentialResult,
   type AdvertisedEndpoint,
   type DesktopServerExposureState,
   type DesktopWslState,
@@ -63,7 +68,13 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
-import { usePrimarySessionState } from "~/environments/primary";
+import {
+  revokeOtherServerClientSessions,
+  revokeServerClientSession,
+  revokeServerPairingLink,
+  usePrimarySessionState,
+  type ServerClientSessionRecord,
+} from "~/environments/primary";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { useUiStateStore } from "~/uiStateStore";
 import {
@@ -74,6 +85,7 @@ import {
 } from "~/versionSkew";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { RemoveT3ConnectEnvironmentDialog } from "../clerk/RemoveT3ConnectEnvironmentDialog";
+import { authEnvironment } from "~/state/auth";
 import { environmentCatalog } from "~/connection/catalog";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { useEnvironmentQuery } from "~/state/query";
@@ -99,7 +111,11 @@ import {
   type ServerUpdateTarget,
 } from "../ServerUpdateAction";
 import {
+  sortDesktopPairingLinks,
   summarizeAuthorizedClients,
+  sortDesktopClientSessions,
+  toDesktopPairingLinkRecord,
+  toDesktopClientSessionRecord,
   selectPairingEndpoint,
   isTailscaleHttpsEndpoint,
   endpointDefaultPreferenceKey,
@@ -117,7 +133,6 @@ import {
   CloudRemoteEnvironmentRows,
   SavedBackendListRow,
 } from "./SavedEnvironmentRows";
-import { useEnvironmentAccessManagement } from "./useEnvironmentAccessManagement";
 import { AddEnvironmentDialog } from "./AddEnvironmentDialog";
 import { APP_BASE_NAME } from "~/branding";
 
@@ -149,6 +164,9 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
   });
   const primaryEnvironmentId = primaryEnvironment?.environmentId ?? null;
   const primarySessionState = usePrimarySessionState();
+  const currentSessionScopes = primarySessionState.data?.authenticated
+    ? (primarySessionState.data.permissions ?? primarySessionState.data.scopes ?? null)
+    : null;
   const currentAuthPolicy = desktopBridge ? null : (primarySessionState.data?.auth.policy ?? null);
   const savedEnvironments = environments.filter(
     (environment) => environment.entry.target._tag !== "PrimaryConnectionTarget",
@@ -203,6 +221,22 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
   const [desktopServerExposureMutationError, setDesktopServerExposureMutationError] = useState<
     string | null
   >(null);
+  const [desktopAccessManagementMutationError, setDesktopAccessManagementMutationError] = useState<
+    string | null
+  >(null);
+  const [createdPairingCredentials, setCreatedPairingCredentials] = useState<
+    ReadonlyMap<string, string>
+  >(() => new Map());
+  const handlePairingLinkCreated = (created: AuthPairingCredentialResult) => {
+    setCreatedPairingCredentials((current) => new Map(current).set(created.id, created.credential));
+  };
+  const [revokingDesktopPairingLinkId, setRevokingDesktopPairingLinkId] = useState<string | null>(
+    null,
+  );
+  const [revokingDesktopClientSessionId, setRevokingDesktopClientSessionId] = useState<
+    string | null
+  >(null);
+  const [isRevokingOtherDesktopClients, setIsRevokingOtherDesktopClients] = useState(false);
   const [addBackendDialogOpen, setAddBackendDialogOpen] = useState(false);
   const [routeTarget, setRouteTarget] = useState<EnvironmentPresentation | null>(null);
   const [savedBackendError, setSavedBackendError] = useState<string | null>(null);
@@ -248,12 +282,21 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
   const setDefaultAdvertisedEndpointKey = useUiStateStore(
     (state) => state.setDefaultAdvertisedEndpointKey,
   );
-  const showsAccess = view === "access";
-  const primaryAccess = useEnvironmentAccessManagement(primaryEnvironmentId, showsAccess);
+  const canReadAccess = useEnvironmentScope(primaryEnvironmentId, AuthAccessReadScope);
+  const canWriteAccess = useEnvironmentScope(primaryEnvironmentId, AuthAccessWriteScope);
   const canReadRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope);
   const canMaintain = useEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope);
   const canManageRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope);
   const canManageLocalBackend = !isLocalEnvironmentDisabled() && canMaintain;
+  const showsAccess = view === "access";
+  const authAccessChanges = useEnvironmentQuery(
+    showsAccess && canReadAccess && primaryEnvironmentId !== null
+      ? authEnvironment.accessChanges({
+          environmentId: primaryEnvironmentId,
+          input: null,
+        })
+      : null,
+  );
   const desktopNetworkAccess = useEnvironmentQuery(
     showsAccess && canManageLocalBackend && desktopBridge ? desktopNetworkAccessStateAtom : null,
   );
@@ -268,7 +311,28 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     desktopNetworkAccess.data?.advertisedEndpoints ?? EMPTY_ADVERTISED_ENDPOINTS;
   const desktopServerExposureError =
     desktopServerExposureMutationError ?? desktopNetworkAccess.error;
-
+  const desktopAccessManagementError =
+    desktopAccessManagementMutationError ?? authAccessChanges.error;
+  const isLoadingDesktopAccessManagement =
+    authAccessChanges.isPending && authAccessChanges.data === null;
+  const desktopPairingLinks = (() => {
+    const event = authAccessChanges.data;
+    if (event?.type !== "snapshot") return [];
+    return sortDesktopPairingLinks(
+      event.payload.pairingLinks.map((pairingLink: AuthPairingLink) =>
+        toDesktopPairingLinkRecord(pairingLink),
+      ),
+    );
+  })();
+  const desktopClientSessions = (() => {
+    const event = authAccessChanges.data;
+    if (event?.type !== "snapshot") return [];
+    return sortDesktopClientSessions(
+      event.payload.clientSessions.map((clientSession: AuthClientSession) =>
+        toDesktopClientSessionRecord(clientSession),
+      ),
+    );
+  })();
   const isLocalBackendNetworkAccessible = desktopBridge
     ? desktopServerExposureState?.mode === "network-accessible"
     : currentAuthPolicy === "remote-reachable";
@@ -407,6 +471,91 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     setDisableTailscaleServeDialogOpen(true);
   };
 
+  const handleRevokeDesktopPairingLink = async (id: string) => {
+    if (
+      primaryEnvironmentId === null ||
+      !readEnvironmentScope(primaryEnvironmentId, AuthAccessWriteScope)
+    )
+      return;
+    setRevokingDesktopPairingLinkId(id);
+    setDesktopAccessManagementMutationError(null);
+    const settled = await settlePromise(async () => {
+      await revokeServerPairingLink(id);
+    });
+    if (settled._tag === "Failure") {
+      const error = Cause.squash(settled.cause);
+      const message = error instanceof Error ? error.message : "Failed to revoke pairing link.";
+      setDesktopAccessManagementMutationError(message);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not revoke pairing link",
+          description: message,
+        }),
+      );
+    }
+    setRevokingDesktopPairingLinkId(null);
+  };
+
+  const handleRevokeDesktopClientSession = async (
+    sessionId: ServerClientSessionRecord["sessionId"],
+  ) => {
+    if (
+      primaryEnvironmentId === null ||
+      !readEnvironmentScope(primaryEnvironmentId, AuthAccessWriteScope)
+    )
+      return;
+    setRevokingDesktopClientSessionId(sessionId);
+    setDesktopAccessManagementMutationError(null);
+    const settled = await settlePromise(async () => {
+      await revokeServerClientSession(sessionId);
+    });
+    if (settled._tag === "Failure") {
+      const error = Cause.squash(settled.cause);
+      const message = error instanceof Error ? error.message : "Failed to revoke client access.";
+      setDesktopAccessManagementMutationError(message);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not revoke client access",
+          description: message,
+        }),
+      );
+    }
+    setRevokingDesktopClientSessionId(null);
+  };
+
+  const handleRevokeOtherDesktopClients = async () => {
+    if (
+      primaryEnvironmentId === null ||
+      !readEnvironmentScope(primaryEnvironmentId, AuthAccessWriteScope)
+    )
+      return;
+    setIsRevokingOtherDesktopClients(true);
+    setDesktopAccessManagementMutationError(null);
+    const settled = await settlePromise(async () => {
+      const revokedCount = await revokeOtherServerClientSessions();
+      toastManager.add({
+        type: "success",
+        title: revokedCount === 1 ? "Revoked 1 other client" : `Revoked ${revokedCount} clients`,
+        description: "Other paired clients will need a new pairing link before reconnecting.",
+      });
+    });
+    if (settled._tag === "Failure") {
+      const error = Cause.squash(settled.cause);
+      const message = error instanceof Error ? error.message : "Failed to revoke other clients.";
+      setDesktopAccessManagementMutationError(message);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not revoke other clients",
+          description: message,
+        }),
+      );
+    }
+    setIsRevokingOtherDesktopClients(false);
+  };
+
   const handleSetSavedBackendEnabled = async (environmentId: EnvironmentId, enabled: boolean) => {
     setSavedBackendError(null);
     const result = await setEnvironmentEnabled({ environmentId, enabled });
@@ -463,6 +612,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     if (confirmed === true) await removeSavedBackend(environment);
   };
 
+  const visibleDesktopPairingLinks = desktopPairingLinks;
   const tailscaleHttpsEndpoint = desktopAdvertisedEndpoints.find(isTailscaleHttpsEndpoint) ?? null;
   const visibleDesktopNetworkAdvertisedEndpoints = isLocalBackendNetworkAccessible
     ? desktopAdvertisedEndpoints.filter((endpoint) => !isTailscaleHttpsEndpoint(endpoint))
@@ -787,26 +937,25 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
   );
   const renderAuthorizedClients = (presentation: AccessSectionPresentation) => (
     <>
-      {primaryAccess.error ? (
+      {desktopAccessManagementError ? (
         <div className={accessRowClassName(presentation)}>
-          <p className="text-xs text-destructive">{primaryAccess.error}</p>
+          <p className="text-xs text-destructive">{desktopAccessManagementError}</p>
         </div>
       ) : null}
       <PairingClientsList
         endpointUrl={desktopServerExposureState?.endpointUrl}
         endpoints={visibleDesktopAdvertisedEndpoints}
         defaultEndpointKey={defaultDesktopAdvertisedEndpointKey}
-        shareFromCurrentOrigin
         presentation={presentation}
-        isLoading={primaryAccess.isLoading}
-        pairingLinks={primaryAccess.pairingLinks}
-        createdPairingCredentials={primaryAccess.createdPairingCredentials}
-        clientSessions={primaryAccess.clientSessions}
-        revokingPairingLinkId={primaryAccess.revokingPairingLinkId}
-        revokingClientSessionId={primaryAccess.revokingClientSessionId}
-        onRevokePairingLink={primaryAccess.revokePairingLink}
-        onRevokeClientSession={primaryAccess.revokeClientSession}
-        canRevoke={primaryAccess.canWriteAccess}
+        isLoading={isLoadingDesktopAccessManagement}
+        pairingLinks={visibleDesktopPairingLinks}
+        createdPairingCredentials={createdPairingCredentials}
+        clientSessions={desktopClientSessions}
+        revokingPairingLinkId={revokingDesktopPairingLinkId}
+        revokingClientSessionId={revokingDesktopClientSessionId}
+        onRevokePairingLink={handleRevokeDesktopPairingLink}
+        onRevokeClientSession={handleRevokeDesktopClientSession}
+        canRevoke={canWriteAccess}
       />
     </>
   );
@@ -1005,22 +1154,28 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
             ) : null}
           </SettingsSection>
 
-          {primaryAccess.canReadAccess || primaryAccess.canWriteAccess ? (
+          {canReadAccess || canWriteAccess ? (
             <FoldedSettingsSection
               id="authorized-clients"
               title="Authorized clients"
               summary={summarizeAuthorizedClients(
-                primaryAccess.clientSessions,
-                primaryAccess.pairingLinks,
+                desktopClientSessions,
+                visibleDesktopPairingLinks,
               )}
               control={
-                primaryAccess.canWriteAccess ? (
+                canWriteAccess ? (
                   <AuthorizedClientsHeaderAction
-                    delegatableScopes={primaryAccess.delegatableScopes}
-                    onCreatePairingLink={primaryAccess.createPairingLink}
-                    clientSessions={primaryAccess.hasSnapshot ? primaryAccess.clientSessions : null}
-                    isRevokingOtherClients={primaryAccess.isRevokingOtherClients}
-                    onRevokeOtherClients={primaryAccess.revokeOtherClients}
+                    delegatableScopes={currentSessionScopes ?? []}
+                    onPairingLinkCreated={handlePairingLinkCreated}
+                    clientSessions={
+                      canReadAccess &&
+                      authAccessChanges.error === null &&
+                      authAccessChanges.data?.type === "snapshot"
+                        ? desktopClientSessions
+                        : null
+                    }
+                    isRevokingOtherClients={isRevokingOtherDesktopClients}
+                    onRevokeOtherClients={handleRevokeOtherDesktopClients}
                   />
                 ) : undefined
               }
@@ -1031,7 +1186,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
                 className="max-h-[22.5rem]"
                 data-testid="authorized-clients-scroll-area"
               >
-                {primaryAccess.canReadAccess ? (
+                {canReadAccess ? (
                   renderAuthorizedClients("current")
                 ) : (
                   <p className="px-4 py-3 text-xs text-muted-foreground">

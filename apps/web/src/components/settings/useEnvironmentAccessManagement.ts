@@ -2,6 +2,7 @@ import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
   type AuthCreatePairingCredentialInput,
+  type AuthPairingCredentialResult,
   type AuthEnvironmentScope,
   type EnvironmentId,
 } from "@t3tools/contracts";
@@ -90,27 +91,16 @@ export function useEnvironmentAccessManagement(
     toastManager.add(stackedThreadToast({ type: "error", title, description: message }));
   };
 
-  const createPairingLink = async (input: AuthCreatePairingCredentialInput) => {
-    if (
-      environmentId === null ||
-      !readEnvironmentScope(environmentId, AuthAccessWriteScope) ||
-      !(input.scopes ?? []).every((scope) => readEnvironmentScope(environmentId, scope))
-    )
-      return false;
+  // The header action guards scopes and reports failures, as it does for the primary environment.
+  const createPairingCredential = async (input: AuthCreatePairingCredentialInput) => {
+    if (environmentId === null) throw new Error("This environment is unavailable.");
     setMutationError(null);
     const result = await createPairingLinkCommand({ environmentId, input });
-    if (result._tag === "Failure") {
-      reportMutationFailure(
-        "Could not create pairing URL",
-        "Failed to create pairing URL.",
-        result,
-      );
-      return false;
-    }
-    setCreatedPairingCredentials((current) =>
-      new Map(current).set(result.value.id, result.value.credential),
-    );
-    return true;
+    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+    return result.value;
+  };
+  const onPairingLinkCreated = (created: AuthPairingCredentialResult) => {
+    setCreatedPairingCredentials((current) => new Map(current).set(created.id, created.credential));
   };
 
   const revokePairingLink = async (id: string) => {
@@ -182,7 +172,8 @@ export function useEnvironmentAccessManagement(
     revokingPairingLinkId,
     revokingClientSessionId,
     isRevokingOtherClients,
-    createPairingLink,
+    createPairingCredential,
+    onPairingLinkCreated,
     revokePairingLink,
     revokeClientSession,
     revokeOtherClients,

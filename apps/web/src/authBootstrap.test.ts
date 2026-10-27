@@ -1,6 +1,7 @@
 import {
   EnvironmentAuthInvalidError,
   type AuthBrowserSessionResult,
+  type AuthCreatePairingCredentialInput,
   type AuthSessionState,
   type DesktopBridge,
 } from "@t3tools/contracts";
@@ -95,11 +96,20 @@ async function installAuthApi(input: {
   readonly browserSession?: (
     credential: string,
   ) => Effect.Effect<AuthBrowserSessionResult, EnvironmentAuthInvalidError>;
+  readonly pairingCredential?: (payload: AuthCreatePairingCredentialInput) => Effect.Effect<{
+    readonly id: string;
+    readonly credential: string;
+    readonly label?: string;
+    readonly expiresAt: DateTime.Utc;
+  }>;
 }) {
   const testApi = await installEnvironmentHttpTest({
     ...(input.session ? { session: () => Effect.succeed(input.session!()) } : {}),
     ...(input.browserSession
       ? { browserSession: (payload) => input.browserSession!(payload.credential) }
+      : {}),
+    ...(input.pairingCredential
+      ? { pairingCredential: (payload) => input.pairingCredential!(payload) }
       : {}),
   });
   disposeHttpTest = testApi.dispose;

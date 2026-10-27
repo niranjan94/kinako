@@ -228,7 +228,9 @@ function RemoteAuthorizedClients({
           </p>
           <AuthorizedClientsHeaderAction
             delegatableScopes={access.delegatableScopes}
-            onCreatePairingLink={access.createPairingLink}
+            environmentId={environmentId}
+            createPairingCredential={access.createPairingCredential}
+            onPairingLinkCreated={access.onPairingLinkCreated}
             clientSessions={access.hasSnapshot ? access.clientSessions : null}
             isRevokingOtherClients={access.isRevokingOtherClients}
             onRevokeOtherClients={access.revokeOtherClients}

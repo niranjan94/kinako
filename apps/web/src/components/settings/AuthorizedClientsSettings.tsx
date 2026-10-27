@@ -10,9 +10,13 @@ import {
   AuthTerminalReadScope,
   type AuthEnvironmentScope,
   type AuthGrantScope,
+  type AuthPairingCredentialResult,
   type AuthCreatePairingCredentialInput,
+  type EnvironmentId,
   type AdvertisedEndpoint,
 } from "@t3tools/contracts";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import * as Cause from "effect/Cause";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
@@ -44,10 +48,13 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import {
+  createServerPairingCredential,
   isLoopbackHostname,
   type ServerClientSessionRecord,
   type ServerPairingLinkRecord,
 } from "~/environments/primary";
+import { readEnvironmentScope } from "~/state/session";
+import { usePrimaryEnvironmentId } from "~/state/environments";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "./itemRows";
 import {
@@ -130,7 +137,8 @@ type PairingLinkListRowProps = {
   endpointUrl: string | null | undefined;
   endpoints: ReadonlyArray<AdvertisedEndpoint>;
   defaultEndpointKey: string | null;
-  shareFromCurrentOrigin: boolean;
+  /** Off for another environment, whose links this page's origin cannot serve. */
+  shareFromCurrentOrigin?: boolean;
   presentation?: AccessSectionPresentation;
   revokingPairingLinkId: string | null;
   onRevoke: (id: string) => void;
@@ -143,7 +151,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
   endpointUrl,
   endpoints,
   defaultEndpointKey,
-  shareFromCurrentOrigin,
+  shareFromCurrentOrigin = true,
   presentation = "current",
   revokingPairingLinkId,
   onRevoke,
@@ -575,7 +583,12 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
 });
 
 type AuthorizedClientsHeaderActionProps = {
-  onCreatePairingLink: (input: AuthCreatePairingCredentialInput) => Promise<boolean>;
+  onPairingLinkCreated: (result: AuthPairingCredentialResult) => void;
+  /** Another environment's credential creator; the primary environment's by default. */
+  createPairingCredential?: (
+    input: AuthCreatePairingCredentialInput,
+  ) => Promise<AuthPairingCredentialResult>;
+  environmentId?: EnvironmentId | null;
   clientSessions: ReadonlyArray<ServerClientSessionRecord> | null;
   isRevokingOtherClients: boolean;
   onRevokeOtherClients: () => void;
@@ -583,12 +596,16 @@ type AuthorizedClientsHeaderActionProps = {
 };
 
 export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHeaderAction({
-  onCreatePairingLink,
+  onPairingLinkCreated,
+  createPairingCredential,
+  environmentId,
   clientSessions,
   isRevokingOtherClients,
   onRevokeOtherClients,
   delegatableScopes,
 }: AuthorizedClientsHeaderActionProps) {
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const scopeEnvironmentId = environmentId === undefined ? primaryEnvironmentId : environmentId;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pairingLabel, setPairingLabel] = useState("");
   const [pairingScopes, setPairingScopes] = useState<ReadonlyArray<AuthGrantScope>>([
@@ -598,18 +615,38 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
   const [isCreatingPairingLink, setIsCreatingPairingLink] = useState(false);
 
   const handleCreatePairingLink = async () => {
-    if (selectedScopes.length === 0) return;
+    if (
+      scopeEnvironmentId === null ||
+      selectedScopes.length === 0 ||
+      !readEnvironmentScope(scopeEnvironmentId, AuthAccessWriteScope) ||
+      !selectedScopes.every((scope) => readEnvironmentScope(scopeEnvironmentId, scope))
+    )
+      return;
     setIsCreatingPairingLink(true);
-    const trimmedLabel = pairingLabel.trim();
-    const created = await onCreatePairingLink({
-      ...(trimmedLabel ? { label: trimmedLabel } : {}),
-      scopes: selectedScopes,
+    const settled = await settlePromise(async () => {
+      const created = await (createPairingCredential ?? createServerPairingCredential)({
+        label: pairingLabel,
+        scopes: selectedScopes,
+      });
+      onPairingLinkCreated(created);
+      setPairingLabel("");
+      setPairingScopes(
+        AuthStandardClientScopes.filter((scope) => delegatableScopes.includes(scope)),
+      );
+      setDialogOpen(false);
     });
+    if (settled._tag === "Failure") {
+      const error = Cause.squash(settled.cause);
+      const message = error instanceof Error ? error.message : "Failed to create pairing URL.";
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not create pairing URL",
+          description: message,
+        }),
+      );
+    }
     setIsCreatingPairingLink(false);
-    if (!created) return;
-    setPairingLabel("");
-    setPairingScopes(AuthStandardClientScopes.filter((scope) => delegatableScopes.includes(scope)));
-    setDialogOpen(false);
   };
 
   const togglePairingScope = (scope: AuthGrantScope, checked: boolean) => {
@@ -766,7 +803,7 @@ type PairingClientsListProps = {
   endpointUrl: string | null | undefined;
   endpoints: ReadonlyArray<AdvertisedEndpoint>;
   defaultEndpointKey: string | null;
-  shareFromCurrentOrigin: boolean;
+  shareFromCurrentOrigin?: boolean;
   presentation?: AccessSectionPresentation;
   isLoading: boolean;
   pairingLinks: ReadonlyArray<ServerPairingLinkRecord>;
@@ -805,7 +842,7 @@ export const PairingClientsList = memo(function PairingClientsList({
           endpointUrl={endpointUrl}
           endpoints={endpoints}
           defaultEndpointKey={defaultEndpointKey}
-          shareFromCurrentOrigin={shareFromCurrentOrigin}
+          {...(shareFromCurrentOrigin === undefined ? {} : { shareFromCurrentOrigin })}
           presentation={presentation}
           revokingPairingLinkId={revokingPairingLinkId}
           onRevoke={onRevokePairingLink}
