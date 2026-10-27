@@ -1,6 +1,7 @@
 import * as Migrator from "effect/sql/Migrator";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
+import { runForkMigrations, splitForkMigrationLedger } from "./ForkMigrations.ts";
 import { reconcileV2PreviewMigration } from "./reconcileV2PreviewMigration.ts";
 
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
@@ -65,16 +66,13 @@ import Migration0059 from "./Migrations/059_McpAppModelContext.ts";
 import Migration0060 from "./Migrations/060_ThreadSnapshotWindowIndexes.ts";
 import Migration0061 from "./Migrations/061_PullRequestReviewGuides.ts";
 import Migration0062 from "./Migrations/062_ThreadFailureLookupIndex.ts";
-import Migration0063 from "./Migrations/063_ProjectionProjectsAdditionalDirectories.ts";
-import Migration0064 from "./Migrations/064_DatabaseConnections.ts";
-import Migration0065 from "./Migrations/065_DropUnusedV1Projections.ts";
-import Migration0066 from "./Migrations/066_CanonicalizeThreadPullRequestLinks.ts";
-import Migration0067 from "./Migrations/067_SnoozeWakeIndex.ts";
-import Migration0068 from "./Migrations/068_CodexUsageNativeTurnIndex.ts";
-import Migration0069 from "./Migrations/069_RepairClientSettlementTimestamps.ts";
-import Migration0070 from "./Migrations/070_WebhookDedupe.ts";
-import Migration0071 from "./Migrations/071_ShellStopRequestIndex.ts";
-import Migration0072 from "./Migrations/072_ThreadMessageSearch.ts";
+import Migration0063 from "./Migrations/063_DropUnusedV1Projections.ts";
+import Migration0064 from "./Migrations/064_CanonicalizeThreadPullRequestLinks.ts";
+import Migration0065 from "./Migrations/065_CodexUsageNativeTurnIndex.ts";
+import Migration0066 from "./Migrations/066_RepairClientSettlementTimestamps.ts";
+import Migration0067 from "./Migrations/067_WebhookDedupe.ts";
+import Migration0068 from "./Migrations/068_ShellStopRequestIndex.ts";
+import Migration0069 from "./Migrations/069_ThreadMessageSearch.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -140,16 +138,13 @@ const migrationEntries = [
   [60, "ThreadSnapshotWindowIndexes", Migration0060],
   [61, "PullRequestReviewGuides", Migration0061],
   [62, "ThreadFailureLookupIndex", Migration0062],
-  [63, "ProjectionProjectsAdditionalDirectories", Migration0063],
-  [64, "DatabaseConnections", Migration0064],
-  [65, "DropUnusedV1Projections", Migration0065],
-  [66, "CanonicalizeThreadPullRequestLinks", Migration0066],
-  [67, "SnoozeWakeIndex", Migration0067],
-  [68, "CodexUsageNativeTurnIndex", Migration0068],
-  [69, "RepairClientSettlementTimestamps", Migration0069],
-  [70, "WebhookDedupe", Migration0070],
-  [71, "ShellStopRequestIndex", Migration0071],
-  [72, "ThreadMessageSearch", Migration0072],
+  [63, "DropUnusedV1Projections", Migration0063],
+  [64, "CanonicalizeThreadPullRequestLinks", Migration0064],
+  [65, "CodexUsageNativeTurnIndex", Migration0065],
+  [66, "RepairClientSettlementTimestamps", Migration0066],
+  [67, "WebhookDedupe", Migration0067],
+  [68, "ShellStopRequestIndex", Migration0068],
+  [69, "ThreadMessageSearch", Migration0069],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
@@ -207,6 +202,7 @@ export interface RunMigrationsOptions {
 export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
 }: RunMigrationsOptions = {}) {
+  yield* splitForkMigrationLedger();
   const includesV2 =
     toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_V2_MIGRATION_ID;
   const previewMigrations = includesV2 ? yield* reconcileV2PreviewMigration() : [];
@@ -217,6 +213,7 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
     ...previewMigrations,
     ...(yield* run({ loader: makeMigrationLoader(toMigrationInclusive) })),
   ];
+  if (toMigrationInclusive === undefined) yield* runForkMigrations();
   const migrations = executedMigrations.map(([id, name]) => `${id}_${name}`);
   yield* migrations.length === 0
     ? Effect.logDebug("Database schema is current")
