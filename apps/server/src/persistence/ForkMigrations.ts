@@ -91,11 +91,15 @@ export const splitForkMigrationLedger = Effect.fn("splitForkMigrationLedger")(fu
 
 const run = Migrator.make({});
 
-export const runForkMigrations = Effect.fn("runForkMigrations")(function* () {
+export const runForkMigrations = Effect.fn("runForkMigrations")(function* ({
+  toMigrationInclusive,
+}: { readonly toMigrationInclusive?: number | undefined } = {}) {
   const executed = yield* run({
     loader: Migrator.fromRecord(
       Object.fromEntries(
-        forkMigrationEntries.map(([id, name, migration]) => [`${id}_${name}`, migration]),
+        forkMigrationEntries
+          .filter(([id]) => toMigrationInclusive === undefined || id <= toMigrationInclusive)
+          .map(([id, name, migration]) => [`${id}_${name}`, migration]),
       ),
     ),
     table: FORK_MIGRATIONS_TABLE,

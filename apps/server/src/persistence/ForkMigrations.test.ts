@@ -3,7 +3,11 @@ import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 
-import { FORK_MIGRATIONS_TABLE, forkMigrationManifest } from "./ForkMigrations.ts";
+import {
+  FORK_MIGRATIONS_TABLE,
+  forkMigrationManifest,
+  runForkMigrations,
+} from "./ForkMigrations.ts";
 import { migrationManifest, runMigrations } from "./Migrations.ts";
 import AdditionalDirectories from "./Migrations/fork/001_ProjectionProjectsAdditionalDirectories.ts";
 import DatabaseConnections from "./Migrations/fork/002_DatabaseConnections.ts";
@@ -21,6 +25,24 @@ const ledgers = Effect.gen(function* () {
 });
 
 const upstreamAfter = (id: number) => migrationManifest.filter(([entryId]) => entryId > id);
+
+// The latest upstream migration when each fork migration was added: the earliest point an
+// existing database can have run it. Add an entry with every new fork migration.
+const firstRanAfterUpstream: Readonly<Record<number, number>> = { 1: 62, 2: 62, 3: 64 };
+
+const schema = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const objects = yield* sql<{ readonly type: string; readonly name: string }>`
+    SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name
+  `;
+  const columns = yield* sql<{ readonly tableName: string; readonly columnName: string }>`
+    SELECT m.name AS tableName, p.name AS columnName
+    FROM sqlite_master m, pragma_table_info(m.name) p
+    WHERE m.type = 'table'
+    ORDER BY m.name, p.name
+  `;
+  return { objects, columns };
+});
 
 describe("fork migration ledger", () => {
   it.effect("keeps upstream ids in the upstream ledger and fork ids in the fork ledger", () =>
@@ -82,5 +104,27 @@ describe("fork migration ledger", () => {
         fork: forkMigrationManifest,
       });
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("keeps fork schema when later upstream migrations run over it", () =>
+    Effect.gen(function* () {
+      assert.deepStrictEqual(
+        forkMigrationManifest.filter(([id]) => firstRanAfterUpstream[id] === undefined),
+        [],
+      );
+      const fresh = yield* runMigrations().pipe(
+        Effect.andThen(schema),
+        Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" })),
+      );
+      const upgraded = yield* Effect.gen(function* () {
+        for (const [id] of forkMigrationManifest) {
+          yield* runMigrations({ toMigrationInclusive: firstRanAfterUpstream[id] });
+          yield* runForkMigrations({ toMigrationInclusive: id });
+        }
+        yield* runMigrations();
+        return yield* schema;
+      }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" })));
+      assert.deepStrictEqual(upgraded, fresh);
+    }),
   );
 });
