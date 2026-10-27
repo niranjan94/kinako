@@ -19,6 +19,38 @@ import {
   DatabaseTestConnectionResult,
 } from "./database.ts";
 import {
+  VcsMoveThreadInput,
+  VcsMoveThreadResult,
+  ThreadWorkspaceError,
+} from "./threadWorkspace.ts";
+import {
+  IssueCommentInput,
+  IssueDetail,
+  IssueListInput,
+  IssueListResult,
+  IssueRef,
+} from "./issue.ts";
+import {
+  FollowUpError,
+  FollowUpSetDismissedInput,
+  FollowUpStartInput,
+  FollowUpStartResult,
+} from "./followUp.ts";
+import {
+  AgentSessionImportFailedError,
+  AgentSessionImportSessionInput,
+  AgentSessionImportSessionResult,
+  AgentSessionListInput,
+  AgentSessionListResult,
+  AgentSessionNotFoundError,
+} from "./agentSessions.ts";
+import {
+  VcsRestoreWorktreeSnapshotResult,
+  VcsWorktreeSnapshotInput,
+  WorktreeSnapshot,
+} from "./git.ts";
+import { ServerKeepAwakeStatus } from "./server.ts";
+import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -43,23 +75,11 @@ import {
   ChatGptHandoffInput,
   ChatGptHandoffState,
 } from "./providerSetup.ts";
-import {
-  VcsMoveThreadInput,
-  VcsMoveThreadResult,
-  ThreadWorkspaceError,
-} from "./threadWorkspace.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import {
-  IssueCommentInput,
-  IssueDetail,
-  IssueListInput,
-  IssueListResult,
-  IssueRef,
-} from "./issue.ts";
 import {
   CodexAuthCallbackInput,
   CodexAuthCallbackState,
@@ -118,16 +138,10 @@ import {
   FilesystemBrowseError,
 } from "./filesystem.ts";
 import {
-  AgentSessionImportFailedError,
   AgentSessionImportInput,
   AgentSessionImportProjectChangedError,
   AgentSessionImportProjectNotFoundError,
   AgentSessionImportResult,
-  AgentSessionImportSessionInput,
-  AgentSessionImportSessionResult,
-  AgentSessionListInput,
-  AgentSessionListResult,
-  AgentSessionNotFoundError,
   AgentSessionScanInput,
   AgentSessionScanResult,
   AgentSessionScanError,
@@ -175,9 +189,6 @@ import {
   GitPullRequestRefInput,
   VcsPullResult,
   VcsRemoveWorktreeInput,
-  VcsRestoreWorktreeSnapshotResult,
-  VcsWorktreeSnapshotInput,
-  WorktreeSnapshot,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   VcsStatusInput,
@@ -340,7 +351,6 @@ import {
 } from "./device.ts";
 import {
   ServerConfigStreamEvent,
-  ServerKeepAwakeStatus,
   DesktopUpdateCommitInput,
   OtlpEndpointCheckInput,
   OtlpEndpointCheckResult,
@@ -403,12 +413,6 @@ import {
 } from "./scheduledTask.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import {
-  FollowUpError,
-  FollowUpSetDismissedInput,
-  FollowUpStartInput,
-  FollowUpStartResult,
-} from "./followUp.ts";
-import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
   ProjectCloneListEvent,
@@ -446,25 +450,9 @@ export const WS_METHODS = {
   shellOpenInEditor: "shell.openInEditor",
 
   filesystemBrowse: "filesystem.browse",
-  databaseListConnections: "database.listConnections",
-  databaseSaveConnection: "database.saveConnection",
-  databaseDeleteConnection: "database.deleteConnection",
-  databaseTestConnection: "database.testConnection",
-  databaseIntrospect: "database.introspect",
-  databaseExecute: "database.execute",
-  databaseOpenSession: "database.openSession",
-  databaseCloseSession: "database.closeSession",
-  databaseBrowseTable: "database.browseTable",
-
-  databaseFetchPage: "database.fetchPage",
-  databaseCloseQuery: "database.closeQuery",
-  databaseCancelQuery: "database.cancelQuery",
-
   filesystemGetMetadata: "filesystem.getMetadata",
   agentSessionsScan: "agentSessions.scan",
   agentSessionsImport: "agentSessions.import",
-  agentSessionsList: "agentSessions.list",
-  agentSessionsImportSession: "agentSessions.importSession",
   assetsCreateUrl: "assets.createUrl",
   assetsPersistChatAttachments: "assets.persistChatAttachments",
   attachmentsCreateUploadUrl: "attachments.createUploadUrl",
@@ -496,11 +484,7 @@ export const WS_METHODS = {
   vcsRefreshStatus: "vcs.refreshStatus",
   vcsListRefs: "vcs.listRefs",
   vcsCreateWorktree: "vcs.createWorktree",
-  vcsMoveThread: "vcs.moveThread",
   vcsRemoveWorktree: "vcs.removeWorktree",
-  vcsSubscribeWorktreeSnapshots: "vcs.subscribeWorktreeSnapshots",
-  vcsRestoreWorktreeSnapshot: "vcs.restoreWorktreeSnapshot",
-  vcsDeleteWorktreeSnapshot: "vcs.deleteWorktreeSnapshot",
   vcsCreateRef: "vcs.createRef",
   vcsSwitchRef: "vcs.switchRef",
   vcsInit: "vcs.init",
@@ -553,7 +537,6 @@ export const WS_METHODS = {
   serverRemoveKeybinding: "server.removeKeybinding",
   serverRunStorageCleanup: "server.runStorageCleanup",
   serverGetStorageCleanupReport: "server.getStorageCleanupReport",
-  serverSubscribeKeepAwakeStatus: "server.subscribeKeepAwakeStatus",
   serverGetDatabaseStorage: "server.getDatabaseStorage",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
@@ -591,8 +574,6 @@ export const WS_METHODS = {
   scheduledTasksRunNow: "scheduledTasks.runNow",
   scheduledTasksRotateWebhookToken: "scheduledTasks.rotateWebhookToken",
   secretsAnswerRequest: "secrets.answerRequest",
-  followUpsStart: "followUps.start",
-  followUpsSetDismissed: "followUps.setDismissed",
   guestShareCreate: "guestShare.create",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
@@ -635,10 +616,6 @@ export const WS_METHODS = {
   pullRequestsLabelCandidates: "pullRequests.labelCandidates",
   pullRequestsSetLabels: "pullRequests.setLabels",
 
-  issuesList: "issues.list",
-  issuesDetail: "issues.detail",
-  issuesComment: "issues.comment",
-
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
   sourceControlPublishRepository: "sourceControl.publishRepository",
@@ -660,6 +637,31 @@ export const WS_METHODS = {
   subscribeAuthAccess: "subscribeAuthAccess",
   subscribeBackgroundPolicy: "subscribeBackgroundPolicy",
   subscribeResourceTelemetry: "subscribeResourceTelemetry",
+  // Fork additions stay last so upstream's list merges cleanly.
+  databaseListConnections: "database.listConnections",
+  databaseSaveConnection: "database.saveConnection",
+  databaseDeleteConnection: "database.deleteConnection",
+  databaseTestConnection: "database.testConnection",
+  databaseIntrospect: "database.introspect",
+  databaseExecute: "database.execute",
+  databaseOpenSession: "database.openSession",
+  databaseCloseSession: "database.closeSession",
+  databaseBrowseTable: "database.browseTable",
+  databaseFetchPage: "database.fetchPage",
+  databaseCloseQuery: "database.closeQuery",
+  databaseCancelQuery: "database.cancelQuery",
+  agentSessionsList: "agentSessions.list",
+  agentSessionsImportSession: "agentSessions.importSession",
+  vcsMoveThread: "vcs.moveThread",
+  vcsSubscribeWorktreeSnapshots: "vcs.subscribeWorktreeSnapshots",
+  vcsRestoreWorktreeSnapshot: "vcs.restoreWorktreeSnapshot",
+  vcsDeleteWorktreeSnapshot: "vcs.deleteWorktreeSnapshot",
+  serverSubscribeKeepAwakeStatus: "server.subscribeKeepAwakeStatus",
+  followUpsStart: "followUps.start",
+  followUpsSetDismissed: "followUps.setDismissed",
+  issuesList: "issues.list",
+  issuesDetail: "issues.detail",
+  issuesComment: "issues.comment",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -832,12 +834,6 @@ const WsServerRunStorageCleanupRpc = Rpc.make(WS_METHODS.serverRunStorageCleanup
 const WsServerGetStorageCleanupReportRpc = Rpc.make(WS_METHODS.serverGetStorageCleanupReport, {
   payload: Schema.Struct({}),
   success: Schema.NullOr(StorageCleanupReport),
-  stream: true,
-  error: EnvironmentAuthorizationError,
-});
-const WsServerSubscribeKeepAwakeStatusRpc = Rpc.make(WS_METHODS.serverSubscribeKeepAwakeStatus, {
-  payload: Schema.Struct({}),
-  success: ServerKeepAwakeStatus,
   stream: true,
   error: EnvironmentAuthorizationError,
 });
@@ -1173,24 +1169,6 @@ const WsPullRequestsCommentRpc = Rpc.make(WS_METHODS.pullRequestsComment, {
   error: PullRequestRpcError,
 });
 
-const WsIssuesListRpc = Rpc.make(WS_METHODS.issuesList, {
-  payload: IssueListInput,
-  success: IssueListResult,
-  error: PullRequestRpcError,
-});
-
-const WsIssuesDetailRpc = Rpc.make(WS_METHODS.issuesDetail, {
-  payload: IssueRef,
-  success: IssueDetail,
-  error: PullRequestRpcError,
-});
-
-const WsIssuesCommentRpc = Rpc.make(WS_METHODS.issuesComment, {
-  payload: IssueCommentInput,
-  success: Schema.Void,
-  error: PullRequestRpcError,
-});
-
 const WsPullRequestsUpdateCommentRpc = Rpc.make(WS_METHODS.pullRequestsUpdateComment, {
   payload: PullRequestCommentUpdateInput,
   success: Schema.Void,
@@ -1384,73 +1362,6 @@ const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   error: Schema.Union([FilesystemBrowseError, EnvironmentAuthorizationError]),
 });
 
-const DatabaseRpcError = Schema.Union([DatabaseRequestError, EnvironmentAuthorizationError]);
-
-const WsDatabaseListConnectionsRpc = Rpc.make(WS_METHODS.databaseListConnections, {
-  payload: DatabaseProjectContext,
-  success: DatabaseListConnectionsResult,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseSaveConnectionRpc = Rpc.make(WS_METHODS.databaseSaveConnection, {
-  payload: DatabaseConnectionDraft,
-  success: DatabaseConnection,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseDeleteConnectionRpc = Rpc.make(WS_METHODS.databaseDeleteConnection, {
-  payload: DatabaseDeleteConnectionInput,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseTestConnectionRpc = Rpc.make(WS_METHODS.databaseTestConnection, {
-  payload: DatabaseConnectionDraft,
-  success: DatabaseTestConnectionResult,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseIntrospectRpc = Rpc.make(WS_METHODS.databaseIntrospect, {
-  payload: DatabaseIntrospectInput,
-  success: DatabaseIntrospectResult,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseExecuteRpc = Rpc.make(WS_METHODS.databaseExecute, {
-  payload: DatabaseExecuteInput,
-  success: DatabaseExecuteResult,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseFetchPageRpc = Rpc.make(WS_METHODS.databaseFetchPage, {
-  payload: DatabaseFetchPageInput,
-  success: DatabaseFetchPageResult,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseCloseQueryRpc = Rpc.make(WS_METHODS.databaseCloseQuery, {
-  payload: DatabaseQueryInput,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseCancelQueryRpc = Rpc.make(WS_METHODS.databaseCancelQuery, {
-  payload: DatabaseQueryInput,
-  error: DatabaseRpcError,
-});
-
-const WsDatabaseOpenSessionRpc = Rpc.make(WS_METHODS.databaseOpenSession, {
-  payload: DatabaseOpenSessionInput,
-  error: DatabaseRpcError,
-});
-const WsDatabaseCloseSessionRpc = Rpc.make(WS_METHODS.databaseCloseSession, {
-  payload: DatabaseSessionInput,
-  error: DatabaseRpcError,
-});
-const WsDatabaseBrowseTableRpc = Rpc.make(WS_METHODS.databaseBrowseTable, {
-  payload: DatabaseBrowseTableInput,
-  success: DatabaseBrowseTableResult,
-  error: DatabaseRpcError,
-});
-
 const WsAgentSessionsScanRpc = Rpc.make(WS_METHODS.agentSessionsScan, {
   payload: AgentSessionScanInput,
   success: AgentSessionScanResult,
@@ -1463,28 +1374,6 @@ const WsAgentSessionsImportRpc = Rpc.make(WS_METHODS.agentSessionsImport, {
   error: Schema.Union([
     AgentSessionImportProjectChangedError,
     AgentSessionImportProjectNotFoundError,
-    AgentSessionScanError,
-    EnvironmentAuthorizationError,
-  ]),
-});
-
-const WsAgentSessionsListRpc = Rpc.make(WS_METHODS.agentSessionsList, {
-  payload: AgentSessionListInput,
-  success: AgentSessionListResult,
-  error: Schema.Union([
-    AgentSessionImportProjectNotFoundError,
-    AgentSessionScanError,
-    EnvironmentAuthorizationError,
-  ]),
-});
-
-const WsAgentSessionsImportSessionRpc = Rpc.make(WS_METHODS.agentSessionsImportSession, {
-  payload: AgentSessionImportSessionInput,
-  success: AgentSessionImportSessionResult,
-  error: Schema.Union([
-    AgentSessionImportFailedError,
-    AgentSessionImportProjectNotFoundError,
-    AgentSessionNotFoundError,
     AgentSessionScanError,
     EnvironmentAuthorizationError,
   ]),
@@ -1609,32 +1498,8 @@ const WsVcsCreateWorktreeRpc = Rpc.make(WS_METHODS.vcsCreateWorktree, {
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
-const WsVcsMoveThreadRpc = Rpc.make(WS_METHODS.vcsMoveThread, {
-  payload: VcsMoveThreadInput,
-  success: VcsMoveThreadResult,
-  error: Schema.Union([ThreadWorkspaceError, EnvironmentAuthorizationError]),
-});
-
 const WsVcsRemoveWorktreeRpc = Rpc.make(WS_METHODS.vcsRemoveWorktree, {
   payload: VcsRemoveWorktreeInput,
-  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
-});
-
-const WsVcsSubscribeWorktreeSnapshotsRpc = Rpc.make(WS_METHODS.vcsSubscribeWorktreeSnapshots, {
-  payload: Schema.Struct({}),
-  success: Schema.Array(WorktreeSnapshot),
-  stream: true,
-  error: EnvironmentAuthorizationError,
-});
-
-const WsVcsRestoreWorktreeSnapshotRpc = Rpc.make(WS_METHODS.vcsRestoreWorktreeSnapshot, {
-  payload: VcsWorktreeSnapshotInput,
-  success: VcsRestoreWorktreeSnapshotResult,
-  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
-});
-
-const WsVcsDeleteWorktreeSnapshotRpc = Rpc.make(WS_METHODS.vcsDeleteWorktreeSnapshot, {
-  payload: VcsWorktreeSnapshotInput,
   error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
 });
 
@@ -1949,12 +1814,6 @@ const WsOrchestrationV2GetTurnItemRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.get
   error: Schema.Union([OrchestrationV2GetThreadProjectionError, EnvironmentAuthorizationError]),
 });
 
-const WsOrchestrationV2GetRunHistoryRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.getRunHistory, {
-  payload: OrchestrationV2RpcSchemas.getRunHistory.input,
-  success: OrchestrationV2RpcSchemas.getRunHistory.output,
-  error: Schema.Union([OrchestrationV2GetThreadProjectionError, EnvironmentAuthorizationError]),
-});
-
 const WsOrchestrationV2LaunchThreadRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.launchThread, {
   payload: OrchestrationV2RpcSchemas.launchThread.input,
   success: OrchestrationV2RpcSchemas.launchThread.output,
@@ -2088,17 +1947,6 @@ const WsSecretsAnswerRequestRpc = Rpc.make(WS_METHODS.secretsAnswerRequest, {
   error: Schema.Union([SecretRequestError, EnvironmentAuthorizationError]),
 });
 
-const WsFollowUpsStartRpc = Rpc.make(WS_METHODS.followUpsStart, {
-  payload: FollowUpStartInput,
-  success: FollowUpStartResult,
-  error: Schema.Union([FollowUpError, EnvironmentAuthorizationError]),
-});
-
-const WsFollowUpsSetDismissedRpc = Rpc.make(WS_METHODS.followUpsSetDismissed, {
-  payload: FollowUpSetDismissedInput,
-  error: Schema.Union([FollowUpError, EnvironmentAuthorizationError]),
-});
-
 const WsScheduledTasksListWebhookDeliveriesRpc = Rpc.make(
   WS_METHODS.scheduledTasksListWebhookDeliveries,
   {
@@ -2143,7 +1991,164 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
   { error: EnvironmentAuthorizationError },
 ) {}
 
-// Separate handler groups keep RPC inference within TypeScript's instantiation limit.
+// Fork RPCs, kept together so upstream's definitions merge cleanly.
+const WsServerSubscribeKeepAwakeStatusRpc = Rpc.make(WS_METHODS.serverSubscribeKeepAwakeStatus, {
+  payload: Schema.Struct({}),
+  success: ServerKeepAwakeStatus,
+  stream: true,
+  error: EnvironmentAuthorizationError,
+});
+
+const WsIssuesListRpc = Rpc.make(WS_METHODS.issuesList, {
+  payload: IssueListInput,
+  success: IssueListResult,
+  error: PullRequestRpcError,
+});
+
+const WsIssuesDetailRpc = Rpc.make(WS_METHODS.issuesDetail, {
+  payload: IssueRef,
+  success: IssueDetail,
+  error: PullRequestRpcError,
+});
+
+const WsIssuesCommentRpc = Rpc.make(WS_METHODS.issuesComment, {
+  payload: IssueCommentInput,
+  success: Schema.Void,
+  error: PullRequestRpcError,
+});
+
+const DatabaseRpcError = Schema.Union([DatabaseRequestError, EnvironmentAuthorizationError]);
+
+const WsDatabaseListConnectionsRpc = Rpc.make(WS_METHODS.databaseListConnections, {
+  payload: DatabaseProjectContext,
+  success: DatabaseListConnectionsResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseSaveConnectionRpc = Rpc.make(WS_METHODS.databaseSaveConnection, {
+  payload: DatabaseConnectionDraft,
+  success: DatabaseConnection,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseDeleteConnectionRpc = Rpc.make(WS_METHODS.databaseDeleteConnection, {
+  payload: DatabaseDeleteConnectionInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseTestConnectionRpc = Rpc.make(WS_METHODS.databaseTestConnection, {
+  payload: DatabaseConnectionDraft,
+  success: DatabaseTestConnectionResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseIntrospectRpc = Rpc.make(WS_METHODS.databaseIntrospect, {
+  payload: DatabaseIntrospectInput,
+  success: DatabaseIntrospectResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseExecuteRpc = Rpc.make(WS_METHODS.databaseExecute, {
+  payload: DatabaseExecuteInput,
+  success: DatabaseExecuteResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseFetchPageRpc = Rpc.make(WS_METHODS.databaseFetchPage, {
+  payload: DatabaseFetchPageInput,
+  success: DatabaseFetchPageResult,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseCloseQueryRpc = Rpc.make(WS_METHODS.databaseCloseQuery, {
+  payload: DatabaseQueryInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseCancelQueryRpc = Rpc.make(WS_METHODS.databaseCancelQuery, {
+  payload: DatabaseQueryInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseOpenSessionRpc = Rpc.make(WS_METHODS.databaseOpenSession, {
+  payload: DatabaseOpenSessionInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseCloseSessionRpc = Rpc.make(WS_METHODS.databaseCloseSession, {
+  payload: DatabaseSessionInput,
+  error: DatabaseRpcError,
+});
+
+const WsDatabaseBrowseTableRpc = Rpc.make(WS_METHODS.databaseBrowseTable, {
+  payload: DatabaseBrowseTableInput,
+  success: DatabaseBrowseTableResult,
+  error: DatabaseRpcError,
+});
+
+const WsAgentSessionsListRpc = Rpc.make(WS_METHODS.agentSessionsList, {
+  payload: AgentSessionListInput,
+  success: AgentSessionListResult,
+  error: Schema.Union([
+    AgentSessionImportProjectNotFoundError,
+    AgentSessionScanError,
+    EnvironmentAuthorizationError,
+  ]),
+});
+
+const WsAgentSessionsImportSessionRpc = Rpc.make(WS_METHODS.agentSessionsImportSession, {
+  payload: AgentSessionImportSessionInput,
+  success: AgentSessionImportSessionResult,
+  error: Schema.Union([
+    AgentSessionImportFailedError,
+    AgentSessionImportProjectNotFoundError,
+    AgentSessionNotFoundError,
+    AgentSessionScanError,
+    EnvironmentAuthorizationError,
+  ]),
+});
+
+const WsVcsMoveThreadRpc = Rpc.make(WS_METHODS.vcsMoveThread, {
+  payload: VcsMoveThreadInput,
+  success: VcsMoveThreadResult,
+  error: Schema.Union([ThreadWorkspaceError, EnvironmentAuthorizationError]),
+});
+
+const WsVcsSubscribeWorktreeSnapshotsRpc = Rpc.make(WS_METHODS.vcsSubscribeWorktreeSnapshots, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(WorktreeSnapshot),
+  stream: true,
+  error: EnvironmentAuthorizationError,
+});
+
+const WsVcsRestoreWorktreeSnapshotRpc = Rpc.make(WS_METHODS.vcsRestoreWorktreeSnapshot, {
+  payload: VcsWorktreeSnapshotInput,
+  success: VcsRestoreWorktreeSnapshotResult,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+const WsVcsDeleteWorktreeSnapshotRpc = Rpc.make(WS_METHODS.vcsDeleteWorktreeSnapshot, {
+  payload: VcsWorktreeSnapshotInput,
+  error: Schema.Union([GitCommandError, EnvironmentAuthorizationError]),
+});
+
+const WsOrchestrationV2GetRunHistoryRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.getRunHistory, {
+  payload: OrchestrationV2RpcSchemas.getRunHistory.input,
+  success: OrchestrationV2RpcSchemas.getRunHistory.output,
+  error: Schema.Union([OrchestrationV2GetThreadProjectionError, EnvironmentAuthorizationError]),
+});
+
+const WsFollowUpsStartRpc = Rpc.make(WS_METHODS.followUpsStart, {
+  payload: FollowUpStartInput,
+  success: FollowUpStartResult,
+  error: Schema.Union([FollowUpError, EnvironmentAuthorizationError]),
+});
+
+const WsFollowUpsSetDismissedRpc = Rpc.make(WS_METHODS.followUpsSetDismissed, {
+  payload: FollowUpSetDismissedInput,
+  error: Schema.Union([FollowUpError, EnvironmentAuthorizationError]),
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsGuestShareCreateRpc,
   WsServerProbeRpc,

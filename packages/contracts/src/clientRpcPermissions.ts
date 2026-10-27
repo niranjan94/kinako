@@ -29,7 +29,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.pullRequestsSetFilesViewed]: AuthSourceControlWriteScope,
   [WS_METHODS.pullRequestsRequestReviewers]: AuthSourceControlWriteScope,
   [WS_METHODS.pullRequestsSetLabels]: AuthSourceControlWriteScope,
-  [WS_METHODS.issuesComment]: AuthSourceControlWriteScope,
   // Writing a guide runs a model on this environment's providers, which reading one does not.
   [WS_METHODS.pullRequestsGenerateReviewGuide]: AuthOrchestrationOperateScope,
   [WS_METHODS.sourceControlCloneRepository]: AuthSourceControlWriteScope,
@@ -41,10 +40,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.gitRunStackedAction]: AuthSourceControlWriteScope,
   [WS_METHODS.gitPreparePullRequestThread]: AuthSourceControlWriteScope,
   [WS_METHODS.vcsCreateWorktree]: AuthSourceControlWriteScope,
-  [WS_METHODS.vcsMoveThread]: AuthSourceControlWriteScope,
   [WS_METHODS.vcsRemoveWorktree]: AuthSourceControlWriteScope,
-  [WS_METHODS.vcsRestoreWorktreeSnapshot]: AuthSourceControlWriteScope,
-  [WS_METHODS.vcsDeleteWorktreeSnapshot]: AuthSourceControlWriteScope,
   [WS_METHODS.vcsCreateRef]: AuthSourceControlWriteScope,
   [WS_METHODS.vcsSwitchRef]: AuthSourceControlWriteScope,
   [WS_METHODS.vcsInit]: AuthSourceControlWriteScope,
@@ -54,9 +50,16 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksDelete]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
+  [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
+  // A guest link hands thread access to someone outside, like a pairing link.
+  [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
+  // Fork additions stay last so upstream's list merges cleanly.
+  [WS_METHODS.issuesComment]: AuthSourceControlWriteScope,
+  [WS_METHODS.vcsMoveThread]: AuthSourceControlWriteScope,
+  [WS_METHODS.vcsRestoreWorktreeSnapshot]: AuthSourceControlWriteScope,
+  [WS_METHODS.vcsDeleteWorktreeSnapshot]: AuthSourceControlWriteScope,
   [WS_METHODS.followUpsStart]: AuthOrchestrationOperateScope,
   [WS_METHODS.followUpsSetDismissed]: AuthOrchestrationOperateScope,
-  [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
   [WS_METHODS.agentSessionsImportSession]: AuthOrchestrationOperateScope,
   [WS_METHODS.databaseSaveConnection]: AuthSettingsWriteScope,
   [WS_METHODS.databaseDeleteConnection]: AuthSettingsWriteScope,
@@ -70,8 +73,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.databaseFetchPage]: AuthTerminalOperateScope,
   [WS_METHODS.databaseCloseQuery]: AuthTerminalOperateScope,
   [WS_METHODS.databaseCancelQuery]: AuthTerminalOperateScope,
-  // A guest link hands thread access to someone outside, like a pairing link.
-  [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
