@@ -117,6 +117,17 @@ function withRequestId(expected: unknown, actual: unknown): unknown {
     : expected;
 }
 
+// Forks rename the client, so recordings match its title on shape, not value.
+function withAnyClientTitle(expected: unknown): unknown {
+  if (!isRecord(expected) || !isRecord(expected.params)) return expected;
+  const clientInfo = expected.params.clientInfo;
+  if (!isRecord(clientInfo)) return expected;
+  return {
+    ...expected,
+    params: { ...expected.params, clientInfo: { ...clientInfo, title: MUSE_REPLAY_ANY } },
+  };
+}
+
 /** A write may not match past one of these: it would be a turn early. */
 function startsTurn(entry: ProviderReplayEntryType): boolean {
   if (entry.type !== "expect_outbound" || !isRecord(entry.frame)) return false;
@@ -252,7 +263,7 @@ class MuseReplayController {
       possible =
         pending &&
         entryHost(entry) === host.ordinal &&
-        replayValueMatches(withRequestId(entry.frame, actual), actual);
+        replayValueMatches(withRequestId(withAnyClientTitle(entry.frame), actual), actual);
       if (!possible && pending && startsTurn(entry)) break;
     }
     if (!possible) {
@@ -310,7 +321,8 @@ class MuseReplayController {
       const entry = entries[index]!;
       if (entry.type !== "expect_outbound") return false;
       if (this.consumed.has(index) || entryHost(entry) !== host.ordinal) continue;
-      if (!replayValueMatches(withRequestId(entry.frame, actual), actual)) continue;
+      if (!replayValueMatches(withRequestId(withAnyClientTitle(entry.frame), actual), actual))
+        continue;
       const recordedId = clientRequestId(entry.frame);
       const actualId = clientRequestId(actual);
       if (recordedId !== undefined && actualId !== undefined) host.ids.set(recordedId, actualId);
