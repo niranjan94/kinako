@@ -39,6 +39,7 @@ import { buildCodexAdditionalContext } from "./CodexDeveloperInstructions.ts";
 import { DocumentText } from "./DocumentText.ts";
 import { ProviderRegistry } from "./ProviderRegistry.ts";
 import budget from "./agentContextBudget.json" with { type: "json" };
+import forkBudget from "./agentContextBudget.fork.json" with { type: "json" };
 
 // Registration only stores tool definitions, so the handlers' services are never called.
 const toolHandlerServices = Layer.mergeAll(
@@ -117,7 +118,11 @@ it.effect("agent context matches the committed budget", () =>
       ),
     };
 
-    expect(measured).toEqual(budget);
+    // Kinako's tools add to upstream's count in their own file, so upstream's merges cleanly.
+    expect(measured).toEqual({
+      ...budget,
+      mcpToolListJsonBytes: budget.mcpToolListJsonBytes + forkBudget.mcpToolListJsonBytes,
+    });
   }).pipe(
     Effect.provide(
       McpHttpServer.layerTools.pipe(
