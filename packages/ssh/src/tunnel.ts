@@ -34,6 +34,7 @@ import {
   resolveSshCommand,
   resolveSshTarget,
   runSshCommand,
+  sshTargetLogFields,
   targetConnectionKey,
 } from "./command.ts";
 import {
@@ -110,15 +111,6 @@ type SshEnvironmentEffectError =
   | SshReadinessError
   | SshPasswordPromptError
   | NetService.NetError;
-
-function sshTargetLogFields(target: DesktopSshEnvironmentTarget) {
-  return {
-    alias: target.alias,
-    hostname: target.hostname,
-    username: target.username,
-    port: target.port,
-  };
-}
 
 function isNodeScriptRunner(runner: RemoteT3RunnerOptions | undefined): boolean {
   return Boolean(runner?.nodeScriptPath?.trim());

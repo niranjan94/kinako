@@ -22,7 +22,6 @@ import { type ComponentProps, useRef, useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { serverEnvironment, updateOutdatedServer } from "~/state/server";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -54,9 +53,7 @@ export interface ServerUpdateTarget {
   readonly selfUpdate: ServerSelfUpdateCapability | null;
   readonly installation?: ServerInstallation | undefined;
   readonly desktopAppUpdate?: boolean;
-  readonly threadContinuation?: boolean;
   readonly targetVersion: string;
-  readonly continueThreadsAfterServerUpdate?: boolean;
 }
 
 type UpdateButtonProps = Pick<ComponentProps<typeof Button>, "variant" | "size" | "className"> & {
@@ -84,12 +81,7 @@ export function useServerUpdate() {
     pendingUpdateEnvironmentIds.add(environmentId);
     const result = await updateServer({
       environmentId,
-      input: {
-        targetVersion,
-        ...(target.threadContinuation && target.continueThreadsAfterServerUpdate
-          ? { continueRunningThreads: true }
-          : {}),
-      },
+      input: { targetVersion },
     });
     pendingUpdateEnvironmentIds.delete(environmentId);
     if (result._tag === "Failure") {
@@ -207,21 +199,16 @@ export function ServerUpdateAction({
   selfUpdate,
   installation,
   desktopAppUpdate = false,
-  threadContinuation = false,
   targetVersion,
   label = "Update",
   variant = "outline",
   size = "xs",
   className,
   appearance = "button",
-}: Omit<ServerUpdateTarget, "continueThreadsAfterServerUpdate"> & UpdateButtonProps) {
+}: ServerUpdateTarget & UpdateButtonProps) {
   const isDesktopAppUpdate = selfUpdate === "desktop-managed";
   const sessionStateAtom = environmentSession.sessionStateAtom(environmentId);
   const canUpdate = canUpdateServer(useAtomValue(sessionStateAtom));
-  const continueThreadsAfterServerUpdate = useEnvironmentSettings(
-    environmentId,
-    (settings) => settings.continueThreadsAfterServerUpdate,
-  );
   const update = useServerUpdate();
   // Installs without a known npm origin get the CLI's own `update` command.
   const copiesUpdate = installation === undefined || installation.kind === "npm-global";
@@ -267,9 +254,7 @@ export function ServerUpdateAction({
       serverLabel,
       selfUpdate,
       desktopAppUpdate,
-      threadContinuation,
       targetVersion,
-      continueThreadsAfterServerUpdate,
     });
   };
 

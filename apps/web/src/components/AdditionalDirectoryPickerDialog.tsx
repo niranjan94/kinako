@@ -10,7 +10,7 @@ import {
   getBrowseDirectoryPath,
   getBrowseLeafPathSegment,
   getBrowseParentPath,
-} from "../lib/projectPaths";
+} from "@t3tools/client-runtime/state/projects";
 import { getLocalFileManagerName, isWindowsPlatform, normalizeSearchText } from "../lib/utils";
 import { readLocalApi } from "../localApi";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";

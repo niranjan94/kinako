@@ -351,6 +351,10 @@ export function readEnvironmentSupportsPinReorder(environmentId: EnvironmentId):
   );
 }
 
+export function readEnvironmentServerConfigLoaded(environmentId: EnvironmentId): boolean {
+  return appAtomRegistry.get(environmentServerConfigsAtom).has(environmentId);
+}
+
 export function readEnvironmentSupportsAutoSettleOptOut(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities

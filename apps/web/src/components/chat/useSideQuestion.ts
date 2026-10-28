@@ -10,7 +10,8 @@ import {
 } from "@t3tools/client-runtime/state/thread-workflows";
 import type { OrchestrationV2ThreadProjection, ScopedThreadRef } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { threadContextRecord, threadContextReference } from "../../lib/composerContextRecords";
+import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
+import { threadContextReference } from "../../lib/composerContextRecords";
 import { ensureInlineContextReferences } from "../../lib/composerContextReferences";
 import { newMessageId, newThreadId } from "../../lib/utils";
 import { appAtomRegistry } from "../../rpc/atomRegistry";

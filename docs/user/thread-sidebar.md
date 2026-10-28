@@ -159,6 +159,16 @@ A group exists as long as it has threads, and threads with the same group name a
 
 Grouping only affects active threads. Pinned, working, snoozed, and settled threads stay in their own sections and return to their group when they become active again. With the Working section turned off, drag or use **Move up** and **Move down** to change the order within a group; while it is on, threads in a group follow the active list's order. On mobile, threads move between groups only through **Move to group**. Agents can group threads too. Groups need a current server in each environment.
 
+### Group threads by project (beta)
+
+Turn on **Settings → Labs → Boring sidebar (group by project)** on web and desktop to put active
+threads in a folder for each project. A project with no active threads has no folder until you
+pick it in the project filter. Click a folder to open or close it. A closed folder shows how
+many threads it holds, and a dot when one of them needs you. Use the pen button on a folder, or
+right-click it, to start a thread in that project. Pinned threads stay above the folders, and
+Snoozed and Settled stay below them. In this mode you cannot drag threads, and the Working section
+is off. Each device keeps its own choice.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list
@@ -230,8 +240,11 @@ palette.
 
 Use **Settings → Keybindings** to find or customize shortcuts for searching files
 and copying a thread reference. A copied reference uses the thread's pull request
-link when available, otherwise its thread ID. See [keybindings](./keybindings.md)
-for custom configuration.
+link when available, otherwise the thread itself, which pastes into a composer as
+a thread chip. To copy the thread even when it has a PR, choose **Copy → Thread**
+from its context menu, or **Copy thread** from its long-press menu on mobile.
+**Thread ID** copies the bare ID for scripts and the `t3` CLI. See
+[keybindings](./keybindings.md) for custom configuration.
 
 ## Inspect agent work
 
@@ -293,6 +306,12 @@ and office preferences are saved in the current browser or desktop app; use
 **Settings → Export Layout** and **Import Layout** to move a layout between devices.
 
 ## Snooze until later
+
+To change the choices in the snooze menu, open **Settings → Threads → Snooze options**.
+Each option is a duration, such as 3 hours, or a time on a day, such as 9:00 PM
+tomorrow. A weekday means the next one after today. Menus list the options soonest
+first and hide a today option after its time passes. Saved with **All environments**
+selected, the options apply to every connected environment, and the mobile app uses them too.
 
 Choose **Snooze → Custom…** from a thread's menu to pick a date and time in your
 local time zone, or a duration in minutes, hours, or days. Durations start when

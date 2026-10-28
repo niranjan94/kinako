@@ -96,13 +96,6 @@ export function supportsDesktopAppUpdate(
   return serverConfig?.environment.capabilities.desktopAppUpdate === true;
 }
 
-export function supportsServerUpdateThreadContinuation(
-  serverConfig: Pick<ServerConfig, "environment"> | null | undefined,
-): boolean {
-  return serverConfig?.environment.capabilities.serverUpdateThreadContinuation === true;
-}
-
-/** Installs without a known npm origin came from the install script, which updates itself. */
 export function manualServerUpdateCommand(
   targetVersion: string,
   installation?: ServerInstallation,

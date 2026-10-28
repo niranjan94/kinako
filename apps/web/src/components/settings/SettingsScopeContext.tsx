@@ -5,7 +5,6 @@ import {
 } from "@t3tools/contracts";
 import { PROJECT_FILE_NAMES, parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
 import { useAtomValue } from "@effect/atom-react";
-import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { createContext, type ReactNode, useContext } from "react";
 
@@ -37,7 +36,7 @@ const memberProjectFilesAtom = Atom.family((membersKey: string) => {
         }
         data =
           get(optimisticFileAtom(environmentId, workspaceRoot, fileName))?.data ??
-          Option.getOrNull(AsyncResult.value(result));
+          AsyncResult.getOrElse(result, () => null);
         if (data !== null) break;
       }
       if (!settled) continue;

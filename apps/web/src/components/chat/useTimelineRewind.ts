@@ -56,12 +56,9 @@ interface TimelineRewindInput {
   readonly timelineMessages: ReadonlyArray<ChatMessage>;
   readonly canOperateThread: boolean;
   readonly phase: SessionPhase;
-  readonly isConnecting: boolean;
   readonly isSendBusy: boolean;
   readonly isRevertingCheckpoint: boolean;
   readonly supportsConversationRollback: boolean;
-  /** Shown with rollback confirmations when checkpoints cannot restore every directory. */
-  readonly restoreNote: string | null;
   readonly activeEnvironmentUnavailable: boolean;
   readonly activeEnvironmentUnavailableLabel: string | null;
   readonly promptRef: { current: string };
@@ -72,7 +69,7 @@ interface TimelineRewindInput {
 
 /**
  * Going back in a thread's timeline: reverting to an earlier turn (restoring that message into
- * the composer), rolling back a provider checkpoint, and forking a new thread from a run.
+ * the composer) and forking a new thread from a run.
  */
 export function useTimelineRewind(input: TimelineRewindInput) {
   const {
@@ -85,11 +82,9 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     timelineMessages,
     canOperateThread,
     phase,
-    isConnecting,
     isSendBusy,
     isRevertingCheckpoint,
     supportsConversationRollback,
-    restoreNote,
     activeEnvironmentUnavailable,
     activeEnvironmentUnavailableLabel,
     promptRef,
@@ -166,7 +161,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     if (activeEnvironmentUnavailable && activeEnvironmentUnavailableLabel) {
       return `Reconnect ${activeEnvironmentUnavailableLabel} before ${action}.`;
     }
-    if (phase === "running" || isSendBusy || isConnecting) {
+    if (phase === "running" || isSendBusy) {
       return `Interrupt the current turn before ${action}.`;
     }
     return null;
@@ -352,61 +347,6 @@ export function useTimelineRewind(input: TimelineRewindInput) {
           activeProviderThreadId,
         })();
 
-  const onRollbackCheckpoint = async (input: {
-    readonly checkpointId: string;
-    readonly scopeId: string;
-  }) => {
-    if (!activeThread || isRevertingCheckpoint) return;
-    const blocker = conversationChangeBlocker("reverting checkpoints");
-    if (blocker !== null) {
-      setThreadError(activeThread.id, blocker);
-      return;
-    }
-    const localApi = readLocalApi();
-    const confirmed =
-      localApi == null
-        ? window.confirm(
-            ["Roll back this thread to the selected checkpoint?", restoreNote]
-              .filter(Boolean)
-              .join("\n"),
-          )
-        : await localApi.dialogs.confirm(
-            [
-              "Roll back this thread to the selected checkpoint?",
-              "This action cannot be undone.",
-              restoreNote,
-            ]
-              .filter(Boolean)
-              .join("\n"),
-          );
-    if (!confirmed) return;
-
-    useComposerDraftStore.setState((store) => ({
-      rewindingThreadKeys: new Set(store.rewindingThreadKeys).add(routeThreadKey),
-    }));
-    setThreadError(activeThread.id, null);
-    const result = await revertThreadCheckpoint({
-      environmentId,
-      input: {
-        threadId: activeThread.id,
-        checkpointId: input.checkpointId,
-        scopeId: input.scopeId,
-      },
-    });
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      const error = squashAtomCommandFailure(result);
-      setThreadError(
-        activeThread.id,
-        error instanceof Error ? error.message : "Failed to revert thread state.",
-      );
-    }
-    useComposerDraftStore.setState((store) => {
-      const remaining = new Set(store.rewindingThreadKeys);
-      remaining.delete(routeThreadKey);
-      return { rewindingThreadKeys: remaining };
-    });
-  };
-
   const onForkFromRun = async (input: {
     readonly sourceThreadId: ThreadId;
     readonly runId: RunId;
@@ -447,13 +387,6 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     });
   };
   const onForkFromRunStable = useStableCallback(onForkFromRun);
-  const onTimelineRollbackCheckpoint = (input: {
-    readonly checkpointId: string;
-    readonly scopeId: string;
-  }) => {
-    void onRollbackCheckpoint(input);
-  };
-  const onTimelineRollbackCheckpointStable = useStableCallback(onTimelineRollbackCheckpoint);
   const onRevertTimelineTurn = (targetTurnCount: number, messageId: MessageId) => {
     void onRevertToTurnCountStable(targetTurnCount, messageId);
   };
@@ -462,7 +395,6 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     onConfirmRevertStable,
     onForkFromRunStable,
     onRevertTimelineTurnStable,
-    onTimelineRollbackCheckpointStable,
     conversationSummaryControls,
     isSummarizing,
     pendingSummaryDirection: pendingSummary?.direction ?? null,

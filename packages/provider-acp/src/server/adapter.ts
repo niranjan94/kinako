@@ -310,8 +310,6 @@ export interface AcpAdapterV2Flavor {
   readonly approvalOptions?: (
     request: EffectAcpSchema.RequestPermissionRequest,
   ) => ReadonlyArray<ProviderApprovalOption>;
-  /** Prefer resume over load when both exist; Antigravity's load replays history slowly. */
-  readonly preferResumeSession?: boolean;
   readonly onSessionEvent?: (
     event: AcpSessionRuntime.AcpSessionRuntimeEvent,
   ) => Effect.Effect<void>;
@@ -445,12 +443,6 @@ export interface AcpAdapterV2Options {
   readonly testHooks?: {
     readonly onDeferredFinalizeScheduled?: (debounce: Duration.Input) => Effect.Effect<void>;
     readonly afterPromptSettledWithBackgroundWork?: () => Effect.Effect<void>;
-    readonly afterNativeResponseTransportClosed?: () => Effect.Effect<void>;
-    readonly afterHardTeardownTransportDrained?: () => Effect.Effect<void>;
-    readonly beforeNativeResponseAdmissionCheck?: (
-      generation: number,
-      requestId: string,
-    ) => Effect.Effect<void>;
     readonly onNativeResponseLifecycle?: (event: {
       readonly generation?: number;
       readonly requestId?: string;
@@ -848,7 +840,24 @@ export function acpToolCallDiffPatch(content: unknown): string | undefined {
   });
   for (const diff of diffs) {
     const patch = unknownRecord(diff.patch);
-    if (typeof patch?.text === "string") return patch.text;
+    if (typeof patch?.text === "string") {
+      const change =
+        Array.isArray(diff.changes) && diff.changes.length === 1
+          ? unknownRecord(diff.changes[0])
+          : undefined;
+      if (
+        patch.format === "git_patch" &&
+        patch.text.trimStart().startsWith("@@ ") &&
+        typeof change?.path === "string"
+      ) {
+        const oldPath = typeof change.oldPath === "string" ? change.oldPath : change.path;
+        const before = change.operation === "add" ? "/dev/null" : JSON.stringify(`a/${oldPath}`);
+        const after =
+          change.operation === "delete" ? "/dev/null" : JSON.stringify(`b/${change.path}`);
+        return `diff --git ${JSON.stringify(`a/${oldPath}`)} ${JSON.stringify(`b/${change.path}`)}\n--- ${before}\n+++ ${after}\n${patch.text.trimStart()}`;
+      }
+      return patch.text;
+    }
   }
   const v1Patches = diffs.flatMap((diff) => {
     if (typeof diff.path !== "string" || typeof diff.newText !== "string") return [];
@@ -1674,13 +1683,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             });
           });
         const acknowledgeNativeResponse = (generation: number, transportRequestId: string) =>
-          (
-            options.testHooks?.beforeNativeResponseAdmissionCheck?.(
-              generation,
-              transportRequestId,
-            ) ?? Effect.void
-          ).pipe(
-            Effect.andThen(runRuntimeCallbackAtGeneration(generation, Effect.void)),
+          runRuntimeCallbackAtGeneration(generation, Effect.void).pipe(
             Effect.flatMap((registered) =>
               Option.isSome(registered)
                 ? Effect.void
@@ -6159,9 +6162,6 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                 if (mcpApprovalDisposition.value === "allow") {
                   return { action: "accept", content: {} } as const;
                 }
-                if (mcpApprovalDisposition.value === "deny") {
-                  return { action: "decline" } as const;
-                }
               }
               if (
                 params.mode === "url" &&
@@ -7746,7 +7746,6 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               { discard: true },
             );
             const transportHadOutstandingResponses = yield* closeNativeTransport;
-            yield* options.testHooks?.afterNativeResponseTransportClosed?.() ?? Effect.void;
             const sessionCapabilities =
               started.initializeResult.agentCapabilities?.sessionCapabilities;
             if (sessionCapabilities?.close != null) {
@@ -8158,10 +8157,6 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                               completed: teardownBarrier,
                             });
                             yield* advanceRuntimeCallbackGeneration;
-                            yield* (
-                              options.testHooks?.afterHardTeardownTransportDrained?.() ??
-                                Effect.void
-                            );
                           }),
                         );
                       }
@@ -8558,8 +8553,3 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
     ),
   });
 });
-
-export type AcpAdapterV2Env =
-  | FileSystem.FileSystem
-  | IdAllocator.IdAllocatorV2
-  | McpProviderSessions.McpProviderSessions;

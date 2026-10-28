@@ -1,3 +1,4 @@
+import { pipe } from "effect/Function";
 import * as DocumentText from "../../provider/DocumentText.ts";
 import { revertCodexThread } from "../../provider/CodexThreadRevert.ts";
 import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudget";
@@ -72,7 +73,6 @@ import type {
   ProviderTurnId,
   ProviderInstanceId,
   RuntimeMode,
-  RuntimeRequestId,
   ThreadId,
 } from "@t3tools/contracts";
 import * as CodexClient from "effect-codex-app-server/client";
@@ -129,7 +129,6 @@ import {
 import { snapshotMcpApp } from "../../mcpApps/McpAppSnapshot.ts";
 import {
   ProviderAdapterDriverCreateError,
-  type ProviderAdapterDriver,
   type ProviderAdapterDriverCreateInput,
 } from "@t3tools/provider-core/server/adapterDriver";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
@@ -207,7 +206,6 @@ export function codexProviderTurnTokenUsage(
     updatedAt,
   };
 }
-const DEFAULT_CODEX_SETTINGS = Schema.decodeSync(CodexSettings)({});
 const CODEX_ASSISTANT_DELTA_FLUSH_INTERVAL_MS = 50;
 // Plan flushes store three copies; use the client's assistant-text cadence.
 const CODEX_PLAN_DELTA_FLUSH_INTERVAL_MS = 400;
@@ -338,10 +336,6 @@ function toProtocolError(
     detail,
     ...(payload === undefined ? {} : { payload }),
   });
-}
-
-function normalizeCodexCause(error: unknown): unknown {
-  return error;
 }
 
 function codexTimestamp(seconds: number | null | undefined): DateTime.Utc {
@@ -1149,7 +1143,6 @@ interface ActiveCodexTurnContext {
   readonly providerTurnId: ProviderTurnId;
   readonly providerTurnOrdinal: number;
   readonly providerNodeId: OrchestrationV2ExecutionNode["id"];
-  readonly providerNodeKind: OrchestrationV2ExecutionNode["kind"];
   readonly providerNodeStartedAt: DateTime.Utc | null;
   readonly itemParentNodeId: OrchestrationV2ExecutionNode["id"];
   readonly rootNodeId: OrchestrationV2ExecutionNode["id"];
@@ -1237,8 +1230,6 @@ interface CodexSubagentThreadContext {
   readonly subagentNodeId: OrchestrationV2ExecutionNode["id"];
   readonly childRootNodeId: OrchestrationV2ExecutionNode["id"];
   readonly childThreadId: ThreadId;
-  readonly nativeToolCallId: string;
-  readonly ordinal: number;
   readonly nativeTurnIds: Set<string>;
   startedAt: DateTime.Utc;
   readonly turnItemId: OrchestrationV2TurnItem["id"];
@@ -1283,13 +1274,11 @@ interface PendingCodexSubagentTurnStarted {
 type PendingCodexRuntimeRequest =
   | {
       readonly type: "approval";
-      readonly requestId: RuntimeRequestId;
       readonly requestKind: ProviderRequestKind;
       readonly decision: Deferred.Deferred<ProviderApprovalDecision, never>;
     }
   | {
       readonly type: "user_input";
-      readonly requestId: RuntimeRequestId;
       readonly answers: Deferred.Deferred<ProviderUserInputAnswers, never>;
     };
 
@@ -1480,8 +1469,11 @@ function redactCodexProtocolValue(value: unknown): unknown {
       return value;
     }
     try {
-      return JSON.stringify(
-        redactCodexProtocolValue(boundProviderEventForLogging(JSON.parse(trimmed) as unknown)),
+      return pipe(
+        JSON.parse(trimmed) as unknown,
+        boundProviderEventForLogging,
+        redactCodexProtocolValue,
+        JSON.stringify,
       );
     } catch {
       return value;
@@ -1619,13 +1611,6 @@ export const createCodexAdapterV2 = Effect.fn("CodexAdapterV2.createCodexAdapter
     ...hooks,
   });
 });
-
-export const CodexAdapterV2Driver: ProviderAdapterDriver<CodexSettings, CodexAdapterV2DriverEnv> = {
-  driverKind: CODEX_DRIVER_KIND,
-  configSchema: CodexSettings,
-  defaultConfig: (): CodexSettings => DEFAULT_CODEX_SETTINGS,
-  create: createCodexAdapterV2,
-};
 
 export interface CodexAdapterV2Options {
   readonly instanceId: ProviderInstanceId;
@@ -1989,7 +1974,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             providerTurnId,
             providerTurnOrdinal: input.turnInput.providerTurnOrdinal,
             providerNodeId: input.turnInput.rootNodeId,
-            providerNodeKind: "root_turn",
             providerNodeStartedAt: input.startedAt,
             itemParentNodeId: input.turnInput.rootNodeId,
             rootNodeId: input.turnInput.rootNodeId,
@@ -2589,7 +2573,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               providerTurnId,
               providerTurnOrdinal,
               providerNodeId,
-              providerNodeKind: "root_turn",
               providerNodeStartedAt: turn.startedAt,
               itemParentNodeId: providerNodeId,
               rootNodeId: providerNodeId,
@@ -2861,8 +2844,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               subagentNodeId,
               childRootNodeId,
               childThreadId,
-              nativeToolCallId: input.nativeToolCallId,
-              ordinal: input.ordinal,
               nativeTurnIds: new Set<string>(),
               startedAt: now,
               turnItemId: idAllocator.derive.turnItemFromProviderItem({
@@ -4347,7 +4328,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
 
         yield* client.handleServerNotification("account/rateLimits/updated", (payload) =>
           Effect.gen(function* () {
-            yield* Ref.update(rateLimitSnapshot, (previous) =>
+            const previous = yield* Ref.getAndUpdate(rateLimitSnapshot, (previous) =>
               mergeCodexRateLimits(previous, payload.rateLimits),
             );
             const resetAt = codexUsageLimitResetAt(yield* Ref.get(rateLimitSnapshot));
@@ -4367,7 +4348,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 turnItem: updated,
               });
             }
-            const update = codexRateLimitsToUpdate(payload.rateLimits);
+            const update = codexRateLimitsToUpdate(payload.rateLimits, previous);
             if (update && adapterOptions.onUsageLimits) {
               const checkedAt = DateTime.formatIso(yield* DateTime.now);
               yield* adapterOptions.onUsageLimits({ ...update, checkedAt });
@@ -5145,7 +5126,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "approval",
-                requestId: artifacts.request.id,
                 requestKind: "command",
                 decision,
               });
@@ -5218,7 +5198,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "approval",
-                requestId: artifacts.request.id,
                 requestKind: "file-change",
                 decision,
               });
@@ -5282,7 +5261,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "approval",
-                requestId: artifacts.request.id,
                 requestKind,
                 decision,
               });
@@ -5365,7 +5343,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "approval",
-                requestId: artifacts.request.id,
                 requestKind: "mcp-elicitation",
                 decision,
               });
@@ -5430,7 +5407,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "approval",
-                requestId: artifacts.request.id,
                 requestKind: "command",
                 decision,
               });
@@ -5499,7 +5475,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "approval",
-                requestId: artifacts.request.id,
                 requestKind: "file-change",
                 decision,
               });
@@ -5561,7 +5536,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               const updated = new Map(current);
               updated.set(String(artifacts.request.id), {
                 type: "user_input",
-                requestId: artifacts.request.id,
                 answers,
               });
               return updated;
@@ -6373,7 +6347,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             }),
             providerTurnOrdinal: turnInput.providerTurnOrdinal,
             providerNodeId: turnInput.rootNodeId,
-            providerNodeKind: "root_turn",
             providerNodeStartedAt: now,
             itemParentNodeId: turnInput.rootNodeId,
             rootNodeId: turnInput.rootNodeId,
@@ -6842,14 +6815,13 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   new ProviderAdapter.ProviderAdapterEnsureThreadError({
                     driver: CODEX_PROVIDER,
                     threadId: threadInput.threadId,
-                    cause: normalizeCodexCause(cause),
+                    cause,
                   }),
               ),
             ),
           resumeThread: Effect.fn("CodexAdapterV2.resumeThread")(
             function* (threadInput) {
               const nativeThreadId = yield* getNativeThreadId(threadInput.providerThread);
-              // excludeTurns is not in the generated request schema yet.
               const resume = client.raw.request("thread/resume", {
                 threadId: nativeThreadId,
                 excludeTurns: true,
@@ -6908,7 +6880,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                       driver: CODEX_PROVIDER,
                       providerSessionId: input.providerSessionId,
                       providerThreadId: threadInput.providerThread.id,
-                      cause: normalizeCodexCause(cause),
+                      cause,
                     }),
                 ),
               ),
@@ -7057,7 +7029,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     : new ProviderAdapter.ProviderAdapterProtocolError({
                         driver: CODEX_PROVIDER,
                         detail: `Failed to unload Codex thread for provider thread ${unloadInput.providerThread.id}`,
-                        cause: normalizeCodexCause(cause),
+                        cause,
                       }),
                 ),
               ),
@@ -7675,7 +7647,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     new ProviderAdapter.ProviderAdapterRollbackThreadError({
                       driver: CODEX_PROVIDER,
                       providerThreadId: threadInput.providerThread.id,
-                      cause: normalizeCodexCause(cause),
+                      cause,
                     }),
                 ),
               ),
@@ -7707,7 +7679,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     new ProviderAdapter.ProviderAdapterForkThreadError({
                       driver: CODEX_PROVIDER,
                       providerThreadId: threadInput.sourceProviderThread.id,
-                      cause: normalizeCodexCause(cause),
+                      cause,
                     }),
                 ),
               );
@@ -7732,7 +7704,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                       new ProviderAdapter.ProviderAdapterForkThreadError({
                         driver: CODEX_PROVIDER,
                         providerThreadId: threadInput.sourceProviderThread.id,
-                        cause: normalizeCodexCause(cause),
+                        cause,
                       }),
                   ),
                 )).thread;
@@ -7759,7 +7731,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     new ProviderAdapter.ProviderAdapterForkThreadError({
                       driver: CODEX_PROVIDER,
                       providerThreadId: threadInput.sourceProviderThread.id,
-                      cause: normalizeCodexCause(cause),
+                      cause,
                     }),
                 ),
               ),

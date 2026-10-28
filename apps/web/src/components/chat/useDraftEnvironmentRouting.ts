@@ -16,7 +16,7 @@ import { openCommandPalette } from "../../commandPaletteBus";
 import {
   deriveLogicalProjectKeyFromSettings,
   selectProjectGroupingSettings,
-} from "../../logicalProject";
+} from "@t3tools/client-runtime/state/project-grouping";
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
 import { type EnvironmentPresentation, useEnvironmentProviders } from "../../state/environments";
 import { useProjects } from "../../state/entities";

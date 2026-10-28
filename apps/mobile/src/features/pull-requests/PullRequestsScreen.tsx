@@ -135,13 +135,10 @@ export function PullRequestsScreen(
         animated: false,
       });
   }, [tab.searchMode, tab.scrollOffset, insets.top]);
-  const maintainVisiblePosition = useMemo(
-    () => ({
-      data: tab.searchMode === "resting",
-      shouldRestorePosition: () => workspace.getScrollOffset("pullRequests") > 0,
-    }),
-    [tab.searchMode, workspace],
-  );
+  const maintainVisiblePosition = {
+    data: tab.searchMode === "resting",
+    shouldRestorePosition: () => workspace.getScrollOffset("pullRequests") > 0,
+  };
   const debouncedQuery = useDebouncedValue(tab.query.trim(), 180);
   const query = tab.searchMode === "resting" ? "" : debouncedQuery;
   const typedQuery = tab.searchMode === "resting" ? "" : tab.query;
@@ -152,21 +149,18 @@ export function PullRequestsScreen(
     ? selectedEnvironmentId
     : null;
   const selectDetail = useSelectWorkspaceDetail();
-  const selectPullRequest = useCallback(
-    (item: EnvironmentPullRequestListEntry) => {
-      Keyboard.dismiss();
-      const params = {
-        environmentId: String(item.environmentId),
-        projectId: String(item.projectId),
-        repository: item.repository,
-        number: item.number,
-        host: item.host,
-        initialSummary: item,
-      };
-      selectDetail({ name: "PullRequest", params });
-    },
-    [selectDetail],
-  );
+  const selectPullRequest = (item: EnvironmentPullRequestListEntry) => {
+    Keyboard.dismiss();
+    const params = {
+      environmentId: String(item.environmentId),
+      projectId: String(item.projectId),
+      repository: item.repository,
+      number: item.number,
+      host: item.host,
+      initialSummary: item,
+    };
+    selectDetail({ name: "PullRequest", params });
+  };
   const allProjects = useProjects();
   const savedControls = listControls.controlsFor(environmentId);
   const controls = useMemo(
@@ -178,8 +172,7 @@ export function PullRequestsScreen(
       environments
         .filter(
           (environment) =>
-            configs.get(environment.environmentId)?.environment.capabilities.pullRequests ===
-              true &&
+            configs.get(environment.environmentId) !== undefined &&
             (environmentId === null || environment.environmentId === environmentId) &&
             (!controls.projectEnvironmentId ||
               environment.environmentId === controls.projectEnvironmentId),

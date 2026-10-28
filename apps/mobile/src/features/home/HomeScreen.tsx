@@ -442,6 +442,7 @@ export function HomeScreen(props: HomeScreenProps) {
     machineByEnvironmentId,
     settlementEnvironmentIds,
     snoozeEnvironmentIds,
+    snoozePresetsByEnvironmentId,
     pinningEnvironmentIds,
     autoSettleOptOutEnvironmentIds,
     pinReorderEnvironmentIds,
@@ -629,6 +630,7 @@ export function HomeScreen(props: HomeScreenProps) {
         settlementSupported={settlementEnvironmentIds.has(thread.environmentId)}
         onSettleThread={handleSettleThread}
         snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
+        snoozePresets={snoozePresetsByEnvironmentId.get(thread.environmentId)}
         pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
         groupingSupported={groupingEnvironmentIds.has(thread.environmentId)}
         onSetThreadGroup={handleSetThreadGroup}
