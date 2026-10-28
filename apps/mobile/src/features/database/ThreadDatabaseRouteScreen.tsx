@@ -102,6 +102,7 @@ function DatabaseScreen({
     offset: number;
     after: readonly (string | number | boolean | null)[] | null;
   } | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- lists saved database connections from the server while connected
   useEffect(() => {
     if (!allowed || status !== "connected") return;
     const key = `${environmentId}:${projectId}:${revision}`;
@@ -118,6 +119,7 @@ function DatabaseScreen({
         }
       });
   }, [allowed, environmentId, projectId, registry, revision, status]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- releases this screen's server-side database session and query on unmount
   useEffect(() => {
     mounted.current = true;
     return () => {

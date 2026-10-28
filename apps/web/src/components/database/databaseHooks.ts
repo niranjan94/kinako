@@ -33,6 +33,7 @@ export function useDatabaseConnections(environmentId: EnvironmentId, projectId?:
   const phase = environment?.connection.phase;
   const loadKey = JSON.stringify([environmentId, projectId, revision, phase]);
   const [settled, setSettled] = useState<{ key: string; error: string | null } | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- lists saved database connections from the server while connected
   useEffect(() => {
     if (!allowed || phase !== "connected") return;
     let active = true;

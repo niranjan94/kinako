@@ -121,6 +121,7 @@ function TableView({
   const reload = useEffectEvent((id: string) => void loadTable(id));
   const unloaded =
     allowed && connected && !tab.result && !tab.loading && !tab.error ? tab.id : null;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- loads a connected table tab that has no result yet from the database server
   useEffect(() => {
     if (unloaded) reload(unloaded);
   }, [unloaded]);

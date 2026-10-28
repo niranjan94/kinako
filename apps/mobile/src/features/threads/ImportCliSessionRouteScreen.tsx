@@ -144,6 +144,7 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
   } | null>(null);
   const [importingKey, setImportingKey] = useState<string | null>(null);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- lists the project's terminal agent sessions from the server
   useEffect(() => {
     if (!supported) return;
     let active = true;

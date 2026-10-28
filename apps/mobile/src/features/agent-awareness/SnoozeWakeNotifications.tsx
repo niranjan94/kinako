@@ -21,6 +21,7 @@ function EnvironmentSnoozeWakeNotifications({ environmentId }: { environmentId: 
   const threads =
     shell.status === "live" && Option.isSome(shell.snapshot) ? shell.snapshot.value.threads : null;
   const previous = useRef(new Map<ThreadId, OrchestrationV2ThreadShell>());
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- posts a local notification when the server reports a new snooze wake
   useEffect(() => {
     if (threads === null) {
       previous.current.clear();

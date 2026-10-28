@@ -57,6 +57,7 @@ export default function DatabasePanel({
   const revealDrawer = () => {
     if (sheet) useRightPanelStore.getState().close(threadRef);
   };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- persists the database workspace atom to storage as it changes
   useEffect(() => {
     persistDatabaseWorkspace(key, registry.get(workspaceAtom));
     return registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(key, next));
@@ -81,9 +82,11 @@ export default function DatabasePanel({
     if (selected) newQuery(selected);
   });
   const readyForQuery = selected !== undefined;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- runs a query intent another surface queued once a connection is selected
   useEffect(() => {
     if (intent === "query" && readyForQuery) handleQueryIntent();
   }, [intent, readyForQuery]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- focuses the table search input when a table intent arrives
   useEffect(() => {
     if (intent === "table") findTable.current?.focus();
   }, [intent]);

@@ -26,6 +26,7 @@ export function requestThreadWorkspaceMove(threadRef: ScopedThreadRef): void {
 
 export function ThreadWorkspaceMoveDialog() {
   const [threadRef, setThreadRef] = useState<ScopedThreadRef | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- listens for the window event that opens the move dialog
   useEffect(() => {
     const open = (event: Event) => setThreadRef((event as CustomEvent<ScopedThreadRef>).detail);
     window.addEventListener(OPEN_EVENT, open);

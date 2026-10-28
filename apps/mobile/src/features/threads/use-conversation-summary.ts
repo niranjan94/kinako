@@ -73,6 +73,7 @@ export function useConversationSummary(input: {
   });
   const [pending, setPending] = useState<ConversationSummaryRequest | null>(null);
   const projectionRef = useRef(projection);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the latest projection in a ref for the async summary callbacks
   useEffect(() => {
     projectionRef.current = projection;
   }, [projection]);
@@ -104,6 +105,7 @@ export function useConversationSummary(input: {
   const summarizing =
     projection?.thread.summarize != null && projection.thread.summarize.failure === undefined;
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- shows the summary outcome and restores the draft once the server reports it
   useEffect(() => {
     if (pending === null || projection === null) return;
     const outcome = conversationSummaryOutcome(projection, pending);

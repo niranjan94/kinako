@@ -113,6 +113,7 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
     };
   };
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- loads the importable agent sessions from the server when the dialog opens
   useEffect(() => {
     let cancelled = false;
     void fetchSessions().then((next) => {

@@ -117,6 +117,7 @@ function OfficeFrameSession({
     }
   });
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- connects to the pixel office iframe over postMessage while mounted
   useEffect(() => {
     const controller = new AbortController();
     let started = false;
@@ -160,6 +161,7 @@ function OfficeFrameSession({
     };
   }, []);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pushes agent and seat changes into the pixel office iframe
   useEffect(() => {
     if (state === "ready") bridge.current?.sync(agents, saved.seats);
   }, [agents, state, saved.seats]);

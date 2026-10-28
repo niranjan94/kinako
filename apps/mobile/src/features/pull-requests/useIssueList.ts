@@ -65,6 +65,7 @@ export function useIssueList(targets: readonly IssueListTarget[]) {
     error: null as string | null,
   });
   const state = loading.key === scopeKey ? loading : { page: false, refresh: false, error: null };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tracks the active scope and aborts its in-flight issue requests when it changes
   useLayoutEffect(() => {
     activeScope.current = scopeKey;
     return () => {
@@ -73,6 +74,7 @@ export function useIssueList(targets: readonly IssueListTarget[]) {
       requests.current = {};
     };
   }, [scopeKey, activeScope]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- seeds the shared issue page atoms from the loaded sources
   useEffect(() => {
     for (const { target, pages } of sources)
       if (pages) registry.set(pagesFamily(JSON.stringify(target)), pages);

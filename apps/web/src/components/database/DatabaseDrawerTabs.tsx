@@ -64,6 +64,7 @@ export function DatabaseDrawerTabs({
   const workspaceAtom = databaseState.workspaces(threadKey);
   const workspace = useAtomValue(workspaceAtom);
   const shownId = shownDatabaseTabId(workspace);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- persists the database workspace atom to storage as it changes
   useEffect(
     () => registry.subscribe(workspaceAtom, (next) => persistDatabaseWorkspace(threadKey, next)),
     [registry, threadKey, workspaceAtom],

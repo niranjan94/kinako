@@ -1154,6 +1154,11 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverRunStorageCleanup,
       concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
     }),
+    prepareTriage: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:prepare-triage",
+      tag: WS_METHODS.serverPrepareTriage,
+      concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
+    }),
     databaseStorage,
     databaseCompactionRecommendations,
     storageCleanupReport: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
@@ -1595,6 +1600,16 @@ export function createServerEnvironmentAtoms<R, E>(
     setFollowUpDismissed: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:follow-ups:set-dismissed",
       tag: WS_METHODS.followUpsSetDismissed,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) =>
+          JSON.stringify([environmentId, input.threadId, input.turnItemId]),
+      },
+    }),
+    // Like a secret card's answer: off the config lane, one per card at a time.
+    answerLinkRequest: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:peer-links:answer-request",
+      tag: WS_METHODS.peerLinksAnswerRequest,
       concurrency: {
         mode: "singleFlight",
         key: ({ environmentId, input }) =>

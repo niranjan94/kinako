@@ -173,6 +173,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   const storeRevealTerminalDrawer = useTerminalUiStateStore((state) => state.revealTerminalDrawer);
   const reconcileTerminalIds = useTerminalUiStateStore((state) => state.reconcileTerminalIds);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reconciles the terminal UI store's ids with the server's terminal list when they diverge
   useEffect(() => {
     if (terminalIdListsEqual(serverOrderedTerminalIds, terminalUiState.terminalIds)) {
       return;

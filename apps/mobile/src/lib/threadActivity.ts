@@ -415,6 +415,12 @@ export function isFollowUpActivityGroup(entry: ThreadFeedActivityGroup): boolean
   );
 }
 
+export function isLinkRequestActivityGroup(entry: ThreadFeedActivityGroup): boolean {
+  return (
+    entry.activities.length === 1 && entry.activities[0]?.projectedItem.item.type === "link_request"
+  );
+}
+
 function isUserInputActivityGroup(entry: ThreadFeedActivityGroup): boolean {
   return entry.activities.some((activity) => activity.workEntry.questionAnswer !== undefined);
 }
@@ -524,7 +530,8 @@ function itemIsProminent(item: OrchestrationV2TurnItem): boolean {
     item.type === "system_notice" ||
     item.type === "proposed_plan" ||
     item.type === "secret_request" ||
-    item.type === "follow_up"
+    item.type === "follow_up" ||
+    item.type === "link_request"
   );
 }
 
@@ -647,6 +654,8 @@ function itemIcon(item: OrchestrationV2TurnItem): ThreadFeedActivity["icon"] {
       return "zap";
     case "secret_request":
       return "lock";
+    case "link_request":
+      return "globe";
   }
 }
 
@@ -707,6 +716,8 @@ function itemSummary(
     case "secret_request":
     case "follow_up":
       return item.label;
+    case "link_request":
+      return `Link ${item.label ?? item.url ?? "an environment"}`;
     case "dynamic_tool": {
       const classified = classifyToolActivity({
         itemType: "dynamic_tool_call",
@@ -765,6 +776,7 @@ function itemPreview(item: OrchestrationV2TurnItem): string | null {
     case "thread_created":
       return item.targetThreadId;
     case "secret_request":
+    case "link_request":
       return item.reason || null;
     case "follow_up":
       return item.prompt;

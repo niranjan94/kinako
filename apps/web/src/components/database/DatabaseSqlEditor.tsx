@@ -106,6 +106,7 @@ export function DatabaseSqlEditor({
       if (editor.current) runSelection(editor.current);
     },
   }));
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- mounts the CodeMirror view and destroys it on unmount
   useEffect(() => {
     if (!parent.current) return;
     const view = new EditorView({
@@ -221,6 +222,7 @@ export function DatabaseSqlEditor({
       editor.current = null;
     };
   }, [engine]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reconfigures the CodeMirror SQL dialect when the engine changes
   useEffect(() => {
     editor.current?.dispatch({
       effects: language.current.reconfigure(
@@ -231,9 +233,11 @@ export function DatabaseSqlEditor({
       ),
     });
   }, [engine]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pushes new completions into the CodeMirror view
   useEffect(() => {
     editor.current?.dispatch({ effects: suggestions.current.reconfigure(completion) });
   }, [completion]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- marks the server-reported error position in the CodeMirror view
   useEffect(() => {
     const view = editor.current;
     if (!view) return;
@@ -253,6 +257,7 @@ export function DatabaseSqlEditor({
       ],
     });
   }, [errorAt]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- replaces the CodeMirror document when the controlled value changes
   useEffect(() => {
     const view = editor.current;
     if (view && view.state.doc.toString() !== value)

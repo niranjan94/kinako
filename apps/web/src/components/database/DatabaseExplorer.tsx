@@ -78,6 +78,7 @@ function DatabaseNode({
     expanded ||
     (!!filter &&
       (kind === "objects" || ((kind === "schemas" || kind === "databases") && metadata !== null)));
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- introspects the database on the server when a node opens without metadata
   useEffect(() => {
     if (!open || metadata) return;
     let active = true;
@@ -318,6 +319,7 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
   const canEdit = useAtomValue(databaseState.saveConnection.permissionAtom(environmentId));
   const tree = useRef<HTMLDivElement>(null);
   // Roving tabindex: the tree is one tab stop, landing on the last focused row.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps one tree row in the DOM tab order after each render
   useEffect(() => {
     const rows = tree.current?.querySelectorAll<HTMLElement>("[data-database-tree-row]");
     if (rows?.length && ![...rows].some((row) => row.tabIndex === 0)) rows[0]!.tabIndex = 0;

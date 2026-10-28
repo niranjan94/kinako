@@ -72,6 +72,7 @@ export const DatabaseGrid = memo(function DatabaseGrid({
   const [viewer, setViewer] = useState<{ name: string; value: DatabaseCell } | null>(null);
   const dragging = useRef(false);
   const extending = useRef(false);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- ends a drag selection on a pointerup anywhere in the window
   useEffect(() => {
     const stop = () => {
       dragging.current = false;

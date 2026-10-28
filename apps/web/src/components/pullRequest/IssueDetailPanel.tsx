@@ -153,6 +153,7 @@ export function IssueDetailPanel({
     });
   };
   const appliedRefreshToken = useRef(refreshToken);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- refetches the issue from its host when the parent bumps refreshToken
   useEffect(() => {
     if (appliedRefreshToken.current === refreshToken) return;
     appliedRefreshToken.current = refreshToken;

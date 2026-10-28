@@ -41,6 +41,7 @@ function finish(name: string | null) {
 
 export function ThreadGroupDialogHost() {
   const request = useRequest((state) => state.request);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- settles a pending group request when the host unmounts
   useEffect(() => () => finish(null), []);
   return request ? <ThreadGroupDialog initialName={request.initialName} /> : null;
 }

@@ -60,6 +60,12 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("keeps triage, which seeds an agent that reads logs and the database, behind operate scope", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.serverPrepareTriage)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+
   it("reads issues like pull requests and writes their comments under source control", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.issuesList)).toBe(
       requiredScopeForRpcMethod(WS_METHODS.pullRequestsList),
@@ -98,6 +104,7 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.terminalClear,
       WS_METHODS.terminalRestart,
       WS_METHODS.terminalClose,
+      WS_METHODS.previewStopLocalServer,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTerminalOperateScope);
     }

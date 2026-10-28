@@ -58,7 +58,9 @@ describe("fork migration ledger", () => {
   it.effect("splits a fork-era shared ledger without rerunning any migration", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations();
+      // The fork-era shared ledger ended at upstream's ThreadMessageSearch (69).
+      yield* runMigrations({ toMigrationInclusive: 69 });
+      yield* runForkMigrations();
       yield* sql`DROP TABLE ${sql(FORK_MIGRATIONS_TABLE)}`;
       for (const [from, to] of [
         [69, 72],
@@ -78,7 +80,7 @@ describe("fork migration ledger", () => {
           (67, 'SnoozeWakeIndex')
       `;
 
-      assert.deepStrictEqual(yield* runMigrations(), []);
+      assert.deepStrictEqual(yield* runMigrations(), upstreamAfter(69));
       assert.deepStrictEqual(yield* ledgers, {
         upstream: migrationManifest,
         fork: forkMigrationManifest,

@@ -177,6 +177,7 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
   const ensureProjectRef = useRef<ReturnType<typeof createAgentSessionProjectEnsurer> | null>(null);
   const maxAgeInput = maxAgeInputFor(ageWindow);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scans the server for terminal agent sessions in the chosen age window
   useEffect(() => {
     if (!supported) return;
     let active = true;
