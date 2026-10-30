@@ -127,7 +127,10 @@ it.effect("agent context matches the committed budget", () =>
     };
 
     // Kinako's tools add to upstream's count in their own file, so upstream's merges cleanly.
-    expect(measured).toEqual({
+    expect(
+      measured,
+      "Set agentContextBudget.json to the measured values. Before you cut text to fit, run the evals that cover it (evals/README.md).",
+    ).toEqual({
       ...budget,
       mcpToolListJsonBytes: budget.mcpToolListJsonBytes + forkBudget.mcpToolListJsonBytes,
     });

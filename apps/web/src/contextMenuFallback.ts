@@ -124,6 +124,16 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "line", attrs: { x1: "19", x2: "19", y1: "8", y2: "14" } },
     { tag: "line", attrs: { x1: "22", x2: "16", y1: "11", y2: "11" } },
   ],
+  "folder-plus": [
+    { tag: "path", attrs: { d: "M12 10v6" } },
+    { tag: "path", attrs: { d: "M9 13h6" } },
+    {
+      tag: "path",
+      attrs: {
+        d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+      },
+    },
+  ],
   "folder-tree": [
     {
       tag: "path",
@@ -144,6 +154,13 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "path", attrs: { d: "m7 11 2-2-2-2" } },
     { tag: "path", attrs: { d: "M11 13h4" } },
     { tag: "rect", attrs: { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2" } },
+  ],
+  "text-search": [
+    { tag: "path", attrs: { d: "M21 5H3" } },
+    { tag: "path", attrs: { d: "M10 12H3" } },
+    { tag: "path", attrs: { d: "M10 19H3" } },
+    { tag: "circle", attrs: { cx: "17", cy: "15", r: "3" } },
+    { tag: "path", attrs: { d: "m21 19-1.9-1.9" } },
   ],
   trash: [
     { tag: "path", attrs: { d: "M3 6h18" } },

@@ -72,8 +72,8 @@ export class NpmLauncherCommandFailedError extends Schema.TaggedError<NpmLaunche
   }
 }
 
-/** engines requires import.meta.dirname and fetch. */
-export function npmLauncherPackageManifest(version: string) {
+/** engines requires import.meta.dirname and fetch. `t3code` is read back by npmReleaseDatabaseMigration. */
+export function npmLauncherPackageManifest(version: string, databaseMigration: number) {
   return {
     name: NPM_LAUNCHER_PACKAGE_NAME,
     version,
@@ -84,8 +84,23 @@ export function npmLauncherPackageManifest(version: string) {
     bin: { [FORK_CLI_NAME]: `./bin/${FORK_CLI_NAME}.mjs` },
     files: ["bin", "dist"],
     engines: { node: ">=20.11" },
+    t3code: { databaseMigration },
   };
 }
+
+/** Highest server migration id, from the `NNN_Name.ts` files the server registers. */
+const latestServerMigrationId = Effect.fn("latestServerMigrationId")(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = yield* path.fromFileUrl(
+    new URL("../apps/server/src/persistence/Migrations/", import.meta.url),
+  );
+  const ids = (yield* fs.readDirectory(dir)).flatMap((name) => {
+    const id = /^(\d+)_\w+\.ts$/.exec(name)?.[1];
+    return id === undefined ? [] : [Number(id)];
+  });
+  return Math.max(0, ...ids);
+});
 
 export const buildNpmLauncher = Effect.fn("buildNpmLauncher")(function* (input: {
   readonly version: string;
@@ -106,7 +121,9 @@ export const buildNpmLauncher = Effect.fn("buildNpmLauncher")(function* (input: 
   yield* fs.makeDirectory(path.join(stageDir, "dist"));
   yield* fs.writeFileString(
     path.join(stageDir, "package.json"),
-    `${yield* encodePackageJson(npmLauncherPackageManifest(input.version))}\n`,
+    `${yield* encodePackageJson(
+      npmLauncherPackageManifest(input.version, yield* latestServerMigrationId()),
+    )}\n`,
   );
   yield* fs.writeFileString(
     path.join(stageDir, `bin/${FORK_CLI_NAME}.mjs`),

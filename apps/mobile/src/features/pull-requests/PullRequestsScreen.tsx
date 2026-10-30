@@ -57,6 +57,7 @@ import {
   scopedPullRequestListKey as pullRequestKey,
   type EnvironmentPullRequestListEntry,
   withoutScratchProjectScope,
+  pullRequestProjectChoices,
 } from "./pullRequestList";
 import { useDebouncedValue } from "../../state/queries";
 import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
@@ -292,10 +293,14 @@ export function PullRequestsScreen(
   }
   const labelColors =
     knownFacets.scope === facetScope ? knownFacets.labelColors : facets.labelColors;
-  const projects = allProjects.filter(
-    (project) =>
-      !project.isScratch && (environmentId === null || project.environmentId === environmentId),
-  );
+  const projects = pullRequestProjectChoices(allProjects, {
+    environmentId,
+    controls,
+    environmentLabels: new Map(
+      environments.map((item) => [item.environmentId, item.environmentLabel]),
+    ),
+    servesPullRequests: (id) => configs.get(id)?.environment.capabilities.pullRequests === true,
+  });
   const openIssue = useOpenIssue();
   const issueActions = useIssueListActions();
   const rows: readonly ListRow[] = kind === "issues" ? issueEntries : entries;
