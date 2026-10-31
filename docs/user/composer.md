@@ -23,7 +23,7 @@ included, and `#1234` without a space still looks up a pull request.
 
 Enter sends. In a list or quote, **Shift+Enter** continues it, and Shift+Enter
 on an empty line moves out one level, then leaves it; **Tab** nests a list item
-under the one above. In a code block, Enter
+under the one above and **Shift+Tab** moves it back out. In a code block, Enter
 starts a new line at the current indentation, **Tab** and **Shift+Tab** indent
 the selected lines, and a closing ` ``` ` followed by Enter, or two blank lines
 at the end, leave the block. **Backspace** at the start of a code block turns it
@@ -80,13 +80,7 @@ keyboard. The button only offers Steer when the running agent supports it.
 
 ## Ask a side question
 
-Start a message with `/btw` to ask about the conversation without interrupting the agent or queueing behind it. The answer appears in a card above the composer while the main turn keeps running. On web and desktop you can also choose **Ask a side question** in the command palette, or press `Cmd+Option+/` on macOS or `Ctrl+Alt+/` on Windows and Linux. Change `thread.sideQuestion` in **Settings → Keybindings** to use another shortcut.
-
-A side question starts from the last finished turn, so it needs at least one finished turn, and it accepts text only. It is read-only: it can look at your files but cannot change them. If it stops to ask for approval, choose **Open as thread** to respond.
-
-While the card is open, send `/btw` again to follow up in the same side conversation. **Add to conversation** gives the answer to the main agent for its next turn. **Open as thread** turns the side conversation into a regular thread in the thread list. Dismiss the card to start fresh next time, or send `/btw` on its own to bring the last one back.
-
-Side questions work the same way on mobile, from the slash menu in the thread composer. Thread and pull request mentions are not supported in a side question on mobile.
+Start a message with `/side` or `/btw` to ask about the conversation in a side chat without interrupting the agent. See [Side chats](./thread-sidebar.md#side-chats).
 
 ## Suggested follow-ups
 
@@ -263,7 +257,7 @@ After you add or change skills, plugins, or MCP servers, use **Restart agent
 session** in the command palette on web and desktop. The conversation continues,
 and your next message starts the agent again with the new setup.
 
-Provider commands and `/btw` must start the message to run. T3 Code commands such as
+Provider commands, `/side`, and `/btw` must start the message to run. T3 Code commands such as
 `/model` and `/plan`, and skill mentions, work on any line.
 
 The context meter next to the composer shows how full the thread's context window is. Hover it on web and desktop, or tap it on mobile, to see what fills the window. Claude itemizes the window by category, such as system prompt, tools, memory files, and messages. Other providers report how the last request split into cached input, new input, and output. Claude's breakdown updates when a turn finishes, so the cached and new input split shows while a turn runs. Turn the meter off in **Settings → Chat → Context window indicator** on web and desktop, or **Settings → Chat** on mobile.

@@ -41,29 +41,6 @@ describe("thread relationships", () => {
     ).toBe(childStatus);
   });
 
-  it("keeps hidden side chats and their transfers out of the lineage", () => {
-    const parent = ThreadId.make("parent");
-    const side = ThreadId.make("side");
-    const graph = deriveThreadRelationshipGraph({
-      threads: [
-        { id: parent, status: "completed", lineage: { parentThreadId: null } },
-        {
-          id: side,
-          status: "completed",
-          isSideChat: true,
-          lineage: { parentThreadId: parent, relationshipToParent: "fork" },
-        },
-      ] as never,
-      projection: {
-        thread: { id: parent },
-        subagents: [],
-        contextTransfers: [{ sourceThreadId: side, targetThreadId: parent, status: "completed" }],
-      } as never,
-    });
-    expect(graph.nodes.has(side)).toBe(false);
-    expect(graph.edges).toEqual([]);
-  });
-
   it("does not label a missing parent with its child's running status", () => {
     const parent = ThreadId.make("missing-parent");
     const child = ThreadId.make("child");
@@ -81,6 +58,40 @@ describe("thread relationships", () => {
       threadRelationshipRowStatus(graph, immediateThreadRelationships(graph, child)[0]!),
     ).toBeNull();
   });
+
+  it.each(["fork", "subagent"] as const)(
+    "keeps the parent edge of an opened %s omitted from the shell",
+    (relationshipToParent) => {
+      const parent = ThreadId.make("parent");
+      const child = ThreadId.make("omitted-child");
+      const projection = {
+        thread: {
+          id: child,
+          forkedFrom:
+            relationshipToParent === "fork"
+              ? { type: "run", threadId: parent, runId: "source-run" }
+              : null,
+          lineage: { rootThreadId: parent, parentThreadId: parent, relationshipToParent },
+        },
+        subagents: [],
+        contextTransfers: [],
+      } as never;
+      const graph = deriveThreadRelationshipGraph({ threads: [], projection });
+      expect(immediateThreadRelationships(graph, child)).toEqual([
+        expect.objectContaining({
+          threadId: parent,
+          edge: expect.objectContaining({
+            sourceThreadId: parent,
+            targetThreadId: child,
+            kind: relationshipToParent,
+          }),
+        }),
+      ]);
+      expect(resolveMergeBackTargetThreadId(projection)).toBe(
+        relationshipToParent === "fork" ? parent : null,
+      );
+    },
+  );
 
   it("keeps an older activity run visible over a newer cancelled run", () => {
     const parent = ThreadId.make("thread-parent");

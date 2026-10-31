@@ -45,6 +45,8 @@ export const projectMutationOperation = Effect.fn("projectMutationOperation")(fu
         ...(mutation.additionalDirectories === undefined
           ? {}
           : { additionalDirectories: mutation.additionalDirectories }),
+        ...(mutation.pinned === undefined ? {} : { pinned: mutation.pinned }),
+        ...(mutation.archived === undefined ? {} : { archived: mutation.archived }),
       });
 
     case "project.delete":

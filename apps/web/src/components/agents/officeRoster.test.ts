@@ -58,7 +58,14 @@ describe("office roster", () => {
       working("settled", { settledOverride: "settled" }),
       thread("archived", { archivedAt: now }),
       thread("deleted", { deletedAt: now }),
-      thread("side-chat", { isSideChat: true }),
+      thread("side-chat", {
+        lineage: {
+          parentThreadId: ThreadId.make("one"),
+          relationshipToParent: "fork",
+          rootThreadId: ThreadId.make("one"),
+          sideChat: true,
+        },
+      }),
     ];
     const roster = buildOfficeRoster(threads, options);
     expect(filterOfficeRoster(roster, "all")).toHaveLength(7);

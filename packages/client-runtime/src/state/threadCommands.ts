@@ -19,7 +19,6 @@ import {
 } from "./runtime.ts";
 import {
   type InterruptThreadTurnInput,
-  type AskSideQuestionInput,
   type SummarizeThreadInput,
   type RestoreThreadSummaryInput,
   type SetThreadGroupInput,
@@ -31,8 +30,8 @@ import {
   deleteThread,
   editQueuedRun,
   interruptThreadTurn,
+  forkSideChat,
   forkThreadFromRun,
-  askSideQuestion,
   markThreadUnread,
   mergeThreadBack,
   promoteQueuedRun,
@@ -333,13 +332,13 @@ export function createThreadEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.sourceThreadId]),
       },
     }),
-    askSideQuestion: createEnvironmentCommand(runtime, {
-      label: "environment-data:commands:thread:ask-side-question",
-      execute: (input: AskSideQuestionInput) => askSideQuestion(input),
+    forkSideChat: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:fork-side-chat",
+      execute: forkSideChat,
       scheduler,
       concurrency: {
         mode: "serial",
-        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.parentThreadId]),
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.sourceThreadId]),
       },
     }),
     mergeBack: createEnvironmentCommand(runtime, {

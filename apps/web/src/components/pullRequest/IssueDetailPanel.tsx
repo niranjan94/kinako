@@ -29,6 +29,7 @@ import { PullRequestCommentBody } from "./PullRequestCommentBody";
 import { openOnHostLabel } from "./pullRequestLinkContextMenu";
 import { PullRequestMarkdown, PullRequestMarkdownContext } from "./PullRequestMarkdown";
 import { ISSUE_STATE_PRESENTATION } from "./pullRequestIcons";
+import { issueAutolinkPlugins } from "./pullRequestMarkdown.logic";
 import { PullRequestActorLabel, PullRequestLabelChip } from "./pullRequestPresentation";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 
@@ -164,17 +165,11 @@ export function IssueDetailPanel({
     detail === null
       ? null
       : (sourceControlClients.parseIssueUrl(detail.url)?.link.repositoryUrl ?? null);
-  const markdownContext = (() => {
-    const find = hostClient.referenceAutolinks;
-    return {
-      autolinks:
-        find === undefined || repositoryUrl === null
-          ? null
-          : (text: string) => find(text, repositoryUrl),
-      lineBreaks: hostClient.hardLineBreaks ?? false,
-      threadRef,
-    };
-  })();
+  const markdownContext = {
+    remarkPlugins: issueAutolinkPlugins(detail),
+    lineBreaks: hostClient.hardLineBreaks ?? false,
+    threadRef,
+  };
 
   if (detail === null) {
     return (

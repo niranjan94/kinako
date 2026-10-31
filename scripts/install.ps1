@@ -230,5 +230,5 @@ if ($interactive) { [Console]::Error.Write("`r$esc[2K") }
 if (($env:PATH -split ";") -notcontains $binDir) {
   Write-Host "  Add $binDir to your PATH, then run ${bold}kinako$reset.`n"
 } else {
-  Write-Host "  Run ${bold}kinako$reset to get started.`n"
+  Write-Host "  Run ${bold}kinako$reset to use Kinako here, or ${bold}kinako up$reset to use it from your other devices.`n"
 }

@@ -70,13 +70,15 @@ export const runDefaultServerCommand = Effect.fn("server.runDefaultServerCommand
 });
 
 export const startCommand = Command.make("start", { ...sharedServerCommandFlags }).pipe(
-  Command.withDescription(`Run the ${FORK_DISPLAY_NAME} server.`),
+  Command.withDescription(`Same as \`${FORK_CLI_NAME}\`.`),
+  Command.unlisted,
   Command.withHandler((flags) => runServerCommand(flags, { rejectRunningServer: true })),
 );
 
 export const serveCommand = Command.make("serve", { ...sharedServerCommandFlags }).pipe(
+  Command.withShortDescription(`Run ${FORK_DISPLAY_NAME} in this terminal, with no browser.`),
   Command.withDescription(
-    `Run the ${FORK_DISPLAY_NAME} server without opening a browser and print headless pairing details.`,
+    `Run ${FORK_DISPLAY_NAME} in this terminal without opening a browser, and print pairing details. The background service runs this. To set up access from your other devices, run \`${FORK_CLI_NAME} up\`.`,
   ),
   Command.withHandler((flags) =>
     runServerCommand(flags, {

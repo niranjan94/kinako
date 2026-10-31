@@ -194,6 +194,8 @@ export const Project = Schema.Struct({
   autoPull: Schema.optional(Schema.Boolean),
   scripts: Schema.Array(ProjectScript),
   additionalDirectories: Schema.optional(ProjectAdditionalDirectories),
+  pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  archivedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
@@ -225,6 +227,12 @@ export const ProjectUpdatePayload = Schema.Struct({
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   additionalDirectories: Schema.optional(ProjectAdditionalDirectories),
+  pinned: Schema.optional(Schema.Boolean),
+  archived: Schema.optional(
+    Schema.Boolean.annotate({
+      description: "Threads and files are kept.",
+    }),
+  ),
 });
 export type ProjectUpdatePayload = typeof ProjectUpdatePayload.Type;
 

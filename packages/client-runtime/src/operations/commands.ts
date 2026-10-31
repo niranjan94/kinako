@@ -65,6 +65,8 @@ export interface UpdateProjectInput extends CommandMetadata {
   readonly defaultThreadEnvMode?: ThreadEnvMode | null;
   readonly scripts?: ReadonlyArray<ProjectScript>;
   readonly additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory>;
+  readonly pinned?: boolean;
+  readonly archived?: boolean;
 }
 
 export interface DeleteProjectInput extends CommandMetadata {
@@ -87,7 +89,10 @@ export interface ThreadCommandInput extends CommandMetadata {
   readonly threadId: ThreadId;
 }
 
-export type DeleteThreadInput = ThreadCommandInput;
+export interface DeleteThreadInput extends ThreadCommandInput {
+  /** The server deletes only a thread with no runs and no messages. */
+  readonly onlyIfUnused?: boolean;
+}
 export type ArchiveThreadInput = ThreadCommandInput;
 export type UnarchiveThreadInput = ThreadCommandInput;
 export type SettleThreadInput = ThreadCommandInput;
@@ -131,7 +136,6 @@ export interface VisitThreadInput extends ThreadCommandInput {
 export type MarkThreadUnreadInput = ThreadCommandInput;
 
 export interface UpdateThreadMetadataInput extends ThreadCommandInput {
-  readonly isSideChat?: false;
   readonly limitRecovery?: import("@t3tools/contracts").OrchestrationV2LimitRecoveryUpdate | null;
   readonly title?: string;
   readonly modelSelection?: ModelSelection;
@@ -234,23 +238,16 @@ export interface RestoreThreadSummaryInput extends ThreadCommandInput {
 export type StopThreadSessionInput = ThreadCommandInput;
 
 export interface ForkThreadFromRunInput extends CommandMetadata {
-  readonly isSideChat?: boolean;
   readonly sourceThreadId: ThreadId;
   readonly targetThreadId: ThreadId;
   readonly runId: RunId;
   readonly title?: string;
 }
 
-export interface AskSideQuestionInput extends CommandMetadata {
-  readonly parentThreadId: ThreadId;
-  readonly sideThreadId: ThreadId;
-  /** Present to start a new side chat; omitted to follow up in an existing one. */
-  readonly fork?: { readonly runId: RunId; readonly title: string };
-  readonly message: {
-    readonly messageId: MessageId;
-    readonly text: string;
-    readonly context?: import("@t3tools/contracts").OrchestrationMessageContext;
-  };
+export interface ForkSideChatInput extends CommandMetadata {
+  readonly sourceThreadId: ThreadId;
+  readonly targetThreadId: ThreadId;
+  readonly title?: string;
 }
 
 export interface MergeThreadBackInput extends CommandMetadata {
@@ -404,6 +401,8 @@ export const updateProject = Effect.fn("EnvironmentCommands.updateProject")(func
     ...(input.additionalDirectories === undefined
       ? {}
       : { additionalDirectories: input.additionalDirectories }),
+    ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
+    ...(input.archived === undefined ? {} : { archived: input.archived }),
   });
 });
 
@@ -439,7 +438,6 @@ export const createThread = Effect.fn("EnvironmentCommands.createThread")(functi
 
 function simpleThreadCommand(
   type:
-    | "thread.delete"
     | "thread.archive"
     | "thread.unarchive"
     | "thread.settle"
@@ -456,7 +454,12 @@ function simpleThreadCommand(
 export const deleteThread = Effect.fn("EnvironmentCommands.deleteThread")(function* (
   input: DeleteThreadInput,
 ) {
-  return yield* simpleThreadCommand("thread.delete", input);
+  return yield* dispatch({
+    type: "thread.delete",
+    commandId: yield* allocateCommandId(input),
+    threadId: input.threadId,
+    ...(input.onlyIfUnused === undefined ? {} : { onlyIfUnused: input.onlyIfUnused }),
+  });
 });
 
 export type CloseGuestShareInput = ThreadCommandInput;
@@ -644,7 +647,6 @@ export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadM
     let result = null;
     if (
       input.title !== undefined ||
-      input.isSideChat !== undefined ||
       input.branch !== undefined ||
       input.worktreePath !== undefined ||
       input.regenerateTitle !== undefined ||
@@ -653,7 +655,6 @@ export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadM
     ) {
       result = yield* dispatch({
         type: "thread.metadata.update",
-        ...(input.isSideChat === undefined ? {} : { isSideChat: input.isSideChat }),
         ...(input.limitRecovery === undefined ? {} : { limitRecovery: input.limitRecovery }),
         commandId,
         threadId: input.threadId,
@@ -1043,7 +1044,6 @@ export const forkThreadFromRun = Effect.fn("EnvironmentCommands.forkThreadFromRu
 ) {
   return yield* dispatch({
     type: "thread.fork",
-    ...(input.isSideChat === undefined ? {} : { isSideChat: input.isSideChat }),
     commandId: yield* allocateCommandId(input),
     createdBy: "user",
     creationSource: input.creationSource ?? "web",
@@ -1054,33 +1054,20 @@ export const forkThreadFromRun = Effect.fn("EnvironmentCommands.forkThreadFromRu
   });
 });
 
-export const askSideQuestion = Effect.fn("EnvironmentCommands.askSideQuestion")(function* (
-  input: AskSideQuestionInput,
+/** Forks the thread's latest stable point into a hidden side chat; works while it runs. */
+export const forkSideChat = Effect.fn("EnvironmentCommands.forkSideChat")(function* (
+  input: ForkSideChatInput,
 ) {
-  const commandId = yield* allocateCommandId(input);
-  const creationSource = input.creationSource ?? "web";
-  if (input.fork !== undefined) {
-    yield* forkThreadFromRun({
-      commandId: CommandId.make(`${commandId}:fork`),
-      creationSource,
-      sourceThreadId: input.parentThreadId,
-      targetThreadId: input.sideThreadId,
-      runId: input.fork.runId,
-      title: input.fork.title,
-      isSideChat: true,
-    });
-  }
   return yield* dispatch({
-    type: "message.dispatch",
-    commandId: CommandId.make(`${commandId}:ask`),
+    type: "thread.fork",
+    commandId: yield* allocateCommandId(input),
     createdBy: "user",
-    creationSource,
-    threadId: input.sideThreadId,
-    messageId: input.message.messageId,
-    text: input.message.text,
-    ...(input.message.context === undefined ? {} : { context: input.message.context }),
-    attachments: [],
-    dispatchMode: { type: "start_immediately" },
+    creationSource: input.creationSource ?? "web",
+    sourceThreadId: input.sourceThreadId,
+    targetThreadId: input.targetThreadId,
+    sourcePoint: { type: "latest_stable" },
+    sideChat: true,
+    ...(input.title === undefined ? {} : { title: input.title }),
   });
 });
 

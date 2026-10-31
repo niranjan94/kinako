@@ -4,6 +4,7 @@ import {
   advertisedEndpointsFromDirect,
   applyWslEnableSelection,
   isQrShareableEndpoint,
+  resolveTailscaleServeBaseUrl,
   selectQrEndpointOption,
   togglePairingScopeSelection,
 } from "./ConnectionsSettings.logic";
@@ -40,6 +41,26 @@ describe("togglePairingScopeSelection", () => {
     },
   ] as const)("$label", ({ current, scope, checked, expected }) => {
     expect(togglePairingScopeSelection(current, scope, checked)).toEqual(expected);
+  });
+});
+
+describe("resolveTailscaleServeBaseUrl", () => {
+  it.each([
+    ["https://host.tail.ts.net:441/", 443, "https://host.tail.ts.net"],
+    ["https://host.tail.ts.net:441/", 444, "https://host.tail.ts.net:444"],
+  ] as const)("previews %s on port %i", (httpBaseUrl, port, expected) => {
+    expect(resolveTailscaleServeBaseUrl({ httpBaseUrl }, port, true)).toBe(expected);
+  });
+
+  it("returns null without a pending endpoint", () => {
+    expect(resolveTailscaleServeBaseUrl(null, 443, true)).toBeNull();
+  });
+
+  it.each([
+    ["https://host.tail.ts.net:441/", 0, false],
+    ["not a URL", 443, true],
+  ] as const)("preserves %s when port %i cannot be previewed", (httpBaseUrl, port, isPortValid) => {
+    expect(resolveTailscaleServeBaseUrl({ httpBaseUrl }, port, isPortValid)).toBe(httpBaseUrl);
   });
 });
 

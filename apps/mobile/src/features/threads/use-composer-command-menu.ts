@@ -104,7 +104,6 @@ export function buildComposerSlashCommandItems(input: {
   readonly hasThread: boolean;
   readonly hasCompactableConversation?: boolean;
   readonly offersUsageLimits?: boolean;
-  readonly offersSideQuestions?: boolean;
   readonly allowInteractionMode: boolean;
   readonly selectedProviderStatus: Pick<
     ServerProvider,
@@ -142,21 +141,10 @@ export function buildComposerSlashCommandItems(input: {
   );
 
   // Providers expand commands only at the start of a message. T3 commands
-  // change local state and do not have this restriction, except /btw, which
-  // is recognised only as the whole message.
+  // change local state and do not have this restriction.
   if (!input.atMessageStart) return items;
-  if (input.offersSideQuestions && "btw".includes(query)) {
-    items.unshift({
-      id: "cmd:btw",
-      type: "slash-command",
-      command: "btw",
-      label: "/btw",
-      description: "Ask a side question without interrupting the agent",
-    });
-  }
   for (const command of input.selectedProviderStatus?.slashCommands ?? []) {
     if (!command.name.toLowerCase().includes(query)) continue;
-    if (command.name === "btw" && input.offersSideQuestions) continue;
     if (command.name === "compact" && !input.hasCompactableConversation) continue;
     if (command.name === USAGE_LIMITS_COMMAND.name && input.offersUsageLimits && !input.hasThread) {
       continue;
@@ -233,7 +221,6 @@ export function useComposerCommandMenu({
   hasThread,
   hasCompactableConversation,
   offersUsageLimits = false,
-  offersSideQuestions = false,
   enabled = true,
   onChangeDraftMessage,
   onUpdateInteractionMode,
@@ -255,7 +242,6 @@ export function useComposerCommandMenu({
   readonly hasThread: boolean;
   readonly hasCompactableConversation: boolean;
   readonly offersUsageLimits?: boolean;
-  readonly offersSideQuestions?: boolean;
   readonly enabled?: boolean;
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onUpdateInteractionMode?: (mode: ProviderInteractionMode) => void;
@@ -363,7 +349,6 @@ export function useComposerCommandMenu({
         hasThread,
         hasCompactableConversation,
         offersUsageLimits,
-        offersSideQuestions,
         allowInteractionMode: onUpdateInteractionMode !== undefined,
         selectedProviderStatus: selectedProviderStatus
           ? {

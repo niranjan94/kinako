@@ -34,9 +34,6 @@ export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 export const ProviderInteractionMode = Schema.Literals(["default", "plan"]);
 export type ProviderInteractionMode = typeof ProviderInteractionMode.Type;
 export const DEFAULT_PROVIDER_INTERACTION_MODE: ProviderInteractionMode = "default";
-// Side chats share the parent's checkout while its agent works, so they may read but not write.
-export const SIDE_CHAT_RUNTIME_MODE: RuntimeMode = "approval-required";
-export const SIDE_CHAT_INTERACTION_MODE: ProviderInteractionMode = "plan";
 
 export const ProviderRequestKind = Schema.Literals([
   "command",

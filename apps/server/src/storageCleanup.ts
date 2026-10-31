@@ -122,11 +122,24 @@ function sameProjectWorktreePolicies(left: ServerSettings, right: ServerSettings
   );
 }
 
-export function storageCleanupThreadIdle(thread: OrchestrationV2ThreadShell, now: number): boolean {
-  return thread.worktreePath !== null && threadIdle(thread, now);
+type LimitRecoverySettings = Pick<
+  ServerSettings,
+  "autoResumeLimitedThreads" | "snoozeLimitedThreads"
+>;
+
+export function storageCleanupThreadIdle(
+  thread: OrchestrationV2ThreadShell,
+  now: number,
+  settings: LimitRecoverySettings,
+): boolean {
+  return thread.worktreePath !== null && threadIdle(thread, now, settings);
 }
 
-function threadIdle(thread: OrchestrationV2ThreadShell, now: number): boolean {
+function threadIdle(
+  thread: OrchestrationV2ThreadShell,
+  now: number,
+  settings: LimitRecoverySettings,
+): boolean {
   return (
     thread.activeRunId === null &&
     (thread.status === "idle" ||
@@ -137,8 +150,39 @@ function threadIdle(thread: OrchestrationV2ThreadShell, now: number): boolean {
       thread.status === "rolled_back") &&
     (thread.pendingBackgroundTasks?.length ?? 0) === 0 &&
     thread.pendingRuntimeRequest === null &&
-    !threadHasQueuedTurnStart(thread, now)
+    !threadHasQueuedTurnStart(thread, now) &&
+    !heldForLimitRecovery(thread, now, settings)
   );
+}
+
+// A run held for its usage-limit reset has its work still ahead of it, and a
+// fresh worktree would otherwise look unchanged and be removed before it runs.
+function heldForLimitRecovery(
+  thread: OrchestrationV2ThreadShell,
+  now: number,
+  settings: LimitRecoverySettings,
+): boolean {
+  if (
+    thread.status !== "failed" ||
+    thread.lastErrorClass !== "usage_limit" ||
+    !thread.usageLimitResetAt ||
+    thread.archivedAt !== null ||
+    thread.settledOverride === "settled"
+  )
+    return false;
+  const resetMs = Date.parse(thread.usageLimitResetAt);
+  const recovery = thread.limitRecovery;
+  if (recovery?.runId === thread.latestRunId && recovery.resetAt === thread.usageLimitResetAt)
+    // An auto-resume holds until its continuation replaces the failed run.
+    return recovery.autoResume || (recovery.snooze === true && resetMs > now);
+  // The recovery worker arms this failure on a later tick; hold it until then.
+  // Like the worker, skip a reset that had already passed when the run ended.
+  if (
+    !Number.isFinite(resetMs) ||
+    resetMs <= DateTime.toEpochMillis(thread.latestRunCompletedAt ?? thread.updatedAt)
+  )
+    return false;
+  return settings.autoResumeLimitedThreads || (settings.snoozeLimitedThreads && resetMs > now);
 }
 
 /** PR metadata refreshes must not reset the inactivity clock. */
@@ -154,7 +198,7 @@ export function storageCleanupActivityAt(thread: OrchestrationV2ThreadShell): nu
   );
 }
 
-/** Only a complete subagent chain within this worktree shares ownership. */
+/** Only a complete subagent or side chat chain within this worktree shares ownership. */
 function worktreeOwner<T extends Pick<OrchestrationV2ThreadShell, "id" | "lineage">>(
   threads: ReadonlyArray<T>,
 ) {
@@ -169,7 +213,8 @@ function worktreeOwner<T extends Pick<OrchestrationV2ThreadShell, "id" | "lineag
     while (current.id !== owner.id) {
       if (
         seen.has(current.id) ||
-        current.lineage.relationshipToParent !== "subagent" ||
+        (current.lineage.relationshipToParent !== "subagent" &&
+          current.lineage.sideChat !== true) ||
         current.lineage.rootThreadId !== owner.lineage.rootThreadId
       )
         return undefined;
@@ -962,7 +1007,10 @@ const make = Effect.gen(function* () {
           return keep(`shared by ${members.length} threads`);
         if (project === undefined || repositoryRoot === undefined)
           return keep("project is unavailable");
-        if (worktreeBranch === null || !group.every((member) => threadIdle(member.thread, now)))
+        if (
+          worktreeBranch === null ||
+          !group.every((member) => threadIdle(member.thread, now, serverSettings))
+        )
           return keep(waitForStop("thread is running or has pending work"));
         if (group.some((member) => member.branch !== worktreeBranch))
           return keep("a subagent thread's branch differs from this worktree's branch");
@@ -1146,7 +1194,7 @@ const make = Effect.gen(function* () {
                 !Equal.equals(shell.settledAt, previous.thread.settledAt) ||
                 (shell.settledAt !== null &&
                   !Equal.equals(shell.updatedAt, previous.thread.updatedAt)) ||
-                !threadIdle(shell, now) ||
+                !threadIdle(shell, now, serverSettings) ||
                 storageCleanupActivityAt(shell) !== storageCleanupActivityAt(previous.thread)
               );
             })
@@ -1199,6 +1247,8 @@ const make = Effect.gen(function* () {
         if (finalChanges !== null) return keep(finalChanges);
         const current = resolveWorktreeCleanup(latestSettings, thread.projectId);
         if (
+          latestSettings.autoResumeLimitedThreads !== serverSettings.autoResumeLimitedThreads ||
+          latestSettings.snoozeLimitedThreads !== serverSettings.snoozeLimitedThreads ||
           Object.keys(settings).some(
             (key) =>
               current[key as keyof typeof settings] !== settings[key as keyof typeof settings],

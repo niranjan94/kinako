@@ -125,38 +125,4 @@ describe("mobile slash commands", () => {
       }),
     ).toEqual({ text: "/plan ", cursor: 6, interactionMode: null });
   });
-
-  it("offers /btw at the start of a message in place of a provider command", () => {
-    const input = {
-      query: "bt",
-      hasThread: true,
-      allowInteractionMode: true,
-      offersSideQuestions: true,
-      selectedProviderStatus: {
-        driver: ProviderDriverKind.make("claude"),
-        slashCommands: [{ name: "btw", description: "Provider side question" }],
-      },
-    };
-    const items = buildComposerSlashCommandItems({ ...input, atMessageStart: true });
-    expect(items.map((item) => item.id)).toEqual(["cmd:btw"]);
-    const item = items[0];
-    if (!item) throw new Error("Expected the side question command");
-    expect(
-      resolveComposerCommandSelection({
-        draftMessage: "/bt",
-        trigger: { rangeStart: 0, rangeEnd: 3 },
-        item,
-        allowInteractionMode: true,
-      }),
-    ).toEqual({ text: "/btw ", cursor: 5, interactionMode: null });
-
-    expect(buildComposerSlashCommandItems({ ...input, atMessageStart: false })).toEqual([]);
-    expect(
-      buildComposerSlashCommandItems({
-        ...input,
-        atMessageStart: true,
-        offersSideQuestions: false,
-      }).map((item) => item.id),
-    ).toEqual(["pcmd:btw"]);
-  });
 });

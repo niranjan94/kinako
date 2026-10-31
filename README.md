@@ -16,7 +16,6 @@ Feature highlights:
 
 - **Databases:** browse Postgres and SQLite in the bottom panel, run SQL with completion, and export results. Postgres can sign in with AWS IAM, Secrets Manager, or Parameter Store. Mobile and agents get read-only queries. [Guide](./docs/user/databases.md)
 - **CLI sessions:** import Claude Code and Codex history across folders, or copy a resume command to continue a thread in the terminal. [Guide](./docs/user/providers-claude.md#bring-a-claude-code-session-into-kinako)
-- **Side questions:** ask a quick `/btw` question about a thread in a read-only side chat without interrupting the agent. [Guide](./docs/user/composer.md#ask-a-side-question)
 - **Turn wrap-up:** a recap card shows how a turn ended, what the agent is waiting on, and the diff totals. Agents can suggest follow-ups that start as new threads. [Guide](./docs/user/composer.md#suggested-follow-ups)
 - **Context controls:** summarize part of a conversation, restore full context, and see a context-window breakdown. [Guide](./docs/user/composer.md#summarize-part-of-a-conversation)
 - **Thread organization:** group and collapse threads in the sidebar and on mobile, or watch them work as characters in a pixel agent office. [Guide](./docs/user/thread-sidebar.md#group-threads)

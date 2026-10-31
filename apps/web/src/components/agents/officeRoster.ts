@@ -19,7 +19,7 @@ export function buildOfficeRoster(
       thread.deletedAt === null &&
       thread.archivedAt === null &&
       thread.settledOverride !== "settled" &&
-      thread.isSideChat !== true,
+      thread.lineage.sideChat !== true,
   );
   const byKey = new Map(threads.map((thread) => [officeThreadKey(thread), thread]));
   const children = new Map<string, Map<string, OfficeSubagent>>();
