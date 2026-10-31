@@ -171,6 +171,7 @@ export function IssueDetailPanel({
         find === undefined || repositoryUrl === null
           ? null
           : (text: string) => find(text, repositoryUrl),
+      lineBreaks: hostClient.hardLineBreaks ?? false,
       threadRef,
     };
   })();

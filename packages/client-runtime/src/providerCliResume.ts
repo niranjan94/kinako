@@ -76,7 +76,7 @@ function instanceEnvironmentValue(
   const variable = instance?.environment?.find(
     (entry) => entry.name === name && entry.valueRedacted !== true,
   );
-  const value = variable?.value.trim() ?? "";
+  const value = typeof variable?.value === "string" ? variable.value.trim() : "";
   return value.length > 0 ? value : null;
 }
 

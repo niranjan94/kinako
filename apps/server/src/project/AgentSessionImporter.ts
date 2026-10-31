@@ -205,8 +205,10 @@ export function importedThreadEvents(input: {
   readonly projectId: ProjectId;
   readonly providerThreadId: OrchestrationV2ProviderThread["id"];
   readonly thread: AgentSessionScanner.AgentSessionThread;
+  readonly nativeThreadId?: string;
 }): ReadonlyArray<OrchestrationV2DomainEvent> {
   const { threadId, thread, providerThreadId } = input;
+  const nativeThreadId = input.nativeThreadId ?? thread.providerSessionId;
   const driver = ProviderDriverKind.make(thread.source);
   const model = thread.model ?? DEFAULT_MODEL_BY_PROVIDER[driver] ?? DEFAULT_MODEL;
   const createdAt = dateTime(thread.createdAt);
@@ -256,7 +258,7 @@ export function importedThreadEvents(input: {
     ownerNodeId: null,
     nativeThreadRef: {
       driver,
-      nativeId: thread.providerSessionId,
+      nativeId: nativeThreadId,
       strength: "strong",
     },
     nativeConversationHeadRef: null,
@@ -266,7 +268,7 @@ export function importedThreadEvents(input: {
     handoffIds: [],
     forkedFrom: null,
     pendingBackgroundTasks: [],
-    nativeMetadata: { importedNativeThreadId: thread.providerSessionId },
+    nativeMetadata: { importedNativeThreadId: nativeThreadId },
     createdAt,
     updatedAt,
   };
@@ -321,6 +323,8 @@ const make = Effect.gen(function* () {
       });
     }
     const driver = ProviderDriverKind.make(thread.source);
+    // Pi resumes by session file path; its session UUID only names the thread.
+    const nativeThreadId = thread.source === "pi" ? source.filePath : thread.providerSessionId;
     const persistRuntime = runtimes.upsert(
       {
         threadId,
@@ -331,9 +335,9 @@ const make = Effect.gen(function* () {
         status: "stopped",
         lastSeenAt: thread.updatedAt,
         resumeCursor:
-          thread.source === "codex"
-            ? { threadId: thread.providerSessionId }
-            : { threadId, resume: thread.providerSessionId },
+          thread.source === "claudeAgent"
+            ? { threadId, resume: thread.providerSessionId }
+            : { threadId: nativeThreadId },
         runtimePayload: { cwd: input.workspaceRoot },
       },
       { onConflict: "ignore" },
@@ -358,7 +362,7 @@ const make = Effect.gen(function* () {
     const providerThreadId = idAllocator.derive.providerThread({
       driver,
       providerInstanceId: thread.providerInstanceId,
-      nativeThreadId: thread.providerSessionId,
+      nativeThreadId,
     });
     const committed = yield* eventSink.write({
       // Earlier generations are deleted imports that still hold this native session.
@@ -368,7 +372,7 @@ const make = Effect.gen(function* () {
               driver,
               providerInstanceId: thread.providerInstanceId,
               appThreadId: threadId,
-              nativeThreadRef: { driver, nativeId: thread.providerSessionId, strength: "strong" },
+              nativeThreadRef: { driver, nativeId: nativeThreadId, strength: "strong" },
             },
           }
         : {}),
@@ -381,6 +385,7 @@ const make = Effect.gen(function* () {
             ? providerThreadId
             : ProviderThreadId.make(`${providerThreadId}:${generation}`),
         thread,
+        nativeThreadId,
       }),
     });
     if (committed.length === 0) return null;

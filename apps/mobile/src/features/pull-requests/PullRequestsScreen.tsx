@@ -11,6 +11,7 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   Keyboard,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   View,
@@ -20,6 +21,7 @@ import { NativeScrollViewMarker as ScrollViewMarker } from "../../native/NativeS
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
@@ -42,7 +44,6 @@ import {
   usePullRequestListFilters,
   type PullRequestFilterMenu,
 } from "./PullRequestListFilters";
-import { PullRequestCardRow } from "./PullRequestControls";
 import { usePullRequestList } from "./usePullRequestList";
 import { usePullRequestListControls } from "./usePullRequestListControls";
 import { usePullRequestListActions } from "./usePullRequestListActions";
@@ -71,29 +72,38 @@ function PullRequestScrollView(props: ScrollViewProps) {
   );
 }
 
-function PullRequestListErrors(props: {
-  readonly messages: readonly string[];
-  readonly noun: string;
-}) {
+function PullRequestListError(props: { readonly message: string }) {
   const [expanded, setExpanded] = useState(false);
-  const title = `${props.messages.length} ${props.messages.length === 1 ? "error" : "errors"} loading ${props.noun}`;
   return (
-    <View>
-      <PullRequestCardRow
-        title={title}
-        icon="exclamationmark.triangle"
-        compact
-        last
-        expanded={expanded}
-        accessibilityLabel={`${title}. ${expanded ? "Hide" : "Show"} details`}
-        onPress={() => setExpanded((value) => !value)}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={props.message}
+      accessibilityState={{ expanded }}
+      onPress={() => setExpanded((value) => !value)}
+      // A long press selects the text; collapsing under that selection crashes Android's
+      // smart-select animation, so it must not also count as a press.
+      onLongPress={() => undefined}
+      className="min-h-11 flex-row items-center gap-3 px-4 py-2.5 active:opacity-70"
+    >
+      <SymbolView
+        name="exclamationmark.triangle"
+        size={18}
+        tintColorClassName="accent-icon-muted"
       />
-      {expanded ? (
-        <Text selectable className="px-4 pb-3 text-sm text-foreground-muted">
-          {props.messages.join("\n")}
-        </Text>
-      ) : null}
-    </View>
+      <Text
+        selectable={expanded}
+        numberOfLines={expanded ? undefined : 1}
+        ellipsizeMode="tail"
+        className="min-w-0 flex-1 text-sm text-foreground-muted"
+      >
+        {props.message}
+      </Text>
+      <SymbolView
+        name={expanded ? "chevron.up" : "chevron.down"}
+        size={11}
+        tintColorClassName="accent-icon-muted"
+      />
+    </Pressable>
   );
 }
 
@@ -473,14 +483,14 @@ export function PullRequestsScreen(
             ) : null}
             <PullRequestListFilters sidebar={sidebar} filters={filters} />
             {active.errors.length ? (
-              <PullRequestListErrors
-                key={`${kind}:${JSON.stringify(activeTargets)}`}
-                noun={active.noun}
-                messages={active.errors.map(
-                  (error) =>
-                    `${error.projectTitle || environments.find((environment) => environment.environmentId === error.environmentId)?.environmentLabel || "Environment"}: ${error.message}`,
-                )}
-              />
+              <View key={`${kind}:${JSON.stringify(activeTargets)}`}>
+                {active.errors.map((error) => (
+                  <PullRequestListError
+                    key={`${error.environmentId} ${error.projectTitle} ${error.message}`}
+                    message={`${error.projectTitle || environments.find((environment) => environment.environmentId === error.environmentId)?.environmentLabel || "Environment"}: ${error.message}`}
+                  />
+                ))}
+              </View>
             ) : null}
           </>
         }

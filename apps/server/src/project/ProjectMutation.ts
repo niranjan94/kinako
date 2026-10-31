@@ -2,6 +2,7 @@ import { type ProjectMutation } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import { type ProjectService, type ProjectServiceError } from "./ProjectService.ts";
+import { type ProjectCloneTracker } from "./ProjectCloneTracker.ts";
 
 type ProjectMutations = Pick<ProjectService["Service"], "create" | "delete" | "update">;
 
@@ -70,3 +71,17 @@ export function describeProjectMutationFailure(cause: ProjectServiceError): stri
       return "Failed to mutate project.";
   }
 }
+
+// A disconnect after deletion commits must not leave the in-memory clone record behind.
+export const mutateProjectWithClone = Effect.fn("mutateProjectWithClone")(function* (
+  projects: ProjectMutations,
+  clones: Pick<ProjectCloneTracker["Service"], "discard">,
+  mutation: ProjectMutation,
+) {
+  if (mutation.type !== "project.delete")
+    return yield* projectMutationOperation(projects, mutation);
+  return yield* projectMutationOperation(projects, mutation).pipe(
+    Effect.tap(() => clones.discard(mutation.projectId)),
+    Effect.uninterruptible,
+  );
+});

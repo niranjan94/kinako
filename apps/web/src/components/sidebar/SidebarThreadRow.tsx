@@ -1126,15 +1126,20 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     )
   ) : null;
 
+  const remoteMachineIcon =
+    isRemote && !showsScratchMachine ? (
+      <span className="inline-flex shrink-0 items-center text-sidebar-muted-foreground/70">
+        <EnvironmentMachineIcon aria-hidden kind={props.environmentMachine} className="size-3.5" />
+      </span>
+    ) : null;
   const diff = latestRunDiff(thread);
-  // Only the provider icon would remain, so the row drops the line instead of leaving it blank.
+  // Only the trailing icons would remain, so the row moves them to the title line instead.
   const metaLineEmpty =
     !recapPreview &&
     !thread.branch &&
     !showsScratchMachine &&
     prBadge === null &&
     diff === null &&
-    !isRemote &&
     runningTerminalIds.length === 0;
   const metaLine = metaLineEmpty ? null : (
     <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-secondary-label text-xs">
@@ -1172,15 +1177,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         aria-hidden
         className="pointer-events-none ml-auto inline-flex shrink-0 items-center gap-1"
       >
-        {isRemote && !showsScratchMachine ? (
-          <span className="inline-flex shrink-0 items-center text-sidebar-muted-foreground/70">
-            <EnvironmentMachineIcon
-              aria-hidden
-              kind={props.environmentMachine}
-              className="size-3.5"
-            />
-          </span>
-        ) : null}
+        {remoteMachineIcon}
         <SidebarProviderStack
           thread={thread}
           providerEntryByInstanceId={props.providerEntryByInstanceId}
@@ -1188,8 +1185,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       </span>
     </div>
   );
-  const titleLineProviderStack = metaLineEmpty ? (
-    <span aria-hidden className="inline-flex shrink-0">
+  const titleLineIcons = metaLineEmpty ? (
+    <span aria-hidden className="inline-flex shrink-0 items-center gap-1">
+      {remoteMachineIcon}
       <SidebarProviderStack
         thread={thread}
         providerEntryByInstanceId={props.providerEntryByInstanceId}
@@ -1262,7 +1260,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   {recapPreview}
                 </span>
               ) : null}
-              {multiline ? titleLineProviderStack : null}
+              {multiline ? titleLineIcons : null}
               {pinIndicator}
               {multiline ? null : terminalStatusIcon}
               {isRegeneratingTitle ? (
@@ -1582,7 +1580,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   Regenerating title
                 </span>
               ) : null}
-              {titleLineProviderStack}
+              {titleLineIcons}
             </div>
             {metaLine}
           </div>

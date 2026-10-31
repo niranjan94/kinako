@@ -85,7 +85,11 @@ Mac logged in and awake for unattended remote access. Installing over SSH while
 nobody is logged in at the Mac's screen can fail at the final start step; the
 service is still installed and will start at the next login.
 
-Windows background services are not supported.
+Windows background services are not supported. To keep a Windows host available
+through T3 Connect, leave the desktop app running with its local environment
+enabled, or keep `t3 serve` running in a terminal. Minimize the desktop app rather
+than closing its last window, which stops its local server. Linking T3 Connect
+does not configure automatic startup at Windows sign-in.
 
 T3 Connect can offer service installation during setup, but the two are managed
 separately. Signing out of T3 Connect does not stop or uninstall the service.
@@ -100,6 +104,24 @@ A sleeping computer stops running agents and disconnects every remote client. To
 The screen can still turn off. Closing a laptop lid usually still puts it to sleep, unless the laptop is plugged in and connected to an external display.
 
 Keep awake works on macOS, on Windows, and on Linux with systemd. It is hidden where the computer does not support it. If the computer cannot be kept awake, the setting shows the reason. Choose another option and then your setting again to retry.
+
+## Keep the server responsive when agents use all memory
+
+On Linux, agents already run with lower priority than the server. When they
+fill the machine's memory, though, the kernel may still slow down or stop the
+server, because only an administrator can reserve memory for it. Run, as your
+normal user:
+
+```sh
+t3 service protect
+```
+
+It shows the system settings it will change, asks before applying them, and
+then asks for your sudo password. If the machine runs Tailscale or SSH, it
+also offers to protect them, so you can still reach the machine. Memory
+protection takes effect at once. The server's protection from the kernel's
+out-of-memory killer takes effect after `t3 service restart`. `t3 service status` reports whether
+the protection is in place, and `t3 service protect --undo` removes it.
 
 ## Troubleshooting
 
