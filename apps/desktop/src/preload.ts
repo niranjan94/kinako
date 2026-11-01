@@ -276,6 +276,21 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   downloadUpdate: () => ipcRenderer.invoke(IpcChannels.UPDATE_DOWNLOAD_CHANNEL),
   installUpdate: (expectedVersion) =>
     ipcRenderer.invoke(IpcChannels.UPDATE_INSTALL_CHANNEL, expectedVersion),
+  cloudflare: {
+    getState: () => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_GET_STATE_CHANNEL),
+    connect: (token) => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_CONNECT_CHANNEL, token),
+    listZones: () => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_LIST_ZONES_CHANNEL),
+    selectZone: (zoneId) => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_SELECT_ZONE_CHANNEL, zoneId),
+    disconnect: () => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_DISCONNECT_CHANNEL),
+    provision: (input) => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_PROVISION_CHANNEL, input),
+    rotate: (input) => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_ROTATE_CHANNEL, input),
+    remove: (environmentId) =>
+      ipcRenderer.invoke(IpcChannels.CLOUDFLARE_REMOVE_CHANNEL, environmentId),
+    removeTunnel: (tunnelId) =>
+      ipcRenderer.invoke(IpcChannels.CLOUDFLARE_REMOVE_TUNNEL_CHANNEL, tunnelId),
+    listTunnels: () => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_LIST_TUNNELS_CHANNEL),
+    verify: (input) => ipcRenderer.invoke(IpcChannels.CLOUDFLARE_VERIFY_CHANNEL, input),
+  },
   cliCommand: {
     getState: () => ipcRenderer.invoke(IpcChannels.CLI_COMMAND_GET_STATE_CHANNEL),
     install: () => ipcRenderer.invoke(IpcChannels.CLI_COMMAND_INSTALL_CHANNEL),

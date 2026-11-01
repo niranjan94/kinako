@@ -2,6 +2,19 @@ import * as Effect from "effect/Effect";
 
 import { receiveProviderAuthCallback, cancelProviderAuthCallback } from "./methods/providerAuth.ts";
 import * as DesktopIpc from "./DesktopIpc.ts";
+import {
+  cloudflareConnect,
+  cloudflareDisconnect,
+  cloudflareGetState,
+  cloudflareListTunnels,
+  cloudflareListZones,
+  cloudflareProvision,
+  cloudflareRemove,
+  cloudflareRemoveTunnel,
+  cloudflareRotate,
+  cloudflareSelectZone,
+  cloudflareVerify,
+} from "./methods/cloudflare.ts";
 import { installNotificationBadge } from "./methods/notificationBadge.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
 import { getConnectionCatalog, setConnectionCatalog } from "./methods/connectionCatalog.ts";
@@ -133,6 +146,18 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setServerExposureMode);
   yield* ipc.handle(setTailscaleServeEnabled);
   yield* ipc.handle(getAdvertisedEndpoints);
+
+  yield* ipc.handle(cloudflareGetState);
+  yield* ipc.handle(cloudflareConnect);
+  yield* ipc.handle(cloudflareListZones);
+  yield* ipc.handle(cloudflareSelectZone);
+  yield* ipc.handle(cloudflareDisconnect);
+  yield* ipc.handle(cloudflareProvision);
+  yield* ipc.handle(cloudflareRotate);
+  yield* ipc.handle(cloudflareRemove);
+  yield* ipc.handle(cloudflareRemoveTunnel);
+  yield* ipc.handle(cloudflareListTunnels);
+  yield* ipc.handle(cloudflareVerify);
 
   yield* ipc.handle(getWslState);
   yield* ipc.handle(setWslBackendEnabled);

@@ -3,8 +3,8 @@ import * as Schema from "effect/Schema";
 import { PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 /**
- * `kn-` plus 26 base32 characters, one label under the zone: Universal SSL covers only
- * `*.<zone>`, so a deeper name would fail its TLS handshake.
+ * `kn-` plus 26 base32 characters. The desktop puts it one label under the zone, since
+ * Universal SSL covers only `*.<zone>` and a deeper name would fail its TLS handshake.
  */
 const PUBLIC_ROUTE_HOSTNAME_PATTERN =
   /^kn-[a-z2-7]{26}\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9-]{2,63}$/u;

@@ -522,6 +522,49 @@ export const DesktopServerExposureStateSchema = Schema.Struct({
   tailscaleServePort: Schema.Number,
 });
 
+export const DesktopCloudflareZoneSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  accountId: Schema.String,
+  accountName: Schema.String,
+});
+export type DesktopCloudflareZone = typeof DesktopCloudflareZoneSchema.Type;
+
+export const DesktopCloudflareStateSchema = Schema.Struct({
+  /** The account token is stored only with OS-backed encryption. */
+  encryptionAvailable: Schema.Boolean,
+  connected: Schema.Boolean,
+  zone: Schema.NullOr(DesktopCloudflareZoneSchema),
+});
+export type DesktopCloudflareState = typeof DesktopCloudflareStateSchema.Type;
+
+export const DesktopCloudflareProvisionInputSchema = Schema.Struct({
+  environmentId: EnvironmentId,
+  /** The loopback port the host serves on; the tunnel's ingress points at it. */
+  originPort: Schema.Int,
+});
+export type DesktopCloudflareProvisionInput = typeof DesktopCloudflareProvisionInputSchema.Type;
+
+export const DesktopCloudflareProvisionedRouteSchema = Schema.Struct({
+  hostname: Schema.String,
+  tunnelId: Schema.String,
+  connectorToken: Schema.String,
+});
+export type DesktopCloudflareProvisionedRoute = typeof DesktopCloudflareProvisionedRouteSchema.Type;
+
+export const DesktopCloudflareTunnelSchema = Schema.Struct({
+  tunnelId: Schema.String,
+  name: Schema.String,
+  environmentId: Schema.String,
+});
+export type DesktopCloudflareTunnel = typeof DesktopCloudflareTunnelSchema.Type;
+
+export const DesktopCloudflareVerifyInputSchema = Schema.Struct({
+  hostname: Schema.String,
+  environmentId: EnvironmentId,
+});
+export type DesktopCloudflareVerifyInput = typeof DesktopCloudflareVerifyInputSchema.Type;
+
 export interface PickFolderOptions {
   initialPath?: string | null;
   targetEnvironmentId?: string;
@@ -1138,6 +1181,25 @@ export interface DesktopBridge {
   /** With a version, installs only that downloaded build. */
   installUpdate: (expectedVersion?: string) => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  /** Public routes on the user's Cloudflare account; the account token stays in the main process. */
+  cloudflare: {
+    getState: () => Promise<DesktopCloudflareState>;
+    /** Verifies and stores the token, then lists the zones it can manage. */
+    connect: (token: string) => Promise<ReadonlyArray<DesktopCloudflareZone>>;
+    listZones: () => Promise<ReadonlyArray<DesktopCloudflareZone>>;
+    selectZone: (zoneId: string) => Promise<DesktopCloudflareState>;
+    disconnect: () => Promise<DesktopCloudflareState>;
+    provision: (
+      input: DesktopCloudflareProvisionInput,
+    ) => Promise<DesktopCloudflareProvisionedRoute>;
+    /** Moves the route to a new hostname; the old one keeps answering for a short grace period. */
+    rotate: (input: DesktopCloudflareProvisionInput) => Promise<DesktopCloudflareProvisionedRoute>;
+    remove: (environmentId: EnvironmentId) => Promise<void>;
+    removeTunnel: (tunnelId: string) => Promise<void>;
+    listTunnels: () => Promise<ReadonlyArray<DesktopCloudflareTunnel>>;
+    /** Whether the hostname answers as this environment. */
+    verify: (input: DesktopCloudflareVerifyInput) => Promise<boolean>;
+  };
   cliCommand: {
     getState: () => Promise<DesktopCliCommandState>;
     install: () => Promise<DesktopCliCommandState>;

@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./cloudflarePublicRoute": {
+      "types": "./src/cloudflarePublicRoute.ts",
+      "import": "./src/cloudflarePublicRoute.ts"
+    },
     "./changedFileKind": {
       "types": "./src/changedFileKind.ts",
       "import": "./src/changedFileKind.ts"
