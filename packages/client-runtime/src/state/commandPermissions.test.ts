@@ -12,6 +12,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthPreviewOperateScope,
+  AuthRelayWriteScope,
   AuthSettingsWriteScope,
   AuthTerminalOperateScope,
   AuthSourceControlWriteScope,
@@ -568,6 +569,32 @@ it.effect("requires access management to answer a link request", () =>
       );
       expect(registry.get(answer.permissionAtom(env))).toBe(true);
       yield* answer.authorize(registry, env);
+    }),
+  ),
+);
+
+it.effect("requires relay management to turn a public route on or off", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      for (const method of [WS_METHODS.publicRouteEnable, WS_METHODS.publicRouteDisable]) {
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        const command = createCommandPermissions(runtime, method);
+        expect(registry.get(command.permissionAtom(env))).toBe(false);
+        expect((yield* command.authorize(registry, env).pipe(Effect.flip)).requiredPermission).toBe(
+          AuthRelayWriteScope,
+        );
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthRelayWriteScope],
+            permissions: [AuthRelayWriteScope],
+          }),
+        );
+        expect(registry.get(command.permissionAtom(env))).toBe(true);
+        yield* command.authorize(registry, env);
+      }
     }),
   ),
 );

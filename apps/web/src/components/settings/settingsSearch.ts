@@ -1179,6 +1179,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["link peer another machine vps agents work there handoff pairing code"],
   },
   {
+    id: "public-routes",
+    title: "Public routes",
+    to: "/settings/connections",
+    searchTerms: ["cloudflare tunnel domain internet phone mobile data hostname remote access"],
+    desktopOnly: true,
+  },
+  {
     id: "remote-environments",
     title: "Environments",
     to: "/settings/connections",

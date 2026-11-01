@@ -1,4 +1,28 @@
-import { FORK_CLI_NAME } from "./forkBrand.ts";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "./forkBrand.ts";
+
+/** What the account token needs, as the Cloudflare dashboard names it. */
+export const CLOUDFLARE_TOKEN_PERMISSIONS = [
+  "Account · Cloudflare Tunnel · Edit",
+  "Zone · DNS · Edit",
+  "Zone · Zone · Read",
+] as const;
+
+// `dns` and `zone` are documented template keys; `argotunnel` is the Tunnel group's key in practice but
+// undocumented, and user-token templates drop unknown keys silently, so the UI also lists the permissions.
+const TOKEN_TEMPLATE_KEYS = [
+  { key: "argotunnel", type: "edit" },
+  { key: "dns", type: "edit" },
+  { key: "zone", type: "read" },
+];
+
+export const CLOUDFLARE_TOKEN_TEMPLATE_URL = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams(
+  {
+    permissionGroupKeys: JSON.stringify(TOKEN_TEMPLATE_KEYS),
+    accountId: "*",
+    zoneId: "all",
+    name: `${FORK_DISPLAY_NAME} public routes`,
+  },
+).toString()}`;
 
 /** Deterministic, so any desktop holding the token can find, adopt, or clean up an environment's tunnel. */
 export const PUBLIC_ROUTE_TUNNEL_PREFIX = `${FORK_CLI_NAME}-`;

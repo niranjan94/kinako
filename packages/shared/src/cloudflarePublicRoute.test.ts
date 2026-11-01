@@ -2,7 +2,7 @@ import { PublicRouteHostname } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { makePublicRouteHostname } from "./cloudflarePublicRoute.ts";
+import { CLOUDFLARE_TOKEN_TEMPLATE_URL, makePublicRouteHostname } from "./cloudflarePublicRoute.ts";
 
 const isPublicRouteHostname = Schema.is(PublicRouteHostname);
 
@@ -17,5 +17,18 @@ describe("makePublicRouteHostname", () => {
         Uint8Array.from({ length: 16 }, (_, i) => i),
       ),
     ).toBe("kn-aaaqeayeaudaocajbifqydiob4.example.com");
+  });
+});
+
+describe("CLOUDFLARE_TOKEN_TEMPLATE_URL", () => {
+  it("pre-fills the three permissions", () => {
+    const url = new URL(CLOUDFLARE_TOKEN_TEMPLATE_URL);
+    expect(JSON.parse(url.searchParams.get("permissionGroupKeys") ?? "[]")).toEqual([
+      { key: "argotunnel", type: "edit" },
+      { key: "dns", type: "edit" },
+      { key: "zone", type: "read" },
+    ]);
+    expect(url.searchParams.get("accountId")).toBe("*");
+    expect(url.searchParams.get("zoneId")).toBe("all");
   });
 });

@@ -41,6 +41,7 @@ import { searchableSetting } from "./settingsSearch";
 import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { LinkedEnvironmentsSettings } from "./LinkedEnvironmentsSettings";
+import { PublicRouteSetting, PublicRoutesSection } from "./PublicRouteSettings";
 import { usePeerLinkHosts } from "~/state/peerLinks";
 import { LoadBalancingSettings } from "./LoadBalancingSettings";
 import { PullRequestRoutingSettings } from "./PullRequestRoutingSettings";
@@ -1121,6 +1122,12 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
                 {renderNetworkAccessRow()}
                 {renderEndpointRows()}
                 {renderTailscaleRow()}
+                {primaryEnvironmentId ? (
+                  <PublicRouteSetting
+                    environmentId={primaryEnvironmentId}
+                    label={primaryEnvironment?.label ?? "this computer"}
+                  />
+                ) : null}
                 {renderWslRow()}
                 {canReadRelay || canManageRelay ? (
                   <CloudLinkRow canReadRelay={canReadRelay} canManageRelay={canManageRelay} />
@@ -1521,6 +1528,22 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
           savedEnvironments={savedEnvironments}
         />
       </SettingsSection>
+      <PublicRoutesSection
+        environments={[
+          ...(primaryEnvironmentId
+            ? [
+                {
+                  environmentId: primaryEnvironmentId,
+                  label: primaryEnvironment?.label ?? "This computer",
+                },
+              ]
+            : []),
+          ...listedEnvironments.map((environment) => ({
+            environmentId: environment.environmentId,
+            label: environment.label,
+          })),
+        ]}
+      />
       {hasCloudPublicConfig() ? (
         <RemoveT3ConnectEnvironmentDialog
           environmentLabel={pendingT3ConnectRemoval?.label ?? null}
