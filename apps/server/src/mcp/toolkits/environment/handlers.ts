@@ -2,6 +2,7 @@ import { OrchestratorMcpFailure, type ServerSettings } from "@t3tools/contracts"
 import * as Effect from "effect/Effect";
 import * as Environment from "../../../environment/ServerEnvironment.ts";
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
+import * as PublicRoute from "../../../publicRoute/PublicRoute.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -51,6 +52,7 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
         serverVersion: descriptor.serverVersion,
         platform: descriptor.platform,
         preferences: preferences(current),
+        publicRoute: yield* (yield* PublicRoute.PublicRoute).getStatus,
       };
     }),
   ),
@@ -69,6 +71,20 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
       return yield* scope.thread === undefined
         ? update
         : executor.withLock(scope.thread.threadId, update);
+    }),
+  ),
+  t3_public_route_disable: McpToolAccess.writesEnvironment(() =>
+    Effect.gen(function* () {
+      yield* access;
+      const publicRoute = yield* PublicRoute.PublicRoute;
+      return yield* publicRoute
+        .disable()
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
+          ),
+        );
     }),
   ),
 });
