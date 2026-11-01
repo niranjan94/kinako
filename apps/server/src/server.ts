@@ -31,6 +31,7 @@ import * as ServerConfig from "./config.ts";
 import { withUntracedRequests } from "./http.ts";
 import * as ServerHttp from "./http.ts";
 import * as HttpBodyLimit from "./httpBodyLimit.ts";
+import * as HttpForwardedProto from "./httpForwardedProto.ts";
 import {
   guardHttpResponseWriteErrors,
   rejectRequestsUntilServing,
@@ -827,6 +828,7 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(ServerHttp.layerBrowserApiCors),
   Layer.provide(ServerHttp.layerHttpCompression),
   Layer.provide(HttpBodyLimit.layerUnauthenticatedBodyLimit),
+  Layer.provide(HttpForwardedProto.layerForwardedHttps),
 );
 
 const layerMakeServer = Layer.unwrap(
