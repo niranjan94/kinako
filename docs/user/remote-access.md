@@ -207,6 +207,28 @@ For a plain HTTP LAN endpoint, use the direct pairing URL in a browser that can
 open it, or pair from the desktop app. On mobile, an IP address entered without a
 scheme uses HTTP, so include `https://` when your server uses HTTPS.
 
+## Public routes with your Cloudflare account
+
+A public route makes an environment reachable from anywhere, including a phone on mobile data, through a Cloudflare Tunnel on your own Cloudflare account and domain. Nothing runs on a VPN, no router ports open, and Cloudflare's free plan covers it. You need a domain whose DNS is on Cloudflare.
+
+Set it up from the desktop app:
+
+1. Open **Settings → Environments → Public routes** and select **Create an API token**. The link opens Cloudflare with these permissions filled in; check they are all there before creating the token:
+   - Account · Cloudflare Tunnel · Edit
+   - Zone · DNS · Edit
+   - Zone · Zone · Read
+2. Paste the token and select **Connect**, then choose the domain if the token can see more than one. The token stays on this computer, encrypted by the operating system. The machines you expose never receive it.
+3. Turn on **Public route** for an environment: the local one under **Settings → Sharing & access**, or a remote one from its row's details in **Settings → Environments**. Remote environments added over SSH work too; the host only needs outbound internet access.
+
+Each route gets a long random address such as `https://kn-….example.com`. Nobody needs to type it:
+
+- **Add to phone** shows a QR code with the address and a one-time pairing code. The code expires after five minutes and does not grant terminal control.
+- A phone already paired over your local network or Tailscale learns the public route the next time it connects, and uses it when the other routes are out of reach.
+
+Anyone who learns the address reaches the environment's sign-in, the same as with T3 Connect; pairing codes and sessions still protect it. If an address leaks, select **Rotate address**. The old address keeps working for ten minutes so connected devices can move over, then stops.
+
+To remove a route, turn off **Public route**. The host stops its connector, and the desktop deletes the tunnel and its DNS record, even if the host is offline. **Public routes** also lists every tunnel this app created on the account, including ones whose environment is gone, so you can delete them. Disconnecting Cloudflare leaves existing routes running; delete their tunnels first if you want them gone.
+
 ## Desktop-managed SSH
 
 In the desktop app, open **Settings → Environments → Add environment**, choose
