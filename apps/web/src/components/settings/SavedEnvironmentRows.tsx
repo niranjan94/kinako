@@ -43,6 +43,7 @@ import { EnvironmentRow, environmentTransportLabel } from "./EnvironmentRow";
 import { AuthorizedClientsHeaderAction, PairingClientsList } from "./AuthorizedClientsSettings";
 import { advertisedEndpointsFromDirect } from "./ConnectionsSettings.logic";
 import { useEnvironmentAccessManagement } from "./useEnvironmentAccessManagement";
+import { PublicRouteSetting } from "./PublicRouteSettings";
 import { isLoopbackHostname } from "~/environments/primary";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
@@ -224,6 +225,7 @@ function RemoteAuthorizedClients({
   return (
     <div id={id} className="mt-2 border-t border-border/50">
       {sshTarget ? <SshNetworkAccessSetting target={sshTarget} label={label} /> : null}
+      <PublicRouteSetting environmentId={environmentId} label={label} layout="inline" />
       {access.canWriteAccess ? (
         <div className="flex flex-wrap items-center justify-between gap-3 py-3">
           <p className="text-xs text-muted-foreground">
