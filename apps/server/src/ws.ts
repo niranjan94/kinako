@@ -191,6 +191,7 @@ import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as WorktreeSnapshots from "./worktreeSnapshots.ts";
 import * as KeepAwake from "./background/KeepAwake.ts";
+import * as PublicRoute from "./publicRoute/PublicRoute.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import { terminalOutputStream, withTerminalOutputWindow } from "./terminal/OutputProtocol.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
@@ -1387,6 +1388,7 @@ export const layerWsRpc = (
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const storageCleanup = yield* StorageCleanup.StorageCleanup;
       const keepAwake = yield* KeepAwake.KeepAwake;
+      const publicRoute = yield* PublicRoute.PublicRoute;
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const secretResolver = yield* SecretResolver.SecretResolver;
@@ -2576,6 +2578,9 @@ export const layerWsRpc = (
         [WS_METHODS.serverRunStorageCleanup]: () => storageCleanup.runNow,
         [WS_METHODS.serverGetStorageCleanupReport]: () => storageCleanup.reports,
         [WS_METHODS.serverSubscribeKeepAwakeStatus]: () => keepAwake.status,
+        [WS_METHODS.publicRouteEnable]: (input) => publicRoute.enable(input),
+        [WS_METHODS.publicRouteDisable]: () => publicRoute.disable(),
+        [WS_METHODS.publicRouteSubscribeStatus]: () => publicRoute.status,
         [WS_METHODS.serverGetDatabaseStorage]: () => databaseStorage.status,
         [WS_METHODS.peerLinksList]: (_input) =>
           peerLinks.list.pipe(Effect.map((links) => ({ links }))),

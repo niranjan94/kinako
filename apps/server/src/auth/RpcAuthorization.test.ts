@@ -4,6 +4,8 @@ import {
   AuthFilesystemReadScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
+  AuthRelayReadScope,
+  AuthRelayWriteScope,
   CommandId,
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
@@ -105,6 +107,14 @@ describe("RPC authorization scopes", () => {
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTerminalOperateScope);
     }
+  });
+
+  it("guards public routes like the relay tunnel", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.publicRouteEnable)).toBe(AuthRelayWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.publicRouteDisable)).toBe(AuthRelayWriteScope);
+    expect(requiredScopeForRpcMethod(WS_METHODS.publicRouteSubscribeStatus)).toBe(
+      AuthRelayReadScope,
+    );
   });
 
   it("treats saved database credentials as settings and running SQL like a terminal", () => {
