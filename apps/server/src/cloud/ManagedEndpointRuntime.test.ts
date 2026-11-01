@@ -763,6 +763,7 @@ describe("CloudManagedEndpointRuntime", () => {
       yield* Queue.offer(output, encoder.encode(rejectedLine));
 
       expect(yield* Deferred.await(recoveryRequested)).toEqual(config);
+      expect(Option.getOrNull(yield* Stream.runHead(runtime.tunnelRejected))).toEqual(config);
 
       yield* Queue.offer(output, encoder.encode(rejectedLine.repeat(4)));
 

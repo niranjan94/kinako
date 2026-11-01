@@ -72,6 +72,8 @@ export class CloudManagedEndpointRuntime extends Context.Service<
     readonly recoveryRequests: Stream.Stream<RelayManagedEndpointRuntimeConfig>;
     readonly requestRecovery: (config: RelayManagedEndpointRuntimeConfig) => Effect.Effect<void>;
     readonly tunnelConnected: Stream.Stream<void>;
+    /** Emits when the edge keeps rejecting the connector's tunnel, unlike `recoveryRequests`, which any exit also feeds. */
+    readonly tunnelRejected: Stream.Stream<RelayManagedEndpointRuntimeConfig>;
     readonly withLinkStateLock: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   }
 >()("t3/cloud/ManagedEndpointRuntime/CloudManagedEndpointRuntime") {}
@@ -205,6 +207,7 @@ export const make = Effect.gen(function* () {
   const desiredConfigRef = yield* Ref.make<RelayManagedEndpointRuntimeConfig | null>(null);
   const recoveryRequests = yield* Queue.sliding<RelayManagedEndpointRuntimeConfig>(1);
   const tunnelConnections = yield* Queue.sliding<void>(1);
+  const tunnelRejections = yield* Queue.sliding<RelayManagedEndpointRuntimeConfig>(1);
   const readinessChanges = yield* Queue.sliding<void>(1);
   const reconcileSemaphore = yield* Semaphore.make(1);
   const restartDelayRef = yield* Ref.make(0);
@@ -630,6 +633,7 @@ export const make = Effect.gen(function* () {
                   attributes,
                 ).pipe(
                   Effect.andThen(Queue.offer(recoveryRequests, connector.config)),
+                  Effect.andThen(Queue.offer(tunnelRejections, connector.config)),
                   Effect.asVoid,
                 );
               }
@@ -865,6 +869,7 @@ export const make = Effect.gen(function* () {
       return Queue.offer(recoveryRequests, config).pipe(Effect.asVoid);
     }),
     tunnelConnected: Stream.fromQueue(tunnelConnections),
+    tunnelRejected: Stream.fromQueue(tunnelRejections),
     withLinkStateLock: linkStateSemaphore.withPermits(1),
   });
 

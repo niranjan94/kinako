@@ -197,6 +197,7 @@ describe("releaseManagedTunnelOnShutdown", () => {
                     } satisfies ManagedEndpointRuntime.CloudManagedEndpointRuntimeStatus);
               }),
             recoveryRequests: Stream.empty,
+            tunnelRejected: Stream.empty,
             requestRecovery: () => Effect.void,
             tunnelConnected: Stream.empty,
             inspectConnector: Effect.succeed(null),
