@@ -454,6 +454,7 @@ import {
   SourceControlSignInResult,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import { PublicRouteEnableInput, PublicRouteError, PublicRouteStatus } from "./publicRoute.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
@@ -682,6 +683,9 @@ export const WS_METHODS = {
   vcsRestoreWorktreeSnapshot: "vcs.restoreWorktreeSnapshot",
   vcsDeleteWorktreeSnapshot: "vcs.deleteWorktreeSnapshot",
   serverSubscribeKeepAwakeStatus: "server.subscribeKeepAwakeStatus",
+  publicRouteEnable: "publicRoute.enable",
+  publicRouteDisable: "publicRoute.disable",
+  publicRouteSubscribeStatus: "publicRoute.subscribeStatus",
   followUpsStart: "followUps.start",
   followUpsSetDismissed: "followUps.setDismissed",
   issuesList: "issues.list",
@@ -2054,6 +2058,25 @@ const WsServerSubscribeKeepAwakeStatusRpc = Rpc.make(WS_METHODS.serverSubscribeK
   error: EnvironmentAuthorizationError,
 });
 
+const WsPublicRouteEnableRpc = Rpc.make(WS_METHODS.publicRouteEnable, {
+  payload: PublicRouteEnableInput,
+  success: PublicRouteStatus,
+  error: Schema.Union([PublicRouteError, EnvironmentAuthorizationError]),
+});
+
+const WsPublicRouteDisableRpc = Rpc.make(WS_METHODS.publicRouteDisable, {
+  payload: Schema.Struct({}),
+  success: PublicRouteStatus,
+  error: Schema.Union([PublicRouteError, EnvironmentAuthorizationError]),
+});
+
+const WsPublicRouteSubscribeStatusRpc = Rpc.make(WS_METHODS.publicRouteSubscribeStatus, {
+  payload: Schema.Struct({}),
+  success: PublicRouteStatus,
+  stream: true,
+  error: EnvironmentAuthorizationError,
+});
+
 const WsIssuesListRpc = Rpc.make(WS_METHODS.issuesList, {
   payload: IssueListInput,
   success: IssueListResult,
@@ -2439,4 +2462,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsDeleteWorktreeSnapshotRpc,
   WsFollowUpsStartRpc,
   WsFollowUpsSetDismissedRpc,
+  WsPublicRouteEnableRpc,
+  WsPublicRouteDisableRpc,
+  WsPublicRouteSubscribeStatusRpc,
 ).middleware(RpcScopeAuthorization);

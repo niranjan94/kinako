@@ -6,6 +6,7 @@ import {
   AuthOrchestrationReadScope,
   AuthPreviewOperateScope,
   AuthSettingsWriteScope,
+  AuthRelayWriteScope,
   AuthSourceControlWriteScope,
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
@@ -88,6 +89,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.databaseFetchPage]: AuthTerminalOperateScope,
   [WS_METHODS.databaseCloseQuery]: AuthTerminalOperateScope,
   [WS_METHODS.databaseCancelQuery]: AuthTerminalOperateScope,
+  // Exposes or withdraws this environment on the internet, like the relay tunnel.
+  [WS_METHODS.publicRouteEnable]: AuthRelayWriteScope,
+  [WS_METHODS.publicRouteDisable]: AuthRelayWriteScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
