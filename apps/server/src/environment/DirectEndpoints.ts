@@ -18,6 +18,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { isTailnetHost } from "@t3tools/shared/hostClassification";
 
 import * as ServerConfig from "../config.ts";
+import * as PublicRoute from "../publicRoute/PublicRoute.ts";
 import {
   formatHostForUrl,
   isLoopbackHost,
@@ -120,6 +121,7 @@ export const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const httpClient = yield* HttpClient.HttpClient;
   const platform = yield* HostProcess.Platform;
+  const publicRoute = yield* PublicRoute.PublicRoute;
   // Only the service default listens on every interface without being asked,
   // so only it checks once whether it runs in a cloud. The check starts now so
   // the first client does not wait for its timeout.
@@ -161,6 +163,10 @@ export const make = Effect.gen(function* () {
       if (Option.isSome(servedUrl)) {
         endpoints.push({ kind: "tailnet", httpBaseUrl: servedUrl.value });
       }
+    }
+    const publicBaseUrl = yield* publicRoute.publicBaseUrl;
+    if (publicBaseUrl !== null) {
+      endpoints.push({ kind: "public", httpBaseUrl: publicBaseUrl });
     }
     return endpoints;
   });

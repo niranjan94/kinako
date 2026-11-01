@@ -66,6 +66,23 @@ export function advertisedEndpointsFromDirect(
   return directEndpoints.flatMap((endpoint) => {
     const secure = endpoint.httpBaseUrl.startsWith("https:");
     try {
+      if (endpoint.kind === "public") {
+        return [
+          createAdvertisedEndpoint({
+            id: `server-public:${endpoint.httpBaseUrl}`,
+            label: "Public route",
+            provider: {
+              id: "cloudflare-tunnel",
+              label: "Cloudflare tunnel",
+              kind: "tunnel",
+              isAddon: false,
+            },
+            httpBaseUrl: endpoint.httpBaseUrl,
+            reachability: "public",
+            source: "server",
+          }),
+        ];
+      }
       return [
         endpoint.kind === "lan"
           ? createAdvertisedEndpoint({

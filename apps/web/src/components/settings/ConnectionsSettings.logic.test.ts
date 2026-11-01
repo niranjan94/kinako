@@ -148,16 +148,18 @@ describe("selectQrEndpointOption", () => {
 });
 
 describe("advertisedEndpointsFromDirect", () => {
-  it("offers a remote server's LAN and tailnet addresses as QR targets", () => {
+  it("offers a remote server's LAN, tailnet, and public addresses as QR targets", () => {
     const endpoints = advertisedEndpointsFromDirect([
       { kind: "lan", httpBaseUrl: "http://192.168.1.20:3773/" },
       { kind: "tailnet", httpBaseUrl: "http://100.64.0.7:3773/" },
       { kind: "tailnet", httpBaseUrl: "https://box.tail1234.ts.net/" },
+      { kind: "public", httpBaseUrl: "https://kn-abcdefghijklmnopqrstuvwxyz.example.com/" },
     ]);
     expect(endpoints.map(({ label, reachability }) => ({ label, reachability }))).toEqual([
       { label: "Local network", reachability: "lan" },
       { label: "Tailscale IP", reachability: "private-network" },
       { label: "Tailscale HTTPS", reachability: "private-network" },
+      { label: "Public route", reachability: "public" },
     ]);
     expect(endpoints.every(isQrShareableEndpoint)).toBe(true);
     expect(endpoints[0]?.wsBaseUrl).toBe("ws://192.168.1.20:3773/");
