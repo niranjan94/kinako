@@ -1,3 +1,6 @@
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no generateKeyPairSync or sign.
+import * as NodeCrypto from "node:crypto";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   AuthTokenExchangeGrantType,
@@ -5,9 +8,11 @@ import {
   AuthAccessTokenType,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
+import type { DpopPublicJwk } from "@t3tools/shared/dpop";
 import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -156,4 +161,76 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
     );
   }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+const signTokenEndpointProof = (jti: string, iat: number) => {
+  const { privateKey, publicKey } = NodeCrypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const header = encode({
+    typ: "dpop+jwt",
+    alg: "ES256",
+    jwk: publicKey.export({ format: "jwk" }) as DpopPublicJwk,
+  });
+  const payload = encode({
+    htm: "POST",
+    htu: "http://127.0.0.1/oauth/token",
+    jti,
+    iat,
+  });
+  const signature = NodeCrypto.sign("sha256", Buffer.from(`${header}.${payload}`), {
+    key: privateKey,
+    dsaEncoding: "ieee-p1363",
+  }).toString("base64url");
+  return `${header}.${payload}.${signature}`;
+};
+
+// The web handler runs on its own runtime and wall clock, so the proof's iat must come from one too.
+it.live("records a DPoP proof as used only after the token request's credential resolves", () =>
+  Effect.gen(function* () {
+    const crypto = yield* Crypto.Crypto;
+    const secretStore = yield* ServerSecretStore.ServerSecretStore;
+    const requestContext = Context.make(Crypto.Crypto, crypto).pipe(
+      Context.add(ServerSecretStore.ServerSecretStore, secretStore),
+    );
+    const now = yield* DateTime.now;
+    const proof = signTokenEndpointProof(
+      "token-endpoint-proof",
+      Math.floor(now.epochMilliseconds / 1_000),
+    );
+    const tokenRequest = (subjectToken: string) =>
+      new Request("http://127.0.0.1/oauth/token", {
+        method: "POST",
+        headers: { dpop: proof, host: "127.0.0.1" },
+        body: new URLSearchParams({
+          grant_type: AuthTokenExchangeGrantType,
+          subject_token: subjectToken,
+          subject_token_type: AuthEnvironmentBootstrapTokenType,
+          requested_token_type: AuthAccessTokenType,
+        }),
+      });
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
+      (environment) =>
+        Effect.tryPromise(async () => {
+          const rejected = await environment.handler(tokenRequest("UNKNOWNCODE2"), requestContext);
+          expect(rejected.status).toBe(401);
+
+          const accepted = await environment.handler(tokenRequest(DEV_TOKEN), requestContext);
+          expect(accepted.status).toBe(200);
+          expect(await accepted.json()).toMatchObject({ token_type: "DPoP" });
+
+          const replayed = await environment.handler(tokenRequest(DEV_TOKEN), requestContext);
+          expect(replayed.status).toBe(401);
+          expect(await replayed.json()).toMatchObject({ dpopFailureReason: "replay" });
+        }),
+      (environment) => Effect.promise(() => environment.dispose()),
+    );
+  }).pipe(
+    Effect.provide(
+      ServerSecretStore.layer.pipe(
+        Layer.provide(layerConfig),
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
+  ),
 );

@@ -9,6 +9,7 @@ import {
 import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Etag from "effect/http/Etag";
@@ -439,7 +440,14 @@ it.live(
             bound.credential,
             undefined,
             { deviceType: "mobile" },
-            { proofKeyThumbprint: "device-key-thumbprint" },
+            {
+              dpopProof: {
+                thumbprint: "device-key-thumbprint",
+                jti: "device-proof",
+                iat: 0,
+                verifiedAt: DateTime.makeUnsafe(0),
+              },
+            },
           )
           .pipe(
             Effect.as(true),

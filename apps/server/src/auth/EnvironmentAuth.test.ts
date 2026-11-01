@@ -109,6 +109,14 @@ const makeDpopKey = () => {
   };
 };
 
+let testProofCount = 0;
+const testDpopProof = (thumbprint: string) => ({
+  thumbprint,
+  jti: `test-proof-${++testProofCount}`,
+  iat: 0,
+  verifiedAt: DateTime.makeUnsafe(0),
+});
+
 it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
   it.effect("uses the reusable dev cookie without overriding a normal scoped cookie", () =>
     Effect.gen(function* () {
@@ -232,7 +240,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         token,
         ["orchestration:read"],
         requestMetadata,
-        { proofKeyThumbprint: "test-proof-key" },
+        { dpopProof: testDpopProof("test-proof-key") },
       );
       expect(dpop.access_token).not.toBe(token);
       expect(dpop.access_token).not.toBe(exchanged.access_token);
@@ -710,7 +718,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         "desktop-bootstrap-token",
         ["orchestration:read"],
         requestMetadata,
-        { proofKeyThumbprint: key.thumbprint },
+        { dpopProof: testDpopProof(key.thumbprint) },
       );
       const session = yield* sessions.verify(exchanged.access_token);
       const host = "192.168.1.50:3773";
@@ -780,7 +788,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         "desktop-bootstrap-token",
         ["orchestration:read"],
         requestMetadata,
-        { proofKeyThumbprint: key.thumbprint },
+        { dpopProof: testDpopProof(key.thumbprint) },
       );
       const session = yield* sessions.verify(exchanged.access_token);
       const rpc = yield* serverAuth.issueWebSocketTicket(session, { use: "rpc" });

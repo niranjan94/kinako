@@ -52,7 +52,15 @@ export const mapDpopReplayStoreError = (
         cause: error,
       });
 
-export const verifyRequestDpopProof = Effect.fn("dpop.verifyRequestDpopProof")(function* (input: {
+export interface VerifiedDpopProof {
+  readonly thumbprint: string;
+  readonly jti: string;
+  readonly iat: number;
+  readonly verifiedAt: DateTime.Utc;
+}
+
+/** Checks a proof's signature and claims without recording its use. */
+export const checkRequestDpopProof = Effect.fn("dpop.checkRequestDpopProof")(function* (input: {
   readonly request: HttpServerRequest.HttpServerRequest;
   /** Overrides the `DPoP` header for requests that cannot carry one, such as a WebSocket upgrade. */
   readonly proof?: string;
@@ -84,10 +92,22 @@ export const verifyRequestDpopProof = Effect.fn("dpop.verifyRequestDpopProof")(f
       dpopFailureReason: mapDpopFailureReason(result.code),
     });
   }
+  return {
+    thumbprint: result.thumbprint,
+    jti: result.jti,
+    iat: result.iat,
+    verifiedAt: now,
+  } satisfies VerifiedDpopProof;
+});
+
+/** Records a checked proof as used; fails with a replay error when it was used before. */
+export const recordDpopProofUse = Effect.fn("dpop.recordDpopProofUse")(function* (
+  proof: VerifiedDpopProof,
+) {
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
   const replayKey = yield* Crypto.Crypto.pipe(
     Effect.flatMap((crypto) =>
-      crypto.digest("SHA-256", new TextEncoder().encode(`${result.thumbprint}:${result.jti}`)),
+      crypto.digest("SHA-256", new TextEncoder().encode(`${proof.thumbprint}:${proof.jti}`)),
     ),
     Effect.map(Base64Url.encode),
     Effect.mapError(
@@ -102,10 +122,10 @@ export const verifyRequestDpopProof = Effect.fn("dpop.verifyRequestDpopProof")(f
       `${DPOP_REPLAY_MARKER_PREFIX}${replayKey}`,
       new TextEncoder().encode(
         [
-          `thumbprint=${result.thumbprint}`,
-          `jti=${result.jti}`,
-          `iat=${result.iat}`,
-          `consumedAt=${DateTime.formatIso(now)}`,
+          `thumbprint=${proof.thumbprint}`,
+          `jti=${proof.jti}`,
+          `iat=${proof.iat}`,
+          `consumedAt=${DateTime.formatIso(proof.verifiedAt)}`,
         ].join("\n"),
       ),
     )
@@ -122,5 +142,12 @@ export const verifyRequestDpopProof = Effect.fn("dpop.verifyRequestDpopProof")(f
         }),
       ),
     );
-  return result.thumbprint;
+});
+
+export const verifyRequestDpopProof = Effect.fn("dpop.verifyRequestDpopProof")(function* (
+  input: Parameters<typeof checkRequestDpopProof>[0],
+) {
+  const proof = yield* checkRequestDpopProof(input);
+  yield* recordDpopProofUse(proof);
+  return proof.thumbprint;
 });
