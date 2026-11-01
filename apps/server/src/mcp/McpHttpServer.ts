@@ -72,6 +72,7 @@ import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
+import { withAuthenticatedBodyLimit } from "../httpBodyLimit.ts";
 import * as DeviceHandlers from "./toolkits/device/handlers.ts";
 import {
   DeviceScreenshotTool,
@@ -240,6 +241,7 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
         ...limited,
         linkedEnvironments,
       }),
+      withAuthenticatedBodyLimit,
       Effect.map(normalizeMcpHttpResponse),
     );
   }) satisfies McpAuthMiddleware;

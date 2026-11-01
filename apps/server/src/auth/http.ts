@@ -34,6 +34,7 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import * as SessionStore from "./SessionStore.ts";
 import { traceAuthenticatedRelayRequest, traceRelayRequest } from "../cloud/traceRelayRequest.ts";
+import { withAuthenticatedBodyLimit } from "../httpBodyLimit.ts";
 import { deriveAuthClientMetadata } from "./utils.ts";
 import { verifyRequestDpopProof } from "./dpop.ts";
 
@@ -250,6 +251,7 @@ export const layerAuthenticatedAuth = Layer.effect(
             ...session,
             scopes: new Set(session.scopes),
           }),
+          withAuthenticatedBodyLimit,
         );
         return yield* session.subject === "cloud-connect"
           ? traceAuthenticatedRelayRequest(handler, { startTime, endTime })

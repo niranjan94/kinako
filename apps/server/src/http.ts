@@ -48,6 +48,7 @@ import {
   failEnvironmentInternal,
 } from "./auth/http.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
+import { withAuthenticatedBodyLimit } from "./httpBodyLimit.ts";
 import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import {
   browserApiCorsAllowedHeaders,
@@ -343,7 +344,9 @@ export const layerOtlpTracesProxyRoute = HttpRouter.add(
     const browserTraceCollector = yield* BrowserTraceCollector.BrowserTraceCollector;
     const httpClient = yield* HttpClient.HttpClient;
     const serialization = yield* OtlpSerialization.OtlpSerialization;
-    const bodyJson = cast<unknown, OtlpTracer.TraceData>(yield* request.json);
+    const bodyJson = cast<unknown, OtlpTracer.TraceData>(
+      yield* withAuthenticatedBodyLimit(request.json),
+    );
 
     yield* Effect.try({
       try: () => decodeOtlpTraceRecords(bodyJson),
