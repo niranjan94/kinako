@@ -185,13 +185,9 @@ export function PublicRouteSetting({
 
   const run = async (title: string, action: () => Promise<void>) => {
     setBusy(true);
-    try {
-      await action();
-    } catch (error) {
-      reportError(title, error);
-    } finally {
-      setBusy(false);
-    }
+    await action()
+      .catch((error: unknown) => reportError(title, error))
+      .finally(() => setBusy(false));
   };
 
   const turnOn = () =>
@@ -309,15 +305,14 @@ function ConnectCloudflareForm() {
     const bridge = desktopCloudflareBridge();
     if (!bridge || token.trim().length === 0) return;
     setBusy(true);
-    try {
-      await bridge.connect(token);
-      setToken("");
-      refreshDesktopCloudflareState();
-    } catch (error) {
-      reportError("Could not connect Cloudflare", error);
-    } finally {
-      setBusy(false);
-    }
+    await bridge
+      .connect(token)
+      .then(() => {
+        setToken("");
+        refreshDesktopCloudflareState();
+      })
+      .catch((error: unknown) => reportError("Could not connect Cloudflare", error))
+      .finally(() => setBusy(false));
   };
   return (
     <div className="flex flex-col gap-3 px-4 py-3 sm:px-5">
@@ -441,16 +436,14 @@ function TunnelList({
     );
     if (confirmed !== true) return;
     setRemoving(tunnel.tunnelId);
-    try {
-      await desktopCloudflareBridge()?.removeTunnel(tunnel.tunnelId);
-      setTunnels(
-        (current) => current?.filter((entry) => entry.tunnelId !== tunnel.tunnelId) ?? null,
-      );
-    } catch (error) {
-      reportError("Could not delete the tunnel", error);
-    } finally {
-      setRemoving(null);
-    }
+    await (desktopCloudflareBridge()?.removeTunnel(tunnel.tunnelId) ?? Promise.resolve())
+      .then(() =>
+        setTunnels(
+          (current) => current?.filter((entry) => entry.tunnelId !== tunnel.tunnelId) ?? null,
+        ),
+      )
+      .catch((error: unknown) => reportError("Could not delete the tunnel", error))
+      .finally(() => setRemoving(null));
   };
   return (
     <div className="flex flex-col gap-1 px-4 py-3 sm:px-5">
