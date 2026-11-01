@@ -43,7 +43,7 @@ import * as PairingGrantStore from "./PairingGrantStore.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
 import * as SessionStore from "./SessionStore.ts";
 import { REUSABLE_DEV_SESSION_EXPIRES_AT, resolveReusableDevAuth } from "./ReusableDevAuth.ts";
-import { verifyRequestDpopProof } from "./dpop.ts";
+import { recordDpopProofUse, verifyRequestDpopProof, type VerifiedDpopProof } from "./dpop.ts";
 import { DESKTOP_RENDERER_ORIGINS } from "../httpCors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedLimits from "../policy/managedLimits.ts";
@@ -474,7 +474,8 @@ export class EnvironmentAuth extends Context.Service<
       requestedScopes: ReadonlyArray<AuthEnvironmentScope> | undefined,
       requestMetadata: AuthClientMetadata,
       input?: {
-        readonly proofKeyThumbprint?: string;
+        /** Binds the token to this proof's key; the proof is marked used only once the credential resolves. */
+        readonly dpopProof?: VerifiedDpopProof;
       },
     ) => Effect.Effect<
       AuthAccessTokenResult,
@@ -954,12 +955,19 @@ export const make = Effect.gen(function* () {
 
   const exchangeBootstrapCredentialForAccessToken: EnvironmentAuth["Service"]["exchangeBootstrapCredentialForAccessToken"] =
     (credential, requestedScopes, requestMetadata, input) => {
+      const proofKeyThumbprint = input?.dpopProof?.thumbprint;
       return resolveBootstrapGrant(credential, {
-        ...input,
+        ...(proofKeyThumbprint ? { proofKeyThumbprint } : {}),
         ...(requestedScopes !== undefined ? { requestedScopes } : {}),
       }).pipe(
         Effect.flatMap((grant) =>
           Effect.gen(function* () {
+            if (input?.dpopProof) {
+              yield* recordDpopProofUse(input.dpopProof).pipe(
+                Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore),
+                Effect.provideService(Crypto.Crypto, crypto),
+              );
+            }
             const grantedScopes =
               requestedScopes === undefined
                 ? grant.scopes
@@ -969,12 +977,12 @@ export const make = Effect.gen(function* () {
             }
             return yield* sessions
               .issue({
-                method: input?.proofKeyThumbprint ? "dpop-access-token" : "bearer-access-token",
+                method: proofKeyThumbprint ? "dpop-access-token" : "bearer-access-token",
                 subject: grant.subject,
                 scopes: grantedScopes,
-                ...(input?.proofKeyThumbprint
+                ...(proofKeyThumbprint
                   ? {
-                      proofKeyThumbprint: input.proofKeyThumbprint,
+                      proofKeyThumbprint,
                       ttl: Duration.hours(1),
                     }
                   : {}),
@@ -998,7 +1006,7 @@ export const make = Effect.gen(function* () {
                 ({
                   access_token: session.token,
                   issued_token_type: AuthAccessTokenType,
-                  token_type: input?.proofKeyThumbprint ? "DPoP" : "Bearer",
+                  token_type: proofKeyThumbprint ? "DPoP" : "Bearer",
                   expires_in: Math.max(
                     0,
                     Math.floor(
