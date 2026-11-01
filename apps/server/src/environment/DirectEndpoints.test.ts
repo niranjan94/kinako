@@ -11,6 +11,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { describe, expect, it } from "vite-plus/test";
 
 import * as ServerConfig from "../config.ts";
+import * as PublicRoute from "../publicRoute/PublicRoute.ts";
 import * as DirectEndpoints from "./DirectEndpoints.ts";
 import { resolveBoundEndpoints } from "./DirectEndpoints.ts";
 
@@ -268,12 +269,17 @@ const layerServeConfig = Layer.effect(
   Layer.provide(NodeServices.layer),
 );
 
-const resolveWithServe = (probeStatus: number) =>
+const resolveWithServe = (probeStatus: number, publicBaseUrl: string | null = null) =>
   Effect.flatMap(DirectEndpoints.DirectEndpoints, (service) => service.resolve()).pipe(
     Effect.provide(
       DirectEndpoints.layer.pipe(
         Layer.provide(
-          Layer.mergeAll(layerServeConfig, layerTailscaleUp, layerServeProbe(probeStatus)),
+          Layer.mergeAll(
+            layerServeConfig,
+            layerTailscaleUp,
+            layerServeProbe(probeStatus),
+            Layer.mock(PublicRoute.PublicRoute)({ publicBaseUrl: Effect.succeed(publicBaseUrl) }),
+          ),
         ),
       ),
     ),
@@ -291,6 +297,16 @@ describe("DirectEndpoints Tailscale Serve", () => {
   effectIt.effect("leaves the tailnet name out when Serve is not forwarding", () =>
     Effect.gen(function* () {
       expect(yield* resolveWithServe(502)).toEqual([]);
+    }),
+  );
+
+  effectIt.effect("lists a configured public route, even on a loopback bind", () =>
+    Effect.gen(function* () {
+      expect(
+        yield* resolveWithServe(502, "https://kn-abcdefghijklmnopqrstuvwxyz.example.com/"),
+      ).toEqual([
+        { kind: "public", httpBaseUrl: "https://kn-abcdefghijklmnopqrstuvwxyz.example.com/" },
+      ]);
     }),
   );
 });
