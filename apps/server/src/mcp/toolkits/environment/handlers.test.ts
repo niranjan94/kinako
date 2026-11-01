@@ -16,6 +16,7 @@ import * as Stream from "effect/Stream";
 import * as Environment from "../../../environment/ServerEnvironment.ts";
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as PublicRoute from "../../../publicRoute/PublicRoute.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -58,6 +59,7 @@ it.effect("refuses a preferences update when the caller's turn ends while it wai
           capabilities: { repositoryIdentity: false },
         }),
       }),
+      Layer.mock(PublicRoute.PublicRoute)({}),
       Layer.mock(Settings.ServerSettingsService)({
         getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
         updateSettings: () =>

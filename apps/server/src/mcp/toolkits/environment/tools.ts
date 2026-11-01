@@ -4,6 +4,7 @@ import {
   ExecutionEnvironmentDescriptor,
   OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
+  PublicRouteStatus,
   ServerSettings,
   ServerSettingsPatch,
 } from "@t3tools/contracts";
@@ -12,6 +13,7 @@ import { Tool, Toolkit } from "effect/ai";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as PublicRoute from "../../../publicRoute/PublicRoute.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
@@ -36,6 +38,7 @@ const shared = {
     ServerEnvironment.ServerEnvironment,
     Settings.ServerSettingsService,
     ThreadCommandExecutor.ThreadCommandExecutor,
+    PublicRoute.PublicRoute,
   ],
 };
 const EnvironmentReadTool = Tool.make("t3_environment_read", {
@@ -49,6 +52,7 @@ const EnvironmentReadTool = Tool.make("t3_environment_read", {
     serverVersion: Schema.String,
     platform: ExecutionEnvironmentDescriptor.fields.platform,
     preferences: Schema.Struct(PreferenceFields),
+    publicRoute: PublicRouteStatus,
   }),
 })
   .annotate(Tool.Readonly, true)
@@ -67,4 +71,17 @@ const EnvironmentPreferencesTool = Tool.make("t3_environment_preferences_update"
   }),
   success: Schema.Struct(PreferenceFields),
 }).annotate(Tool.Destructive, true);
-export const EnvironmentToolkit = Toolkit.make(EnvironmentReadTool, EnvironmentPreferencesTool);
+const PublicRouteDisableTool = Tool.make("t3_public_route_disable", {
+  ...shared,
+  description:
+    "Stop this server's public route (Cloudflare tunnel) and delete its connector. Live full-access or default caller thread only. Only the desktop app can re-enable it.",
+  parameters: Schema.Struct({ environmentId: OrchestratorMcpEnvironmentTarget }),
+  success: PublicRouteStatus,
+})
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.Idempotent, true);
+export const EnvironmentToolkit = Toolkit.make(
+  EnvironmentReadTool,
+  EnvironmentPreferencesTool,
+  PublicRouteDisableTool,
+);
