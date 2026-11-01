@@ -245,6 +245,9 @@ const RPC_AGGREGATES = {
   [WS_METHODS.vcsSubscribeWorktreeSnapshots]: "vcs",
   [WS_METHODS.vcsRestoreWorktreeSnapshot]: "vcs",
   [WS_METHODS.vcsDeleteWorktreeSnapshot]: "vcs",
+  [WS_METHODS.publicRouteEnable]: "public-route",
+  [WS_METHODS.publicRouteDisable]: "public-route",
+  [WS_METHODS.publicRouteSubscribeStatus]: "public-route",
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;
 
 const RPC_SPAN_PREFIX = "ws.rpc";

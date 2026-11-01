@@ -27,6 +27,7 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as BackgroundPolicy from "./background/BackgroundPolicy.ts";
 import * as HostPowerMonitor from "./background/HostPowerMonitor.ts";
 import * as KeepAwake from "./background/KeepAwake.ts";
+import * as PublicRoute from "./publicRoute/PublicRoute.ts";
 import * as ServerConfig from "./config.ts";
 import { withUntracedRequests } from "./http.ts";
 import * as ServerHttp from "./http.ts";
@@ -539,6 +540,12 @@ const layerCloudManagedEndpointRuntime = Layer.mergeAll(
   ),
 );
 
+// One instance shared by the WebSocket handlers, MCP, and the endpoints it is advertised in.
+const layerPublicRoute = PublicRoute.layer.pipe(
+  Layer.provide(ServerSecretStore.layer),
+  Layer.provide(layerRelayClient),
+);
+
 const layerScheduledTaskWebhookOrigin = Layer.effect(
   ScheduledTaskWebhookOrigin,
   Effect.gen(function* () {
@@ -739,6 +746,7 @@ const layerRuntimeCoreDependencies = layerRuntimeCoreDependenciesBase.pipe(
         Layer.provide(ExternalLauncher.layer),
       ),
       layerCloudManagedEndpointRuntime,
+      layerPublicRoute,
     ),
   ),
 );
