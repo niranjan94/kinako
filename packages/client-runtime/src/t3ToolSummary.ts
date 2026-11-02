@@ -364,9 +364,6 @@ export function summarizeT3ToolCalls(
     case "environment-update":
       label = phrase("Updated", "update", `environment preferences ${times}`);
       break;
-    case "public-route-disable":
-      label = phrase("Turned off", "turn off", `the public route ${times}`);
-      break;
     case "environment-links":
       label = phrase("Listed", "list", `linked environments ${times}`);
       break;
