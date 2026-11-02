@@ -47,6 +47,7 @@ import {
   type DatabaseWorkspaceScope,
 } from "./databaseWorkspace";
 import { createSqlSchemaCompletion } from "./sqlCompletion";
+import { ENGINE_LABELS } from "./sqlDialect";
 import { sqlStatementRanges, sqlWriteRisk, type SqlStatement } from "./sqlStatements";
 
 const shortcut = (shiftKey: boolean) =>
@@ -263,7 +264,7 @@ function ConsoleView({
         updateTab(tab.id, { result });
         if (result.kind === "failed") {
           if (result.position) updateTab(tab.id, { errorAt: statement.from + result.position - 1 });
-          if (result.cancelled && tabConnection.target.engine === "sqlite")
+          if (result.cancelled && tabConnection.target.engine !== "postgres")
             updateTab(tab.id, { sessionId: undefined });
           break;
         }
@@ -461,9 +462,10 @@ function ConsoleView({
           >
             {tab.result.cancelled ? "Query cancelled." : tab.result.message}
           </p>
-          {tab.result.cancelled && tabConnection?.target.engine === "sqlite" && (
+          {tab.result.cancelled && tabConnection && tabConnection.target.engine !== "postgres" && (
             <p className="mt-2 text-muted-foreground">
-              SQLite session reset. Run again to start a new session.
+              {ENGINE_LABELS[tabConnection.target.engine]} session reset. Run again to start a new
+              session.
             </p>
           )}
           {(tab.result.code || tab.errorAt !== undefined) && (
@@ -613,7 +615,7 @@ function ConsoleView({
                 <DatabaseIcon />
                 {connection.name}
                 <span className="ml-auto pl-4 text-xs text-muted-foreground">
-                  {connection.target.engine === "sqlite" ? "SQLite" : "PostgreSQL"}
+                  {ENGINE_LABELS[connection.target.engine]}
                   {connection.readOnly ? " · Read-only" : ""}
                 </span>
               </MenuItem>

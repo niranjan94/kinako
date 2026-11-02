@@ -27,6 +27,7 @@ import { databaseState } from "../../state/database";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
 import { DatabaseToolbarButton, DatabaseHint } from "./DatabaseToolbarButton";
 import { databaseErrorMessage, databaseValue } from "./databaseHooks";
+import { ENGINE_LABELS } from "./sqlDialect";
 
 function DatabaseNode({
   environmentId,
@@ -104,7 +105,7 @@ function DatabaseNode({
           : EyeIcon;
   const description =
     kind === "schemas" || kind === "databases"
-      ? `${connection.name}${database ? ` · ${database}` : ""} · ${connection.target.engine === "sqlite" ? "SQLite" : "PostgreSQL"}${connection.readOnly ? " · Read-only" : ""}`
+      ? `${connection.name}${database ? ` · ${database}` : ""} · ${ENGINE_LABELS[connection.target.engine]}${connection.readOnly ? " · Read-only" : ""}`
       : kind === "columns" && objectType !== "table"
         ? `${label} · ${objectType === "view" ? "View" : "Materialized view"}`
         : label;

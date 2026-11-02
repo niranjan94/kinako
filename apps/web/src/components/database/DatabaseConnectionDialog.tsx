@@ -65,9 +65,11 @@ export function DatabaseConnectionDialog({
   const [level, setLevel] = useState(connection?.level ?? initialLevel);
   const [engine, setEngine] = useState(connection?.target.engine ?? "postgres");
   const pg = connection?.target.engine === "postgres" ? connection.target : null;
-  const [host, setHost] = useState(pg?.host ?? "localhost");
-  const [port, setPort] = useState(String(pg?.port ?? 5432));
-  const [database, setDatabase] = useState(pg?.database ?? "");
+  const ch = connection?.target.engine === "clickhouse" ? connection.target : null;
+  const server = pg ?? ch;
+  const [host, setHost] = useState(server?.host ?? "localhost");
+  const [port, setPort] = useState(String(server?.port ?? 5432));
+  const [database, setDatabase] = useState(server?.database ?? "");
   const [databaseMode, setDatabaseMode] = useState<"single" | "all" | "selected">(
     pg?.databaseSelection === undefined
       ? "single"
@@ -78,7 +80,8 @@ export function DatabaseConnectionDialog({
   const [selectedDatabases, setSelectedDatabases] = useState(
     pg?.databaseSelection && pg.databaseSelection !== "all" ? pg.databaseSelection.join("\n") : "",
   );
-  const [user, setUser] = useState(pg?.user ?? "");
+  const [user, setUser] = useState(server?.user ?? "");
+  const [secure, setSecure] = useState(ch?.secure ?? true);
   const [sslMode, setSslMode] = useState<DatabasePostgresSslMode>(pg?.sslMode ?? "prefer");
   const auth = pg?.auth;
   const [authKind, setAuthKind] = useState<DatabasePostgresAuthKind>(auth?.kind ?? "password");
@@ -111,7 +114,7 @@ export function DatabaseConnectionDialog({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const id = useId();
-  const usesPassword = authKind === "password";
+  const usesPassword = engine !== "postgres" || authKind === "password";
   const awsLocation = () => ({
     ...(awsProfile.trim() ? { profile: awsProfile } : {}),
     ...(awsRegion.trim() ? { region: awsRegion } : {}),
@@ -139,30 +142,32 @@ export function DatabaseConnectionDialog({
       target:
         engine === "sqlite"
           ? { engine, path }
-          : {
-              engine,
-              host,
-              port: Number(port),
-              database,
-              user,
-              sslMode,
-              ...postgresAuth(),
-              ...(databaseMode === "single"
-                ? {}
-                : {
-                    databaseSelection:
-                      databaseMode === "all"
-                        ? "all"
-                        : [
-                            ...new Set(
-                              selectedDatabases
-                                .split("\n")
-                                .map((name) => name.trim())
-                                .filter(Boolean),
-                            ),
-                          ],
-                  }),
-            },
+          : engine === "clickhouse"
+            ? { engine, host, port: Number(port), database, user, secure }
+            : {
+                engine,
+                host,
+                port: Number(port),
+                database,
+                user,
+                sslMode,
+                ...postgresAuth(),
+                ...(databaseMode === "single"
+                  ? {}
+                  : {
+                      databaseSelection:
+                        databaseMode === "all"
+                          ? "all"
+                          : [
+                              ...new Set(
+                                selectedDatabases
+                                  .split("\n")
+                                  .map((name) => name.trim())
+                                  .filter(Boolean),
+                              ),
+                            ],
+                    }),
+              },
       readOnly,
       ...(engine === "postgres" && !usesPassword
         ? {}
@@ -291,13 +296,18 @@ export function DatabaseConnectionDialog({
                   disabled={!!copyTo}
                   onValueChange={(next) => {
                     const value = next[0];
-                    if (value !== "postgres" && value !== "sqlite") return;
+                    if (value !== "postgres" && value !== "sqlite" && value !== "clickhouse")
+                      return;
                     setEngine(value);
-                    if (value === "sqlite" && level === "global") setLevel("environment");
+                    if (value !== "postgres" && level === "global") setLevel("environment");
+                    // Swap only an untouched default port.
+                    if (value === "clickhouse" && port === "5432") setPort("8443");
+                    if (value === "postgres" && port === "8443") setPort("5432");
                   }}
                 >
                   <Toggle value="postgres">PostgreSQL</Toggle>
                   <Toggle value="sqlite">SQLite</Toggle>
+                  <Toggle value="clickhouse">ClickHouse</Toggle>
                 </ToggleGroup>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -347,7 +357,11 @@ export function DatabaseConnectionDialog({
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex min-w-0 flex-col gap-1.5">
                       <Label htmlFor={`${id}-database`}>
-                        {databaseMode === "single" ? "Database" : "Initial database"}
+                        {engine === "clickhouse"
+                          ? "Default database"
+                          : databaseMode === "single"
+                            ? "Database"
+                            : "Initial database"}
                       </Label>
                       <Input
                         id={`${id}-database`}
@@ -365,27 +379,29 @@ export function DatabaseConnectionDialog({
                       />
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-database-mode`}>Databases to show</Label>
-                    <DatabaseSelect
-                      id={`${id}-database-mode`}
-                      label="Databases to show"
-                      value={databaseMode}
-                      options={[
-                        { value: "single", label: "Only the initial database" },
-                        { value: "all", label: "All databases" },
-                        { value: "selected", label: "Selected databases" },
-                      ]}
-                      onChange={setDatabaseMode}
-                    />
-                    {databaseMode !== "single" && (
-                      <p className="text-xs text-muted-foreground">
-                        The initial database is used to connect to the server. All databases lists
-                        those your user can connect to.
-                      </p>
-                    )}
-                  </div>
-                  {databaseMode === "selected" && (
+                  {engine === "postgres" && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor={`${id}-database-mode`}>Databases to show</Label>
+                      <DatabaseSelect
+                        id={`${id}-database-mode`}
+                        label="Databases to show"
+                        value={databaseMode}
+                        options={[
+                          { value: "single", label: "Only the initial database" },
+                          { value: "all", label: "All databases" },
+                          { value: "selected", label: "Selected databases" },
+                        ]}
+                        onChange={setDatabaseMode}
+                      />
+                      {databaseMode !== "single" && (
+                        <p className="text-xs text-muted-foreground">
+                          The initial database is used to connect to the server. All databases lists
+                          those your user can connect to.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {engine === "postgres" && databaseMode === "selected" && (
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor={`${id}-selected-databases`}>Database names</Label>
                       <Textarea
@@ -400,21 +416,23 @@ export function DatabaseConnectionDialog({
                       </p>
                     </div>
                   )}
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-auth`}>Authentication</Label>
-                    <DatabaseSelect
-                      id={`${id}-auth`}
-                      label="Authentication"
-                      value={authKind}
-                      options={[
-                        { value: "password", label: "Password" },
-                        { value: "aws-iam", label: "AWS IAM" },
-                        { value: "aws-secrets-manager", label: "AWS Secrets Manager" },
-                        { value: "aws-parameter-store", label: "AWS Parameter Store" },
-                      ]}
-                      onChange={setAuthKind}
-                    />
-                  </div>
+                  {engine === "postgres" && (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor={`${id}-auth`}>Authentication</Label>
+                      <DatabaseSelect
+                        id={`${id}-auth`}
+                        label="Authentication"
+                        value={authKind}
+                        options={[
+                          { value: "password", label: "Password" },
+                          { value: "aws-iam", label: "AWS IAM" },
+                          { value: "aws-secrets-manager", label: "AWS Secrets Manager" },
+                          { value: "aws-parameter-store", label: "AWS Parameter Store" },
+                        ]}
+                        onChange={setAuthKind}
+                      />
+                    </div>
+                  )}
                   {usesPassword && (
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor={`${id}-password`}>Password</Label>
@@ -516,21 +534,34 @@ export function DatabaseConnectionDialog({
                       </p>
                     </>
                   )}
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-tls`}>TLS</Label>
-                    <DatabaseSelect
-                      id={`${id}-tls`}
-                      label="TLS"
-                      value={sslMode}
-                      options={[
-                        { value: "disable", label: "Disable" },
-                        { value: "prefer", label: "Prefer (use TLS when the server offers it)" },
-                        { value: "require", label: "Require" },
-                        { value: "verify-full", label: "Require and verify the certificate" },
-                      ]}
-                      onChange={setSslMode}
-                    />
-                  </div>
+                  {engine === "clickhouse" ? (
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex flex-col gap-1">
+                        <Label htmlFor={`${id}-secure`}>HTTPS</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Connects to ClickHouse's HTTP interface, usually port 8443 with HTTPS or
+                          8123 without.
+                        </p>
+                      </div>
+                      <Switch id={`${id}-secure`} checked={secure} onCheckedChange={setSecure} />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor={`${id}-tls`}>TLS</Label>
+                      <DatabaseSelect
+                        id={`${id}-tls`}
+                        label="TLS"
+                        value={sslMode}
+                        options={[
+                          { value: "disable", label: "Disable" },
+                          { value: "prefer", label: "Prefer (use TLS when the server offers it)" },
+                          { value: "require", label: "Require" },
+                          { value: "verify-full", label: "Require and verify the certificate" },
+                        ]}
+                        onChange={setSslMode}
+                      />
+                    </div>
+                  )}
                 </>
               )}
               <div className="flex flex-col gap-1.5">

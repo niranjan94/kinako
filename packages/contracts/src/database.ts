@@ -91,7 +91,23 @@ export const DatabaseSqliteTarget = Schema.Struct({
 });
 export type DatabaseSqliteTarget = typeof DatabaseSqliteTarget.Type;
 
-export const DatabaseTarget = Schema.Union([DatabasePostgresTarget, DatabaseSqliteTarget]);
+/** Reached over ClickHouse's HTTP interface; its databases are shown as schemas. */
+export const DatabaseClickhouseTarget = Schema.Struct({
+  engine: Schema.Literal("clickhouse"),
+  host: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  port: PortSchema,
+  /** Default database for unqualified table names. */
+  database: Identifier,
+  user: Identifier,
+  secure: Schema.Boolean,
+});
+export type DatabaseClickhouseTarget = typeof DatabaseClickhouseTarget.Type;
+
+export const DatabaseTarget = Schema.Union([
+  DatabasePostgresTarget,
+  DatabaseSqliteTarget,
+  DatabaseClickhouseTarget,
+]);
 export type DatabaseTarget = typeof DatabaseTarget.Type;
 export type DatabaseEngine = DatabaseTarget["engine"];
 
