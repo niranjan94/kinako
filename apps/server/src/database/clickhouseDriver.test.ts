@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - A local HTTP server stands in for ClickHouse.
 import * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
 import { expect, it } from "@effect/vitest";
@@ -47,51 +48,61 @@ async function fakeClickhouse() {
       "pw",
       true,
     );
-  return { requests, open, [Symbol.asyncDispose]: () => new Promise((r) => server.close(r)) };
+  const close = () => new Promise<void>((resolve) => server.close(() => resolve()));
+  return { requests, open, close };
 }
 
-it("pages streamed rows and keeps 64-bit integers and arrays exact", async () => {
-  await using fake = await fakeClickhouse();
-  const session = await fake.open();
-  const outcome = await session.execute("SELECT * FROM t", 2);
-  expect(outcome.kind).toBe("rows");
-  if (outcome.kind !== "rows") return;
-  expect(outcome.cursor.columns).toEqual([
-    { name: "id", dataType: "UInt64" },
-    { name: "tags", dataType: "Array(String)" },
-  ]);
-  expect(outcome.firstPage).toEqual({
-    rows: [
-      ["18446744073709551615", '["a"]'],
-      ["2", "[]"],
-    ],
-    done: false,
-  });
-  expect(await outcome.cursor.read(5)).toEqual({ rows: [["3", '["c"]']], done: true });
-  await outcome.cursor.close();
-  const query = fake.requests.at(-1)!;
-  expect(query.user).toBe("reader");
-  expect(query.url.searchParams.get("readonly")).toBe("1");
-  expect(query.url.searchParams.get("database")).toBe("db");
-  expect(query.url.searchParams.get("session_id")).toBeTruthy();
-});
+async function withFake(test: (fake: Awaited<ReturnType<typeof fakeClickhouse>>) => Promise<void>) {
+  const fake = await fakeClickhouse();
+  try {
+    await test(fake);
+  } finally {
+    await fake.close();
+  }
+}
 
-it("reports errors before and during the stream, and row counts for commands", async () => {
-  await using fake = await fakeClickhouse();
-  const session = await fake.open();
-  await expect(session.execute("SELECT broken", 10)).rejects.toMatchObject({
-    engineMessage: "Code: 47. DB::Exception: Unknown identifier",
-    code: "47",
-  });
-  const failing = await session.execute("SELECT fails", 1);
-  if (failing.kind !== "rows") throw new Error("expected rows");
-  await expect(failing.cursor.read(10)).rejects.toMatchObject({
-    engineMessage: "Code: 241. DB::Exception: Memory limit exceeded",
-    code: "241",
-  });
-  expect(await session.execute("INSERT INTO t VALUES (1)", 10)).toEqual({
-    kind: "command",
-    command: "OK",
-    affectedRows: 3,
-  });
-});
+it("pages streamed rows and keeps 64-bit integers and arrays exact", () =>
+  withFake(async (fake) => {
+    const session = await fake.open();
+    const outcome = await session.execute("SELECT * FROM t", 2);
+    expect(outcome.kind).toBe("rows");
+    if (outcome.kind !== "rows") return;
+    expect(outcome.cursor.columns).toEqual([
+      { name: "id", dataType: "UInt64" },
+      { name: "tags", dataType: "Array(String)" },
+    ]);
+    expect(outcome.firstPage).toEqual({
+      rows: [
+        ["18446744073709551615", '["a"]'],
+        ["2", "[]"],
+      ],
+      done: false,
+    });
+    expect(await outcome.cursor.read(5)).toEqual({ rows: [["3", '["c"]']], done: true });
+    await outcome.cursor.close();
+    const query = fake.requests.at(-1)!;
+    expect(query.user).toBe("reader");
+    expect(query.url.searchParams.get("readonly")).toBe("1");
+    expect(query.url.searchParams.get("database")).toBe("db");
+    expect(query.url.searchParams.get("session_id")).toBeTruthy();
+  }));
+
+it("reports errors before and during the stream, and row counts for commands", () =>
+  withFake(async (fake) => {
+    const session = await fake.open();
+    await expect(session.execute("SELECT broken", 10)).rejects.toMatchObject({
+      engineMessage: "Code: 47. DB::Exception: Unknown identifier",
+      code: "47",
+    });
+    const failing = await session.execute("SELECT fails", 1);
+    if (failing.kind !== "rows") throw new Error("expected rows");
+    await expect(failing.cursor.read(10)).rejects.toMatchObject({
+      engineMessage: "Code: 241. DB::Exception: Memory limit exceeded",
+      code: "241",
+    });
+    expect(await session.execute("INSERT INTO t VALUES (1)", 10)).toEqual({
+      kind: "command",
+      command: "OK",
+      affectedRows: 3,
+    });
+  }));

@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalFetch:off - Engine adapters sit behind the Promise-based DatabaseSession, like the Postgres and SQLite drivers.
 import * as NodeCrypto from "node:crypto";
 
 import type { DatabaseClickhouseTarget, DatabaseIntrospectScope } from "@t3tools/contracts";
