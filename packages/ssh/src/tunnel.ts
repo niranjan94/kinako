@@ -551,6 +551,27 @@ fi
 exec "$T3_RUNTIME_DIR/${FORK_CLI_NAME}" "$@"
 `;
 
+// A pid file outlives a reboot, and kill -0 also accepts Linux thread ids, so
+// a recorded pid is only trusted when ps lists it with the start time saved at
+// launch. Records without a start time fall back to ps listing the pid at all,
+// and a host without a usable ps falls back to kill -0.
+const REMOTE_PROCESS_IDENTITY_SCRIPT = `PS_USABLE=""
+if [ -n "$(ps -o lstart= -p "$$" 2>/dev/null || true)" ]; then
+  PS_USABLE=1
+fi
+record_process_start() {
+  [ -n "$PS_USABLE" ] || return 0
+  ps -o lstart= -p "$1" >"$2" 2>/dev/null || rm -f "$2"
+}
+process_is() {
+  [ -n "$1" ] && kill -0 "$1" 2>/dev/null || return 1
+  [ -n "$PS_USABLE" ] || return 0
+  PROCESS_START="$(ps -o lstart= -p "$1" 2>/dev/null || true)"
+  [ -n "$PROCESS_START" ] || return 1
+  [ -n "$2" ] && [ -f "$2" ] || return 0
+  [ "$PROCESS_START" = "$(cat "$2" 2>/dev/null || true)" ]
+}`;
+
 const REMOTE_LAUNCH_SCRIPT = `set -eu
 @@T3_NODE_ENV_SCRIPT@@
 STATE_KEY="$1"
@@ -560,6 +581,7 @@ DEFAULT_SERVER_HOME="$HOME/${FORK_HOME_DIR_NAME}"
 DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"
 SERVER_DIR="$LAUNCH_DIR/${REMOTE_SERVER_RECORD_DIR}"
 PID_FILE="$SERVER_DIR/pid"
+START_FILE="$SERVER_DIR/started"
 PORT_FILE="$SERVER_DIR/port"
 MODE_FILE="$SERVER_DIR/mode"
 OWNER_FILE="$SERVER_DIR/owner"
@@ -625,13 +647,18 @@ wait_for_pid_exit() {
     sleep 0.1
   done
 }
+@@T3_PROCESS_IDENTITY_SCRIPT@@
 # kill -0 also succeeds for a server that exited but was not reaped yet, so
-# a zombie does not count as running. Without ps to tell, trust kill -0.
+# a zombie does not count as running.
 server_running() {
-  [ -n "$1" ] && kill -0 "$1" 2>/dev/null || return 1
+  process_is "$1" "$2" || return 1
+  [ -n "$PS_USABLE" ] || return 0
   case "$(ps -o stat= -p "$1" 2>/dev/null || true)" in
     *Z*) return 1 ;;
   esac
+}
+clear_owned_record() {
+  rm -f "$PID_FILE" "$START_FILE" "$MODE_FILE" "$OWNER_FILE" "$HOST_FILE"
 }
 resolve_default_runtime_port() {
   if [ "$T3_ARCHIVE_MODE" = "1" ]; then
@@ -662,22 +689,23 @@ NODE
 stop_owned_server() {
   kill "$OWNED_PID" 2>/dev/null || true
   wait_for_pid_exit "$OWNED_PID"
-  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE" "$HOST_FILE"
+  clear_owned_record
   OWNED_PID=""
 }
 OWNED_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-if [ -n "$OWNED_PID" ] && ! server_running "$OWNED_PID"; then
+if [ -n "$OWNED_PID" ] && ! server_running "$OWNED_PID" "$START_FILE"; then
   OWNED_PID=""
-  rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE" "$HOST_FILE"
+  clear_owned_record
 fi
 # Earlier launchers kept this record per route, so a second route to the same
 # host saw the server as external and never replaced it. Adopt a live one.
 for LEGACY_DIR in "$LAUNCH_DIR"/*; do
   [ -f "$LEGACY_DIR/managed" ] || continue
   LEGACY_PID="$(cat "$LEGACY_DIR/pid" 2>/dev/null || true)"
-  if [ -z "$OWNED_PID" ] && [ "$(cat "$LEGACY_DIR/managed" 2>/dev/null || true)" = "managed" ] && server_running "$LEGACY_PID"; then
+  if [ -z "$OWNED_PID" ] && [ "$(cat "$LEGACY_DIR/managed" 2>/dev/null || true)" = "managed" ] && server_running "$LEGACY_PID" ""; then
     OWNED_PID="$LEGACY_PID"
     printf '%s\\n' "$OWNED_PID" >"$PID_FILE"
+    record_process_start "$OWNED_PID" "$START_FILE"
     cp "$LEGACY_DIR/port" "$PORT_FILE" 2>/dev/null || true
     printf 'serve\\n' >"$MODE_FILE"
     printf '%s\\n' "\${LEGACY_DIR##*/}" >"$OWNER_FILE"
@@ -705,12 +733,12 @@ if [ -n "$OWNED_PID" ]; then
     stop_owned_server
   elif wait_ready "@@T3_READY_TIMEOUT_MS@@"; then
     REMOTE_MANAGED="managed"
-  elif server_running "$OWNED_PID"; then
+  elif server_running "$OWNED_PID" "$START_FILE"; then
     printf 'Remote T3 server is still running but did not become ready. Retry the connection; the server was left running.\\n' >&2
     exit 1
   else
     OWNED_PID=""
-    rm -f "$PID_FILE" "$MODE_FILE" "$OWNER_FILE" "$HOST_FILE"
+    clear_owned_record
     REMOTE_PORT=""
   fi
 else
@@ -742,6 +770,7 @@ if [ -z "$REMOTE_PORT" ]; then
   fi
   OWNED_PID="$!"
   printf '%s\\n' "$OWNED_PID" >"$PID_FILE"
+  record_process_start "$OWNED_PID" "$START_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf '%s\\n' "$SERVER_MODE" >"$MODE_FILE"
   printf '%s\\n' "$STATE_KEY" >"$OWNER_FILE"
@@ -792,15 +821,18 @@ STATE_KEY="@@T3_STATE_KEY@@"
 LAUNCH_DIR="$HOME/${FORK_HOME_DIR_NAME}/ssh-launch"
 STATE_DIR="$LAUNCH_DIR/$STATE_KEY"
 SERVER_DIR="$LAUNCH_DIR/${REMOTE_SERVER_RECORD_DIR}"
+@@T3_PROCESS_IDENTITY_SCRIPT@@
 # Only the route that started the server stops it: another route to this
 # host may still be using it.
 REMOTE_PID=""
+REMOTE_START_FILE=""
 if [ "$(cat "$SERVER_DIR/owner" 2>/dev/null || true)" = "$STATE_KEY" ]; then
   REMOTE_PID="$(cat "$SERVER_DIR/pid" 2>/dev/null || true)"
+  REMOTE_START_FILE="$SERVER_DIR/started"
 elif [ "$(cat "$STATE_DIR/managed" 2>/dev/null || true)" = "managed" ]; then
   REMOTE_PID="$(cat "$STATE_DIR/pid" 2>/dev/null || true)"
 fi
-if [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
+if process_is "$REMOTE_PID" "$REMOTE_START_FILE"; then
   kill "$REMOTE_PID" 2>/dev/null || true
   WAIT_COUNT=0
   while kill -0 "$REMOTE_PID" 2>/dev/null && [ "$WAIT_COUNT" -lt @@T3_STOP_WAIT_TICKS@@ ]; do
@@ -813,7 +845,7 @@ if [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
   fi
 fi
 if [ "$(cat "$SERVER_DIR/owner" 2>/dev/null || true)" = "$STATE_KEY" ]; then
-  rm -f "$SERVER_DIR/pid" "$SERVER_DIR/mode" "$SERVER_DIR/owner" "$SERVER_DIR/host"
+  rm -f "$SERVER_DIR/pid" "$SERVER_DIR/started" "$SERVER_DIR/mode" "$SERVER_DIR/owner" "$SERVER_DIR/host"
 fi
 rm -f "$STATE_DIR/pid" "$STATE_DIR/port" "$STATE_DIR/managed"
 printf '{"stopped":true}\\n'
@@ -902,6 +934,7 @@ function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
     T3_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
     T3_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
     T3_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
+    T3_PROCESS_IDENTITY_SCRIPT: REMOTE_PROCESS_IDENTITY_SCRIPT,
     T3_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
     T3_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
     T3_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
@@ -928,6 +961,7 @@ export function buildRemoteStopScript(stateKey: string): string {
   return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
     T3_STATE_KEY: stateKey,
     T3_STOP_WAIT_TICKS: String(REMOTE_STOP_WAIT_TICKS),
+    T3_PROCESS_IDENTITY_SCRIPT: REMOTE_PROCESS_IDENTITY_SCRIPT,
   });
 }
 

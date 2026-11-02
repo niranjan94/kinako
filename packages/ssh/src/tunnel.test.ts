@@ -774,6 +774,48 @@ esac
   );
 
   it.live.skipIf(windowsHost)(
+    "treats a recorded server pid that another process now holds as stale",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* makeHost();
+        const other = yield* host.run(host.home, [
+          "-c",
+          "nohup sleep 300 >/dev/null 2>&1 & echo $!",
+        ]);
+        const otherPid = Number(other.stdout.trim());
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (isAlive(otherPid)) process.kill(otherPid, "SIGTERM");
+          }),
+        );
+        // What a server leaves behind when the host reboots and its pid is reused.
+        const serverDir = `${host.home}/.kinako/ssh-launch/server`;
+        const writeStaleRecord = Effect.forEach(
+          Object.entries({
+            pid: String(otherPid),
+            port: "4400",
+            mode: "launcher",
+            owner: routeA,
+            host: "127.0.0.1",
+            started: "Thu Jan  1 00:00:00 1970",
+          }),
+          ([name, value]) => host.fs.writeFileString(`${serverDir}/${name}`, `${value}\n`),
+        );
+        yield* host.fs.makeDirectory(serverDir, { recursive: true });
+
+        yield* writeStaleRecord;
+        yield* host.stop(routeA);
+        assert.isTrue(isAlive(otherPid));
+
+        yield* writeStaleRecord;
+        const result = yield* host.launch(routeA);
+        assert.deepEqual(result, { remotePort: 4400, serverKind: "managed", networkAccess: false });
+        assert.isTrue((yield* host.servers)[0]?.alive);
+        assert.isTrue(isAlive(otherPid));
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.live.skipIf(windowsHost)(
     "relaunches its server on the network when the host enables network access",
     () =>
       Effect.gen(function* () {
