@@ -71,17 +71,4 @@ const EnvironmentPreferencesTool = Tool.make("t3_environment_preferences_update"
   }),
   success: Schema.Struct(PreferenceFields),
 }).annotate(Tool.Destructive, true);
-const PublicRouteDisableTool = Tool.make("t3_public_route_disable", {
-  ...shared,
-  description:
-    "Stop this server's public route (Cloudflare tunnel) and delete its connector. Live full-access or default caller thread only. Only the desktop app can re-enable it.",
-  parameters: Schema.Struct({ environmentId: OrchestratorMcpEnvironmentTarget }),
-  success: PublicRouteStatus,
-})
-  .annotate(Tool.Destructive, true)
-  .annotate(Tool.Idempotent, true);
-export const EnvironmentToolkit = Toolkit.make(
-  EnvironmentReadTool,
-  EnvironmentPreferencesTool,
-  PublicRouteDisableTool,
-);
+export const EnvironmentToolkit = Toolkit.make(EnvironmentReadTool, EnvironmentPreferencesTool);

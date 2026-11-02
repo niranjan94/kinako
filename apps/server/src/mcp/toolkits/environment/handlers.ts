@@ -73,18 +73,4 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
         : executor.withLock(scope.thread.threadId, update);
     }),
   ),
-  t3_public_route_disable: McpToolAccess.writesEnvironment(() =>
-    Effect.gen(function* () {
-      yield* access;
-      const publicRoute = yield* PublicRoute.PublicRoute;
-      return yield* publicRoute
-        .disable()
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
-          ),
-        );
-    }),
-  ),
 });
