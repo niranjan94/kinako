@@ -110,6 +110,7 @@ import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../termina
 import { isMacPlatform } from "~/lib/utils";
 import { readLocalApi } from "../localApi";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
+import { useRightPanelStore } from "../rightPanelStore";
 import {
   pickableProjectGroups,
   selectProjectGroupingSettings,
@@ -2882,6 +2883,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+              canOpenInSplit:
+                routeThreadRef !== null &&
+                routeThreadRef.environmentId === threadRef.environmentId &&
+                routeThreadRef.threadId !== threadRef.threadId,
               supports: {
                 settlement: configLoaded,
                 autoSettleOptOut: supportsAutoSettleOptOut,
@@ -3008,6 +3013,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             }
             return;
           }
+          case "open-split":
+            if (routeThreadRef)
+              useRightPanelStore.getState().openSideChat(routeThreadRef, threadRef.threadId);
+            return;
           case "rename":
             startThreadRename(threadRef, thread.title);
             return;
