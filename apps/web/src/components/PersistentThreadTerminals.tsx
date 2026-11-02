@@ -262,7 +262,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
         active && visible && "[[data-panel-animations=true]_&]:starting:grid-rows-[0fr]!",
       )}
     >
-      <div className="min-h-0 overflow-clip">
+      <div className="min-h-0 min-w-0 overflow-clip">
         <ThreadTerminalDrawer
           threadRef={threadRef}
           threadId={threadId}
