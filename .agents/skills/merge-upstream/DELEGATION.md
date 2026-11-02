@@ -18,11 +18,11 @@ Keep files that share a feature in one batch, even across tiers (raise the batch
 After the merge compiles, two more jobs go out the same way:
 
 - **Compile errors (step 4):** send each package's errors back to the agent that resolved that area, with `SendMessage`, so it fixes them with its context intact.
-- **Comment-length lint (step 6):** one `haiku` agent with the file:line list and the rule "shorten to four lines or fewer, keeping the constraint and any Kinako command or path names".
+- **Comment-length lint (step 7):** one `haiku` agent with the file:line list and the rule "shorten to four lines or fewer, keeping the constraint and any Kinako command or path names".
 
 ## Review
 
-Before step 4, dispatch one `opus` agent to review the `sonnet` and `haiku` resolutions. Give it the file list and ask it to read `git diff MERGE_HEAD -- <file>` and `git diff HEAD -- <file>` for each, and report only defects: a dropped `break` or `return` where two sides' cases meet, a fork guard or feature lost, an upstream change lost, a `FORK_*` value replaced by an upstream literal. It edits nothing; you fix or re-dispatch what it reports.
+Before step 4, dispatch one `opus` agent to review the `sonnet` and `haiku` resolutions. Give it the file list and ask it to read `git diff MERGE_HEAD -- <file>` and `git diff HEAD -- <file>` for each, and report only defects: a dropped `break` or `return` where two sides' cases meet, a fork guard or feature lost (including the security guards in FORK.md "Unauthenticated surface"), an upstream change lost, a `FORK_*` value replaced by an upstream literal. It edits nothing; you fix or re-dispatch what it reports.
 
 ## Brief
 

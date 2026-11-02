@@ -55,6 +55,19 @@ Merge conflicts come from fork changes that touch the same lines as upstream. Ke
 
 Fork-only migrations live in `apps/server/src/persistence/Migrations/fork/` and record into their own `fork_sql_migrations` ledger (`ForkMigrations.ts`), so upstream migrations keep upstream's ids and merge without renumbering. Fork migrations run after every upstream migration; give a new one the next fork id and record the latest upstream id beside it in `firstRanAfterUpstream` (`ForkMigrations.test.ts`), which checks that later upstream migrations never drop fork schema from existing databases. Builds before this split recorded fork migrations in upstream's ledger at shifted ids; `splitForkMigrationLedger` moves them once on startup, and those older builds refuse to open the database afterwards. The mobile store promotion row is omitted until Kinako has public distribution links.
 
+## Unauthenticated surface
+
+Kinako hosts can be on the public internet through public routes, so anything a request reaches before a credential check is security-critical here even where upstream treats it as LAN-only. Every upstream merge audits it (`merge-upstream` skill, step 6): `scan-upstream.sh` section 5 lists what upstream changed there, and `scan-upstream.sh --guards` fails if a resolution dropped one of the fork's guards. A new route, body read, cookie, forwarded-header check or pre-auth write from upstream gets a decision in the merge report, and an upstream bug found there gets its own fix commit with a test.
+
+The fork's guards, each with a test that fails without it:
+
+- A global 1 MiB request body cap (`layerUnauthenticatedBodyLimit` in `server.ts`), lifted only after authentication by `withAuthenticatedBodyLimit` in `auth/http.ts`, `http.ts` (OTLP proxy) and `mcp/McpHttpServer.ts`.
+- `/oauth/token` checks a DPoP proof statelessly (`checkRequestDpopProof`) and records its replay marker (`recordDpopProofUse` in `EnvironmentAuth.ts`) only after the bootstrap credential resolves.
+- Session cookies go through `sessionCookieOptions` in `auth/http.ts`, which marks them `Secure` behind a TLS-terminating proxy.
+- The HTTPS redirect and HSTS (`layerForwardedHttps`) apply only to requests through Cloudflare's edge (`cf-ray`), so LAN proxies keep working.
+
+The `surface` and `guards` lists in `.agents/skills/merge-upstream/scripts/scan-upstream.sh` are the authoritative file and guard lists; add a new guard there and here together.
+
 ## Rebrand seams
 
 Kinako's identity lives in `packages/shared/src/forkBrand.ts`. Call sites import from it instead of carrying literals, so most upstream changes merge cleanly; a conflict on one of these lines usually means upstream touched the same literal, and the fix is to keep the import. Internal names stay upstream's on purpose: the `@t3tools/*` scope, contract names, and `T3CODE_*` environment variables. Text only agents read also keeps upstream's "T3 Code": MCP tool names and descriptions, the MCP server name, MCP errors returned to agents, and prompts injected into turns such as pull request watch wakes. Commands, paths, and repository URLs inside that text still use Kinako's values, since an agent has to be able to run them. The worktree-local dev state directory is `.kinako` like the home directory; `.t3` stays in `.gitignore` so older worktrees' data is not committed.

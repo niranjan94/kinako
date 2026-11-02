@@ -14,12 +14,46 @@
 #      alters (a table rebuild there silently drops the fork's schema).
 #   4. Lines upstream added that carry an upstream identity literal. Each one
 #      is a candidate for a forkBrand import; some are labels that stay.
+#   5. Upstream changes to the unauthenticated surface (FORK.md "Unauthenticated
+#      surface"): surface files it changed, and added server lines that add a
+#      route, read a body, set a cookie, or trust proxy headers. Audit each one.
+#
+# --guards runs after conflicts are resolved: it checks that every fork security
+# guard on the unauthenticated surface is still in the working tree, and exits 1
+# naming any that a resolution dropped.
 #
 # --drift runs after conflicts are resolved: it lists files whose code (not comments)
 # lost FORK_* references or Kinako literals compared with the fork (default HEAD,
 # which is the fork's side during a merge). A drop is a silent revert unless
 # upstream deleted that code on purpose.
 set -eu
+
+# Fork security guards, as token<TAB>file. Keep in step with FORK.md "Unauthenticated surface".
+guards='layerUnauthenticatedBodyLimit	apps/server/src/server.ts
+layerForwardedHttps	apps/server/src/server.ts
+withAuthenticatedBodyLimit	apps/server/src/auth/http.ts
+withAuthenticatedBodyLimit	apps/server/src/http.ts
+withAuthenticatedBodyLimit	apps/server/src/mcp/McpHttpServer.ts
+checkRequestDpopProof	apps/server/src/auth/http.ts
+recordDpopProofUse	apps/server/src/auth/EnvironmentAuth.ts
+sessionCookieOptions	apps/server/src/auth/http.ts
+cf-ray	apps/server/src/httpForwardedProto.ts'
+
+if [ "${1:-}" = "--guards" ]; then
+  printf '== Fork security guards\n\n'
+  missing=0
+  printf '%s\n' "$guards" | while IFS='	' read -r token file; do
+    if [ -f "$file" ] && grep -qF -- "$token" "$file"; then
+      printf 'ok       %s  %s\n' "$file" "$token"
+    else
+      printf 'MISSING  %s  %s\n' "$file" "$token"
+    fi
+  done > "${TMPDIR:-/tmp}/kinako-guards.$$"
+  cat "${TMPDIR:-/tmp}/kinako-guards.$$"
+  grep -q '^MISSING' "${TMPDIR:-/tmp}/kinako-guards.$$" && missing=1
+  rm -f "${TMPDIR:-/tmp}/kinako-guards.$$"
+  exit "$missing"
+fi
 
 if [ "${1:-}" = "--drift" ]; then
   fork="${2:-HEAD}"
@@ -145,4 +179,50 @@ git diff -U0 "$base" "$upstream" -- . ':(exclude)pnpm-lock.yaml' ':(exclude).rep
       line++
     }
     END { if (!found) print "(none)" }
+  '
+printf '\n'
+
+printf '== 5. Unauthenticated surface changed upstream\n\n'
+# Anyone who can reach the server, including through a public route, hits these before a credential check.
+surface='apps/server/src/auth apps/server/src/http.ts apps/server/src/httpBodyLimit.ts
+apps/server/src/httpForwardedProto.ts apps/server/src/httpCors.ts apps/server/src/server.ts
+apps/server/src/ws.ts apps/server/src/guest apps/server/src/scheduledTasks/webhookRoute.ts
+apps/server/src/cloud/http.ts apps/server/src/cloud/CliTokenManager.ts
+apps/server/src/mcp/McpHttpServer.ts apps/server/src/assets/AttachmentUpload.ts
+apps/server/src/device/DeviceHubProxy.ts apps/server/src/preview/ServerBrowserStream.ts
+apps/server/src/environment/ServerEnvironment.ts packages/contracts/src/environmentHttp.ts
+packages/contracts/src/auth.ts packages/shared/src/dpop.ts'
+printf 'Surface files:\n'
+# shellcheck disable=SC2086
+git diff --stat=120 "$base" "$upstream" -- $surface ':(exclude)*.test.ts' | sed 's/^/  /' | grep . || printf '  (none)\n'
+printf '\nAdded server lines to audit:\n'
+surface_patterns='route	HttpRouter\.(add|prefixAll)\(|HttpApiEndpoint\.(get|post|put|patch|delete|del)\(|HttpApiGroup\.make\(|\.middleware\(
+body	request\.(json|text|arrayBuffer|urlParamsBody|multipart|stream)\b|schemaBody(Json|Urlencoded)?\(|MaxBodySize
+cookie	setCookie|Cookies\.(set|expireCookie)|sameSite|httpOnly
+proxy	x-forwarded|cf-ray|remoteAddress|privateNetworkOnly|isLoopback
+upgrade	\.upgrade\b|authenticateWebSocketUpgrade|wsTicket
+state	secretStore\.(create|set)|\.consume\('
+git diff -U0 "$base" "$upstream" -- 'apps/server/src/*.ts' 'packages/contracts/src/*.ts' \
+  'packages/shared/src/*.ts' ':(exclude)*.test.ts' ':(exclude)*.testkit.ts' ':(exclude)*/testkit/*' \
+  | PATTERNS="$surface_patterns" awk '
+    BEGIN {
+      n = split(ENVIRON["PATTERNS"], rows, "\n")
+      for (i = 1; i <= n; i++) { split(rows[i], kv, "\t"); label[i] = kv[1]; re[i] = kv[2] }
+    }
+    /^\+\+\+ b\// { file = substr($0, 7); next }
+    /^@@/ { split($3, hunk, ","); line = substr(hunk[1], 2) + 0; next }
+    /^\+/ {
+      text = substr($0, 2)
+      for (i = 1; i <= n; i++) {
+        if (text ~ re[i]) {
+          sub(/^[ \t]+/, "", text)
+          if (length(text) > 160) text = substr(text, 1, 157) "..."
+          printf "  %-8s %s:%d  %s\n", label[i], file, line, text
+          found = 1
+          break
+        }
+      }
+      line++
+    }
+    END { if (!found) print "  (none)" }
   '

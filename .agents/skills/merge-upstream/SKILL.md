@@ -7,18 +7,19 @@ description: Merge pingdotgg/t3code's main into this Kinako fork and resolve the
 
 This repository is a fork of `pingdotgg/t3code` that ships as **Kinako**. Its identity (display name, `~/.kinako`, the `kinako` CLI and release archives, `io.niranjan.kinako` app IDs, `kinako://` schemes, service names, default ports 3873 and 8443, SnapShot helper names, `kinako/<hex>` worktree branches) is routed through `packages/shared/src/forkBrand.ts`. FORK.md has the full list under "Rebrand seams". Read it before resolving anything.
 
-A merge can break Kinako in three ways, and only the first is loud:
+A merge can break Kinako in four ways, and only the first is loud:
 
 1. **Conflicts** where upstream edited a line the fork changed.
 2. **Silent regressions** where upstream adds a new `t3code://` link, `~/.t3` path, `t3` executable name, `com.t3tools.t3code` ID or 3773 port in code the fork never touched. Git merges these cleanly, and the next build collides with an installed upstream T3 Code or sends links to the wrong app.
 3. **Silent reverts** where a clean merge or a careless resolution drops a `FORK_*` reference the fork had.
+4. **New exposure** where upstream changes what anyone can reach without a credential. Kinako hosts can sit on the public internet through public routes, so an upstream route that reads a body or writes state before authenticating, or a resolution that drops one of the fork's guards, is a security bug in Kinako even if it is harmless for upstream (step 6).
 
 Merge often. Conflict count grows with the gap, not with upstream's activity: a week of upstream is a dozen conflicts, a month is a hundred.
 
 ## Ground rules
 
 - Merge, never rebase. `main` is published and other clones track it (FORK.md "Syncing with upstream").
-- Leave the merge commit local and report; the developer pushes after reviewing. If the developer asks you to push, the merge is not done until CI is green on the pushed commit (step 8).
+- Leave the merge commit local and report; the developer pushes after reviewing. If the developer asks you to push, the merge is not done until CI is green on the pushed commit (step 9).
 - The checkout may be shared with other sessions. Check `git status` and `git branch --show-current` right before merging and again before committing, and stop if either changed under you.
 - Use `pnpm`; run project tools with `pnpm exec` or from `node_modules/.bin`.
 - Write long test, typecheck and install output to a file in the scratchpad (`$S` below) and grep that file.
@@ -34,14 +35,15 @@ git fetch upstream                 # remote: https://github.com/pingdotgg/t3code
 .agents/skills/merge-upstream/scripts/scan-upstream.sh > "$S/scan.txt"
 ```
 
-The scan has four sections:
+The scan has five sections:
 
 1. **Seam files changed upstream.** Usually long, since most seam files carry fork edits. Skim it for files you recognise from the known cases below; step 5's drift check is what catches reverts.
 2. **Workflows added upstream.** Each needs disabling in the fork's Actions tab (FORK.md "One-time setup"). Report them; the developer disables them.
 3. **Migrations added upstream**, flagged where they touch a table a fork migration alters (step 3).
 4. **Upstream identity literals on added lines.** Input for step 5.
+5. **Unauthenticated surface changed upstream.** Input for step 6.
 
-If the scan reports 0 commits, say so and stop. Done when you have read sections 2 to 4.
+If the scan reports 0 commits, say so and stop. Done when you have read sections 2 to 5.
 
 ## 2. Merge and triage
 
@@ -69,7 +71,7 @@ Done when `git diff --name-only --diff-filter=U` is empty and no file the merge 
 | Conflict                                                                                        | Resolution                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm-lock.yaml`                                                                                | `git checkout --theirs pnpm-lock.yaml`, then `pnpm install` once all other conflicts are resolved. Never hand-merge it.                                                                                                                                                                                                                                                                                                                             |
-| Migrations (scan section 3)                                                                     | Upstream migrations keep upstream's ids and merge cleanly; never renumber them. Fork-only migrations live in `Migrations/fork/` with their own ledger (`ForkMigrations.ts`) and run after all of upstream's. On a database that already ran a fork migration, a later upstream migration that rebuilds or drops a table the fork alters silently loses the fork's column or index. Read each migration the scan flags; step 6 proves it either way. |
+| Migrations (scan section 3)                                                                     | Upstream migrations keep upstream's ids and merge cleanly; never renumber them. Fork-only migrations live in `Migrations/fork/` with their own ledger (`ForkMigrations.ts`) and run after all of upstream's. On a database that already ran a fork migration, a later upstream migration that rebuilds or drops a table the fork alters silently loses the fork's column or index. Read each migration the scan flags; step 7 proves it either way. |
 | Deleted in the fork, changed upstream                                                           | Keep it deleted (`git rm`) unless the fork's reason no longer holds; `git log` on the fork side shows why it went.                                                                                                                                                                                                                                                                                                                                  |
 | Deleted or moved upstream, changed in the fork                                                  | Follow upstream, then re-home the fork's change in upstream's new structure. `git log $(git merge-base HEAD MERGE_HEAD)..HEAD -- <file>` shows which fork commits to carry. A change that was only a previous merge's adjustment needs nothing.                                                                                                                                                                                                     |
 | `.github/workflows/ci.yml`                                                                      | Take theirs, then rerun both substitutions in FORK.md "CI" (runners and the web test timeout).                                                                                                                                                                                                                                                                                                                                                      |
@@ -128,7 +130,29 @@ The first command looks only at lines the merge added. `--drift` lists files who
 
 Done when every section 4 line, every added-line hit and every drift entry has a decision.
 
-## 6. Verify with CI's scope
+## 6. Audit the unauthenticated surface
+
+Every merge, whether or not section 5 looks quiet. The surface is everything a request reaches before a credential check: `/oauth/*`, `/api/auth/*`, `/.well-known/t3/environment`, guest and webhook routes, the WebSocket and media upgrades, MCP OAuth, and the HTTP middleware around them. The `surface` and `guards` lists in `scan-upstream.sh` name the files and the fork's guards; FORK.md "Unauthenticated surface" says why each guard exists.
+
+```bash
+.agents/skills/merge-upstream/scripts/scan-upstream.sh --guards > "$S/guards.txt"; echo "guards=$?"
+git diff HEAD -- $(sed -n '/^Surface files:/,/^$/p' "$S/scan.txt" | awk -F'|' 'NF>1 {print $1}') > "$S/surface.diff"
+```
+
+Both run after conflicts are resolved, before the merge commit, so `HEAD` is the fork's side and the diff is what the merge brings in. In zsh, word-split the file list with `${=...}` or loop over it. A nonzero `--guards` exit means a resolution dropped a fork guard. Restore it before anything else. Then read `surface.diff` and every line in scan section 5, and for each new or changed route or handler ask:
+
+- **Before authentication, is the body bounded?** Body readers buffer the whole request. A new unauthenticated route that reads a body must stay under the global `MaxBodySize` from `httpBodyLimit.ts`, or set its own smaller one. Only code that has already authenticated may call `withAuthenticatedBodyLimit`.
+- **Does it write anything before the credential is checked?** Disk, SQLite or secret-store writes (replay markers, rate counters, records) on an unauthenticated path let anyone fill the volume. Check the credential first, as `/oauth/token` does with DPoP proofs.
+- **Does it trust the request about who sent it?** Every request through `cloudflared` arrives from loopback, and `Host`, `X-Forwarded-*` and `Origin` are client-controlled. No auth decision may rest on the peer address, hostname or a forwarded header.
+- **Do new cookies follow the session cookie options?** Session-bearing cookies use `sessionCookieOptions` in `auth/http.ts`, which sets `Secure` behind HTTPS.
+- **Does a WebSocket or media route authenticate before upgrading?** And do new credentials (tickets, pairing codes, tokens) stay single-use, short-lived and unguessable?
+- **What does it reveal without auth?** Versions, paths, labels or capabilities added to unauthenticated responses.
+
+If a finding is upstream's own bug, fix it in the fork in its own commit after the merge commit, with a test that fails without the fix, and say in the report that it is worth sending upstream. If the surface moved (a new route file, a renamed guard), update the `surface` and `guards` lists in `scan-upstream.sh` (and FORK.md for a new guard) in the merge commit.
+
+Done when `--guards` exits 0 and every surface change has a decision.
+
+## 7. Verify with CI's scope
 
 A merge changes behaviour under files it never touched: a new upstream lint rule applies to fork-only files, and an upstream semantics change breaks fork tests that sit beside unchanged code. `check:changed` only looks at changed files, so a merge runs what CI runs, repo-wide. This is the developer's standing exception to AGENTS.md's "no repo-wide checks" for upstream merges.
 
@@ -154,7 +178,7 @@ These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/
 
 Done when format, lint and knip pass and every remaining test failure is shown to fail on pre-merge `main` too. Any edit after this point reruns the affected command before committing.
 
-## 7. Commit and report
+## 8. Commit and report
 
 Check `git status` and the branch again, then commit the resolution as the merge commit (`git commit --no-edit` keeps `chore(fork): merge upstream main`). If the sweep found new seams, update FORK.md's "Rebrand seams" list and this skill's known cases in the same commit, so the next merge knows about them.
 
@@ -163,6 +187,7 @@ Report:
 - How many upstream commits came in, how many files conflicted, and how many hunks the classifier resolved.
 - Each conflicted file that needed judgement and how it was resolved, in a sentence each.
 - Each upstream literal changed to a Kinako value, and any left alone on purpose that a reviewer might question.
+- The unauthenticated surface audit: what upstream changed there, the decision for each change, and any fork fix it needed.
 - Each upstream migration that touches a fork-altered table, whether the fork schema test passed, and any fork migration added to restore schema.
 - New workflows to disable.
 - Tests and typechecks run, with results; anything that failed and why.
@@ -170,7 +195,7 @@ Report:
 
 Then stop. Pushing is the developer's call.
 
-## 8. After a push to main
+## 9. After a push to main
 
 Only when the developer asked you to push. Push with `git push origin HEAD:main` (a fast-forward; never force), then wait for the `CI` run on that exact commit to finish:
 
