@@ -55,6 +55,29 @@ export default function SideChatPane(props: {
   const [bringingBack, setBringingBack] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const mergeRun = projection ? resolveLatestMergeBackRun(projection) : null;
+  // The same pane also shows any thread opened in split view; only side chats merge back.
+  const isSideChat =
+    shell?.lineage.sideChat === true && shell.lineage.parentThreadId === parentRef.threadId;
+  const sharesWorkspace =
+    shell !== null &&
+    parent !== null &&
+    shell.projectId === parent.projectId &&
+    shell.worktreePath === parent.worktreePath;
+  // The parent's terminal runs in the parent's folder, which is wrong for another workspace.
+  const parentPanel: SideChatParentPanel =
+    isSideChat || sharesWorkspace
+      ? props.parentPanel
+      : {
+          ...props.parentPanel,
+          runShellCommand: (command) => {
+            void navigator.clipboard.writeText(command);
+            toastManager.add({
+              type: "info",
+              title: "Command copied",
+              description: "This thread uses another folder. Run it from the thread itself.",
+            });
+          },
+        };
   // A pending merge-back would fail the main thread's queued message, so the server refuses it.
   const bringBackBlockedReason = !canOperate
     ? "This connection cannot change threads."
@@ -126,41 +149,50 @@ export default function SideChatPane(props: {
     <div data-side-chat-pane className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border pr-1 pl-3">
         <span className="min-w-0 flex-1 truncate text-xs font-medium">
-          {shell?.title ?? "Side chat"}
+          {shell?.title ?? (isSideChat ? "Side chat" : "Thread")}
         </span>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="xs"
-                aria-disabled={bringBackBlockedReason !== null || bringingBack || undefined}
-                onClick={() => void bringBack()}
-              >
-                Bring back
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {bringBackBlockedReason ?? "Adds this side chat to the main thread's next message."}
-          </TooltipPopup>
-        </Tooltip>
+        {isSideChat && (
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    aria-disabled={bringBackBlockedReason !== null || bringingBack || undefined}
+                    onClick={() => void bringBack()}
+                  >
+                    Bring back
+                  </Button>
+                }
+              />
+              <TooltipPopup side="bottom">
+                {bringBackBlockedReason ?? "Adds this side chat to the main thread's next message."}
+              </TooltipPopup>
+            </Tooltip>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Delete side chat"
+              disabled={!canOperate || shell === null || deleting}
+              onClick={() => void deleteSideChat()}
+            >
+              <Trash2Icon />
+            </Button>
+          </>
+        )}
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Delete side chat"
-          disabled={!canOperate || shell === null || deleting}
-          onClick={() => void deleteSideChat()}
+          aria-label={isSideChat ? "Close side chat" : "Close split view"}
+          onClick={props.onClose}
         >
-          <Trash2Icon />
-        </Button>
-        <Button variant="ghost" size="icon-xs" aria-label="Close side chat" onClick={props.onClose}>
           <XIcon />
         </Button>
       </div>
       {shell === null ? (
         snapshotLoaded ? (
-          <p className="p-3 text-xs text-muted-foreground">This side chat was deleted.</p>
+          <p className="p-3 text-xs text-muted-foreground">This thread was deleted.</p>
         ) : null
       ) : (
         <BackgroundThreadContext value>
@@ -169,7 +201,7 @@ export default function SideChatPane(props: {
               environmentId={parentRef.environmentId}
               threadId={threadId}
               routeKind="server"
-              embedded={props.parentPanel}
+              embedded={parentPanel}
             />
           </ComposerHandleContext>
         </BackgroundThreadContext>

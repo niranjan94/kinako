@@ -3,6 +3,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 
 export type ThreadActionMenuId =
   | "find"
+  | "open-split"
   | "new-thread-on-branch"
   | "filter-by-project"
   | "turn-into-project"
@@ -78,6 +79,8 @@ export interface ThreadActionMenuState {
   readonly canMoveWorkspace?: boolean;
   readonly canOperate: boolean;
   readonly canFind?: boolean;
+  /** Another thread on the same environment is open, so this one can sit beside it. */
+  readonly canOpenInSplit?: boolean;
   readonly branch: string | null;
   /** Shell command that resumes the thread in its provider's CLI, when the provider supports it. */
   readonly cliResumeCommand: string | null;
@@ -115,6 +118,7 @@ export interface ThreadActionMenuState {
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
   return ![
     "find",
+    "open-split",
     "new-thread-on-branch",
     "project-settings",
     "mark-unread",
@@ -134,6 +138,9 @@ export function buildThreadActionMenuItems(
   const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
     ...(state.canFind
       ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
+      : []),
+    ...(state.canOpenInSplit
+      ? [{ id: "open-split" as const, label: "Open in split view", icon: "message-square" }]
       : []),
     ...(state.canMoveWorkspace
       ? [
