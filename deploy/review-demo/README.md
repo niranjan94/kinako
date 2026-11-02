@@ -13,7 +13,7 @@ This uses a Cloudflare quick tunnel, which needs no account. Its URL changes whe
 
 ### Stable hostname
 
-For a URL that survives restarts, create a tunnel in Cloudflare Zero Trust under **Networks → Tunnels**, add a public hostname with service `HTTP` and URL `kinako:3873`, and copy its token. Then run:
+For a URL that survives restarts, you need a domain on Cloudflare. In the Cloudflare dashboard, go to **Networking → Tunnels**, create a tunnel, and copy its token. On the tunnel's **Routes** tab, add a **Published application** route with a single-level subdomain and service URL `http://kinako:3873`. Then run:
 
 ```sh
 TUNNEL_TOKEN=<token> docker compose --profile named up -d --build --scale quick-tunnel=0
