@@ -22,7 +22,7 @@ it.layer(
     Layer.provideMerge(NodeHttpServer.layerTest),
   ),
 )("forwarded HTTPS", (it) => {
-  it.effect("upgrades proxied plain HTTP and pins proxied HTTPS", () =>
+  it.effect("upgrades plain HTTP and pins HTTPS only for Cloudflare-proxied requests", () =>
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       const post = (headers: Record<string, string>) =>
@@ -35,6 +35,7 @@ it.layer(
           .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
 
       const insecure = yield* post({
+        "cf-ray": "8f0000000000abcd-AMS",
         "x-forwarded-proto": "http",
         "x-forwarded-host": "kn-example.example.com",
       });
@@ -43,9 +44,17 @@ it.layer(
         "https://kn-example.example.com/api/auth/browser-session?next=1",
       );
 
-      const secure = yield* post({ "x-forwarded-proto": "https" });
+      const secure = yield* post({
+        "cf-ray": "8f0000000000abcd-AMS",
+        "x-forwarded-proto": "https",
+      });
       expect(secure.status).toBe(200);
       expect(secure.headers["strict-transport-security"]).toBe("max-age=31536000");
+
+      const lanProxy = yield* post({ "x-forwarded-proto": "http" });
+      expect(lanProxy.status).toBe(200);
+      const lanTlsProxy = yield* post({ "x-forwarded-proto": "https" });
+      expect(lanTlsProxy.headers["strict-transport-security"]).toBeUndefined();
 
       const direct = yield* post({});
       expect(direct.status).toBe(200);

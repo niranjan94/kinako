@@ -4,6 +4,7 @@ import {
   type PublicRouteEnableInput,
   type PublicRouteStatus,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -27,6 +28,8 @@ export const PUBLIC_ROUTE_SECRET = "public-route-connector";
 
 // Picks up a finished background install of cloudflared and a dropped edge connection.
 const STATUS_REFRESH_INTERVAL = Duration.seconds(15);
+// Cloudflare can refuse a just-created tunnel's connector while its token propagates.
+export const NEW_TUNNEL_REJECTION_GRACE = Duration.minutes(2);
 
 const StoredPublicRoute = Schema.Struct({
   hostname: PublicRouteHostname,
@@ -81,6 +84,7 @@ export const make = Effect.gen(function* () {
   ): PublicRouteStatus => ({ ...detail, originPort: config.port });
   const statusRef = yield* SubscriptionRef.make<PublicRouteStatus>(offStatus());
   const mutations = yield* Semaphore.make(1);
+  const rejectionGraceUntilRef = yield* Ref.make(0);
 
   const computeStatus = Effect.gen(function* () {
     const route = yield* Ref.get(routeRef);
@@ -152,6 +156,10 @@ export const make = Effect.gen(function* () {
           .set(PUBLIC_ROUTE_SECRET, new TextEncoder().encode(encodeStoredPublicRoute(route)))
           .pipe(Effect.mapError(storageError("Could not store the tunnel connector.")));
         yield* Ref.set(routeRef, route);
+        yield* Ref.set(
+          rejectionGraceUntilRef,
+          (yield* Clock.currentTimeMillis) + Duration.toMillis(NEW_TUNNEL_REJECTION_GRACE),
+        );
         yield* startConnector(route);
         yield* refresh;
         yield* Effect.logInfo("public route enabled", {
@@ -188,6 +196,16 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const route = yield* Ref.get(routeRef);
         if (route === null || route.tunnelId !== rejected.tunnelId) return;
+        if ((yield* Clock.currentTimeMillis) < (yield* Ref.get(rejectionGraceUntilRef))) {
+          yield* SubscriptionRef.set(statusRef, {
+            state: "connecting",
+            hostname: route.hostname,
+            tunnelId: route.tunnelId,
+            originPort: config.port,
+            detail: "Cloudflare has not accepted the new tunnel yet.",
+          });
+          return;
+        }
         yield* clearRoute.pipe(
           Effect.catch((error) =>
             Effect.logWarning("could not clear a rejected public route", { cause: error }),

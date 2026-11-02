@@ -22,10 +22,13 @@ const httpsLocation = (request: HttpServerRequest.HttpServerRequest): string | u
 };
 
 // HSTS and the upgrade redirect are sent per response so the user's other sites on the zone are untouched.
+// Only Cloudflare's edge gets them: behind a plain-HTTP LAN proxy there is no HTTPS to upgrade to, and
+// HSTS pins every port of a shared hostname.
 export const layerForwardedHttps = HttpRouter.middleware(
   (httpEffect) =>
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
+      if (request.headers["cf-ray"] === undefined) return yield* httpEffect;
       const proto = forwardedProto(request);
       if (proto === "http") {
         const location = httpsLocation(request);
