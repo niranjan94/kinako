@@ -53,6 +53,9 @@ const STATE_LABELS: Record<PublicRouteStatus["state"], string> = {
   failed: "The tunnel connector failed to start.",
 };
 
+// A just-created DNS record can take a while to answer, so a failed check is retried.
+const VERIFY_RETRY_MS = 15_000;
+
 // A phone needs the standard permissions, but not a shell on the host.
 const PHONE_SCOPES = AuthStandardClientScopes.filter((scope) => scope !== AuthTerminalOperateScope);
 
@@ -75,11 +78,17 @@ function useRouteVerified(environmentId: EnvironmentId, status: PublicRouteStatu
     const bridge = desktopCloudflareBridge();
     if (!bridge || hostname === null) return;
     let cancelled = false;
-    void bridge.verify({ hostname, environmentId }).then((ok) => {
-      if (!cancelled) setVerified({ hostname, ok });
-    });
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const check = () =>
+      void bridge.verify({ hostname, environmentId }).then((ok) => {
+        if (cancelled) return;
+        setVerified({ hostname, ok });
+        if (!ok) retry = setTimeout(check, VERIFY_RETRY_MS);
+      });
+    check();
     return () => {
       cancelled = true;
+      clearTimeout(retry);
     };
   }, [environmentId, hostname]);
   return verified !== null && verified.hostname === hostname ? verified.ok : null;
@@ -203,8 +212,8 @@ export function PublicRouteSetting({
     await run("Could not turn off the public route", async () => {
       const result = await disableRoute({ environmentId, input: {} });
       // An unreachable host still loses the route: deleting the tunnel closes it at Cloudflare.
-      if (result._tag === "Failure" && !bridge) throw squashAtomCommandFailure(result);
-      await bridge?.remove(environmentId);
+      if (result._tag === "Failure" && !zoneReady) throw squashAtomCommandFailure(result);
+      if (zoneReady) await bridge?.remove(environmentId);
     });
   };
 

@@ -352,9 +352,7 @@ export const make = Effect.gen(function* () {
 
   // Universal SSL covers one label under the zone only.
   const isRouteHostname = (hostname: string, zone: DesktopCloudflareZone) =>
-    hostname.startsWith("kn-") &&
-    hostname.endsWith(`.${zone.name}`) &&
-    !hostname.slice(0, -zone.name.length - 1).includes(".");
+    isPublicRouteHostname(hostname) && hostname.slice(hostname.indexOf(".") + 1) === zone.name;
 
   const pendingHostnames = (account: StoredAccount, tunnelId: string) =>
     account.pendingCleanups.filter((entry) => entry.tunnelId === tunnelId).map((e) => e.hostname);
@@ -511,10 +509,12 @@ export const make = Effect.gen(function* () {
         "This token cannot see any active domain. Give it Zone · Zone · Read on the domain to use.",
       )();
     }
+    // A replaced token must still retire hostnames rotated out under the previous one.
+    const previous = yield* readAccount.pipe(Effect.orElseSucceed(() => null));
     yield* writeAccount({
       token: trimmed,
       zone: zones.length === 1 ? zones[0]! : null,
-      pendingCleanups: [],
+      pendingCleanups: previous?.pendingCleanups ?? [],
     });
     return zones;
   }, locked);

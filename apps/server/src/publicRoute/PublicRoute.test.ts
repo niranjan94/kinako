@@ -7,6 +7,7 @@ import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient } from "effect/http";
 import * as RelayClient from "@t3tools/shared/relayClient";
@@ -144,6 +145,40 @@ describe("PublicRoute", () => {
           message: "Acme's policy does not allow public routes.",
         });
         expect(fixture.spawned).toEqual([]);
+        expect(fixture.secrets.has(PublicRoute.PUBLIC_ROUTE_SECRET)).toBe(false);
+      }).pipe(Effect.provide(fixture.layer));
+    }),
+  );
+
+  it.effect("keeps a just-enabled route through rejections while Cloudflare propagates it", () =>
+    Effect.gen(function* () {
+      const fixture = yield* makeFixture();
+      yield* Effect.gen(function* () {
+        const publicRoute = yield* PublicRoute.PublicRoute;
+        yield* publicRoute.enable({
+          hostname: HOSTNAME,
+          tunnelId: "tunnel-1",
+          connectorToken: Redacted.make("connector-token"),
+        });
+
+        yield* Queue.offer(fixture.output, new TextEncoder().encode(REJECTED_LINE.repeat(4)));
+        const propagating = yield* publicRoute.status.pipe(
+          Stream.filter((status) => status.detail !== null),
+          Stream.runHead,
+        );
+        expect(Option.getOrThrow(propagating)).toMatchObject({
+          state: "connecting",
+          tunnelId: "tunnel-1",
+        });
+        expect(fixture.secrets.has(PublicRoute.PUBLIC_ROUTE_SECRET)).toBe(true);
+
+        yield* TestClock.adjust(PublicRoute.NEW_TUNNEL_REJECTION_GRACE);
+        yield* Queue.offer(fixture.output, new TextEncoder().encode(REJECTED_LINE.repeat(4)));
+        const rejected = yield* publicRoute.status.pipe(
+          Stream.filter((status) => status.state === "rejected"),
+          Stream.runHead,
+        );
+        expect(Option.getOrThrow(rejected).tunnelId).toBe("tunnel-1");
         expect(fixture.secrets.has(PublicRoute.PUBLIC_ROUTE_SECRET)).toBe(false);
       }).pipe(Effect.provide(fixture.layer));
     }),
