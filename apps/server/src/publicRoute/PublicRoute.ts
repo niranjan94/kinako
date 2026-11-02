@@ -19,6 +19,8 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ManagedEndpointRuntime from "../cloud/ManagedEndpointRuntime.ts";
 import * as ServerConfig from "../config.ts";
+import * as ManagedLimits from "../policy/managedLimits.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { forkParked } from "../serverActivation.ts";
 
 export const PUBLIC_ROUTE_SECRET = "public-route-connector";
@@ -59,6 +61,13 @@ export const make = Effect.gen(function* () {
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
   // A runtime of its own: T3 Connect's instance is reset by relinks and reports to the relay.
   const runtime = yield* ManagedEndpointRuntime.make;
+  // A route exposes the host to the internet as T3 Connect does, and the runtime refuses both alike.
+  const policy = yield* ManagedPolicy.ManagedPolicy;
+  const allowedByPolicy = ManagedLimits.allowsConnect(policy);
+  const policyRefusal = new ManagedLimits.ManagedPolicyRefusedError({
+    organization: policy.document?.organization ?? "Your organization",
+    action: "public routes",
+  }).message;
   const routeRef = yield* Ref.make<StoredPublicRoute | null>(null);
   const lastApplyRef =
     yield* Ref.make<ManagedEndpointRuntime.CloudManagedEndpointRuntimeStatus | null>(null);
@@ -80,6 +89,9 @@ export const make = Effect.gen(function* () {
       return current.state === "rejected" ? current : offStatus();
     }
     const base = { hostname: route.hostname, tunnelId: route.tunnelId, originPort: config.port };
+    if (!allowedByPolicy) {
+      return { ...base, state: "failed", detail: policyRefusal } satisfies PublicRouteStatus;
+    }
     const facts = yield* runtime.inspectConnector;
     if (facts !== null) {
       return {
@@ -126,6 +138,9 @@ export const make = Effect.gen(function* () {
     .pipe(Effect.flatMap((applied) => Ref.set(lastApplyRef, applied)));
 
   const enable = Effect.fn("PublicRoute.enable")(function* (input: PublicRouteEnableInput) {
+    if (!allowedByPolicy) {
+      return yield* new PublicRouteError({ reason: "managed_by_policy", message: policyRefusal });
+    }
     const route: StoredPublicRoute = {
       hostname: input.hostname,
       tunnelId: input.tunnelId,

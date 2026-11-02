@@ -544,6 +544,7 @@ const layerCloudManagedEndpointRuntime = Layer.mergeAll(
 const layerPublicRoute = PublicRoute.layer.pipe(
   Layer.provide(ServerSecretStore.layer),
   Layer.provide(layerRelayClient),
+  Layer.provide(ManagedPolicy.layer),
 );
 
 const layerScheduledTaskWebhookOrigin = Layer.effect(

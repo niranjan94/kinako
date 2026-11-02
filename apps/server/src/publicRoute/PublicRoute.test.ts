@@ -10,16 +10,18 @@ import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient } from "effect/http";
 import * as RelayClient from "@t3tools/shared/relayClient";
+import type { ManagedPolicyDocument } from "@t3tools/contracts";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as PublicRoute from "./PublicRoute.ts";
 
 const HOSTNAME = "kn-abcdefghijklmnopqrstuvwxyz.example.com";
 const REJECTED_LINE =
   '2026-10-06T12:00:00Z ERR Register tunnel error from server side error="Unauthorized: Tunnel not found" connIndex=0\n';
 
-const makeFixture = Effect.fnUntraced(function* (stored?: string) {
+const makeFixture = Effect.fnUntraced(function* (stored?: string, policy?: ManagedPolicyDocument) {
   const secrets = new Map<string, Uint8Array>();
   if (stored !== undefined) {
     secrets.set(PublicRoute.PUBLIC_ROUTE_SECRET, new TextEncoder().encode(stored));
@@ -81,10 +83,9 @@ const makeFixture = Effect.fnUntraced(function* (stored?: string) {
           set: (name, value) => Effect.sync(() => void secrets.set(name, value)),
           remove: (name) => Effect.sync(() => void secrets.delete(name)),
         }),
-        ServerConfig.layerTest(process.cwd(), { prefix: "t3-public-route-test-" }).pipe(
-          Layer.provide(NodeServices.layer),
-        ),
-      ),
+        ManagedPolicy.layerTest(policy),
+        ServerConfig.layerTest(process.cwd(), { prefix: "t3-public-route-test-" }),
+      ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),
   );
   return { secrets, spawned, killed, output, layer };
@@ -118,6 +119,32 @@ describe("PublicRoute", () => {
         expect(fixture.killed).toEqual([901]);
         expect(fixture.secrets.has(PublicRoute.PUBLIC_ROUTE_SECRET)).toBe(false);
         expect(yield* publicRoute.publicBaseUrl).toBeNull();
+      }).pipe(Effect.provide(fixture.layer));
+    }),
+  );
+
+  it.effect("refuses to enable when the managed policy does not allow T3 Connect", () =>
+    Effect.gen(function* () {
+      const fixture = yield* makeFixture(undefined, {
+        schemaVersion: 1,
+        organization: "Acme",
+        limits: { connect: false },
+      });
+      yield* Effect.gen(function* () {
+        const publicRoute = yield* PublicRoute.PublicRoute;
+        const refused = yield* Effect.flip(
+          publicRoute.enable({
+            hostname: HOSTNAME,
+            tunnelId: "tunnel-1",
+            connectorToken: Redacted.make("connector-token"),
+          }),
+        );
+        expect(refused).toMatchObject({
+          reason: "managed_by_policy",
+          message: "Acme's policy does not allow public routes.",
+        });
+        expect(fixture.spawned).toEqual([]);
+        expect(fixture.secrets.has(PublicRoute.PUBLIC_ROUTE_SECRET)).toBe(false);
       }).pipe(Effect.provide(fixture.layer));
     }),
   );

@@ -44,7 +44,7 @@ export const PublicRouteStatus = Schema.Struct({
 export type PublicRouteStatus = typeof PublicRouteStatus.Type;
 
 export class PublicRouteError extends Schema.TaggedError<PublicRouteError>()("PublicRouteError", {
-  reason: Schema.Literals(["storage"]),
+  reason: Schema.Literals(["storage", "managed_by_policy"]),
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
