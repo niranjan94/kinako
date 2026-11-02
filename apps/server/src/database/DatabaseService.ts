@@ -42,6 +42,7 @@ import {
   type DatabaseCursor,
   type DatabaseSession,
 } from "./databaseDriver.ts";
+import { openClickhouseSession } from "./clickhouseDriver.ts";
 import { openPostgresSession } from "./postgresDriver.ts";
 import { openSqliteSession } from "./sqliteDriver.ts";
 
@@ -164,7 +165,7 @@ const make = Effect.gen(function* () {
     requested: string | undefined,
   ) {
     const { target } = credentials.connection;
-    if (target.engine === "sqlite") {
+    if (target.engine !== "postgres") {
       if (requested !== undefined)
         return yield* new DatabaseRequestError({ failure: "database-not-selected" });
       return credentials;
@@ -219,7 +220,9 @@ const make = Effect.gen(function* () {
             const { target, readOnly } = credentials.connection;
             const session = await (target.engine === "postgres"
               ? openPostgresSession(target, credentials.password, readOnly)
-              : openSqliteSession(target, readOnly, sqliteInvocation));
+              : target.engine === "clickhouse"
+                ? openClickhouseSession(target, credentials.password, readOnly)
+                : openSqliteSession(target, readOnly, sqliteInvocation));
             if (signal.aborted) {
               await session.close();
               throw new DatabaseEngineError({
@@ -407,7 +410,7 @@ const make = Effect.gen(function* () {
       const saved = yield* connections.get(input.connectionId, input.projectId);
       if (input.scope.kind === "databases") {
         const target = saved.connection.target;
-        if (target.engine === "sqlite") return { kind: "databases" as const, databases: [] };
+        if (target.engine !== "postgres") return { kind: "databases" as const, databases: [] };
         if (target.databaseSelection !== "all") {
           const names = target.databaseSelection ?? [target.database];
           return {

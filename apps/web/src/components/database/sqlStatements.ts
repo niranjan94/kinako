@@ -1,4 +1,9 @@
-import { splitQuery, postgreSplitterOptions, sqliteSplitterOptions } from "dbgate-query-splitter";
+import {
+  splitQuery,
+  mysqlSplitterOptions,
+  postgreSplitterOptions,
+  sqliteSplitterOptions,
+} from "dbgate-query-splitter";
 import type { DatabaseEngine } from "@t3tools/contracts";
 import { sqlDialect } from "./sqlDialect";
 
@@ -14,7 +19,11 @@ export function sqlStatementRanges(
   cursor?: number,
 ): SqlStatement[] {
   const statements = splitQuery(sql, {
-    ...(engine === "postgres" ? postgreSplitterOptions : sqliteSplitterOptions),
+    ...(engine === "postgres"
+      ? postgreSplitterOptions
+      : engine === "clickhouse"
+        ? mysqlSplitterOptions
+        : sqliteSplitterOptions),
     returnRichInfo: true,
   }).flatMap((item) =>
     typeof item === "string" ? [] : item.text.trim() && !item.specialMarker ? [item] : [],

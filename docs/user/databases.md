@@ -1,7 +1,7 @@
 # Databases
 
-Connect to Postgres and SQLite in **Settings → Databases**, or add a connection
-from the database explorer. The environment opens the database, so a remote
+Connect to Postgres, SQLite, and ClickHouse in **Settings → Databases**, or add a
+connection from the database explorer. The environment opens the database, so a remote
 browser or phone can reach databases available only on that machine. SQLite
 paths refer to existing files on the environment.
 
@@ -12,6 +12,11 @@ and discover databases; all databases shows non-template databases your user
 can connect to. Expand a database to browse its schemas, or open a query console
 for it. Consoles also let you change databases from the editor toolbar. Existing
 connections show only their configured database until you change this setting.
+
+ClickHouse connects over its HTTP interface, usually port 8443 with **HTTPS** on or 8123
+with it off. Its databases appear where Postgres shows schemas, and the default database
+resolves unqualified table names. Read-only ClickHouse connections run queries with
+`readonly=1`, which also rejects `SET` and `SETTINGS`.
 
 Choose where a connection is **Available in**:
 
