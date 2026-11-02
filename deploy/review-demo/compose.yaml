@@ -1,0 +1,42 @@
+services:
+  kinako:
+    build: .
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 256
+    volumes:
+      - kinako-data:/data
+      - kinako-workspace:/workspace
+    networks: [demo]
+
+  # No account needed, but the trycloudflare.com URL changes whenever this container restarts.
+  quick-tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://kinako:3873
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on: [kinako]
+    networks: [demo]
+
+  tunnel:
+    profiles: [named]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on: [kinako]
+    networks: [demo]
+
+volumes:
+  kinako-data:
+  kinako-workspace:
+
+networks:
+  demo:

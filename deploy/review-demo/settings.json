@@ -1,0 +1,16 @@
+{
+  "defaultModelSelection": { "instanceId": "devReplay", "model": "showcase" },
+  "providerInstances": {
+    "codex": { "driver": "codex", "enabled": false },
+    "claudeAgent": { "driver": "claudeAgent", "enabled": false },
+    "devReplay": {
+      "displayName": "Replay",
+      "driver": "acpRegistry",
+      "config": {
+        "source": "local",
+        "commandPath": "/usr/local/bin/node",
+        "commandArgs": ["/opt/replay/scripts/dev-replay-agent.ts"]
+      }
+    }
+  }
+}
