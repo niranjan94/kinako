@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
+  isRuntimeModeAbove,
   AgentSessionImportFailedError,
   AgentSessionImportProjectChangedError,
   AgentSessionImportProjectNotFoundError,
@@ -31,6 +32,7 @@ import {
   type OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
 import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -43,6 +45,7 @@ import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as AgentSessionScanner from "./AgentSessionScanner.ts";
 import * as ProjectService from "./ProjectService.ts";
 
@@ -206,6 +209,7 @@ export function importedThreadEvents(input: {
   readonly providerThreadId: OrchestrationV2ProviderThread["id"];
   readonly thread: AgentSessionScanner.AgentSessionThread;
   readonly nativeThreadId?: string;
+  readonly runtimeMode?: OrchestrationV2AppThread["runtimeMode"];
 }): ReadonlyArray<OrchestrationV2DomainEvent> {
   const { threadId, thread, providerThreadId } = input;
   const nativeThreadId = input.nativeThreadId ?? thread.providerSessionId;
@@ -221,7 +225,7 @@ export function importedThreadEvents(input: {
     title: thread.title.trim() === "" ? "Untitled thread" : thread.title,
     providerInstanceId: thread.providerInstanceId,
     modelSelection: { instanceId: thread.providerInstanceId, model },
-    runtimeMode: DEFAULT_RUNTIME_MODE,
+    runtimeMode: input.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
     branch: null,
     worktreePath: null,
@@ -281,6 +285,34 @@ export function importedThreadEvents(input: {
       occurredAt: createdAt,
       payload: appThread,
     },
+    ...(thread.omittedMessageCount > 0
+      ? [
+          {
+            id: EventId.make(`${IMPORT_EVENT_PREFIX}:history-truncated:${threadId}`),
+            type: "turn-item.updated" as const,
+            threadId,
+            occurredAt: createdAt,
+            payload: {
+              id: TurnItemId.make(`${IMPORT_EVENT_PREFIX}:history-truncated:${threadId}`),
+              threadId,
+              runId: null,
+              nodeId: null,
+              providerThreadId: null,
+              providerTurnId: null,
+              nativeItemRef: null,
+              parentItemId: null,
+              ordinal: 0,
+              status: "completed" as const,
+              title: null,
+              startedAt: createdAt,
+              completedAt: createdAt,
+              updatedAt: createdAt,
+              type: "system_notice" as const,
+              message: `${thread.omittedMessageCount} earlier ${thread.omittedMessageCount === 1 ? "message was" : "messages were"} not imported. This thread keeps the first user message and the most recent history. The original session transcript is unchanged.`,
+            },
+          },
+        ]
+      : []),
     ...thread.messages.flatMap((message, index) => messageEvents({ threadId, index, message })),
     {
       id: EventId.make(`${IMPORT_EVENT_PREFIX}:provider-thread:${providerThreadId}`),
@@ -301,6 +333,27 @@ const make = Effect.gen(function* () {
   const eventSink = yield* EventSink.EventSinkV2;
   const idAllocator = yield* IdAllocator.IdAllocatorV2;
   const runtimes = yield* ProviderSessionRuntime.ProviderSessionRuntimeRepository;
+  const settingsService = yield* ServerSettings.ServerSettingsService;
+  const ceiling = settingsService.managedPolicy?.limits?.maxRuntimeMode;
+
+  // Imports run in full access, except under a policy ceiling: then in the project's default,
+  // which the policy keeps under it, so imported threads never sit above the ceiling.
+  const importRuntimeMode = (
+    projectId: ProjectId,
+    project: Parameters<typeof resolveProjectSettings>[2],
+  ) =>
+    ceiling === undefined
+      ? Effect.succeed(DEFAULT_RUNTIME_MODE)
+      : settingsService.getSettings.pipe(
+          Effect.mapError(
+            (cause) => new AgentSessionScanError({ operation: "read-settings", cause }),
+          ),
+          Effect.map((settings) => {
+            const mode = resolveProjectSettings(settings, projectId, project).settings
+              .defaultRuntimeMode;
+            return isRuntimeModeAbove(mode, ceiling) ? ceiling : mode;
+          }),
+        );
 
   /** Write one parsed session as a thread, or adopt the thread a previous import created. */
   const importThread = Effect.fn("importAgentSessionThread")(function* (input: {
@@ -308,6 +361,7 @@ const make = Effect.gen(function* () {
     readonly workspaceRoot: string;
     readonly thread: AgentSessionScanner.AgentSessionThread;
     readonly source: AgentSessionImportSource;
+    readonly runtimeMode: OrchestrationV2AppThread["runtimeMode"];
     readonly generation?: number;
   }) {
     const { thread, source } = input;
@@ -331,7 +385,7 @@ const make = Effect.gen(function* () {
         providerName: driver,
         providerInstanceId: thread.providerInstanceId,
         adapterKey: driver,
-        runtimeMode: DEFAULT_RUNTIME_MODE,
+        runtimeMode: input.runtimeMode,
         status: "stopped",
         lastSeenAt: thread.updatedAt,
         resumeCursor:
@@ -386,6 +440,7 @@ const make = Effect.gen(function* () {
             : ProviderThreadId.make(`${providerThreadId}:${generation}`),
         thread,
         nativeThreadId,
+        runtimeMode: input.runtimeMode,
       }),
     });
     if (committed.length === 0) return null;
@@ -488,6 +543,7 @@ const make = Effect.gen(function* () {
       workspaceRoot: project.workspaceRoot,
       thread: session.value.thread,
       source: session.value.source,
+      runtimeMode: yield* importRuntimeMode(input.projectId, project),
       generation,
     }).pipe(
       Effect.filterOrFail(
@@ -512,6 +568,7 @@ const make = Effect.gen(function* () {
     ) {
       return yield* new AgentSessionImportProjectChangedError({ projectId: input.projectId });
     }
+    const runtimeMode = yield* importRuntimeMode(input.projectId, project);
     const runtimeRows = yield* runtimes
       .list()
       .pipe(
@@ -561,6 +618,7 @@ const make = Effect.gen(function* () {
           workspaceRoot: project.workspaceRoot,
           thread: outcome.thread,
           source,
+          runtimeMode,
         }).pipe(
           Effect.map((result) => (result === null ? null : true)),
           Effect.catch((cause) =>

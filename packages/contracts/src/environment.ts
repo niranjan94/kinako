@@ -161,6 +161,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   linkFence: Schema.optionalKey(Schema.Boolean),
   /** Server answers server.prepareTriage. */
   triage: Schema.optionalKey(Schema.Boolean),
+  /** Server accepts `{ type: "once" }` scheduled tasks; older servers reject them on save. */
+  oneTimeSchedules: Schema.optionalKey(Schema.Boolean),
   // Fork additions stay last so upstream's list merges cleanly.
   worktreeSnapshots: Schema.optionalKey(Schema.Boolean),
   /** Server copies the files `worktreeIncludePatterns` selects into new worktrees. */

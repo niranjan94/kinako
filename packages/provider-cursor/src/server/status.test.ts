@@ -14,7 +14,9 @@ import {
   checkCursorProviderStatus,
 } from "./status.ts";
 import * as CursorSdkCatalog from "./CursorSdkCatalog.ts";
-import { CursorSdkError } from "./sdk.ts";
+import { loadCursorSdk } from "./sdk.ts";
+
+const { CursorSdkError } = loadCursorSdk();
 
 const decodeCursorSettings = Schema.decodeSync(CursorSettingsSchema);
 
@@ -242,6 +244,7 @@ describe("checkCursorProviderStatus", () => {
               Effect.fail(
                 new CursorSdkCatalog.CursorSdkCatalogError({
                   authenticationFailure: false,
+                  code: "plan_required",
                   cause: new CursorSdkError(
                     "[plan_required] Cloud Agent is not available for free users. Please upgrade to Pro.",
                     { code: "plan_required", status: 403 },
@@ -334,6 +337,8 @@ describe("checkCursorProviderStatus", () => {
           Effect.fail(
             new CursorSdkCatalog.CursorSdkCatalogError({
               authenticationFailure: meFailure.status === 401,
+              ...(meFailure.status === undefined ? {} : { status: meFailure.status }),
+              ...(meFailure.code === undefined ? {} : { code: meFailure.code }),
               cause: meFailure,
             }),
           ),

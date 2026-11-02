@@ -20,7 +20,6 @@ import type { OtlpProtocol } from "@t3tools/shared/observability";
 import {
   FORK_DESKTOP_APP_ID,
   FORK_DESKTOP_DEV_APP_ID,
-  FORK_DESKTOP_NAME,
   FORK_DISPLAY_NAME,
 } from "@t3tools/shared/forkBrand";
 
@@ -81,7 +80,6 @@ export class DesktopEnvironment extends Context.Service<
     readonly displayName: string;
     readonly appUserModelId: string;
     readonly linuxDesktopEntryName: string;
-    readonly linuxWmClass: string;
     readonly linuxApplicationsDir: string;
     readonly desktopLauncherPath: Option.Option<string>;
     readonly appImagePath: Option.Option<string>;
@@ -238,7 +236,6 @@ const make = Effect.fn("desktop.environment.make")(function* (
       isDevelopment ? FORK_DESKTOP_DEV_APP_ID : FORK_DESKTOP_APP_ID,
     ),
     linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
-    linuxWmClass: isDevelopment ? `${FORK_DESKTOP_NAME}-dev` : FORK_DESKTOP_NAME,
     linuxApplicationsDir,
     desktopLauncherPath: config.desktopLauncherPath,
     appImagePath: config.appImagePath,

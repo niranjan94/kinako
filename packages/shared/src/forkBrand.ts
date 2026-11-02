@@ -28,7 +28,7 @@ export const FORK_DESKTOP_APP_ID = "io.niranjan.kinako";
 export const FORK_DESKTOP_DEV_APP_ID = `${FORK_DESKTOP_APP_ID}.dev`;
 
 /**
- * Desktop package name, Linux executable, and X11 WM class. Distinct from
+ * Desktop package name, Linux executable, and the desktop entry's StartupWMClass. Distinct from
  * `FORK_CLI_NAME` because a .deb links its executable into /usr/bin.
  */
 export const FORK_DESKTOP_NAME = "kinako-desktop";
@@ -46,6 +46,14 @@ export const FORK_SERVICE_NAME = "kinako";
 export const FORK_URL_SCHEME = "kinako";
 export const FORK_DEV_URL_SCHEME = "kinako-dev";
 export const FORK_PREVIEW_URL_SCHEME = "kinako-preview";
+
+/**
+ * Managed policy locations administrators deploy to. Sharing upstream's would let a T3 Code policy
+ * govern this app, and one with keys this build does not know would stop it from starting.
+ */
+export const FORK_MANAGED_POLICY_DIR_NAME = "Kinako";
+export const FORK_LINUX_MANAGED_POLICY_DIR = "/etc/kinako";
+export const FORK_WINDOWS_POLICY_SUBKEY = "SOFTWARE\\Policies\\Kinako";
 
 export const FORK_DEFAULT_PORT = 3873;
 export const FORK_DEFAULT_TAILSCALE_SERVE_PORT = 8443;

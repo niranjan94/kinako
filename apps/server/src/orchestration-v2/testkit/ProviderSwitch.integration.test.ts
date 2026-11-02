@@ -1385,6 +1385,7 @@ describe("orchestration v2 provider switching", () => {
                 model: CLAUDE_MODEL_SELECTION.model,
                 createdAt: "2026-09-01T10:00:00.000Z",
                 updatedAt: "2026-09-01T10:01:00.000Z",
+                omittedMessageCount: 0,
                 messages: [
                   {
                     role: "user",

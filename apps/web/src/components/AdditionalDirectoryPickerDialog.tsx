@@ -22,7 +22,7 @@ import type { CommandPaletteActionItem, CommandPaletteGroup } from "./CommandPal
 import { CommandPaletteContent } from "./CommandPaletteContent";
 import { CommandPaletteResults } from "./CommandPaletteResults";
 import { ProjectFavicon } from "./ProjectFavicon";
-import { sortProjectsForSidebar } from "./Sidebar.logic";
+import { sortScopedProjectsForSidebar } from "./Sidebar.logic";
 import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "./ui/command";
 
 const CHOOSE_FOLDER_VALUE = "additional-directory:choose-folder";
@@ -77,7 +77,7 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
         !excluded.has(project.workspaceRoot),
     );
     const needle = normalizeSearchText(query);
-    return sortProjectsForSidebar(
+    return sortScopedProjectsForSidebar(
       candidates,
       threads.filter((thread) => thread.environmentId === props.environmentId),
       projectSortOrder,
