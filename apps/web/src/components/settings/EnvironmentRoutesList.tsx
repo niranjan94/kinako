@@ -24,18 +24,31 @@ import {
   connectionRoutes,
   isLearned,
   pendingRouteOrder,
+  routeHttpBaseUrl,
 } from "@t3tools/client-runtime/connection";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import {
+  AuthAccessWriteScope,
+  type AuthEnvironmentScope,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import { GripVerticalIcon, PlusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
 import { environmentCatalog } from "~/connection/catalog";
+import { addRouteOverConnection } from "~/connection/onboarding";
 import { cn } from "~/lib/utils";
 import type { EnvironmentPresentation } from "~/state/environments";
-import { usePreparedConnection } from "~/state/session";
+import { useEnvironmentSessionScopes, usePreparedConnection } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { Button } from "../ui/button";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { usePublicRouteStatus } from "./PublicRouteSettings";
 
 export function EnvironmentRoutesList({
   environment,
@@ -115,12 +128,76 @@ export function EnvironmentRoutesList({
           </ol>
         </SortableContext>
       </DndContext>
+      {environment.connection.phase === "connected" ? (
+        <PublicRouteSuggestion
+          environmentId={environment.environmentId}
+          label={environment.label}
+          savedBaseUrls={saved.flatMap((route) => routeHttpBaseUrl(route) ?? [])}
+        />
+      ) : null}
       <div className="-ml-1.5 pt-1">
         <Button size="xs" variant="ghost-muted" onClick={onAddRoute}>
           <PlusIcon className="size-3" />
           Add route
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Offers the environment's live public route as a route when none points at it yet. */
+function PublicRouteSuggestion(props: {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+  readonly savedBaseUrls: ReadonlyArray<string>;
+}) {
+  const grantedScopes = useEnvironmentSessionScopes(props.environmentId);
+  if (grantedScopes?.includes(AuthAccessWriteScope) !== true) return null;
+  return <LivePublicRouteSuggestion {...props} grantedScopes={grantedScopes} />;
+}
+
+function LivePublicRouteSuggestion({
+  environmentId,
+  label,
+  savedBaseUrls,
+  grantedScopes,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+  readonly savedBaseUrls: ReadonlyArray<string>;
+  readonly grantedScopes: ReadonlyArray<AuthEnvironmentScope>;
+}) {
+  const status = usePublicRouteStatus(environmentId);
+  const addRoute = useAtomCommand(addRouteOverConnection, { reportFailure: false });
+  const [adding, setAdding] = useState(false);
+  if (status?.state !== "live" || !status.hostname) return null;
+  const url = `https://${status.hostname}`;
+  if (savedBaseUrls.some((saved) => saved.replace(/\/+$/, "") === url)) return null;
+
+  const add = async () => {
+    setAdding(true);
+    const result = await addRoute({ environmentId, host: url, grantedScopes });
+    setAdding(false);
+    if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
+    const error = squashAtomCommandFailure(result);
+    toastManager.add(
+      stackedThreadToast({
+        type: "error",
+        title: "Could not add the public route",
+        description: error instanceof Error ? error.message : `${url} did not pair with ${label}.`,
+      }),
+    );
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-foreground">Public route</p>
+        <p className="truncate text-2xs text-muted-foreground">{url} · not saved as a route</p>
+      </div>
+      <Button size="xs" variant="outline" disabled={adding} onClick={() => void add()}>
+        {adding ? "Adding…" : "Add"}
+      </Button>
     </div>
   );
 }

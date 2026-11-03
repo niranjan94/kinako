@@ -8,9 +8,11 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom, AtomRegistry } from "effect/reactivity";
 
+import * as ConnectionOnboarding from "../connection/onboarding.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
   BearerConnectionTarget,
+  ConnectionBlockedError,
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
@@ -19,6 +21,7 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as RpcHttp from "../rpc/http.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {
+  addRouteOverConnection,
   applyAuthAccessStreamEvent,
   AuthAccessConnectionNotReadyError,
   createAuthEnvironmentAtoms,
@@ -121,6 +124,7 @@ const makeAccessHarness = Effect.fn(function* (options: { readonly remotePrepare
   const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
   const fetchFn: typeof fetch = async (request, init) => {
     calls.push({ url: String(request), init: init ?? {} });
+    if (String(request).endsWith("/revoke")) return Response.json({ revoked: true });
     return Response.json({
       id: "pairing-link-1",
       credential: "pairing-token",
@@ -170,15 +174,12 @@ const makeAccessHarness = Effect.fn(function* (options: { readonly remotePrepare
   } as EnvironmentRegistry.EnvironmentRegistry["Service"]);
   const registry = AtomRegistry.make();
   yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
-  const auth = createAuthEnvironmentAtoms(
-    Atom.runtime(
-      Layer.merge(
-        Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
-        RpcHttp.layerRemoteHttpClient(fetchFn),
-      ),
-    ),
+  const layer = Layer.merge(
+    Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
+    RpcHttp.layerRemoteHttpClient(fetchFn),
   );
-  return { auth, calls, registry };
+  const auth = createAuthEnvironmentAtoms(Atom.runtime(layer));
+  return { auth, calls, layer, registry };
 });
 
 describe("auth access commands", () => {
@@ -220,5 +221,48 @@ describe("auth access commands", () => {
       );
       expect(calls).toEqual([]);
     }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "pairs a new route with a code minted over the connection, revoking it on failure",
+    () =>
+      Effect.gen(function* () {
+        const { calls, layer } = yield* makeAccessHarness({ remotePrepared: true });
+        const pairings: Array<ConnectionOnboarding.PairingConnectionInput> = [];
+        const onboarding = ConnectionOnboarding.ConnectionOnboarding.of({
+          registerPairing: (input) => {
+            pairings.push(input);
+            return Effect.fail(
+              new ConnectionBlockedError({ reason: "configuration", detail: "unreachable" }),
+            );
+          },
+          registerSsh: () => Effect.die("unused"),
+          updateBearer: () => Effect.die("unused"),
+        });
+
+        const exit = yield* addRouteOverConnection({
+          environmentId: REMOTE_ID,
+          host: "10.0.0.5:3873",
+          grantedScopes: ["orchestration:read", "review:write"],
+        }).pipe(
+          Effect.provide(layer),
+          Effect.provideService(ConnectionOnboarding.ConnectionOnboarding, onboarding),
+          Effect.exit,
+        );
+
+        expect(exit._tag).toBe("Failure");
+        expect(pairings).toEqual([
+          { host: "10.0.0.5:3873", pairingCode: "pairing-token", expectedEnvironmentId: REMOTE_ID },
+        ]);
+        expect(calls.map((call) => call.url)).toEqual([
+          "https://remote.test/api/auth/pairing-token",
+          "https://remote.test/api/auth/pairing-links/revoke",
+        ]);
+        expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
+          label: "Route",
+          scopes: ["orchestration:read"],
+        });
+        expect(JSON.parse(String(calls[1]!.init.body))).toEqual({ id: "pairing-link-1" });
+      }).pipe(Effect.scoped),
   );
 });

@@ -118,6 +118,7 @@ unless the machine confirms it is on Tailscale. To add a route, choose **Add
 route** in the machine's route list, or next to it in the T3 Connect list.
 A pairing link for a saved machine is refused when it comes from an address
 that machine does not have yet; add that address with **Add route** instead.
+While the machine is connected and your session there can manage access, **Add route** needs only the address: leave the pairing code empty and the machine issues one over its current connection. In the web and desktop apps, a live public route that is not saved yet shows in the route list with **Add**.
 Pairing again over an address the machine already has still works. A new route
 is placed by speed, in that order, and you can reorder routes at any time.
 

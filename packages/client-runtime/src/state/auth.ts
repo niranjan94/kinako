@@ -3,20 +3,24 @@ import type {
   AuthAccessStreamEvent,
   AuthAccessStreamSnapshotEvent,
   AuthCreatePairingCredentialInput,
+  AuthEnvironmentScope,
+  EnvironmentId,
   AuthRevokeClientSessionInput,
   AuthRevokePairingLinkInput,
 } from "@t3tools/contracts";
-import { WS_METHODS } from "@t3tools/contracts";
+import { AuthGrantScope, WS_METHODS } from "@t3tools/contracts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { HttpClient } from "effect/http";
 import { Atom } from "effect/reactivity";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import * as ConnectionOnboarding from "../connection/onboarding.ts";
+import { EnvironmentRegistry } from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import { subscribe } from "../rpc/client.ts";
@@ -124,6 +128,51 @@ const requestAuthAccess = Effect.fn("AuthAccess.request")(function* <A, E, R>(
     timeoutMs: AUTH_ACCESS_REQUEST_TIMEOUT_MS,
   }).pipe(Effect.provideService(HttpClient.HttpClient, client.value));
 });
+
+const isGrantScope = Schema.is(AuthGrantScope);
+
+/** Adds a route at another address, paired with a one-time code minted over the current connection. */
+export const addRouteOverConnection = Effect.fn("AuthAccess.addRouteOverConnection")(
+  function* (input: {
+    readonly environmentId: EnvironmentId;
+    readonly host: string;
+    readonly grantedScopes: ReadonlyArray<AuthEnvironmentScope>;
+  }) {
+    const registry = yield* EnvironmentRegistry;
+    const pairing = yield* registry.run(
+      input.environmentId,
+      requestAuthAccess({
+        url: (urls) => urls.pairingCredential(),
+        request: ({ client, headers }) =>
+          client.pairingCredential({
+            headers,
+            payload: { label: "Route", scopes: input.grantedScopes.filter(isGrantScope) },
+          }),
+      }),
+    );
+    const onboarding = yield* ConnectionOnboarding.ConnectionOnboarding;
+    return yield* onboarding
+      .registerPairing({
+        host: input.host,
+        pairingCode: pairing.credential,
+        expectedEnvironmentId: input.environmentId,
+      })
+      .pipe(
+        Effect.onError(() =>
+          registry
+            .run(
+              input.environmentId,
+              requestAuthAccess({
+                url: (urls) => urls.revokePairingLink(),
+                request: ({ client, headers }) =>
+                  client.revokePairingLink({ headers, payload: { id: pairing.id } }),
+              }),
+            )
+            .pipe(Effect.ignore),
+        ),
+      );
+  },
+);
 
 export function createAuthEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,

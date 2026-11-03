@@ -25,7 +25,12 @@ import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { AppText as Text, AppTextInput, type AppTextInputProps } from "../../components/ui/AppText";
 import { FrostedCutout } from "../../components/ui/FrostedCutout";
 import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from "./pairing";
-import { useRemoteConnections } from "../../state/use-remote-environment-registry";
+import {
+  addRouteWithoutCode,
+  type PairingOutcome,
+  useCanAddRouteWithoutCode,
+  useRemoteConnections,
+} from "../../state/use-remote-environment-registry";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { hasCloudPublicConfig } from "../cloud/publicConfig";
 import { CloudEnvironmentRows } from "./CloudEnvironmentRows";
@@ -90,6 +95,7 @@ function PairingForm({
   const [scanComplete, setScanComplete] = useState(false);
 
   const headerIconColor = useUniwindTheme()["--color-icon"];
+  const canIssueCode = useCanAddRouteWithoutCode(routeFor ?? null);
 
   const connectDisabled = connecting || hostInput.trim().length === 0;
 
@@ -153,12 +159,17 @@ function PairingForm({
   };
 
   const handleSubmit = async () => {
-    const pairingUrl = buildPairingUrl(hostInput, codeInput);
     setOwnAttempt(true);
     setSubmitError(null);
     setIsSubmitting(true);
-    onChangeConnectionPairingUrl(pairingUrl);
-    const outcome = await onConnectPress(pairingUrl, routeFor);
+    let outcome: PairingOutcome;
+    if (routeFor !== undefined && canIssueCode && codeInput.trim().length === 0) {
+      outcome = await addRouteWithoutCode(routeFor, hostInput.trim());
+    } else {
+      const pairingUrl = buildPairingUrl(hostInput, codeInput);
+      onChangeConnectionPairingUrl(pairingUrl);
+      outcome = await onConnectPress(pairingUrl, routeFor);
+    }
     setIsSubmitting(false);
     setSubmitError(outcome.error);
     void Haptics.notificationAsync(
@@ -180,10 +191,14 @@ function PairingForm({
   return (
     <SettingsScreen
       formSheet={routeName === "ConnectionsNew"}
-      title="Add environment"
+      title={routeFor === undefined ? "Add environment" : "Add route"}
       actions={[
         {
-          accessibilityLabel: connecting ? "Connecting" : "Add environment",
+          accessibilityLabel: connecting
+            ? "Connecting"
+            : routeFor === undefined
+              ? "Add environment"
+              : "Add route",
           loading: connecting,
           icon: "checkmark",
           tintColor: headerIconColor,
@@ -234,7 +249,7 @@ function PairingForm({
               <View className="ml-4 border-t border-border-subtle" />
               <PairingInputRow
                 label="Code"
-                placeholder="Pairing code"
+                placeholder={canIssueCode ? "Not needed" : "Pairing code"}
                 returnKeyType="go"
                 value={codeInput}
                 onChangeText={handleCodeChange}
@@ -251,7 +266,9 @@ function PairingForm({
               )}
             >
               {pairingConnectionError ??
-                "For machines on your local network or tailnet. The machine keeps its own provider credentials."}
+                (canIssueCode
+                  ? "Another address for this machine, such as its LAN IP or tailnet name. While it is connected, it issues the code itself."
+                  : "For machines on your local network or tailnet. The machine keeps its own provider credentials.")}
             </Text>
           </View>
 
