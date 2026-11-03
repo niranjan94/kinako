@@ -343,6 +343,16 @@ side chats.
 On mobile, a thread lists its side chats above the composer. Tap one to open it and
 answer its questions.
 
+### Open a thread beside another
+
+To watch or steer two threads at once on web and desktop, right-click a thread in
+the sidebar and choose **Open beside current thread**, or use **Open thread beside
+current thread...** in the command palette. It opens in the right panel with its own
+composer, next to the thread you are on, and comes back when you return to that
+thread. Only threads on the same environment can open beside each other. Closing the
+tab never deletes the thread. Suggested commands from a thread in another folder are
+copied instead of run in this thread's terminal.
+
 ## Snooze until later
 
 To change the choices in the snooze menu, open **Settings → Threads → Snooze options**.
