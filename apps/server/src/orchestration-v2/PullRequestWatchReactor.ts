@@ -18,7 +18,7 @@ import {
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -51,13 +51,13 @@ const FINGERPRINT_REREAD_MS = 30 * 60_000;
 
 const isProviderError = Schema.is(PullRequestProviderError);
 
-const isRateLimited = (cause: Cause.Cause<PullRequestService.PullRequestError>) =>
+const providerFailureReason = (cause: Cause.Cause<PullRequestService.PullRequestError>) =>
   Option.match(Cause.findErrorOption(cause), {
-    onNone: () => false,
+    onNone: () => null,
     onSome: (error) =>
-      error._tag === "PullRequestOperationError" &&
-      isProviderError(error.cause) &&
-      error.cause.reason === "rate-limited",
+      error._tag === "PullRequestOperationError" && isProviderError(error.cause)
+        ? error.cause.reason
+        : null,
   });
 
 const logFailure =
@@ -210,7 +210,7 @@ export const make = Effect.gen(function* () {
   const engine = yield* Orchestrator.OrchestratorV2;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const pullRequests = yield* PullRequestService.PullRequestService;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const bootedAt = yield* Clock.currentTimeMillis;
   const lives = new Map<string, WatchLife>();
 
@@ -294,7 +294,7 @@ export const make = Effect.gen(function* () {
     },
     endedWatch?: ThreadPullRequestWatch,
   ) {
-    const uuid = yield* crypto.randomUUIDv4();
+    const uuid = yield* random.uuidV4();
     yield* engine.dispatch({
       type: "thread.pull-request-watch.sync",
       commandId: CommandId.make(`server:pr-watch:${target.thread.id}:${uuid}`),
@@ -467,7 +467,7 @@ export const make = Effect.gen(function* () {
         (cause): Effect.Effect<ProviderChangeRequestWatchFingerprint | null | "paused"> =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.interrupt
-            : isRateLimited(cause)
+            : providerFailureReason(cause) === "rate-limited"
               ? Effect.succeed("paused")
               : Effect.logDebug("pull request watch fingerprint failed", {
                   pullRequest: group.key,
@@ -521,21 +521,33 @@ export const make = Effect.gen(function* () {
     const reference = referenceOf(group);
     // Invalidate cached reads before using the newer fingerprint; clients receive no notification.
     if (fingerprint !== null) yield* pullRequests.invalidate({ reference });
-    const read = yield* Effect.exit(
-      Effect.all(
-        [
-          pullRequests.detail({ ...reference, allowStale: false }),
+    const [detailRead, activityRead] = yield* Effect.all(
+      [
+        Effect.exit(pullRequests.detail({ ...reference, allowStale: false })),
+        Effect.exit(
           plan.activity
             ? pullRequests.activity(reference).pipe(Effect.asSome)
             : Effect.succeed(Option.none<PullRequestActivity>()),
-        ],
-        { concurrency: 2 },
-      ),
+        ),
+      ],
+      { concurrency: 2 },
     );
+    // Activity failures must not cancel or hide a permanent detail failure.
+    const read = Exit.isFailure(detailRead)
+      ? Exit.failCause(detailRead.cause)
+      : Exit.isFailure(activityRead)
+        ? Exit.failCause(activityRead.cause)
+        : Exit.succeed([detailRead.value, activityRead.value] as const);
     if (Exit.isFailure(read)) {
       if (Cause.hasInterruptsOnly(read.cause)) return yield* Effect.failCause(read.cause);
       lastReads.delete(group.key);
-      if (isRateLimited(read.cause)) return;
+      const reason = providerFailureReason(read.cause);
+      if (reason === "rate-limited") return;
+      // Transport and host failures can outlast the failure limit; keep the watch for recovery.
+      if (reason === "failed") {
+        readFailures.delete(group.key);
+        return yield* Effect.failCause(read.cause);
+      }
       const failures = (readFailures.get(group.key) ?? 0) + 1;
       readFailures.set(group.key, failures);
       if (failures >= READ_FAILURE_LIMIT && (yield* eachTarget(group, giveUp))) {
@@ -593,9 +605,7 @@ export const make = Effect.gen(function* () {
     });
     yield* eachTarget(group, (target) =>
       Effect.gen(function* () {
-        const wakeMessageId = MessageId.make(
-          `message:pr-watch:${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`,
-        );
+        const wakeMessageId = MessageId.make(`message:pr-watch:${yield* random.uuidV4()}`);
         const report = evaluatePullRequestWatch(target.watch, detail, remarks, now, {
           wakeMessageId,
           fixTurnEnded: fixesEnded.get(watchKey(target)) ?? false,

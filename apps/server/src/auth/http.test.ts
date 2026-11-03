@@ -1,6 +1,4 @@
-// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no generateKeyPairSync or sign.
-import * as NodeCrypto from "node:crypto";
-
+import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   AuthTokenExchangeGrantType,
@@ -9,10 +7,13 @@ import {
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
 import type { DpopPublicJwk } from "@t3tools/shared/dpop";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's crypto services have no generateKeyPairSync or sign.
+import * as NodeCrypto from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -61,11 +62,11 @@ const layerRoutes = HttpApiBuilder.layer(AuthTestApi).pipe(
   Layer.provide(layerConfig),
   Layer.provideMerge(
     HttpPlatform.layer.pipe(
-      Layer.provideMerge(NodeServices.layer),
+      Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer)),
       Layer.provideMerge(Etag.layerWeak),
     ),
   ),
-  Layer.provide(NodeServices.layer),
+  Layer.provide(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer)),
 );
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
@@ -78,7 +79,7 @@ const postJson = (path: string, body: unknown, headers?: Readonly<Record<string,
 
 it.effect("sets the selected browser session cookies through the HTTP route", () =>
   Effect.gen(function* () {
-    const crypto = yield* Crypto.Crypto;
+    const random = yield* SecureRandom.SecureRandom;
     const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
       get: () => Effect.succeedNone,
       set: () => Effect.void,
@@ -86,7 +87,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
       getOrCreateRandom: () => Effect.die("Not used by these routes."),
       remove: () => Effect.void,
     });
-    const requestContext = Context.make(Crypto.Crypto, crypto).pipe(
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
       Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
     );
     return yield* Effect.acquireUseRelease(
@@ -166,11 +167,13 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
       ([environmentA, environmentB]) =>
         Effect.promise(() => Promise.all([environmentA.dispose(), environmentB.dispose()])),
     );
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer))),
 );
 
 const signTokenEndpointProof = (jti: string, iat: number) => {
-  const { privateKey, publicKey } = NodeCrypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const { privateKey, publicKey } = NodeCrypto.generateKeyPairSync("ec", {
+    namedCurve: "P-256",
+  });
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const header = encode({
     typ: "dpop+jwt",
@@ -193,9 +196,11 @@ const signTokenEndpointProof = (jti: string, iat: number) => {
 // The web handler runs on its own runtime and wall clock, so the proof's iat must come from one too.
 it.live("records a DPoP proof as used only after the token request's credential resolves", () =>
   Effect.gen(function* () {
-    const crypto = yield* Crypto.Crypto;
+    const random = yield* SecureRandom.SecureRandom;
+    const digest = yield* Digest.Digest;
     const secretStore = yield* ServerSecretStore.ServerSecretStore;
-    const requestContext = Context.make(Crypto.Crypto, crypto).pipe(
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
+      Context.add(Digest.Digest, digest),
       Context.add(ServerSecretStore.ServerSecretStore, secretStore),
     );
     const now = yield* DateTime.now;
@@ -235,7 +240,7 @@ it.live("records a DPoP proof as used only after the token request's credential 
     Effect.provide(
       ServerSecretStore.layer.pipe(
         Layer.provide(layerConfig),
-        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer)),
       ),
     ),
   ),

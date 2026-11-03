@@ -1,5 +1,5 @@
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -37,7 +37,7 @@ const make = Effect.gen(function* () {
   const git = yield* GitVcsDriver.GitVcsDriver;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const setup = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
   const broadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
   const movingRepositories = new Set<string>();
@@ -325,7 +325,7 @@ const make = Effect.gen(function* () {
             if (!retryAfterCommit) {
               if (current.worktreePath !== input.expectedWorktreePath)
                 return yield* new ThreadWorkspaceError({ reason: "workspace_changed" });
-              const uuid = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+              const uuid = yield* random.uuidV4();
               yield* threads
                 .dispatch({
                   type: "thread.metadata.update",

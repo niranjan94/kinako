@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "@effect/vitest";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   EnvironmentId,
@@ -92,7 +93,7 @@ function harness(worktreePath: string | null = null, fails = false) {
         fetchWorktreeBaseCommit,
       } as unknown as GitWorkflowService.GitWorkflowService["Service"]),
     ),
-    Layer.provide(NodeServices.layer),
+    Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
   );
   return { layer, moveThread, sendToThread, fetchWorktreeBaseCommit };
 }

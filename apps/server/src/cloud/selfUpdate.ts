@@ -46,7 +46,8 @@ import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 import { isExactServiceVersion, SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
 import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
-const PREFLIGHT_TIMEOUT = Duration.seconds(30);
+// A staged runtime's cold start can take over a minute on a loaded, swapping host.
+const PREFLIGHT_TIMEOUT = Duration.minutes(3);
 
 export function resolveServerSelfUpdateCapability(input: {
   readonly desktopManaged: boolean;

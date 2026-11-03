@@ -6,6 +6,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AuthStandardClientScopes, ORCHESTRATION_PROTOCOL_VERSION } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
@@ -40,7 +41,7 @@ import { DevServerNotProxiableError, resolveTailscaleLocalTarget } from "./pair.
 import packageJson from "../../package.json" with { type: "json" };
 import { buildPairingAppLink } from "@t3tools/shared/remote";
 
-const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NetService.layer);
+const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer);
 
 const baseState = {
   version: 1,
@@ -137,7 +138,7 @@ describe("kinako pair", () => {
               if (!ChildProcess.isStandardCommand(command))
                 return yield* Effect.die("Unexpected pipeline");
               if (command.args[0] === "serve") {
-                const target = command.args.at(-1)!;
+                const target = String(command.args.at(-1));
                 const descriptor = yield* Effect.promise(async () =>
                   (await fetch(new URL("/.well-known/t3/environment", target))).json(),
                 );
@@ -194,7 +195,7 @@ describe("kinako pair", () => {
           );
         }),
       "::1",
-    ).pipe(Effect.provide(NodeServices.layer)),
+    ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("mints a token and prints a QR pairing URL for a live server", () =>
@@ -234,7 +235,7 @@ describe("kinako pair", () => {
         assert.deepEqual(credentials[0]?.scopes, AuthStandardClientScopes);
       }),
     ).pipe(
-      Effect.provide(NodeServices.layer),
+      Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       Effect.provideService(HostProcess.Environment, {
         ...process.env,
         [SERVICE_LAUNCHER_CONTEXT_ENV]: JSON.stringify({
@@ -269,7 +270,7 @@ describe("kinako pair", () => {
 
         assert.include(output, "Pairing URL: http://localhost:5733/pair#token=");
       }),
-    ).pipe(Effect.provide(NodeServices.layer)),
+    ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.effect("refuses --tailscale before turning on Serve when the policy keeps clients local", () =>
@@ -339,7 +340,7 @@ describe("kinako pair", () => {
         );
         assert.include(rendered, "No running Kinako server found.");
       }),
-    ).pipe(Effect.provide(NodeServices.layer)),
+    ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   // regression: #10516 minting opens the target database with this checkout's
@@ -379,7 +380,7 @@ describe("kinako pair", () => {
           "server-runtime.json",
         ]);
       }),
-    ).pipe(Effect.provide(NodeServices.layer)),
+    ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   // regression: #15492 an older CLI minted into a V1 database the protocol 2
@@ -416,7 +417,7 @@ describe("kinako pair", () => {
         }),
       "127.0.0.1",
       { ...testDescriptor, serverVersion: "0.0.45", orchestrationProtocolVersion: 1 },
-    ).pipe(Effect.provide(NodeServices.layer)),
+    ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   // Without the capability `tailscale serve` blocks on an enablement URL, so
@@ -468,7 +469,7 @@ describe("kinako pair", () => {
         assert.include(String(error), "https://login.tailscale.com/admin/dns");
         assert.deepEqual(tailscaleCalls, [["status", "--json"]]);
       }),
-    ).pipe(Effect.provide(NodeServices.layer)),
+    ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 });
 

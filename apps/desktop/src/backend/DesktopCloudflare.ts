@@ -16,7 +16,7 @@ import {
 } from "@t3tools/shared/cloudflarePublicRoute";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
@@ -138,7 +138,7 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const safeStorage = yield* ElectronSafeStorage.ElectronSafeStorage;
   const httpClient = yield* HttpClient.HttpClient;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const storePath = path.join(environment.stateDir, "cloudflare.json");
   const lock = yield* Semaphore.make(1);
 
@@ -342,9 +342,8 @@ export const make = Effect.gen(function* () {
     api(token, "GET", `/accounts/${accountId}/cfd_tunnel/${tunnelId}/token`, Schema.String);
 
   const newHostname = (zone: DesktopCloudflareZone) =>
-    crypto.randomBytes(16).pipe(
+    random.randomBytes(16).pipe(
       Effect.map((bytes) => makePublicRouteHostname(zone.name, bytes)),
-      Effect.mapError(fail("Could not generate a hostname.")),
       Effect.filterOrFail(isPublicRouteHostname, () =>
         fail(`${zone.name} cannot hold a public route hostname.`)(),
       ),

@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AuthStandardClientScopes } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
@@ -79,7 +80,7 @@ const testNetService = NetService.NetService.of({
 });
 
 function commandArgs(command: ChildProcess.Command): ReadonlyArray<string> {
-  return command._tag === "StandardCommand" ? command.args : [];
+  return command._tag === "StandardCommand" ? command.args.map(String) : [];
 }
 
 const ARCHIVE = { archiveVersion: "1.2.3-preview.20260911.4" } as const;
@@ -101,8 +102,9 @@ const captureRemoteScript = <A, E, R>(run: Effect.Effect<A, E, R>, stdout: strin
     );
     yield* run.pipe(
       Effect.provide(
-        Layer.merge(
+        Layer.mergeAll(
           NodeServices.layer,
+          NodeCrypto.layer,
           Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
         ),
       ),
@@ -165,7 +167,10 @@ describe("ssh tunnel scripts", () => {
       }),
     );
     const layerSpawner = Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner);
-    const layerProcess = Layer.merge(NodeServices.layer, layerSpawner);
+    const layerProcess = Layer.merge(
+      Layer.mergeAll(NodeServices.layer, NodeCrypto.layer),
+      layerSpawner,
+    );
 
     return Effect.gen(function* () {
       const result = yield* SshTunnel.launchOrReuseRemoteServer(target, undefined, ARCHIVE);
@@ -195,7 +200,10 @@ describe("ssh tunnel scripts", () => {
       ),
     );
     const layerSpawner = Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner);
-    const layerProcess = Layer.merge(NodeServices.layer, layerSpawner);
+    const layerProcess = Layer.merge(
+      Layer.mergeAll(NodeServices.layer, NodeCrypto.layer),
+      layerSpawner,
+    );
     return Effect.gen(function* () {
       const result = yield* SshTunnel.issueRemotePairingToken(target, undefined, ARCHIVE);
       assert.equal(result.credential, "LCL4R2TPHDKQ");
@@ -229,6 +237,7 @@ describe("ssh tunnel scripts", () => {
       );
       const layer = Layer.mergeAll(
         NodeServices.layer,
+        NodeCrypto.layer,
         Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Layer.succeed(HttpClient.HttpClient, testHttpClient),
         Layer.succeed(NetService.NetService, testNetService),
@@ -277,6 +286,7 @@ describe("ssh tunnel scripts", () => {
       );
       const layer = Layer.mergeAll(
         NodeServices.layer,
+        NodeCrypto.layer,
         Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Layer.succeed(HttpClient.HttpClient, hangingHttpClient),
         Layer.succeed(NetService.NetService, testNetService),
@@ -334,6 +344,7 @@ describe("ssh tunnel scripts", () => {
       );
       const layer = Layer.mergeAll(
         NodeServices.layer,
+        NodeCrypto.layer,
         Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Layer.succeed(HttpClient.HttpClient, hangingHttpClient),
         Layer.succeed(NetService.NetService, testNetService),
@@ -398,6 +409,7 @@ describe("ssh tunnel scripts", () => {
       );
       const layer = Layer.mergeAll(
         NodeServices.layer,
+        NodeCrypto.layer,
         Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Layer.succeed(HttpClient.HttpClient, testHttpClient),
         Layer.succeed(NetService.NetService, testNetService),
@@ -502,6 +514,7 @@ describe("ssh tunnel scripts", () => {
         );
         const layer = Layer.mergeAll(
           NodeServices.layer,
+          NodeCrypto.layer,
           Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
           Layer.succeed(HttpClient.HttpClient, testHttpClient),
           Layer.succeed(NetService.NetService, testNetService),
@@ -735,7 +748,7 @@ esac
         assert.isTrue((yield* host.servers)[0]?.alive);
         yield* host.stop(routeA);
         assert.isFalse((yield* host.servers)[0]?.alive);
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.live.skipIf(windowsHost)(
@@ -770,7 +783,7 @@ esac
         // Route B restarted it, so route A no longer stops it.
         yield* host.stop(routeA);
         assert.isTrue((yield* host.servers).find((server) => server.pid !== legacyPid)?.alive);
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.live.skipIf(windowsHost)(
@@ -812,7 +825,7 @@ esac
         assert.deepEqual(result, { remotePort: 4400, serverKind: "managed", networkAccess: false });
         assert.isTrue((yield* host.servers)[0]?.alive);
         assert.isTrue(isAlive(otherPid));
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.live.skipIf(windowsHost)(
@@ -842,7 +855,7 @@ esac
         const live = (yield* host.servers).filter((server) => server.alive);
         assert.equal(live.length, 1);
         assert.equal(live[0]?.bindHost, "127.0.0.1");
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.live.skipIf(windowsHost)(
@@ -863,6 +876,6 @@ esac
           networkAccess: false,
         });
         assert.equal((yield* host.servers).length, 1);
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 });

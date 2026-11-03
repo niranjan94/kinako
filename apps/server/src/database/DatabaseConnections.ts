@@ -9,7 +9,7 @@ import {
   type DatabaseConnectionDraft,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -72,7 +72,7 @@ const storageFailed = (cause: unknown) =>
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
 
   const selectAll = SqlSchema.findAll({
     Request: Schema.Void,
@@ -178,7 +178,7 @@ const make = Effect.gen(function* () {
     const id =
       existing?.id ??
       (draft.level === "global" ? draft.id : undefined) ??
-      DatabaseConnectionId.make(yield* crypto.randomUUIDv4().pipe(Effect.mapError(storageFailed)));
+      DatabaseConnectionId.make(yield* random.uuidV4());
     yield* sql`
       INSERT INTO database_connections (id, name, level, project_id, target_json, read_only, created_at, updated_at)
       VALUES (

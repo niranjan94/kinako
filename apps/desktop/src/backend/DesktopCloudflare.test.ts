@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { EnvironmentId } from "@t3tools/contracts";
@@ -140,6 +141,7 @@ const withCloudflare = <A, E>(
               layerEnvironment,
               layerSafeStorage,
               NodeServices.layer,
+              NodeCrypto.layer,
               Layer.succeed(HttpClient.HttpClient, fake.client),
             ),
           ),

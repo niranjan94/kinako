@@ -296,6 +296,7 @@ export function applyOrchestrationV2ProjectionEvent(
       return { ...base, thread: event.payload };
     // Read state and grouping are not activity: skip the updatedAt bump.
     case "thread.visited":
+    case "thread.tags-updated":
     case "thread.marked-unread":
     case "thread.group-set":
       return { ...projection, thread: event.payload };
