@@ -2883,7 +2883,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
-              canOpenInSplit:
+              canOpenBeside:
                 routeThreadRef !== null &&
                 routeThreadRef.environmentId === threadRef.environmentId &&
                 routeThreadRef.threadId !== threadRef.threadId,
@@ -3013,7 +3013,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             }
             return;
           }
-          case "open-split":
+          case "open-beside":
             if (routeThreadRef)
               useRightPanelStore.getState().openSideChat(routeThreadRef, threadRef.threadId);
             return;

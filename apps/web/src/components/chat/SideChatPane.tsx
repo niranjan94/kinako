@@ -55,7 +55,7 @@ export default function SideChatPane(props: {
   const [bringingBack, setBringingBack] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const mergeRun = projection ? resolveLatestMergeBackRun(projection) : null;
-  // The same pane also shows any thread opened in split view; only side chats merge back.
+  // The same pane also shows any thread opened beside this one; only side chats merge back.
   const isSideChat =
     shell?.lineage.sideChat === true && shell.lineage.parentThreadId === parentRef.threadId;
   const sharesWorkspace =
@@ -184,7 +184,7 @@ export default function SideChatPane(props: {
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label={isSideChat ? "Close side chat" : "Close split view"}
+          aria-label={isSideChat ? "Close side chat" : "Close thread"}
           onClick={props.onClose}
         >
           <XIcon />

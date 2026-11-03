@@ -3122,7 +3122,7 @@ export const OrchestrationV2Command = Schema.Union([
     type: Schema.Literal("thread.delete"),
     commandId: CommandId,
     threadId: ThreadId,
-    /** Delete only a thread with no runs and no messages; otherwise succeed without a change. */
+    /** Delete only an unused side chat (no runs, no messages); otherwise succeed without a change. */
     onlyIfUnused: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({

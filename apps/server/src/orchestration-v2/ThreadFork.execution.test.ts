@@ -1021,6 +1021,11 @@ it.effect("closing a side chat deletes it only while unused; a deleted parent ta
     assert.isNotNull((yield* orchestrator.getThreadProjection(unused)).thread.deletedAt);
     assert.isNull((yield* orchestrator.getThreadProjection(used)).thread.deletedAt);
 
+    const regular = ThreadId.make("side-chat-close-regular");
+    yield* createParent(regular);
+    yield* close(regular);
+    assert.isNull((yield* orchestrator.getThreadProjection(regular)).thread.deletedAt);
+
     yield* orchestrator.dispatch({
       type: "thread.delete",
       commandId: CommandId.make("side-chat-close-delete-parent"),
