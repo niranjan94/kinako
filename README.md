@@ -14,18 +14,17 @@ Kinako installs alongside T3 Code with its own apps, `kinako` CLI, data in `~/.k
 
 Feature highlights:
 
-- **Databases:** browse Postgres and SQLite in the bottom panel, run SQL with completion, and export results. Postgres can sign in with AWS IAM, Secrets Manager, or Parameter Store. Mobile and agents get read-only queries. [Guide](./docs/user/databases.md)
+- **Databases:** browse Postgres, SQLite, and ClickHouse in the bottom panel, run SQL with completion, and export results. Postgres can sign in with AWS IAM, Secrets Manager, or Parameter Store. Mobile and agents get read-only queries. [Guide](./docs/user/databases.md)
 - **CLI sessions:** import Claude Code and Codex history across folders, or copy a resume command to continue a thread in the terminal. [Guide](./docs/user/providers-claude.md#bring-a-claude-code-session-into-kinako)
 - **Turn wrap-up:** a recap card shows how a turn ended, what the agent is waiting on, and the diff totals. Agents can suggest follow-ups that start as new threads. [Guide](./docs/user/composer.md#suggested-follow-ups)
 - **Context controls:** summarize part of a conversation, restore full context, and see a context-window breakdown. [Guide](./docs/user/composer.md#summarize-part-of-a-conversation)
 - **Thread organization:** group and collapse threads in the sidebar and on mobile, or watch them work as characters in a pixel agent office. [Guide](./docs/user/thread-sidebar.md#group-threads)
 - **Workspaces:** give threads additional directories, copy gitignored files such as `.env` into new worktrees, move a thread between the local checkout and a worktree, point a project at a moved folder, and save recovery snapshots before worktree cleanup. [Guide](./docs/user/project-settings.md#additional-directories)
-- **Density:** switch the web and desktop UI between compact and spacious padding. [Guide](./docs/user/appearance.md#density)
 - **GitHub:** read and reply to issues, send issues and PRs to agents, and opt into automatic CI fixes on watched PRs. [Guide](./docs/user/source-control.md)
-- **Remote access:** manage pairing on remote environments, update SSH servers from the app, and pair using stable local or Tailscale names. [Guide](./docs/user/remote-access.md)
+- **Remote access:** reach an environment from anywhere through a Cloudflare Tunnel on your own Cloudflare account, add it to a phone with a QR code, manage pairing on remote environments, update SSH servers from the app, and pair using stable local or Tailscale names. [Guide](./docs/user/remote-access.md#public-routes-with-your-cloudflare-account)
 - **Keep awake:** prevent the host from sleeping while agents work, including scheduled tasks. [Guide](./docs/user/background-service.md#keep-the-computer-awake)
 
-Remote access uses LAN, Tailscale, or SSH; T3 Connect is not built in. Pairing stays on your server, and builds and updates come from this repository.
+Remote access uses LAN, Tailscale, SSH, or your own Cloudflare account; T3 Connect is not built in. Pairing stays on your server, and builds and updates come from this repository.
 
 See [FORK.md](./FORK.md) for fork maintenance and migration details.
 
@@ -40,7 +39,11 @@ See [FORK.md](./FORK.md) for fork maintenance and migration details.
 > - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 > - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
-> - fx: install [fx](https://fx.sh) and run `fx login` on the machine running the T3 Code server ([setup guide](./docs/user/providers-fx.md))
+> - fx: install [fx](https://fx.sh) and run `fx login` on the machine running the Kinako server ([setup guide](./docs/user/providers-fx.md))
+> - Kiro: install the [Kiro CLI](https://kiro.dev/docs/cli/) and run `kiro-cli login`, then enable it in **Settings → Providers** ([setup guide](./docs/user/providers-kiro.md))
+> - Pi: install [Pi](https://pi.dev) and run `/login` inside `pi`, then enable it in **Settings → Providers** ([setup guide](./docs/user/providers-pi.md))
+> - Muse Code: install [Muse Code](https://dev.meta.ai/docs/muse-code) and run `muse login`, then enable it in **Settings → Providers** ([setup guide](./docs/user/providers-muse.md))
+> - Other ACP agents: add one from the ACP Registry in **Settings → Providers** ([guide](./docs/user/providers-acp.md))
 
 ### Command line
 
