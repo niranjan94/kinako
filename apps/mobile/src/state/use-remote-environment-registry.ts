@@ -2,7 +2,7 @@ import * as Dialog from "../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
 import { Discovery } from "@t3tools/client-runtime/relay";
-import type { EnvironmentId } from "@t3tools/contracts";
+import { AuthAccessWriteScope, type EnvironmentId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
@@ -14,12 +14,15 @@ import { useWorkspaceConnectionState, useWorkspaceEnvironments } from "./workspa
 import type { SavedRemoteConnection } from "../lib/connection";
 import { appAtomRegistry } from "./atom-registry";
 import type { ConnectedEnvironmentSummary, EnvironmentRuntimeState } from "./remote-runtime-types";
-import { environmentSession } from "./session";
+import { environmentSession, useEnvironmentScope } from "./session";
 import { environmentCatalog } from "../connection/catalog";
 import { createRemoteEnvironmentProjectionAtoms } from "./remote-environment-projections";
 import { serverEnvironment } from "./server";
 import { relayEnvironmentDiscovery } from "./relay";
-import { connectPairingUrl as connectPairingUrlCommand } from "../connection/onboarding";
+import {
+  addRouteOverConnection,
+  connectPairingUrl as connectPairingUrlCommand,
+} from "../connection/onboarding";
 
 const RELAY_REMOVAL_ACCOUNT_NOTE: Record<Discovery.RelayEnvironmentRegistration, string> = {
   registered:
@@ -64,7 +67,34 @@ export async function pairEnvironment(
     appAtomRegistry.set(connectionPairingUrlAtom, "");
     return { ok: true, error: null };
   }
-  const error = Cause.squash(result.cause);
+  return pairingFailure(Cause.squash(result.cause));
+}
+
+/** Adds a route at `host` to a connected environment, which issues the pairing code itself. */
+export async function addRouteWithoutCode(
+  environmentId: EnvironmentId,
+  host: string,
+): Promise<PairingOutcome> {
+  const session = AsyncResult.getOrElse(
+    appAtomRegistry.get(environmentSession.sessionStateAtom(environmentId)),
+    () => null,
+  );
+  const result = await runAtomCommand(
+    appAtomRegistry,
+    addRouteOverConnection,
+    {
+      environmentId,
+      host,
+      grantedScopes: session?.authenticated ? (session.permissions ?? session.scopes ?? []) : [],
+    },
+    { reportFailure: false },
+  );
+  return AsyncResult.isSuccess(result)
+    ? { ok: true, error: null }
+    : pairingFailure(Cause.squash(result.cause));
+}
+
+function pairingFailure(error: unknown): PairingOutcome {
   const message = error instanceof Error ? error.message : "Failed to pair with the environment.";
   if (
     error !== null &&
@@ -91,6 +121,16 @@ export const environmentConnectedAtom = Atom.family((environmentId: EnvironmentI
       "connected",
   ).pipe(Atom.withLabel(`mobile:environment-connected:${environmentId}`)),
 );
+
+const NOT_CONNECTED_ATOM = Atom.make(false).pipe(Atom.withLabel("mobile:not-connected"));
+
+/** Whether `addRouteWithoutCode` can reach the environment and has it issue a code. */
+export function useCanAddRouteWithoutCode(environmentId: EnvironmentId | null): boolean {
+  const connected = useAtomValue(
+    environmentId === null ? NOT_CONNECTED_ATOM : environmentConnectedAtom(environmentId),
+  );
+  return useEnvironmentScope(environmentId, AuthAccessWriteScope) && connected;
+}
 
 const EMPTY_SAVED_CONNECTION_ATOM = Atom.make<SavedRemoteConnection | null>(null).pipe(
   Atom.withLabel("mobile:saved-connection:empty"),

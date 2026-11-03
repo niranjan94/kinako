@@ -71,6 +71,8 @@ vi.mock("./devAutoConnect", () => ({
   devAutoConnectAttemptAtom: {},
 }));
 vi.mock("../../state/use-remote-environment-registry", () => ({
+  addRouteWithoutCode: vi.fn(),
+  useCanAddRouteWithoutCode: () => false,
   setPendingConnectionError: (message: string | null) => {
     harness.pendingConnectionError = message;
   },

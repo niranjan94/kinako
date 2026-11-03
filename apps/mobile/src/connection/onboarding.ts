@@ -1,4 +1,5 @@
 import { ConnectionOnboarding } from "@t3tools/client-runtime/connection";
+import { addRouteOverConnection as addRouteOverConnectionEffect } from "@t3tools/client-runtime/state/auth";
 import {
   createAtomCommandScheduler,
   createRuntimeCommand,
@@ -43,4 +44,15 @@ export const updateBearerConnection = createRuntimeCommand(connectionAtomRuntime
     ConnectionOnboarding.ConnectionOnboarding.pipe(
       Effect.flatMap((onboarding) => onboarding.updateBearer(input)),
     ),
+});
+
+export const addRouteOverConnection = createRuntimeCommand(connectionAtomRuntime, {
+  label: "mobile:connection:add-route-over-connection",
+  scheduler: onboardingScheduler,
+  concurrency: {
+    mode: "singleFlight",
+    key: (input: Parameters<typeof addRouteOverConnectionEffect>[0]) =>
+      JSON.stringify([input.environmentId, input.host]),
+  },
+  execute: addRouteOverConnectionEffect,
 });

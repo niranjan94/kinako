@@ -3,6 +3,7 @@ import { ChevronsLeftRightEllipsisIcon, PlusIcon, TerminalIcon } from "lucide-re
 import { useAtomValue } from "@effect/atom-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  AuthAccessWriteScope,
   type DesktopDiscoveredSshHost,
   type DesktopSshEnvironmentTarget,
 } from "@t3tools/contracts";
@@ -44,10 +45,12 @@ import { Button } from "../ui/button";
 import { AnimatedHeight } from "../AnimatedHeight";
 import { environmentCatalog } from "~/connection/catalog";
 import {
+  addRouteOverConnection,
   connectPairing as connectPairingAtom,
   connectSshEnvironment as connectSshEnvironmentAtom,
 } from "~/connection/onboarding";
 import { useEnvironmentQuery } from "~/state/query";
+import { useEnvironmentSessionScopes } from "~/state/session";
 import { desktopSshHostsStateAtom, filterDiscoveredSshHosts } from "~/state/desktopSshHosts";
 import { type EnvironmentPresentation, useRelayEnvironmentDiscovery } from "~/state/environments";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -91,6 +94,15 @@ export function AddEnvironmentDialog({
   const registerEnvironment = useAtomCommand(environmentCatalog.register, {
     reportFailure: false,
   });
+  const addRouteWithoutCode = useAtomCommand(addRouteOverConnection, { reportFailure: false });
+  const routeGrantedScopes = useEnvironmentSessionScopes(routeTarget?.environmentId ?? null);
+  const mintRouteCodeTarget =
+    routeTarget !== null &&
+    routeTarget.connection.phase === "connected" &&
+    routeGrantedScopes?.includes(AuthAccessWriteScope) === true
+      ? { environmentId: routeTarget.environmentId, grantedScopes: routeGrantedScopes }
+      : null;
+  const canMintRouteCode = mintRouteCodeTarget !== null;
   const relayDiscoveryState = useRelayEnvironmentDiscovery();
   const savedDesktopSshEnvironmentKeys = (() => {
     const keys = new Set<string>();
@@ -187,6 +199,26 @@ export function AddEnvironmentDialog({
     setIsAddingSavedBackend(false);
   };
 
+  const readRemotePairingInput = () => {
+    try {
+      return parseRemotePairingFields({
+        host: savedBackendHost,
+        pairingCode: savedBackendPairingCode,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to add backend.";
+      onErrorChange(message);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not add backend",
+          description: message,
+        }),
+      );
+      return null;
+    }
+  };
+
   const handleAddSavedBackend = async () => {
     if (savedBackendMode === "ssh") {
       let target: DesktopSshEnvironmentTarget;
@@ -207,30 +239,23 @@ export function AddEnvironmentDialog({
 
     setIsAddingSavedBackend(true);
     onErrorChange(null);
-    let remotePairingInput: ReturnType<typeof parseRemotePairingFields>;
-    try {
-      remotePairingInput = parseRemotePairingFields({
-        host: savedBackendHost,
-        pairingCode: savedBackendPairingCode,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to add backend.";
-      onErrorChange(message);
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Could not add backend",
-          description: message,
-        }),
-      );
+    const host = savedBackendHost.trim();
+    const pairing =
+      mintRouteCodeTarget !== null && host.length > 0 && savedBackendPairingCode.trim().length === 0
+        ? { ...mintRouteCodeTarget, host }
+        : readRemotePairingInput();
+    if (pairing === null) {
       setIsAddingSavedBackend(false);
       return;
     }
 
-    const result = await connectPairing({
-      ...remotePairingInput,
-      ...(routeTarget ? { expectedEnvironmentId: routeTarget.environmentId } : {}),
-    });
+    const result =
+      "grantedScopes" in pairing
+        ? await addRouteWithoutCode(pairing)
+        : await connectPairing({
+            ...pairing,
+            ...(routeTarget ? { expectedEnvironmentId: routeTarget.environmentId } : {}),
+          });
     if (result._tag === "Failure") {
       if (!isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
@@ -407,7 +432,7 @@ export function AddEnvironmentDialog({
           <Input
             value={savedBackendPairingCode}
             onChange={(event) => setSavedBackendPairingCode(event.target.value)}
-            placeholder="PAIRCODE"
+            placeholder={canMintRouteCode ? "Not needed" : "PAIRCODE"}
             disabled={isAddingSavedBackend}
             spellCheck={false}
           />
@@ -415,7 +440,9 @@ export function AddEnvironmentDialog({
       </div>
       <div>
         <span className="mt-1 block text-2xs text-muted-foreground">
-          Paste a full pairing URL here to fill both fields automatically.
+          {canMintRouteCode
+            ? "Leave the code empty to have one issued over the current connection."
+            : "Paste a full pairing URL here to fill both fields automatically."}
         </span>
       </div>
     </div>

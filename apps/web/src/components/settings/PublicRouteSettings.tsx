@@ -64,7 +64,7 @@ const reportError = (title: string, error: unknown) =>
     stackedThreadToast({ type: "error", title, description: desktopCloudflareErrorMessage(error) }),
   );
 
-function usePublicRouteStatus(environmentId: EnvironmentId): PublicRouteStatus | null {
+export function usePublicRouteStatus(environmentId: EnvironmentId): PublicRouteStatus | null {
   const result = useAtomValue(publicRouteEnvironment.status({ environmentId, input: {} }));
   return result._tag === "Success" ? result.value : null;
 }
