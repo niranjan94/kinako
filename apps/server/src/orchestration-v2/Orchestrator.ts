@@ -14118,7 +14118,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           );
         });
         // Checked under the thread lock: a message sent since the client looked keeps the thread.
+        // Only side chats are discarded by closing their tab; any other thread stays.
         if (command.onlyIfUnused === true) {
+          const target = yield* projectionStore
+            .getThread(command.threadId)
+            .pipe(
+              Effect.mapError(
+                (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+              ),
+            );
+          if (target.lineage.sideChat !== true) {
+            return { events: [], effects: [] };
+          }
           const usage = yield* projectionStore
             .getThreadRecords(command.threadId, ["runs", "messages"])
             .pipe(

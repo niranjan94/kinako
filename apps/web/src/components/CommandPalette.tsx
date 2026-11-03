@@ -56,6 +56,7 @@ import {
   SourceControlProviderKind,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
   resolveEnvironmentMachineKind,
+  ThreadId,
 } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
@@ -1543,6 +1544,39 @@ function OpenCommandPaletteDialog(props: {
       run: async () => {
         useRightPanelStore.getState().open(threadRef, "pull-requests");
       },
+    });
+  }
+
+  if (activeThread) {
+    const host = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    // Thread items carry `thread:<environmentId>:<threadId>` values; the panel hosts same-environment threads.
+    const sameEnvironment = `thread:${activeThread.environmentId}:`;
+    actionItems.push({
+      kind: "submenu",
+      value: "action:open-beside",
+      searchTerms: ["open beside", "side by side", "split", "panel", "thread"],
+      title: "Open thread beside current thread...",
+      icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+      addonIcon: <MessageSquareIcon className={ADDON_ICON_CLASS} />,
+      groups: [
+        {
+          value: "open-beside",
+          label: "Threads",
+          items: allThreadItems
+            .filter(
+              (item) => item.value.startsWith(sameEnvironment) && item.value !== activeThreadValue,
+            )
+            .map((item) => ({
+              ...item,
+              value: `open-beside:${item.value}`,
+              run: async () => {
+                useRightPanelStore
+                  .getState()
+                  .openSideChat(host, ThreadId.make(item.value.slice(sameEnvironment.length)));
+              },
+            })),
+        },
+      ],
     });
   }
 

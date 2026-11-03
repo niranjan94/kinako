@@ -88,10 +88,10 @@ describe("buildThreadActionMenuItems", () => {
     ).toContain("copy-cli-resume");
   });
 
-  it("offers split view only beside another open thread, including to read-only clients", () => {
-    expect(allIds(baseState)).not.toContain("open-split");
-    expect(allIds({ ...baseState, canOpenInSplit: true })).toContain("open-split");
-    expect(threadActionRequiresOperate("open-split")).toBe(false);
+  it("offers opening beside the open thread only for another thread, including to read-only clients", () => {
+    expect(allIds(baseState)).not.toContain("open-beside");
+    expect(allIds({ ...baseState, canOpenBeside: true })).toContain("open-beside");
+    expect(threadActionRequiresOperate("open-beside")).toBe(false);
   });
 
   it("offers existing groups, a new group, and the way back out", () => {
