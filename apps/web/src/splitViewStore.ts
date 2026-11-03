@@ -11,6 +11,7 @@ import {
   focusAfterRemove,
   leaves,
   MAX_SPLIT_DEPTH,
+  paneDepth,
   type PaneNode,
   removePane,
   replacePaneThread,
@@ -24,7 +25,12 @@ interface SplitViewState {
   root: PaneNode | null;
   focusedPaneId: string | null;
   /** Splits the focused pane, or starts a split from `current`, and focuses the new pane. */
-  split: (current: ScopedThreadRef, direction: SplitDirection, threadRef: ScopedThreadRef) => void;
+  /** False when every pane is already split as far as it goes (a 2x2 grid). */
+  split: (
+    current: ScopedThreadRef,
+    threadRef: ScopedThreadRef,
+    direction?: SplitDirection,
+  ) => boolean;
   /** Closes a pane; a single remaining pane ends the split. Returns the thread to show. */
   close: (paneId: string) => ScopedThreadRef | null;
   focus: (paneId: string) => void;
@@ -56,15 +62,29 @@ export const useSplitViewStore = create<SplitViewState>()(
     (set, get) => ({
       root: null,
       focusedPaneId: null,
-      split: (current, direction, threadRef) => {
+      split: (current, threadRef, direction) => {
         const state = get();
         const root: PaneNode = state.root ?? { kind: "leaf", id: randomUUID(), threadRef: current };
+        const focusedId =
+          findLeafByThread(root, current)?.id ?? state.focusedPaneId ?? leaves(root)[0]!.id;
+        // A pane already two splits deep hands the split to one with room, if any.
         const paneId =
-          state.focusedPaneId ?? findLeafByThread(root, current)?.id ?? leaves(root)[0]!.id;
+          (paneDepth(root, focusedId) ?? 0) < MAX_SPLIT_DEPTH
+            ? focusedId
+            : leaves(root).find((leaf) => (paneDepth(root, leaf.id) ?? 0) < MAX_SPLIT_DEPTH)?.id;
+        if (!paneId) return false;
         const ids = { split: randomUUID(), leaf: randomUUID() };
-        const next = splitPane(root, paneId, direction, threadRef, ids);
-        if (next === root) return;
+        // Side by side first, then stacked, so repeated splits fill a 2x2 grid.
+        const next = splitPane(
+          root,
+          paneId,
+          direction ?? ((paneDepth(root, paneId) ?? 0) % 2 === 0 ? "row" : "column"),
+          threadRef,
+          ids,
+        );
+        if (next === root) return false;
         set({ root: next, focusedPaneId: ids.leaf });
+        return true;
       },
       close: (paneId) => {
         const { root, focusedPaneId } = get();

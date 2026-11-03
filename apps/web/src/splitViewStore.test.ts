@@ -23,15 +23,25 @@ beforeEach(() => {
 describe("splitViewStore", () => {
   it("starts a split from the current thread and focuses the new pane", () => {
     const store = useSplitViewStore.getState();
-    store.split(ref("1"), "row", ref("2"));
+    store.split(ref("1"), ref("2"));
     expect(shown()).toEqual({ threads: ["1", "2"], focused: "2" });
-    store.split(ref("2"), "column", ref("3"));
+    store.split(ref("2"), ref("3"));
     expect(shown()).toEqual({ threads: ["1", "2", "3"], focused: "3" });
+    // Side by side first, then stacked.
+    const root = useSplitViewStore.getState().root;
+    expect(root?.kind === "split" && root.direction).toBe("row");
+    expect(root?.kind === "split" && root.second.kind === "split" && root.second.direction).toBe(
+      "column",
+    );
+    // The focused pane is two splits deep, so the fourth pane splits the one with room.
+    expect(store.split(ref("3"), ref("4"))).toBe(true);
+    expect(shown()).toEqual({ threads: ["1", "4", "2", "3"], focused: "4" });
+    expect(store.split(ref("4"), ref("5"))).toBe(false);
   });
 
   it("follows navigation: focuses a shown thread, else swaps the focused pane", () => {
     const store = useSplitViewStore.getState();
-    store.split(ref("1"), "row", ref("2"));
+    store.split(ref("1"), ref("2"));
     store.followRoute(ref("1"));
     expect(shown()).toEqual({ threads: ["1", "2"], focused: "1" });
     store.followRoute(ref("9"));
@@ -40,8 +50,8 @@ describe("splitViewStore", () => {
 
   it("ends the split when one pane is left and returns the thread to show", () => {
     const store = useSplitViewStore.getState();
-    store.split(ref("1"), "row", ref("2"));
-    store.split(ref("2"), "column", ref("3"));
+    store.split(ref("1"), ref("2"));
+    store.split(ref("2"), ref("3"));
     const focusedId = useSplitViewStore.getState().focusedPaneId!;
     expect(store.close(focusedId)).toEqual(ref("2"));
     expect(shown()).toEqual({ threads: ["1", "2"], focused: "2" });

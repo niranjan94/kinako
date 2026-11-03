@@ -86,8 +86,12 @@ import {
   SquareTerminalIcon,
   TextSearchIcon,
   UserPlusIcon,
+  XIcon,
+  Columns2Icon,
 } from "lucide-react";
 import { openThreadFind } from "./chat/threadFindStore";
+import { findLeafByThread, nextPaneThread } from "../splitView.logic";
+import { useSplitViewStore } from "../splitViewStore";
 import {
   useDeferredValue,
   useEffect,
@@ -297,6 +301,7 @@ const databasePermissionAtom = Atom.family((environmentId: EnvironmentId | null)
 
 const ADD_PROJECT_ENTRY_GROUP = "add-project";
 const NEW_THREAD_IN_GROUP = "projects";
+const SPLIT_CHAT_GROUP = "split-chat";
 
 /** The submenu an open intent starts in; its groups resolve while rendering. */
 function openIntentView(intent: CommandPaletteOpenIntent | null): CommandPaletteView | null {
@@ -318,6 +323,11 @@ function openIntentView(intent: CommandPaletteOpenIntent | null): CommandPalette
       return {
         addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
         groups: [{ value: NEW_THREAD_IN_GROUP, label: "Projects", items: [] }],
+      };
+    case "split-chat":
+      return {
+        addonIcon: <Columns2Icon className={ADDON_ICON_CLASS} />,
+        groups: [{ value: SPLIT_CHAT_GROUP, label: "Threads", items: [] }],
       };
     case "change-theme":
       return {
@@ -1580,6 +1590,95 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
+  // Thread items carry `thread:<environmentId>:<threadId>` values; environment ids hold no colon.
+  const threadRefOfItem = (value: string) => {
+    const rest = value.slice("thread:".length);
+    const at = rest.indexOf(":");
+    return scopeThreadRef(rest.slice(0, at) as EnvironmentId, ThreadId.make(rest.slice(at + 1)));
+  };
+  const splitRoot = useSplitViewStore((state) => state.root);
+  const splitChatGroups = activeThread
+    ? [
+        {
+          value: SPLIT_CHAT_GROUP,
+          label: "Threads",
+          items: allThreadItems
+            .filter(
+              (item) =>
+                item.value !== activeThreadValue &&
+                !(splitRoot && findLeafByThread(splitRoot, threadRefOfItem(item.value))),
+            )
+            .map((item) => ({
+              ...item,
+              value: `split-chat:${item.value}`,
+              run: async () => {
+                const ref = threadRefOfItem(item.value);
+                const split = useSplitViewStore
+                  .getState()
+                  .split(scopeThreadRef(activeThread.environmentId, activeThread.id), ref);
+                if (!split) {
+                  toastManager.add({
+                    type: "info",
+                    title: "Split view is full",
+                    description: "It shows up to four threads. Close a pane to open another.",
+                  });
+                  return;
+                }
+                await navigate({
+                  to: "/$environmentId/$threadId",
+                  params: buildThreadRouteParams(ref),
+                });
+              },
+            })),
+        },
+      ]
+    : [];
+  if (activeThread) {
+    actionItems.push({
+      kind: "submenu",
+      value: "action:split-chat",
+      searchTerms: ["split", "pane", "side by side", "split view"],
+      title: "Split chat with...",
+      icon: <Columns2Icon className={ITEM_ICON_CLASS} />,
+      addonIcon: <Columns2Icon className={ADDON_ICON_CLASS} />,
+      shortcutCommand: "chat.split",
+      groups: splitChatGroups,
+    });
+  }
+  const splitFocusedPane =
+    splitRoot && activeThread
+      ? findLeafByThread(splitRoot, scopeThreadRef(activeThread.environmentId, activeThread.id))
+      : null;
+  if (splitRoot && splitFocusedPane) {
+    actionItems.push({
+      kind: "action",
+      value: "action:split-close",
+      searchTerms: ["close pane", "unsplit", "split"],
+      title: "Close pane",
+      icon: <XIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "chat.split.close",
+      run: async () => {
+        const next = useSplitViewStore.getState().close(splitFocusedPane.id);
+        if (next)
+          await navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(next) });
+      },
+    });
+    const next = nextPaneThread(splitRoot, splitFocusedPane.threadRef);
+    if (next) {
+      actionItems.push({
+        kind: "action",
+        value: "action:split-focus-next",
+        searchTerms: ["next pane", "focus pane", "split"],
+        title: "Focus next pane",
+        icon: <Columns2Icon className={ITEM_ICON_CLASS} />,
+        shortcutCommand: "chat.split.focusNext",
+        run: async () => {
+          await navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(next) });
+        },
+      });
+    }
+  }
+
   if (activeThread) {
     const ref = { environmentId: activeThread.environmentId, threadId: activeThread.id };
     for (const [intent, title] of [
@@ -1979,11 +2078,13 @@ function OpenCommandPaletteDialog(props: {
                 items: projectThreadItems.length > 0 ? projectThreadItems : [addProjectAction],
               },
             ]
-          : currentView?.groups[0]?.value === "themes"
-            ? changeThemeItem.groups
-            : currentView?.groups[0]?.value === "appearance"
-              ? changeAppearanceItem.groups
-              : (currentView?.groups ?? rootGroups);
+          : currentView?.groups[0]?.value === SPLIT_CHAT_GROUP
+            ? splitChatGroups
+            : currentView?.groups[0]?.value === "themes"
+              ? changeThemeItem.groups
+              : currentView?.groups[0]?.value === "appearance"
+                ? changeAppearanceItem.groups
+                : (currentView?.groups ?? rootGroups);
 
   const isLinkedThreadSearch =
     linkedThreadSearch?.linkedThreads !== undefined && deferredQuery === linkedThreadSearch.query;

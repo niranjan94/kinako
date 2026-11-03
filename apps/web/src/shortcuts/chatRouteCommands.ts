@@ -1,4 +1,8 @@
-import { AuthPreviewOperateScope, type EnvironmentId } from "@t3tools/contracts";
+import {
+  AuthPreviewOperateScope,
+  type EnvironmentId,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import type { AnyRouter } from "@tanstack/react-router";
 
 import { APP_BASE_NAME } from "~/branding";
@@ -23,7 +27,9 @@ import { primaryEnvironmentIdAtom } from "../state/primaryEnvironment";
 import { readEnvironmentScope } from "../state/session";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
-import { resolveThreadRouteTarget } from "../threadRoutes";
+import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
+import { findLeafByThread, nextPaneThread } from "../splitView.logic";
+import { useSplitViewStore } from "../splitViewStore";
 import { useUiStateStore } from "../uiStateStore";
 import { type CommandHandler, registerCommands } from "./dispatcher";
 
@@ -89,6 +95,12 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
     });
   const canOperatePreview = (environmentId: EnvironmentId) =>
     readEnvironmentScope(environmentId, AuthPreviewOperateScope);
+
+  const openThread = (threadRef: ScopedThreadRef) =>
+    void router.navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+    });
 
   const claim = (event: KeyboardEvent) => {
     event.preventDefault();
@@ -160,6 +172,28 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
           return;
         }
         dispatchPreviewAction("toggle-panel");
+      },
+      "chat.split": (event) => {
+        if (!readRouteThreadRef()) return;
+        claim(event);
+        openCommandPalette({ open: "split-chat" });
+      },
+      "chat.split.close": (event) => {
+        const threadRef = readRouteThreadRef();
+        const { root } = useSplitViewStore.getState();
+        const pane = threadRef && root ? findLeafByThread(root, threadRef) : null;
+        if (!pane) return;
+        claim(event);
+        const next = useSplitViewStore.getState().close(pane.id);
+        if (next) openThread(next);
+      },
+      "chat.split.focusNext": (event) => {
+        const threadRef = readRouteThreadRef();
+        const { root } = useSplitViewStore.getState();
+        const next = threadRef && root ? nextPaneThread(root, threadRef) : null;
+        if (!next) return;
+        claim(event);
+        openThread(next);
       },
       "preview.refresh": previewCommand("refresh"),
       "preview.focusUrl": previewCommand("focus-url"),

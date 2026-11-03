@@ -6,6 +6,7 @@ import {
   clampRatio,
   focusAfterRemove,
   leaves,
+  nextPaneThread,
   type PaneNode,
   removePane,
   replacePaneThread,
@@ -61,6 +62,14 @@ describe("split view panes", () => {
     expect(ratio(resizeSplit(root, "s1", 0.9))).toBe(0.75);
     expect(ratio(resizeSplit(root, "s1", 0.4))).toBe(0.4);
     expect(clampRatio(Number.NaN)).toBe(0.5);
+  });
+
+  it("cycles focus through panes in reading order", () => {
+    let root = splitPane(leaf("a", "1"), "a", "row", ref("2"), { split: "s1", leaf: "b" });
+    root = splitPane(root, "b", "column", ref("3"), { split: "s2", leaf: "c" });
+    expect(nextPaneThread(root, ref("1"))).toEqual(ref("2"));
+    expect(nextPaneThread(root, ref("3"))).toEqual(ref("1"));
+    expect(nextPaneThread(leaf("a", "1"), ref("1"))).toBeNull();
   });
 
   it("swaps a pane's thread unless another pane already shows it", () => {

@@ -32,10 +32,18 @@ export function findLeafByThread(node: PaneNode, ref: ScopedThreadRef) {
   return leaves(node).find((leaf) => scopedThreadKey(leaf.threadRef) === key) ?? null;
 }
 
-function depthOf(node: PaneNode, id: string, depth = 0): number | null {
+/** How many splits sit above a pane; null when it is not in the tree. */
+export function paneDepth(node: PaneNode, id: string, depth = 0): number | null {
   if (node.id === id) return depth;
   if (node.kind === "leaf") return null;
-  return depthOf(node.first, id, depth + 1) ?? depthOf(node.second, id, depth + 1);
+  return paneDepth(node.first, id, depth + 1) ?? paneDepth(node.second, id, depth + 1);
+}
+
+/** The pane after `ref`'s in reading order, wrapping around. */
+export function nextPaneThread(node: PaneNode, ref: ScopedThreadRef): ScopedThreadRef | null {
+  const all = leaves(node);
+  const index = all.findIndex((leaf) => scopedThreadKey(leaf.threadRef) === scopedThreadKey(ref));
+  return all.length < 2 ? null : all[(index + 1) % all.length]!.threadRef;
 }
 
 function mapNode(node: PaneNode, id: string, update: (node: PaneNode) => PaneNode): PaneNode {
@@ -57,7 +65,7 @@ export function splitPane(
   threadRef: ScopedThreadRef,
   ids: { split: string; leaf: string },
 ): PaneNode {
-  const depth = depthOf(root, paneId);
+  const depth = paneDepth(root, paneId);
   if (depth === null || depth >= MAX_SPLIT_DEPTH || findLeafByThread(root, threadRef)) return root;
   return mapNode(root, paneId, (leaf) =>
     leaf.kind !== "leaf"
