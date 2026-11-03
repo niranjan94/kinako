@@ -1,10 +1,7 @@
 import { DatabaseIcon } from "lucide-react";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import {
-  threadRuntimeIsActive,
-  type EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   useProjects,
   useQuietThreadShell,
@@ -67,6 +64,7 @@ import { cn } from "~/lib/utils";
 import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
 import { readLocalApi } from "~/localApi";
 import { useStableCallback } from "~/hooks/useStableCallback";
+import { threadTabState } from "~/openThreadTabs.logic";
 import { Button } from "~/components/ui/button";
 import { MorphIcon } from "~/components/MorphIcon";
 import { AndroidIcon, AppleIcon } from "~/components/Icons";
@@ -719,21 +717,9 @@ function SurfaceIcon({
   }
 }
 
-/** What a side chat tab's dot shows and its title's accessible name says. */
-function sideChatTabState(shell: EnvironmentThreadShell | null) {
-  if (shell === null) return null;
-  if (shell.hasPendingApprovals || shell.pendingSubagentRequest === "approval") {
-    return "needs approval";
-  }
-  if (shell.hasPendingUserInput || shell.pendingSubagentRequest === "user_input") {
-    return "needs input";
-  }
-  return threadRuntimeIsActive(shell.runtime) ? "running" : null;
-}
-
 // Static dots: a side chat tab can stay open for a whole run.
 function SideChatTabIcon(props: { environmentId: EnvironmentId | null; threadId: ThreadId }) {
-  const state = sideChatTabState(
+  const state = threadTabState(
     useQuietThreadShell(
       props.environmentId === null ? null : scopeThreadRef(props.environmentId, props.threadId),
     ),
@@ -959,7 +945,7 @@ function RightPanelTab(
       : null,
   );
   const title = sideChatShell?.title ?? props.title;
-  const sideChatState = sideChatTabState(sideChatShell);
+  const sideChatState = threadTabState(sideChatShell);
   const content = (
     <>
       <PanelTabCloseButton label={`Close ${title}`} onClick={() => onClose(surface)}>

@@ -10,6 +10,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 
 import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { useClosedViewStore } from "../closedViewStore";
+import { useOpenThreadTabsStore } from "../openThreadTabsStore";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { environmentCatalog } from "../connection/catalog";
 import { effectiveShortcutsForCommand, resolveShortcutCommand } from "../keybindings";
@@ -85,6 +86,7 @@ export function ReopenClosedViewShortcut() {
     const catalog = appAtomRegistry.get(environmentCatalog.catalogValueAtom);
     const drafts = useComposerDraftStore.getState();
     const panelsByThread = useRightPanelStore.getState().byThreadKey;
+    const openTabKeys = new Set(useOpenThreadTabsStore.getState().tabs.map(scopedThreadKey));
     const { drop, restore } = planNextReopen(useClosedViewStore.getState().entries, (entry) => {
       const ref = entry.threadRef;
       const panel = selectThreadRightPanelState(panelsByThread, ref);
@@ -96,6 +98,7 @@ export function ReopenClosedViewShortcut() {
           sideChatExists: true,
           shellLive: true,
           panel,
+          threadTabOpen: false,
         };
       }
       return {
@@ -109,6 +112,7 @@ export function ReopenClosedViewShortcut() {
         shellLive:
           appAtomRegistry.get(environmentShell.stateValueAtom(ref.environmentId)).status === "live",
         panel,
+        threadTabOpen: openTabKeys.has(scopedThreadKey(ref)),
       };
     });
     for (const entry of drop) useClosedViewStore.getState().remove(entry.id);

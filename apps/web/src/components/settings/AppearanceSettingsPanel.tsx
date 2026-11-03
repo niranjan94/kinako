@@ -324,6 +324,31 @@ export function AppearanceSettingsPanel() {
           }
         />
         <SettingsRow
+          {...searchableSetting("thread-tabs")}
+          description="Show threads you opened as tabs above the conversation."
+          resetAction={
+            settings.showOpenThreadTabs !== DEFAULT_UNIFIED_SETTINGS.showOpenThreadTabs ? (
+              <SettingResetButton
+                label="thread tabs"
+                onClick={() =>
+                  updateSettings({
+                    showOpenThreadTabs: DEFAULT_UNIFIED_SETTINGS.showOpenThreadTabs,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.showOpenThreadTabs}
+              onCheckedChange={(checked) =>
+                updateSettings({ showOpenThreadTabs: Boolean(checked) })
+              }
+              aria-label="Show thread tabs"
+            />
+          }
+        />
+        <SettingsRow
           {...searchableSetting("math-rendering")}
           description="Typeset LaTeX math, such as $x^2$ or \[x^2\], in messages and Markdown previews. The composer keeps TeX source editable."
           resetAction={

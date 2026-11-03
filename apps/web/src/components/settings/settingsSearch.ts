@@ -385,6 +385,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["reasoning effort thinking bars graph word label level composer"],
   },
   {
+    id: "thread-tabs",
+    title: "Thread tabs",
+    to: "/settings/appearance",
+    searchTerms: ["open threads tab strip browser tabs"],
+  },
+  {
     id: "math-rendering",
     title: "Render math",
     to: "/settings/appearance",

@@ -19,7 +19,8 @@ export type ClosedView =
       threadRef: ScopedThreadRef;
       surface: Exclude<RightPanelSurface, { kind: "terminal" }>;
     }
-  | { kind: "browser"; threadRef: ScopedThreadRef; snapshot: PreviewSessionSnapshot };
+  | { kind: "browser"; threadRef: ScopedThreadRef; snapshot: PreviewSessionSnapshot }
+  | { kind: "thread-tab"; threadRef: ScopedThreadRef };
 
 export type ClosedViewEntry = ClosedView & { id: string };
 
@@ -42,6 +43,8 @@ const sameTarget = (entry: ClosedViewEntry, view: ClosedView): boolean => {
       return view.kind === "panel-tab" && entry.surface.id === view.surface.id;
     case "browser":
       return view.kind === "browser" && entry.snapshot.tabId === view.snapshot.tabId;
+    case "thread-tab":
+      return true;
   }
 };
 
@@ -56,6 +59,7 @@ const isClosedViewEntry = (entry: unknown): entry is ClosedViewEntry => {
   const view = entry as ClosedViewEntry | null;
   if (!view || typeof view.id !== "string" || !isThreadRef(view.threadRef)) return false;
   if (view.kind === "browser") return isSnapshot(view.snapshot);
+  if (view.kind === "thread-tab") return true;
   if (view.kind !== "panel-tab") return false;
   const surface = view.surface;
   if (!surface || typeof surface.id !== "string") return false;
