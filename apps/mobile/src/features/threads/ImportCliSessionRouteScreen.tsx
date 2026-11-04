@@ -20,7 +20,7 @@ import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
+import { AppBar } from "../../components/ui/AppBar";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
 import * as Dialog from "../../components/ui/Dialog";
@@ -89,11 +89,7 @@ export function ImportCliSessionRouteScreen({
         </Toolbar>
       ) : null}
       {Platform.OS === "android" ? (
-        <AndroidScreenHeader
-          title={SCREEN_TITLE}
-          hideBottomBorder
-          onBack={() => navigation.goBack()}
-        />
+        <AppBar embedded title={SCREEN_TITLE} hideBottomBorder onBack={() => navigation.goBack()} />
       ) : null}
       <ScreenContent>
         <ScrollView

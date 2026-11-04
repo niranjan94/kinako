@@ -5,6 +5,7 @@ import * as Linking from "expo-linking";
 import {
   FORK_DEV_URL_SCHEME,
   FORK_PREVIEW_URL_SCHEME,
+  FORK_THREAD_LINK_ORIGIN,
   FORK_URL_SCHEME,
 } from "@t3tools/shared/forkBrand";
 import * as SplashScreen from "expo-splash-screen";
@@ -132,6 +133,7 @@ const appLinking = {
     `${FORK_URL_SCHEME}://`,
     `${FORK_DEV_URL_SCHEME}://`,
     `${FORK_PREVIEW_URL_SCHEME}://`,
+    FORK_THREAD_LINK_ORIGIN,
   ],
   config: { initialRouteName: "Home" },
   filter: (url: string) => shouldHandleAppLink(url, hasCloudPublicConfig()),

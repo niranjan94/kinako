@@ -10,7 +10,7 @@ import { useCallback, useState, type ReactElement } from "react";
 import { Linking, Platform, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
+import { AppBar } from "../../components/ui/AppBar";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
@@ -27,7 +27,6 @@ import { composerPullRequests } from "../../state/pull-requests";
 import { useEnvironmentQuery } from "../../state/query";
 import { usePullToRefresh } from "../../state/use-pull-to-refresh";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
-import { AndroidWorkspaceSidebarButton } from "../layout/workspace-sidebar-toolbar";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useAndroidWorkspaceBack } from "../workspace/useAndroidWorkspaceNavigation";
 import {
@@ -291,11 +290,11 @@ export function IssueRouteScreen({ route }: StaticScreenProps<IssueParams>) {
           }}
         />
         {Platform.OS === "android" ? (
-          <AndroidScreenHeader
+          <AppBar
+            embedded
             title={`#${params.number}${connected ? "" : " · Offline"}`}
             subtitle={params.repository}
             onBack={layout.usesSplitView ? undefined : returnToList}
-            leading={layout.usesSplitView ? <AndroidWorkspaceSidebarButton /> : undefined}
             actions={[
               ...(canComment
                 ? [

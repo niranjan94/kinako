@@ -40,7 +40,7 @@ import { useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
+import { AppBar } from "../../components/ui/AppBar";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
@@ -104,11 +104,7 @@ export function ImportCliHistoryRouteScreen({
         </Toolbar>
       ) : null}
       {Platform.OS === "android" ? (
-        <AndroidScreenHeader
-          title={SCREEN_TITLE}
-          hideBottomBorder
-          onBack={() => navigation.goBack()}
-        />
+        <AppBar embedded title={SCREEN_TITLE} hideBottomBorder onBack={() => navigation.goBack()} />
       ) : null}
       <ScreenContent>
         <ScrollView

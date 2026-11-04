@@ -30,4 +30,10 @@ it.each([
   const config = await loadConfig(value);
   expect(config.ios?.bundleIdentifier).toBe(identifier);
   expect(config.android?.package).toBe(identifier);
+  // app.t3.codes cannot list this app, so it claims only the fork's thread link domain.
+  expect(config.ios?.associatedDomains).toEqual([
+    "webcredentials:kinako.niranjan.io",
+    "applinks:kinako.niranjan.io",
+  ]);
+  expect(config.android?.intentFilters ?? []).toEqual([]);
 });

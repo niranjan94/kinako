@@ -21,6 +21,7 @@ describe("shouldHandleAppLink", () => {
     "kinako://threads/env-1/thread-1",
     "kinako://pair?pairingUrl=x",
     "kinako-dev://settings/usage?tab=limits",
+    "kinako://threads/env/thread?prompt=Fix%20expo-development-client%20and%20kinako://expo-sharing",
   ])("handles path-bearing URL %s", (url) => {
     expect(shouldHandleAppLink(url, true)).toBe(true);
   });

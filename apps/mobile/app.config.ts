@@ -6,6 +6,7 @@ import {
   FORK_DEV_URL_SCHEME,
   FORK_DISPLAY_NAME,
   FORK_PREVIEW_URL_SCHEME,
+  FORK_THREAD_LINK_ORIGIN,
   FORK_URL_SCHEME,
 } from "../../packages/shared/src/forkBrand.ts";
 
@@ -253,7 +254,11 @@ const config: ExpoConfig = {
     // Avoid Personal Team fallback: it cannot sign App Groups, Apple sign-in or push entitlements.
     appleTeamId: "6456AUQBLS",
     // The production bundle ID doubles as the desktop App ID, whose profile needs the passkey domain.
-    associatedDomains: ["webcredentials:kinako.niranjan.io"],
+    // Copied thread links open the app; the gh-pages apple-app-site-association lists every variant.
+    associatedDomains: [
+      "webcredentials:kinako.niranjan.io",
+      `applinks:${new URL(FORK_THREAD_LINK_ORIGIN).host}`,
+    ],
     entitlements: {
       "keychain-access-groups": [`$(AppIdentifierPrefix)${variant.iosBundleIdentifier}`],
     },
@@ -367,7 +372,7 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission: `Allow ${FORK_DISPLAY_NAME} to use your microphone for voice input.`,
-        recordAudioAndroid: false,
+        recordAudioAndroid: true,
         enableBackgroundPlayback: false,
         enableBackgroundRecording: false,
       },
@@ -381,7 +386,14 @@ const config: ExpoConfig = {
         recordAudioAndroid: false,
       },
     ],
-    ["expo-image-picker", { photosPermission: false, microphonePermission: false }],
+    [
+      "expo-image-picker",
+      {
+        photosPermission: false,
+        // `false` makes this plugin add RECORD_AUDIO to blockedPermissions, breaking Android dictation.
+        microphonePermission: "Allow T3 Code to use your microphone for voice input.",
+      },
+    ],
     [
       "expo-splash-screen",
       {

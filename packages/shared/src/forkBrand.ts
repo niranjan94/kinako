@@ -43,6 +43,12 @@ export const FORK_LINUX_APP_ID = "io.niranjan.Kinako";
 /** systemd unit, launchd label stem, and agent slice name for the background service. */
 export const FORK_SERVICE_NAME = "kinako";
 
+/**
+ * Origin of copied thread links. GitHub Pages serves it from the `gh-pages` branch: a page that
+ * opens the thread in the apps, and the applinks entry that lets iOS open them directly.
+ */
+export const FORK_THREAD_LINK_ORIGIN = "https://kinako.niranjan.io";
+
 export const FORK_URL_SCHEME = "kinako";
 export const FORK_DEV_URL_SCHEME = "kinako-dev";
 export const FORK_PREVIEW_URL_SCHEME = "kinako-preview";
@@ -54,6 +60,8 @@ export const FORK_PREVIEW_URL_SCHEME = "kinako-preview";
 export const FORK_MANAGED_POLICY_DIR_NAME = "Kinako";
 export const FORK_LINUX_MANAGED_POLICY_DIR = "/etc/kinako";
 export const FORK_WINDOWS_POLICY_SUBKEY = "SOFTWARE\\Policies\\Kinako";
+/** Group Policy template namespace; a central store rejects two templates that share one. */
+export const FORK_WINDOWS_POLICY_NAMESPACE = "Niranjan.Policies.Kinako";
 
 export const FORK_DEFAULT_PORT = 3873;
 export const FORK_DEFAULT_TAILSCALE_SERVE_PORT = 8443;

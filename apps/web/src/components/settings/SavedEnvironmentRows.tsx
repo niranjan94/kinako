@@ -254,6 +254,7 @@ function RemoteAuthorizedClients({
           isLoading={access.isLoading}
           pairingLinks={access.pairingLinks}
           createdPairingCredentials={access.createdPairingCredentials}
+          sharedPairingLinkId={access.newestPairingLinkId}
           clientSessions={access.clientSessions}
           revokingPairingLinkId={access.revokingPairingLinkId}
           revokingClientSessionId={access.revokingClientSessionId}

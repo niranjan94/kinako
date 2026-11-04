@@ -12,6 +12,7 @@ import {
   type VcsMoveThreadInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
@@ -37,7 +38,11 @@ const scope: McpInvocationScope = {
   issuedAt: 1,
 };
 
-function harness(worktreePath: string | null = null, fails = false) {
+function harness(
+  worktreePath: string | null = null,
+  fails = false,
+  projectStartFromOrigin?: boolean,
+) {
   const moveThread = vi.fn((input: VcsMoveThreadInput) =>
     fails
       ? Effect.fail(new ThreadWorkspaceError({ reason: "active_run" }))
@@ -55,6 +60,9 @@ function harness(worktreePath: string | null = null, fails = false) {
       commitSha: "abc123",
       remoteRefName: "upstream/main",
     }),
+  );
+  const listRefs = vi.fn((_input: { readonly cwd: string }) =>
+    Effect.succeed({ refs: [], isRepo: true, hasPrimaryRemote: false }),
   );
   const layer = WorktreeMcpService.layer.pipe(
     Layer.provide(Layer.succeed(ThreadWorkspaceService.ThreadWorkspaceService, { moveThread })),
@@ -84,18 +92,27 @@ function harness(worktreePath: string | null = null, fails = false) {
       } as unknown as ProjectService.ProjectService["Service"]),
     ),
     Layer.provide(
-      Layer.succeed(ServerSettings.ServerSettingsService, {
-        getSettings: Effect.succeed({ newWorktreesStartFromOrigin: false }),
-      } as unknown as ServerSettings.ServerSettingsService["Service"]),
+      ServerSettings.layerTest({
+        newWorktreesStartFromOrigin: false,
+        ...(projectStartFromOrigin === undefined
+          ? {}
+          : {
+              projectSettingsOverrides: {
+                [projectId]: { newWorktreesStartFromOrigin: projectStartFromOrigin },
+              },
+            }),
+      }),
     ),
     Layer.provide(
       Layer.succeed(GitWorkflowService.GitWorkflowService, {
         fetchWorktreeBaseCommit,
+        listRefs,
+        localStatus: () => Effect.succeed({ refName: "main" }),
       } as unknown as GitWorkflowService.GitWorkflowService["Service"]),
     ),
     Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
   );
-  return { layer, moveThread, sendToThread, fetchWorktreeBaseCommit };
+  return { layer, moveThread, sendToThread, fetchWorktreeBaseCommit, listRefs };
 }
 
 describe("WorktreeMcpService", () => {
@@ -136,6 +153,17 @@ describe("WorktreeMcpService", () => {
         worktree: { branch: "feature/move", baseRef: "abc123" },
       });
       expect(result.startedFromOrigin).toBe(true);
+    }).pipe(Effect.provide(h.layer));
+  });
+
+  it.effect("defaults startFromOrigin to the project's override", () => {
+    const h = harness(null, false, true);
+    return Effect.gen(function* () {
+      const service = yield* WorktreeMcpService.WorktreeMcpService;
+      const result = yield* service.handoff(scope, { branch: "feature/project-origin" });
+      expect(h.fetchWorktreeBaseCommit).toHaveBeenCalledWith({ cwd: "/repo", refName: "main" });
+      expect(result.startedFromOrigin).toBe(true);
+      expect((yield* service.status(scope)).defaultStartFromOrigin).toBe(true);
     }).pipe(Effect.provide(h.layer));
   });
 
@@ -204,4 +232,22 @@ describe("WorktreeMcpService", () => {
       });
     }).pipe(Effect.provide(h.layer));
   });
+
+  it.effect(
+    "lists refs from the thread's worktree, or the project root once it was removed",
+    () => {
+      const h = harness();
+      return Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const worktreePath = yield* fs.makeTempDirectoryScoped({ prefix: "worktree-list-" });
+        const service = yield* WorktreeMcpService.WorktreeMcpService;
+        yield* service.listRefs({ worktreePath, workspaceRoot: "/repo" });
+        yield* service.listRefs({
+          worktreePath: `${worktreePath}/removed`,
+          workspaceRoot: "/repo",
+        });
+        expect(h.listRefs.mock.calls.map(([input]) => input.cwd)).toEqual([worktreePath, "/repo"]);
+      }).pipe(Effect.scoped, Effect.provide(Layer.merge(h.layer, NodeServices.layer)));
+    },
+  );
 });

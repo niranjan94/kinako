@@ -43,7 +43,7 @@ import {
   signPayload,
   timingSafeEqualBase64Url,
 } from "./utils.ts";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_DISPLAY_NAME, FORK_THREAD_LINK_ORIGIN } from "@t3tools/shared/forkBrand";
 import { requestUrl } from "../requestUrl.ts";
 
 // Request-derived origins support loopback, Tailscale and tunnels.
@@ -593,7 +593,7 @@ export const layerMcpClientAuthenticator = Layer.effect(
                     label: client.label,
                     access: client.access,
                     linked: client.peerLink,
-                    ...(client.peerLink ? {} : { webOrigin: requestUrls(request).issuer }),
+                    ...(client.peerLink ? {} : { hostedAppUrl: FORK_THREAD_LINK_ORIGIN }),
                   },
                   capabilities: new Set<McpInvocationContext.McpCapability>([
                     "orchestration",

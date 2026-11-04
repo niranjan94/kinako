@@ -1,5 +1,4 @@
-import { DEFAULT_HOSTED_APP_URL } from "./connectAuth.ts";
-import { FORK_DISPLAY_NAME, FORK_URL_SCHEME } from "./forkBrand.ts";
+import { FORK_DISPLAY_NAME, FORK_THREAD_LINK_ORIGIN, FORK_URL_SCHEME } from "./forkBrand.ts";
 
 export const PROMPT_LINK_MAX_PROMPT_LENGTH = 8_000;
 
@@ -174,7 +173,7 @@ export function buildNewThreadLink(input: {
   readonly model?: string | null;
   readonly origin?: string;
 }): string {
-  const url = new URL("/new", input.origin ?? DEFAULT_HOSTED_APP_URL);
+  const url = new URL("/new", input.origin ?? FORK_THREAD_LINK_ORIGIN);
   url.searchParams.set("prompt", input.prompt);
   if (input.repository) {
     url.searchParams.set("repo", `${input.repository.owner}/${input.repository.name}`);
@@ -189,7 +188,7 @@ const THREAD_PATH = /^\/([^/]+)\/([^/]+)\/?$/;
 
 export function promptLinkAppPath(
   value: string,
-  hostedAppUrl: string = DEFAULT_HOSTED_APP_URL,
+  hostedAppUrl: string = FORK_THREAD_LINK_ORIGIN,
 ): string | null {
   if (!URL.canParse(value)) return null;
   const url = new URL(value);
@@ -202,7 +201,12 @@ export function promptLinkAppPath(
   }
   if (!URL.canParse(hostedAppUrl) || url.origin !== new URL(hostedAppUrl).origin) return null;
   if (url.pathname === "/new") return `/new${url.search}`;
-  const thread = url.searchParams.has("prompt") ? THREAD_PATH.exec(url.pathname) : null;
+  // The web app's own thread route is a link only with a prompt, so reloading a tab never asks.
+  const thread = url.pathname.startsWith("/threads/")
+    ? THREAD_PATH.exec(url.pathname.slice("/threads".length))
+    : url.searchParams.has("prompt")
+      ? THREAD_PATH.exec(url.pathname)
+      : null;
   return thread ? `/${thread[1]}/${thread[2]}${url.search}` : null;
 }
 

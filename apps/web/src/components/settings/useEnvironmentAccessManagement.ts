@@ -62,6 +62,7 @@ export function useEnvironmentAccessManagement(
   const [createdPairingCredentials, setCreatedPairingCredentials] = useState<
     ReadonlyMap<string, string>
   >(() => new Map());
+  const [newestPairingLinkId, setNewestPairingLinkId] = useState<string | null>(null);
   const [revokingPairingLinkId, setRevokingPairingLinkId] = useState<string | null>(null);
   const [revokingClientSessionId, setRevokingClientSessionId] = useState<string | null>(null);
   const [isRevokingOtherClients, setIsRevokingOtherClients] = useState(false);
@@ -101,6 +102,7 @@ export function useEnvironmentAccessManagement(
   };
   const onPairingLinkCreated = (created: AuthPairingCredentialResult) => {
     setCreatedPairingCredentials((current) => new Map(current).set(created.id, created.credential));
+    setNewestPairingLinkId(created.id);
   };
 
   const revokePairingLink = async (id: string) => {
@@ -169,6 +171,7 @@ export function useEnvironmentAccessManagement(
     pairingLinks,
     clientSessions,
     createdPairingCredentials,
+    newestPairingLinkId,
     revokingPairingLinkId,
     revokingClientSessionId,
     isRevokingOtherClients,
