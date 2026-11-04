@@ -1,4 +1,16 @@
 {
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "6456AUQBLS.io.niranjan.kinako",
+          "6456AUQBLS.io.niranjan.kinako.preview",
+          "6456AUQBLS.io.niranjan.kinako.dev"
+        ],
+        "components": [{ "/": "/threads/*" }]
+      }
+    ]
+  },
   "webcredentials": {
     "apps": [
       "6456AUQBLS.io.niranjan.kinako",
