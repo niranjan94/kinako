@@ -4029,9 +4029,11 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         const rows = yield* sql<{ readonly payload_json: string }>`
         SELECT payload_json FROM orchestration_v2_projection_threads
         WHERE deleted_at IS NULL
-          AND json_extract(payload_json, '$.archivedAt') IS NULL
+          AND CASE WHEN json_valid(payload_json) THEN
+            json_extract(payload_json, '$.archivedAt') IS NULL
+            AND json_extract(payload_json, '$.snoozeWakeNotifiedAt') IS NOT json_extract(payload_json, '$.snoozedUntil')
+            ELSE 0 END
           AND julianday(json_extract(payload_json, '$.snoozedUntil')) <= julianday(${DateTime.formatIso(now)})
-          AND json_extract(payload_json, '$.snoozeWakeNotifiedAt') IS NOT json_extract(payload_json, '$.snoozedUntil')
           AND NOT EXISTS (
             SELECT 1 FROM orchestration_v2_projection_runs r
             WHERE r.thread_id = orchestration_v2_projection_threads.thread_id

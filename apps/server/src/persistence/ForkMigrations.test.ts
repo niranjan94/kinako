@@ -28,7 +28,7 @@ const upstreamAfter = (id: number) => migrationManifest.filter(([entryId]) => en
 
 // The latest upstream migration when each fork migration was added: the earliest point an
 // existing database can have run it. Add an entry with every new fork migration.
-const firstRanAfterUpstream: Readonly<Record<number, number>> = { 1: 62, 2: 62, 3: 64 };
+const firstRanAfterUpstream: Readonly<Record<number, number>> = { 1: 62, 2: 62, 3: 64, 4: 79 };
 
 const schema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
