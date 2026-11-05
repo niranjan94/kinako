@@ -142,6 +142,7 @@ import {
   type PullRequestFinding,
   shouldRefreshPullRequestActivity,
   stripPullRequestHandoffReferences,
+  summarizePullRequestChecks,
 } from "./pullRequestDetail.logic";
 import { resolvePickableEnvironments } from "./pullRequestProjectAssignment.logic";
 import { PullRequestChecksPopover } from "./PullRequestChecksPopover";
@@ -153,7 +154,6 @@ import {
   pullRequestChecksStatePresentation,
   pullRequestReviewOutcomeToneClassName,
   resolvePullRequestState,
-  summarizePullRequestChecks,
 } from "./pullRequestPresentation";
 import { PullRequestGuideTab } from "./PullRequestGuideTab";
 import { guideRunKey, useGuideRunStore } from "./guide/guideRunStore";

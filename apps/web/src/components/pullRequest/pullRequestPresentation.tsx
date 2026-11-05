@@ -27,7 +27,7 @@ import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { InlineButton } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import type { PullRequestReviewOutcome } from "./pullRequestDetail.logic";
+import { isWorkflowApprovalCheck, type PullRequestReviewOutcome } from "./pullRequestDetail.logic";
 import { pullRequestLabelColor } from "./pullRequestList.logic";
 import {
   PULL_REQUEST_STATE_PRESENTATION,
@@ -209,14 +209,6 @@ const CHECK_STATUS_PRESENTATION = {
   PullRequestCheckStatus,
   { label: string; Icon: typeof CircleCheckIcon | typeof Spinner; toneClassName: string }
 >;
-
-function isWorkflowApprovalCheck(check: Pick<PullRequestCheck, "status" | "url">): boolean {
-  return (
-    check.status === "action-required" &&
-    check.url !== null &&
-    /\/actions\/runs\/\d+(?:\/|$)/u.test(check.url)
-  );
-}
 
 export function pullRequestCheckStatusLabel(
   check: Pick<PullRequestCheck, "status" | "url">,
@@ -528,28 +520,4 @@ export function PullRequestMetaLine({
       )}
     </span>
   );
-}
-
-export function summarizePullRequestChecks(checks: ReadonlyArray<PullRequestCheck>): string {
-  if (checks.length === 0) return "No checks reported";
-  const actionRequired = checks.filter((check) => check.status === "action-required");
-  const workflowApprovalRequired = actionRequired.filter(isWorkflowApprovalCheck).length;
-  const otherActionRequired = actionRequired.length - workflowApprovalRequired;
-  const failed = checks.filter(
-    (check) => check.status === "failure" || check.status === "cancelled",
-  ).length;
-  const pending = checks.filter((check) => check.status === "pending").length;
-  const passed = checks.filter((check) => check.status === "success").length;
-  if (failed > 0) return `${failed} of ${checks.length} failing`;
-  if (workflowApprovalRequired > 0 && otherActionRequired > 0) {
-    return `${workflowApprovalRequired} ${workflowApprovalRequired === 1 ? "workflow" : "workflows"} and ${otherActionRequired} ${otherActionRequired === 1 ? "check" : "checks"} awaiting action`;
-  }
-  if (workflowApprovalRequired > 0) {
-    return `${workflowApprovalRequired} ${workflowApprovalRequired === 1 ? "workflow" : "workflows"} awaiting approval`;
-  }
-  if (otherActionRequired > 0) {
-    return `${otherActionRequired} ${otherActionRequired === 1 ? "check" : "checks"} awaiting action`;
-  }
-  if (pending > 0) return `${pending} of ${checks.length} running`;
-  return passed === checks.length ? "All checks passed" : `${passed} of ${checks.length} passing`;
 }

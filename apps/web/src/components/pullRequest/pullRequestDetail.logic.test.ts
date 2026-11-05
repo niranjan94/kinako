@@ -51,6 +51,7 @@ import {
   resolvePullRequestPrimaryControl,
   allowsSinglePullRequestMerge,
   shouldRefreshPullRequestActivity,
+  summarizePullRequestChecks,
   resolveBaseFreshness,
   buildPullRequestTimeline,
   writePullRequestDetailSnapshot,
@@ -152,6 +153,43 @@ describe("pull request activity refresh", () => {
     ).toBe(false);
   });
 });
+
+describe("checks summary", () => {
+  const check = (status: PullRequestCheck["status"], url: string | null = null) => ({
+    name: `check-${status}`,
+    status,
+    description: null,
+    url,
+  });
+
+  it.each([
+    [
+      [check("failure"), check("pending"), check("pending"), check("success")],
+      "1 of 4 failing · 2 running",
+    ],
+    [[check("pending"), check("success")], "1 of 2 running"],
+    [
+      [check("action-required", "https://github.com/acme/web/actions/runs/1"), check("pending")],
+      "1 workflow awaiting approval · 1 running",
+    ],
+    [
+      [
+        check("action-required", "https://github.com/acme/web/actions/runs/1"),
+        check("action-required", "https://github.com/acme/web/actions/runs/2"),
+        check("action-required"),
+      ],
+      "2 workflows and 1 check awaiting action",
+    ],
+    [
+      [check("action-required"), check("action-required"), check("success")],
+      "2 checks awaiting action",
+    ],
+    [[check("success"), check("success")], "All checks passed"],
+  ])("summarizes %j as %s", (checks, expected) => {
+    expect(summarizePullRequestChecks(checks)).toBe(expected);
+  });
+});
+
 describe("review thread comment pages", () => {
   it("appends new comments once and keeps refreshed base comments", () => {
     expect(
