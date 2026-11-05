@@ -18,12 +18,11 @@ import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
-import { groupPullRequestChecks } from "./pullRequestDetail.logic";
+import { groupPullRequestChecks, summarizePullRequestChecks } from "./pullRequestDetail.logic";
 import {
   PullRequestCheckStatusIcon,
   pullRequestCheckStatusLabel,
   pullRequestChecksStatePresentation,
-  summarizePullRequestChecks,
 } from "./pullRequestPresentation";
 
 // Fetch only on open to avoid per-row requests.

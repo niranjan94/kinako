@@ -319,24 +319,44 @@ export function classifyPullRequestChecks(
   return "passing";
 }
 
-export function describePullRequestChecks(checks: ReadonlyArray<PullRequestCheck>): string {
+export function isWorkflowApprovalCheck(check: Pick<PullRequestCheck, "status" | "url">): boolean {
+  return (
+    check.status === "action-required" &&
+    check.url !== null &&
+    /\/actions\/runs\/\d+(?:\/|$)/u.test(check.url)
+  );
+}
+
+function countLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+export function summarizePullRequestChecks(checks: ReadonlyArray<PullRequestCheck>): string {
   if (checks.length === 0) return "No checks reported";
+  const actionRequired = checks.filter((check) => check.status === "action-required");
+  const workflowApprovalRequired = actionRequired.filter(isWorkflowApprovalCheck).length;
+  const otherActionRequired = actionRequired.length - workflowApprovalRequired;
   const failed = checks.filter(
     (check) => check.status === "failure" || check.status === "cancelled",
   ).length;
   const pending = checks.filter((check) => check.status === "pending").length;
-  const actionRequired = checks.filter((check) => check.status === "action-required").length;
   const passed = checks.filter((check) => check.status === "success").length;
   const parts: string[] = [];
-  if (pending > 0) parts.push(`${pending} of ${checks.length} running`);
-  if (actionRequired > 0) parts.push(`${actionRequired} of ${checks.length} awaiting action`);
-  if (failed > 0) {
-    parts.push(parts.length > 0 ? `${failed} failed` : `${failed} of ${checks.length} failing`);
+  if (failed > 0) parts.push(`${failed} of ${checks.length} failing`);
+  const workflows = countLabel(workflowApprovalRequired, "workflow");
+  const others = countLabel(otherActionRequired, "check");
+  if (workflowApprovalRequired > 0 && otherActionRequired > 0) {
+    parts.push(`${workflows} and ${others} awaiting action`);
+  } else if (workflowApprovalRequired > 0) {
+    parts.push(`${workflows} awaiting approval`);
+  } else if (otherActionRequired > 0) {
+    parts.push(`${others} awaiting action`);
   }
-  if (parts.length === 0) {
-    return passed === checks.length ? "All checks passed" : `${passed} of ${checks.length} passing`;
+  if (pending > 0) {
+    parts.push(parts.length > 0 ? `${pending} running` : `${pending} of ${checks.length} running`);
   }
-  return parts.join(" · ");
+  if (parts.length > 0) return parts.join(" · ");
+  return passed === checks.length ? "All checks passed" : `${passed} of ${checks.length} passing`;
 }
 
 export function groupPullRequestChecks(checks: ReadonlyArray<PullRequestCheck>) {
