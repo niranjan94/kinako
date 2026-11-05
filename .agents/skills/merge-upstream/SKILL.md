@@ -101,14 +101,13 @@ Done when `git diff --name-only --diff-filter=U` is empty and no file the merge 
 pnpm install > "$S/install.log" 2>&1
 ```
 
-Typecheck every package that had a conflicted, deleted or swept file. A clean merge still breaks fork code that calls something upstream renamed or moved, so expect errors in fork-only files next to the conflicts. Use the tsc-rs binary directly; package `node_modules/.bin/tsc` shims can point at a removed TypeScript after a dependency change:
+Typecheck every package. A clean merge still breaks fork code that calls something upstream renamed or moved, and upstream's Effect diagnostics (`effect-tsgo tsrs`) apply to fork-only files that the merge never touched, so expect errors well away from the conflicts. `vp run typecheck` runs each package's `typecheck` task (web and desktop define theirs in `vite.config.ts`) and caches per package:
 
 ```bash
-TSC="$PWD/node_modules/.pnpm/@tsc-rs+typescript@$(node -p 'require("./node_modules/typescript/package.json").version')/node_modules/@tsc-rs/typescript/bin/tsc"
-(cd <package> && node "$TSC" --noEmit > "$S/tc-<package>.log" 2>&1)
+vp run typecheck > "$S/tc-all.log" 2>&1; echo "tc=$?"
 ```
 
-Done when every affected package typechecks with zero errors.
+Done when every package typechecks with zero errors.
 
 ## 5. Sweep for regressions and reverts
 
@@ -167,7 +166,7 @@ vp run knip:check > "$S/knip.log" 2>&1; echo "knip=$?"
 "${clean[@]}" vp run --filter t3 test > "$S/test-server.log" 2>&1; echo "server=$?"
 ```
 
-These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/ci.yml`); if CI's commands change, follow them. Run them in the background where you can; the server suite is the long one. Typecheck is step 4's job, since `vp check` typechecks through the package shims. `clean` is an array because zsh does not word-split a string variable; an exit code of 127 means the suite never ran.
+These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/ci.yml`); if CI's commands change, follow them. Run them in the background where you can; the server suite is the long one. Typecheck is step 4's job. `clean` is an array because zsh does not word-split a string variable; an exit code of 127 means the suite never ran.
 
 `vp run` stops launching packages after the first failure, so a single known failure hides every package that had not started yet. Check the `vp run: N/M successful` line: every one of the M tasks must have printed a `Test Files` summary. If a known machine failure (below) stopped the run, rerun with that package excluded (for example `--filter '!./apps/desktop'`) until all the others report.
 

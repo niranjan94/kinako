@@ -22,6 +22,7 @@ import {
   sanitizeFeatureBranchName,
 } from "@t3tools/shared/git";
 import * as Cause from "effect/Cause";
+import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
 
 import { useBranches } from "../state/queries";
@@ -38,6 +39,8 @@ import { useAtomCommand } from "./use-atom-command";
 import { showGitActionResult } from "./use-vcs-action-state";
 import { useThreadSelection } from "./use-thread-selection";
 import { useSelectedThreadWorktree } from "./use-selected-thread-worktree";
+
+const isThreadWorkspaceError = Schema.is(ThreadWorkspaceError);
 
 function refreshFailureMessage(cause: Cause.Cause<unknown>): string {
   const error = Cause.squash(cause);
@@ -320,10 +323,7 @@ export function useSelectedThreadGitActions() {
                 };
           pendingWorkspaceMove.current = { environmentId: thread.environmentId, input };
           const result = await moveThread({ environmentId: thread.environmentId, input });
-          if (
-            AsyncResult.isFailure(result) &&
-            Cause.squash(result.cause) instanceof ThreadWorkspaceError
-          )
+          if (AsyncResult.isFailure(result) && isThreadWorkspaceError(Cause.squash(result.cause)))
             pendingWorkspaceMove.current = null;
           if (AsyncResult.isSuccess(result) && !result.value.cleanupPending)
             pendingWorkspaceMove.current = null;
