@@ -29,6 +29,7 @@ import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { BackgroundThreadContext } from "./backgroundThread";
+import { useThreadOnScreen } from "../../onScreenThreads";
 
 /** A side chat tab: its title, Bring back, Delete and Close, over the side chat's own chat. */
 export default function SideChatPane(props: {
@@ -36,9 +37,12 @@ export default function SideChatPane(props: {
   readonly threadId: ThreadId;
   readonly parentPanel: SideChatParentPanel;
   readonly onClose: () => void;
+  /** The panel stays mounted while closed; only an open one shows the thread. */
+  readonly visible: boolean;
 }) {
   const { parentRef, threadId } = props;
   const threadRef = scopeThreadRef(parentRef.environmentId, threadId);
+  useThreadOnScreen(props.visible ? threadRef : null);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers the parent panel as host in the panel store
   useEffect(
     () => hostRightPanel(scopeThreadRef(parentRef.environmentId, threadId), parentRef),
