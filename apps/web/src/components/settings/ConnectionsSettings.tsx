@@ -44,6 +44,11 @@ import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { LinkedEnvironmentsSettings } from "./LinkedEnvironmentsSettings";
 import { PublicRouteSetting, PublicRoutesSection } from "./PublicRouteSettings";
+import {
+  SshNetworkAccessSetting,
+  sshRouteTarget,
+  useRemotePairingEndpoints,
+} from "./RemoteEnvironmentAccess";
 import { usePeerLinkHosts } from "~/state/peerLinks";
 import { LoadBalancingSettings } from "./LoadBalancingSettings";
 import { PullRequestRoutingSettings } from "./PullRequestRoutingSettings";
@@ -421,6 +426,7 @@ function ConnectionsSettingsContent({
   const desktopServerExposureState = desktopNetworkAccess.data?.serverExposureState ?? null;
   const desktopAdvertisedEndpoints =
     desktopNetworkAccess.data?.advertisedEndpoints ?? EMPTY_ADVERTISED_ENDPOINTS;
+  const remotePairing = useRemotePairingEndpoints(isPrimaryAccess ? null : accessEnvironmentId);
   const desktopServerExposureError =
     desktopServerExposureMutationError ?? desktopNetworkAccess.error;
   const desktopAccessManagementError =
@@ -1042,9 +1048,11 @@ function ConnectionsSettingsContent({
   ) => (
     <PairingClientsList
       servedByEnvironment={isPrimaryAccess}
-      endpointUrl={desktopServerExposureState?.endpointUrl}
-      endpoints={visibleDesktopAdvertisedEndpoints}
-      defaultEndpointKey={defaultDesktopAdvertisedEndpointKey}
+      endpointUrl={
+        isPrimaryAccess ? desktopServerExposureState?.endpointUrl : remotePairing.endpointUrl
+      }
+      endpoints={isPrimaryAccess ? visibleDesktopAdvertisedEndpoints : remotePairing.endpoints}
+      defaultEndpointKey={isPrimaryAccess ? defaultDesktopAdvertisedEndpointKey : null}
       isLoading={isLoadingDesktopAccessManagement}
       pairingLinks={pairingLinks}
       createdPairingCredentials={createdPairingCredentials}
@@ -1245,6 +1253,9 @@ function ConnectionsSettingsContent({
               </>
             ) : canManageLocalBackend ? (
               renderDisabledNetworkAccessRow()
+            ) : null}
+            {!isPrimaryAccess && accessEnvironment ? (
+              <RemoteEnvironmentAccessRows environment={accessEnvironment} />
             ) : null}
             {canReadRelay || canManageRelay ? (
               <CloudLinkRow
@@ -1682,5 +1693,19 @@ function ConnectionsSettingsContent({
       <LoadBalancingSettings environments={loadBalancingEnvironments} />
       <PullRequestRoutingSettings environments={loadBalancingEnvironments} />
     </SettingsPageContainer>
+  );
+}
+
+function RemoteEnvironmentAccessRows({
+  environment,
+}: {
+  readonly environment: EnvironmentPresentation;
+}) {
+  const sshTarget = sshRouteTarget(environment.entry);
+  return (
+    <>
+      {sshTarget ? <SshNetworkAccessSetting target={sshTarget} label={environment.label} /> : null}
+      <PublicRouteSetting environmentId={environment.environmentId} label={environment.label} />
+    </>
   );
 }

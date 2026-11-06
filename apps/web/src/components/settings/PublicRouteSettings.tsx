@@ -144,11 +144,9 @@ function AddToPhoneDialog({
 export function PublicRouteSetting({
   environmentId,
   label,
-  layout = "row",
 }: {
   readonly environmentId: EnvironmentId;
   readonly label: string;
-  readonly layout?: "row" | "inline";
 }) {
   const bridge = desktopCloudflareBridge();
   const status = usePublicRouteStatus(environmentId);
@@ -282,21 +280,6 @@ export function PublicRouteSetting({
     <AddToPhoneDialog label={label} pairing={pairing} onOpenChange={() => setPairing(null)} />
   ) : null;
 
-  if (layout === "inline") {
-    return (
-      <div className="flex flex-col gap-2 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-foreground">Public route</p>
-            <p className="break-all text-xs text-muted-foreground">{description}</p>
-          </div>
-          {control}
-        </div>
-        {actions}
-        {dialog}
-      </div>
-    );
-  }
   return (
     <>
       <SettingsRow title="Public route" description={description} control={control}>

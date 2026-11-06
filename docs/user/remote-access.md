@@ -219,7 +219,7 @@ Set it up from the desktop app:
    - Zone · DNS · Edit
    - Zone · Zone · Read
 2. Paste the token and select **Connect**, then choose the domain if the token can see more than one. The token stays on this computer, encrypted by the operating system. The machines you expose never receive it.
-3. Turn on **Public route** for an environment: the local one under **Settings → Sharing & access**, or a remote one from its row's details in **Settings → Environments**. Remote environments added over SSH work too; the host only needs outbound internet access.
+3. Turn on **Public route** for an environment: under **Settings → Sharing & access**, choosing a remote one with **Showing access for**. Remote environments added over SSH work too; the host only needs outbound internet access.
 
 Each route gets a long random address such as `https://kn-….example.com`. Nobody needs to type it:
 
@@ -254,7 +254,7 @@ If SSH reconnecting fails after an app update, retry the launch once. Removing
 the connection stops a server that T3 Code launched; a server that was already
 running is left alone.
 
-The server only listens on the host's loopback address, so other devices cannot reach it until you allow it. To pair a phone or another computer with it directly, open **Clients** on the environment's row and turn on **Network access**. The server restarts on the host's network, and new pairing links offer a QR code for each of its LAN and Tailscale addresses. The setting belongs to the host, so every device connecting to it over SSH sees the same server. A server you started on the host yourself keeps its own binding.
+The server only listens on the host's loopback address, so other devices cannot reach it until you allow it. To pair a phone or another computer with it directly, open **Settings → Sharing & access**, choose the environment in **Showing access for**, and turn on **Network access**. The server restarts on the host's network, and new pairing links offer a QR code for each of its LAN and Tailscale addresses. The setting belongs to the host, so every device connecting to it over SSH sees the same server. A server you started on the host yourself keeps its own binding.
 Each desktop app keeps one session on the host for its SSH connection and reuses
 it when it reconnects. Revoke sessions you no longer use in **Settings →
 Sharing & access** on the host, or on a headless host with `kinako auth session list` and

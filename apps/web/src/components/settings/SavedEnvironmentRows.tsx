@@ -3,16 +3,12 @@ import {
   ChevronRightIcon,
   ChevronsLeftRightEllipsisIcon,
   EllipsisIcon,
-  QrCodeIcon,
   RouteIcon,
 } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useEffectEvent, useState } from "react";
 import {
   AuthRelayWriteScope,
-  type AdvertisedEndpoint,
-  type DesktopSshEnvironmentTarget,
-  type DesktopSshNetworkAccessState,
   type EnvironmentId,
   connectReachabilityHelpUrl,
   formatConnectReachable,
@@ -40,12 +36,6 @@ import {
 } from "./ConnectionDiagnosisDetails";
 import { usePreparedConnection } from "~/state/session";
 import { EnvironmentRow, environmentTransportLabel } from "./EnvironmentRow";
-import { AuthorizedClientsHeaderAction, PairingClientsList } from "./AuthorizedClientsSettings";
-import { advertisedEndpointsFromDirect } from "./ConnectionsSettings.logic";
-import { useEnvironmentAccessManagement } from "./useEnvironmentAccessManagement";
-import { PublicRouteSetting } from "./PublicRouteSettings";
-import { isLoopbackHostname } from "~/environments/primary";
-import { requestConfirmDialog } from "~/confirmDialog";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -77,194 +67,6 @@ import {
 } from "../ServerUpdateAction";
 import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectList";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
-
-const EMPTY_ADVERTISED_ENDPOINTS: ReadonlyArray<AdvertisedEndpoint> = [];
-
-/**
- * The address another device can pair through. Relay and SSH tunnel URLs only
- * reach the environment from this client, so those links share the code alone.
- */
-function directPairingBaseUrl(connection: {
-  readonly target: { readonly _tag: string };
-  readonly httpBaseUrl: string;
-}): string | null {
-  if (connection.target._tag !== "BearerConnectionTarget") return null;
-  try {
-    return isLoopbackHostname(new URL(connection.httpBaseUrl).hostname)
-      ? null
-      : connection.httpBaseUrl;
-  } catch {
-    return null;
-  }
-}
-
-function sshRouteTarget(
-  entry: EnvironmentPresentation["entry"],
-): DesktopSshEnvironmentTarget | null {
-  for (const route of connectionRoutes(entry)) {
-    if (
-      route.target._tag === "SshConnectionTarget" &&
-      Option.isSome(route.profile) &&
-      route.profile.value._tag === "SshConnectionProfile"
-    ) {
-      return route.profile.value.target;
-    }
-  }
-  return null;
-}
-
-/** Shown while this device holds an SSH tunnel to the server, the only time its binding is known. */
-function SshNetworkAccessSetting({
-  target,
-  label,
-}: {
-  readonly target: DesktopSshEnvironmentTarget;
-  readonly label: string;
-}) {
-  const desktopBridge = window.desktopBridge;
-  const [state, setState] = useState<DesktopSshNetworkAccessState | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads this target's SSH network access from the desktop bridge
-  useEffect(() => {
-    if (!desktopBridge) return;
-    let cancelled = false;
-    desktopBridge.getSshNetworkAccess(target).then(
-      (next) => {
-        if (!cancelled) setState(next);
-      },
-      () => {
-        if (!cancelled) setState(null);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [desktopBridge, target]);
-
-  const handleChange = async (enabled: boolean) => {
-    if (!desktopBridge) return;
-    const confirmed = await requestConfirmDialog(
-      enabled
-        ? `Enable network access for ${label}?\nOther devices on its network can connect to it directly once you pair them. Its server will restart.`
-        : `Disable network access for ${label}?\nDevices connected over its network will disconnect. Its server will restart.`,
-    );
-    if (confirmed !== true) return;
-    setIsUpdating(true);
-    return await (async () => {
-      const next = await desktopBridge.setSshNetworkAccess(target, enabled);
-      if (next !== null) setState(next);
-    })()
-      .catch(async (error: unknown) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not update network access",
-            description: error instanceof Error ? error.message : "The SSH host did not respond.",
-          }),
-        );
-      })
-      .finally(() => {
-        setIsUpdating(false);
-      });
-  };
-
-  if (!desktopBridge || state === null) return null;
-  const external = state.serverKind === "external";
-  return (
-    <div className="flex items-center justify-between gap-3 py-3">
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-foreground">Network access</p>
-        <p className="text-xs text-muted-foreground">
-          {external
-            ? "This server was started on the host itself, so its network access is set there."
-            : state.networkAccess
-              ? "Other devices on its network can reach it."
-              : "Reachable only through SSH from this device."}
-        </p>
-      </div>
-      <Switch
-        checked={state.networkAccess}
-        disabled={external || isUpdating}
-        onCheckedChange={(checked) => void handleChange(checked)}
-        aria-label={`Network access for ${label}`}
-      />
-    </div>
-  );
-}
-
-function RemoteAuthorizedClients({
-  environmentId,
-  sshTarget,
-  label,
-  access,
-  id,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly sshTarget: DesktopSshEnvironmentTarget | null;
-  readonly label: string;
-  readonly access: ReturnType<typeof useEnvironmentAccessManagement>;
-  readonly id: string;
-}) {
-  const preparedConnection = usePreparedConnection(environmentId);
-  const endpointUrl = Option.isSome(preparedConnection)
-    ? directPairingBaseUrl(preparedConnection.value)
-    : null;
-  const directEndpoints = useAtomValue(
-    serverEnvironment.configValueAtom(environmentId),
-  )?.directEndpoints;
-  const endpoints =
-    directEndpoints === undefined
-      ? EMPTY_ADVERTISED_ENDPOINTS
-      : advertisedEndpointsFromDirect(directEndpoints);
-
-  return (
-    <div id={id} className="mt-2 border-t border-border/50">
-      {sshTarget ? <SshNetworkAccessSetting target={sshTarget} label={label} /> : null}
-      <PublicRouteSetting environmentId={environmentId} label={label} layout="inline" />
-      {access.canWriteAccess ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-          <p className="text-xs text-muted-foreground">
-            {endpointUrl || endpoints.length > 0
-              ? "Pair another device with this environment."
-              : "Links share a pairing code. Use it from a client that can reach this environment directly."}
-          </p>
-          <AuthorizedClientsHeaderAction
-            delegatableScopes={access.delegatableScopes}
-            environmentId={environmentId}
-            onPairingLinkCreated={access.onPairingLinkCreated}
-            clientSessions={access.hasSnapshot ? access.clientSessions : null}
-            isRevokingOtherClients={access.isRevokingOtherClients}
-            onRevokeOtherClients={access.revokeOtherClients}
-          />
-        </div>
-      ) : null}
-      {access.error ? <p className="pb-3 text-xs text-destructive">{access.error}</p> : null}
-      {access.canReadAccess ? (
-        <PairingClientsList
-          endpointUrl={endpointUrl}
-          endpoints={endpoints}
-          defaultEndpointKey={null}
-          servedByEnvironment={false}
-          isLoading={access.isLoading}
-          pairingLinks={access.pairingLinks}
-          createdPairingCredentials={access.createdPairingCredentials}
-          sharedPairingLinkId={access.newestPairingLinkId}
-          clientSessions={access.clientSessions}
-          revokingPairingLinkId={access.revokingPairingLinkId}
-          revokingClientSessionId={access.revokingClientSessionId}
-          onRevokePairingLink={access.revokePairingLink}
-          onRevokeClientSession={access.revokeClientSession}
-          canRevoke={access.canWriteAccess}
-        />
-      ) : (
-        <p className="py-3 text-xs text-muted-foreground">
-          This connection can create access links but cannot view authorized clients.
-        </p>
-      )}
-    </div>
-  );
-}
 
 type SavedBackendListRowProps = {
   environment: EnvironmentPresentation;
@@ -314,16 +116,12 @@ export function SavedBackendListRow({
 }: SavedBackendListRowProps) {
   const [routesOpen, setRoutesOpen] = useState(false);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
-  const [clientsOpen, setClientsOpen] = useState(false);
   const [diagnosisOpen, setDiagnosisOpen] = useState(false);
   const environmentId = environment.environmentId;
   const unsupported = environment.connection.phase === "unsupported";
   const blocked = unsupported && !hasSavedBearerRoute(environment.entry);
   const enabled = environment.entry.enabled && !unsupported;
   const isConnected = environment.connection.phase === "connected";
-  const clientsAccess = useEnvironmentAccessManagement(environmentId, clientsOpen && isConnected);
-  const canManageClients =
-    isConnected && (clientsAccess.canReadAccess || clientsAccess.canWriteAccess);
   const isRemoving = removingEnvironmentId === environmentId;
   const errorTraceId = environment.connection.traceId;
   const { copyToClipboard: copyTraceIdToClipboard } = useCopyToClipboard<{ traceId: string }>({
@@ -506,29 +304,6 @@ export function SavedBackendListRow({
               )}
             />
           </button>
-          {canManageClients ? (
-            <>
-              <span aria-hidden className="shrink-0">
-                ·
-              </span>
-              <button
-                type="button"
-                aria-expanded={clientsOpen}
-                aria-controls={`remote-clients-${environmentId}`}
-                onClick={() => setClientsOpen((open) => !open)}
-                className="inline-flex shrink-0 items-center gap-0.5 rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-              >
-                Clients
-                <ChevronRightIcon
-                  aria-hidden
-                  className={cn(
-                    "size-3 shrink-0 transition-transform duration-150 motion-reduce:transition-none",
-                    clientsOpen && "rotate-90",
-                  )}
-                />
-              </button>
-            </>
-          ) : null}
         </span>
       }
       below={
@@ -576,15 +351,6 @@ export function SavedBackendListRow({
                 routeContext
               />
             </div>
-          )}
-          {clientsOpen && canManageClients && (
-            <RemoteAuthorizedClients
-              environmentId={environmentId}
-              sshTarget={sshRouteTarget(environment.entry)}
-              label={environment.label}
-              access={clientsAccess}
-              id={`remote-clients-${environmentId}`}
-            />
           )}
         </>
       }
@@ -651,12 +417,6 @@ export function SavedBackendListRow({
             <RouteIcon />
             {routesOpen ? "Hide routes" : "Routes"}
           </MenuItem>
-          {canManageClients ? (
-            <MenuItem onClick={() => setClientsOpen((open) => !open)}>
-              <QrCodeIcon />
-              {clientsOpen ? "Hide clients" : "Authorized clients"}
-            </MenuItem>
-          ) : null}
           {mcpUrl ? (
             <MenuItem onClick={() => copyMcpUrl(mcpUrl, { url: mcpUrl })}>Copy MCP URL</MenuItem>
           ) : null}
