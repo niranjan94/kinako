@@ -282,6 +282,7 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { ThreadTabStrip } from "./chat/ThreadTabStrip";
 import { useSideChat } from "./chat/useSideChat";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -565,6 +566,7 @@ export default function ChatView(props: ChatViewProps) {
   })();
   const settings = useEnvironmentSettings(environmentId);
   const clientSettingsHydrated = useClientSettingsHydrated();
+  const showOpenThreadTabs = useClientSettings((settings) => settings.showOpenThreadTabs);
   const timestampFormat = settings.timestampFormat;
   const navigate = useNavigate();
   // Selects primitives: an object here is new on every router store update, which
@@ -3431,6 +3433,9 @@ export default function ChatView(props: ChatViewProps) {
               {...(threadFindEnabled ? { onFindInThread: openThreadFindStable } : {})}
             />
           </header>
+        )}
+        {embedded || !showOpenThreadTabs ? null : (
+          <ThreadTabStrip activeThreadRef={isServerThread ? activeThreadRef : null} />
         )}
 
         <div className="relative flex min-h-0 min-w-0 flex-1">

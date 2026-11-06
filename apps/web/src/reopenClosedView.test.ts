@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { type ClosedViewEntry, useClosedViewStore } from "./closedViewStore";
 import { __setClientSettingsForTests } from "./hooks/useSettings";
+import { useOpenThreadTabsStore } from "./openThreadTabsStore";
 import { readThreadPreviewState, resetPreviewStateForTests } from "./previewStateStore";
 import {
   planNextReopen,
@@ -66,6 +67,17 @@ describe("reopenClosedView", () => {
     expect(state.isOpen).toBe(true);
     expect(state.surfaces).toMatchObject([{ id: "file:src/app.ts", revealLine: 18 }]);
     expect(openPreview).not.toHaveBeenCalled();
+  });
+
+  it("reopens a closed thread tab in the strip", async () => {
+    useOpenThreadTabsStore.setState({ tabs: [] });
+    expect(
+      await reopenClosedView(
+        { kind: "thread-tab", threadRef },
+        { openPreview: vi.fn(), workspaceAvailable: false },
+      ),
+    ).toBe(true);
+    expect(useOpenThreadTabsStore.getState().tabs).toEqual([threadRef]);
   });
 
   it("does not reopen workspace tabs without an available project", async () => {
@@ -134,6 +146,7 @@ describe("planNextReopen", () => {
   const entries: ClosedViewEntry[] = [
     { id: "a", kind: "panel-tab", threadRef, surface: { kind: "diff", id: "diff" } },
     { id: "b", kind: "panel-tab", threadRef, surface: { kind: "files", id: "files" } },
+    { id: "c", kind: "thread-tab", threadRef },
   ];
   const known: ReopenOwnerState = {
     environmentKnown: true,
@@ -142,6 +155,7 @@ describe("planNextReopen", () => {
     sideChatExists: true,
     shellLive: true,
     panel: { isOpen: false, activeSurfaceId: null, surfaces: [] },
+    threadTabOpen: false,
   };
   const openDiff: ThreadRightPanelState = {
     isOpen: true,
@@ -188,6 +202,22 @@ describe("planNextReopen", () => {
       null,
     ],
     ["drops a tab that is already open", [{ ...known, panel: openDiff }, known], ["a"], "b"],
+    [
+      "drops a thread tab that is open again",
+      [
+        { ...known, panel: openDiff },
+        { ...known, ownerExists: false },
+        { ...known, threadTabOpen: true },
+      ],
+      ["a", "c"],
+      null,
+    ],
+    [
+      "restores a closed thread tab, waiting for a removed environment only until the catalog is ready",
+      [{ ...known, panel: openDiff }, { ...known, environmentKnown: false }, known],
+      ["a", "b"],
+      "c",
+    ],
     [
       "restores a tab whose panel is hidden",
       [{ ...known, panel: { ...openDiff, isOpen: false } }],

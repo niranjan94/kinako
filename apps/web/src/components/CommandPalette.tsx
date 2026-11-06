@@ -87,8 +87,11 @@ import {
   SquareTerminalIcon,
   TextSearchIcon,
   UserPlusIcon,
+  XIcon,
 } from "lucide-react";
 import { openThreadFind } from "./chat/threadFindStore";
+import { closeThreadTab } from "./chat/ThreadTabStrip";
+import { useOpenThreadTabsStore } from "../openThreadTabsStore";
 import {
   useDeferredValue,
   useEffect,
@@ -710,6 +713,7 @@ function OpenCommandPaletteDialog(props: {
 
   const { projectByKey } = useProjectLookups();
 
+  const openThreadTabs = useOpenThreadTabsStore((state) => state.tabs);
   const activeThreadKey = activeThread
     ? scopedThreadKey(scopeThreadRef(activeThread.environmentId, activeThread.id))
     : null;
@@ -1387,6 +1391,19 @@ function OpenCommandPaletteDialog(props: {
       description: "An agent investigates a T3 Code problem and helps file an issue",
       icon: <BugIcon className={ITEM_ICON_CLASS} />,
       run: () => startTriage(triageEnvironmentId),
+    });
+  }
+
+  if (activeThread && openThreadTabs.some((tab) => scopedThreadKey(tab) === activeThreadKey)) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:close-thread-tab",
+      searchTerms: ["close", "tab", "thread tab"],
+      title: "Close thread tab",
+      icon: <XIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "threadTab.close",
+      run: async () => closeThreadTab(navigate, threadRef, true),
     });
   }
 
