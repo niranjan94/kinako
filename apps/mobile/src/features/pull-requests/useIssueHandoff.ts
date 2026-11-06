@@ -17,7 +17,7 @@ import {
   waitForComposerDraftsLoaded,
 } from "../../state/use-composer-drafts";
 import { useWorkspaceEnvironments } from "../../state/workspace";
-import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import {
   issueHandoffProjects,
   type HandoffIssueItem,

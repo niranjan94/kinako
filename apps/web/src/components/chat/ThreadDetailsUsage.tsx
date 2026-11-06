@@ -5,10 +5,6 @@ import type {
   UsageLimitSourceSnapshots,
 } from "@t3tools/contracts";
 import {
-  type ContextWindowSnapshot,
-  formatContextWindowTokens,
-} from "@t3tools/client-runtime/context-window";
-import {
   collectProviderUsageLimits,
   formatDuration,
   type LimitPace,
@@ -20,6 +16,8 @@ import type { ReactNode } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { useNowMinute } from "../../hooks/useNowMinute";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import { formatContextWindowTokens } from "@t3tools/client-runtime/context-window";
 import { cn } from "../../lib/utils";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";

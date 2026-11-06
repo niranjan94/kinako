@@ -293,6 +293,8 @@ function createTextGeneration(
     generateTurnRecap: () => Effect.die("Unexpected recap generation"),
     generateConversationSummary: () => Effect.succeed({ summary: "Summary" }),
     generateReviewGuide: () => Effect.succeed({ stops: [] }),
+    generateTranscriptionPostProcessing: () =>
+      Effect.succeed({ transcription: "processed transcript" }),
     ...overrides,
   };
 
@@ -344,6 +346,8 @@ function createTextGeneration(
     generateTurnRecap: (input) => implementation.generateTurnRecap(input),
     generateConversationSummary: (input) => implementation.generateConversationSummary(input),
     generateReviewGuide: (input) => implementation.generateReviewGuide(input),
+    generateTranscriptionPostProcessing: (input) =>
+      implementation.generateTranscriptionPostProcessing(input),
   };
 }
 

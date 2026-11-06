@@ -28,7 +28,7 @@ import { useEnvironmentQuery } from "../../state/query";
 import { usePullToRefresh } from "../../state/use-pull-to-refresh";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { useAndroidWorkspaceBack } from "../workspace/useAndroidWorkspaceNavigation";
+import { useAndroidWorkspaceBack } from "../layout/workspace/useAndroidWorkspaceNavigation";
 import {
   issueHandoffProjectActions,
   parseIssueHandoffEvent,

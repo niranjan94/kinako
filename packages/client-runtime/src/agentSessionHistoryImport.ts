@@ -6,6 +6,7 @@ import type {
   ServerConfig,
   ThreadId,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 
 import { isAgentSessionRecentlyActive } from "./agentSessionImport.ts";
 
@@ -377,11 +378,16 @@ async function importFolder(
 }
 
 /** A creation whose outcome is unknown; its ids are kept so a retry replays the same command. */
-export class AgentSessionProjectCreateInterrupted extends Error {
-  constructor() {
-    super("Adding the project was interrupted.");
+export class AgentSessionProjectCreateInterrupted extends Schema.TaggedError<AgentSessionProjectCreateInterrupted>()(
+  "AgentSessionProjectCreateInterrupted",
+  {},
+) {
+  override get message(): string {
+    return "Adding the project was interrupted.";
   }
 }
+
+const isProjectCreateInterrupted = Schema.is(AgentSessionProjectCreateInterrupted);
 
 /**
  * Remembers the project id and command id each folder's creation used, so retrying after a lost
@@ -413,7 +419,7 @@ export function createAgentSessionProjectEnsurer(input: {
     try {
       await input.createProject({ ...attempt, folder });
     } catch (error) {
-      if (!(error instanceof AgentSessionProjectCreateInterrupted)) attempts.delete(folder.path);
+      if (!isProjectCreateInterrupted(error)) attempts.delete(folder.path);
       throw error;
     }
     created.set(folder.path, attempt.projectId);

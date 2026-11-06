@@ -1,13 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   type ContextWindowSegmentKind,
-  type ContextWindowSnapshot,
   deriveContextWindowBreakdown,
-  deriveLatestContextWindowSnapshot,
   formatContextWindowPercentage as formatPercentage,
   formatContextWindowTokens,
-  latestProviderTurnTokenUsage,
 } from "@t3tools/client-runtime/context-window";
+import {
+  type ContextWindowSnapshot,
+  deriveLatestContextWindowSnapshot,
+  latestProviderTurnTokenUsage,
+} from "@t3tools/client-runtime/state/context-window";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { useMemo, useState } from "react";

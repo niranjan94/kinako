@@ -1,11 +1,11 @@
 import { Button } from "../ui/button";
 import {
   type ContextWindowBreakdown,
-  type ContextWindowSnapshot,
   deriveContextWindowBreakdown,
   formatContextWindowPercentage,
   formatContextWindowTokens,
 } from "@t3tools/client-runtime/context-window";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import {
   contextWindowSegmentColor,

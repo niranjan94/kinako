@@ -85,6 +85,7 @@ const makeUnsupportedTextGeneration = (): ProviderTextGeneration => {
     generateTurnRecap: () => unsupported("generateTurnRecap"),
     generateConversationSummary: () => unsupported("generateConversationSummary"),
     generateReviewGuide: () => unsupported("generateReviewGuide"),
+    generateTranscriptionPostProcessing: () => unsupported("generateTranscriptionPostProcessing"),
   };
 };
 

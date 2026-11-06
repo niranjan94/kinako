@@ -168,6 +168,12 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   triage: Schema.optionalKey(Schema.Boolean),
   /** Server accepts `{ type: "once" }` scheduled tasks; older servers reject them on save. */
   oneTimeSchedules: Schema.optionalKey(Schema.Boolean),
+  /** Server honors `freshContext` on sends; older servers ignore it and keep the old context. */
+  freshContext: Schema.optionalKey(Schema.Boolean),
+  /** Server saves and runs scheduled task `threadMode`; older servers ignore it. */
+  scheduledTaskThreadModes: Schema.optionalKey(Schema.Boolean),
+  /** Server can transcribe 16 kHz mono PCM audio on the environment machine. */
+  voiceTranscription: Schema.optionalKey(Schema.Boolean),
   // Fork additions stay last so upstream's list merges cleanly.
   worktreeSnapshots: Schema.optionalKey(Schema.Boolean),
   /** Server copies the files `worktreeIncludePatterns` selects into new worktrees. */

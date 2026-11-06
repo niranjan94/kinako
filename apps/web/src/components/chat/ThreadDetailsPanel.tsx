@@ -24,10 +24,10 @@ import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import {
-  type ContextWindowSnapshot,
   formatContextWindowTokens,
   formatContextWindowPercentage,
 } from "@t3tools/client-runtime/context-window";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 import {
   ThreadDetailsContext,

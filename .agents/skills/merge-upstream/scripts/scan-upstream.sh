@@ -190,6 +190,7 @@ apps/server/src/ws.ts apps/server/src/guest apps/server/src/scheduledTasks/webho
 apps/server/src/cloud/http.ts apps/server/src/cloud/CliTokenManager.ts
 apps/server/src/mcp/McpHttpServer.ts apps/server/src/assets/AttachmentUpload.ts
 apps/server/src/device/DeviceHubProxy.ts apps/server/src/preview/ServerBrowserStream.ts
+apps/server/src/speech/http.ts apps/server/src/speech/stream.ts
 apps/server/src/environment/ServerEnvironment.ts packages/contracts/src/environmentHttp.ts
 packages/contracts/src/auth.ts packages/shared/src/dpop.ts'
 printf 'Surface files:\n'

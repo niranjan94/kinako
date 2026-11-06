@@ -1,5 +1,5 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
-import type { StaticScreenProps } from "@react-navigation/native";
+import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { databaseCacheKey, releaseDatabaseResources } from "@t3tools/client-runtime/state/database";
 import {
   squashAtomCommandFailure,
@@ -18,6 +18,7 @@ import {
 import { AsyncResult } from "effect/reactivity";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
+import { AppBar } from "../../components/ui/AppBar";
 import { AppText, AppTextInput } from "../../components/ui/AppText";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { Button } from "../../components/ui/Button";
@@ -53,18 +54,22 @@ const LEVEL_LABELS = {
 
 type Props = StaticScreenProps<{ environmentId: string; threadId: string }>;
 export function ThreadDatabaseRouteScreen(_props: Props) {
+  const navigation = useNavigation();
   const { selectedThread } = useThreadSelection();
-  if (!selectedThread)
-    return (
-      <View className="flex-1 bg-screen p-4">
-        <AppText>Open a project thread to browse its databases.</AppText>
-      </View>
-    );
   return (
-    <DatabaseScreen
-      environmentId={selectedThread.environmentId}
-      projectId={selectedThread.projectId}
-    />
+    <>
+      <AppBar title="Database" onBack={() => navigation.goBack()} />
+      {selectedThread ? (
+        <DatabaseScreen
+          environmentId={selectedThread.environmentId}
+          projectId={selectedThread.projectId}
+        />
+      ) : (
+        <View className="flex-1 bg-screen p-4">
+          <AppText>Open a project thread to browse its databases.</AppText>
+        </View>
+      )}
+    </>
   );
 }
 

@@ -52,6 +52,7 @@ const layer = it.layer(
 );
 
 let queryCounter = 0;
+const testPostgresPort = Number(process.env.T3_TEST_POSTGRES_PORT);
 const nextQueryId = () => DatabaseQueryId.make(`query-${++queryCounter}`);
 
 /** A saved connection to an empty SQLite file; SQLite reads a zero-byte file as a new database. */
@@ -123,7 +124,7 @@ layer("DatabaseService", (it) => {
           ] as const;
           const config = {
             host: "127.0.0.1",
-            port: Number(process.env.T3_TEST_POSTGRES_PORT),
+            port: testPostgresPort,
             user: "postgres",
             password: "kinako-issue15-test",
           };
@@ -277,7 +278,7 @@ layer("DatabaseService", (it) => {
           target: {
             engine: "postgres",
             host: "127.0.0.1",
-            port: Number(process.env.T3_TEST_POSTGRES_PORT),
+            port: testPostgresPort,
             database: "postgres",
             user: "postgres",
             sslMode: "disable",

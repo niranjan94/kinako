@@ -99,7 +99,7 @@ it.effect("sets the selected browser session cookies through the HTTP route", ()
           ] as const,
       ),
       ([environmentA, environmentB]) =>
-        Effect.tryPromise(async () => {
+        Effect.promise(async () => {
           const devResponse = await environmentA.handler(
             postJson("/api/auth/browser-session", { credential: DEV_TOKEN }),
             requestContext,
@@ -222,7 +222,7 @@ it.live("records a DPoP proof as used only after the token request's credential 
     return yield* Effect.acquireUseRelease(
       Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
       (environment) =>
-        Effect.tryPromise(async () => {
+        Effect.promise(async () => {
           const rejected = await environment.handler(tokenRequest("UNKNOWNCODE2"), requestContext);
           expect(rejected.status).toBe(401);
 

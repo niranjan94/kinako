@@ -246,6 +246,7 @@ function makeTextGeneration(
     generateBranchName: unused("generateBranchName"),
     generateThreadTitle: unused("generateThreadTitle"),
     generateReviewGuide: unused("generateReviewGuide"),
+    generateTranscriptionPostProcessing: unused("generateTranscriptionPostProcessing"),
     generateTurnRecap: (input) =>
       Ref.update(recapRequests, (requests) => [...requests, input]).pipe(
         Effect.andThen(

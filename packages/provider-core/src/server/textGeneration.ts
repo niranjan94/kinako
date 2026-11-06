@@ -122,10 +122,23 @@ export type ReviewGuideGenerationResult = Omit<
   "headSha" | "generatedAt" | "modelSelection"
 >;
 
+export interface TranscriptionPostProcessingInput {
+  cwd: string;
+  prompt: string;
+  modelSelection: ModelSelection;
+}
+
+export interface TranscriptionPostProcessingResult {
+  transcription: string;
+}
+
 export interface ProviderTextGeneration {
   readonly generateTurnRecap: (
     input: TurnRecapGenerationInput,
   ) => Effect.Effect<OrchestrationV2TurnRecap, TextGenerationError>;
+  readonly generateTranscriptionPostProcessing: (
+    input: TranscriptionPostProcessingInput,
+  ) => Effect.Effect<TranscriptionPostProcessingResult, TextGenerationError>;
 
   readonly generateCommitMessage: (
     input: CommitMessageGenerationInput,

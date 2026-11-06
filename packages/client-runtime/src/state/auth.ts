@@ -9,23 +9,19 @@ import type {
   AuthRevokePairingLinkInput,
 } from "@t3tools/contracts";
 import { AuthGrantScope, WS_METHODS } from "@t3tools/contracts";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import type { HttpClient } from "effect/http";
 import * as Stream from "effect/Stream";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import { HttpClient } from "effect/http";
 import { Atom } from "effect/reactivity";
 
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import * as ConnectionOnboarding from "../connection/onboarding.ts";
 import { EnvironmentRegistry } from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import * as ManagedRelay from "../relay/managedRelay.ts";
 import { subscribe } from "../rpc/client.ts";
-import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
+import { executeConnectedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
 import { createEnvironmentCommand, createEnvironmentSubscriptionAtomFamily } from "./runtime.ts";
+
+const ACCESS_REQUEST_TIMEOUT_MS = 8_000;
 
 export const EMPTY_AUTH_ACCESS_SNAPSHOT: AuthAccessSnapshot = {
   pairingLinks: [],
@@ -91,44 +87,6 @@ function projectAuthAccessSnapshot(
   return [snapshot, [projected]];
 }
 
-export class AuthAccessConnectionNotReadyError extends Data.TaggedError(
-  "AuthAccessConnectionNotReadyError",
-)<{
-  readonly message: string;
-}> {}
-
-const AUTH_ACCESS_REQUEST_TIMEOUT_MS = 10_000;
-
-type AuthAccessRequest<A, E, R> = Pick<
-  Parameters<typeof executeAuthenticatedEnvironmentHttpRequest<"auth", A, E, R>>[0],
-  "url" | "request"
->;
-
-/** Run an access-management request against the current environment with its credentials. */
-const requestAuthAccess = Effect.fn("AuthAccess.request")(function* <A, E, R>(
-  input: AuthAccessRequest<A, E, R>,
-) {
-  const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
-  const prepared = yield* SubscriptionRef.get(supervisor.prepared);
-  const client = yield* Effect.serviceOption(HttpClient.HttpClient);
-  if (Option.isNone(prepared) || Option.isNone(client)) {
-    return yield* new AuthAccessConnectionNotReadyError({
-      message: "The environment connection is not ready.",
-    });
-  }
-  return yield* executeAuthenticatedEnvironmentHttpRequest({
-    ...input,
-    prepared: prepared.value,
-    signer: yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner),
-    remoteAuthorization: yield* Effect.serviceOption(
-      RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
-    ),
-    group: "auth",
-    method: "POST",
-    timeoutMs: AUTH_ACCESS_REQUEST_TIMEOUT_MS,
-  }).pipe(Effect.provideService(HttpClient.HttpClient, client.value));
-});
-
 const isGrantScope = Schema.is(AuthGrantScope);
 
 /** Adds a route at another address, paired with a one-time code minted over the current connection. */
@@ -141,8 +99,11 @@ export const addRouteOverConnection = Effect.fn("AuthAccess.addRouteOverConnecti
     const registry = yield* EnvironmentRegistry;
     const pairing = yield* registry.run(
       input.environmentId,
-      requestAuthAccess({
+      executeConnectedEnvironmentHttpRequest({
+        group: "auth",
+        method: "POST",
         url: (urls) => urls.pairingCredential(),
+        timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
         request: ({ client, headers }) =>
           client.pairingCredential({
             headers,
@@ -162,8 +123,11 @@ export const addRouteOverConnection = Effect.fn("AuthAccess.addRouteOverConnecti
           registry
             .run(
               input.environmentId,
-              requestAuthAccess({
+              executeConnectedEnvironmentHttpRequest({
+                group: "auth",
+                method: "POST",
                 url: (urls) => urls.revokePairingLink(),
+                timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
                 request: ({ client, headers }) =>
                   client.revokePairingLink({ headers, payload: { id: pairing.id } }),
               }),
@@ -174,48 +138,61 @@ export const addRouteOverConnection = Effect.fn("AuthAccess.addRouteOverConnecti
   },
 );
 
+/** Access management runs on the chosen environment with this client's own session there. */
 export function createAuthEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | HttpClient.HttpClient | R, E>,
 ) {
   return {
-    accessChanges: createEnvironmentSubscriptionAtomFamily(runtime, {
-      label: "environment-data:server:auth-access-changes",
-      subscribe: (_input: null) =>
-        subscribe(WS_METHODS.subscribeAuthAccess, {}).pipe(
-          Stream.mapAccum(() => EMPTY_AUTH_ACCESS_SNAPSHOT, projectAuthAccessSnapshot),
-        ),
-    }),
-    createPairingLink: createEnvironmentCommand(runtime, {
-      label: "environment-data:server:auth-create-pairing-link",
+    createPairingCredential: createEnvironmentCommand(runtime, {
+      label: "environment-data:server:auth-create-pairing-credential",
       execute: (input: AuthCreatePairingCredentialInput) =>
-        requestAuthAccess({
+        executeConnectedEnvironmentHttpRequest({
+          group: "auth",
+          method: "POST",
           url: (urls) => urls.pairingCredential(),
+          timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.pairingCredential({ headers, payload: input }),
         }),
     }),
     revokePairingLink: createEnvironmentCommand(runtime, {
       label: "environment-data:server:auth-revoke-pairing-link",
       execute: (input: AuthRevokePairingLinkInput) =>
-        requestAuthAccess({
+        executeConnectedEnvironmentHttpRequest({
+          group: "auth",
+          method: "POST",
           url: (urls) => urls.revokePairingLink(),
+          timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.revokePairingLink({ headers, payload: input }),
         }),
     }),
     revokeClient: createEnvironmentCommand(runtime, {
       label: "environment-data:server:auth-revoke-client",
       execute: (input: AuthRevokeClientSessionInput) =>
-        requestAuthAccess({
+        executeConnectedEnvironmentHttpRequest({
+          group: "auth",
+          method: "POST",
           url: (urls) => urls.revokeClient(),
+          timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.revokeClient({ headers, payload: input }),
         }),
     }),
     revokeOtherClients: createEnvironmentCommand(runtime, {
       label: "environment-data:server:auth-revoke-other-clients",
       execute: (_input: null) =>
-        requestAuthAccess({
+        executeConnectedEnvironmentHttpRequest({
+          group: "auth",
+          method: "POST",
           url: (urls) => urls.revokeOtherClients(),
+          timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.revokeOtherClients({ headers }),
-        }),
+        }).pipe(Effect.map((result) => result.revokedCount)),
+    }),
+    accessChanges: createEnvironmentSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:auth-access-changes",
+      subscribe: (_input: null) =>
+        subscribe(WS_METHODS.subscribeAuthAccess, {}).pipe(
+          Stream.mapAccum(() => EMPTY_AUTH_ACCESS_SNAPSHOT, projectAuthAccessSnapshot),
+        ),
     }),
   };
 }

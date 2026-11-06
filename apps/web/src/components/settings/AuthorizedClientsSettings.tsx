@@ -12,12 +12,13 @@ import {
   type AuthEnvironmentScope,
   type AuthGrantScope,
   type AuthPairingCredentialResult,
-  type AuthCreatePairingCredentialInput,
-  type EnvironmentId,
   type AdvertisedEndpoint,
+  type EnvironmentId,
 } from "@t3tools/contracts";
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
-import * as Cause from "effect/Cause";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
@@ -49,14 +50,14 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import {
-  createServerPairingCredential,
   isLoopbackHostname,
   type ServerClientSessionRecord,
   type ServerPairingLinkRecord,
 } from "~/environments/primary";
+import { authEnvironment } from "~/state/auth";
 import { readEnvironmentScope } from "~/state/session";
-import { usePrimaryEnvironmentId } from "~/state/environments";
 import { useManagedPolicy, usePrimaryManagedPolicy } from "~/state/managedPolicy";
+import { useAtomCommand } from "~/state/use-atom-command";
 import { ManagedControl } from "../ManagedPolicy";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "./itemRows";
@@ -126,11 +127,11 @@ type PairingLinkListRowProps = {
   pairingLink: ServerPairingLinkRecord;
   credential: string | undefined;
   defaultShareOpen: boolean;
+  /** Whether this page is served by the environment the link pairs with. */
+  servedByEnvironment: boolean;
   endpointUrl: string | null | undefined;
   endpoints: ReadonlyArray<AdvertisedEndpoint>;
   defaultEndpointKey: string | null;
-  /** Off for another environment, whose links this page's origin cannot serve. */
-  shareFromCurrentOrigin?: boolean;
   revokingPairingLinkId: string | null;
   onRevoke: (id: string) => void;
   canRevoke: boolean;
@@ -140,10 +141,10 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
   pairingLink,
   credential,
   defaultShareOpen,
+  servedByEnvironment,
   endpointUrl,
   endpoints,
   defaultEndpointKey,
-  shareFromCurrentOrigin = true,
   revokingPairingLinkId,
   onRevoke,
   canRevoke,
@@ -196,7 +197,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
     endpointPairingUrl ??
     (credential && endpointUrl != null && endpointUrl !== ""
       ? (hostedPairingUrl ?? resolveDesktopPairingUrl(endpointUrl, credential))
-      : !shareFromCurrentOrigin || isLoopbackHostname(window.location.hostname)
+      : !servedByEnvironment || isLoopbackHostname(window.location.hostname)
         ? null
         : currentOriginPairingUrl);
   const [failedCopyValue, setFailedCopyValue] = useState<string | null>(null);
@@ -572,12 +573,8 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
 });
 
 type AuthorizedClientsHeaderActionProps = {
+  environmentId: EnvironmentId;
   onPairingLinkCreated: (result: AuthPairingCredentialResult) => void;
-  /** Another environment's credential creator; the primary environment's by default. */
-  createPairingCredential?: (
-    input: AuthCreatePairingCredentialInput,
-  ) => Promise<AuthPairingCredentialResult>;
-  environmentId?: EnvironmentId | null;
   clientSessions: ReadonlyArray<ServerClientSessionRecord> | null;
   isRevokingOtherClients: boolean;
   onRevokeOtherClients: () => void;
@@ -585,20 +582,17 @@ type AuthorizedClientsHeaderActionProps = {
 };
 
 export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHeaderAction({
-  onPairingLinkCreated,
-  createPairingCredential,
   environmentId,
+  onPairingLinkCreated,
   clientSessions,
   isRevokingOtherClients,
   onRevokeOtherClients,
   delegatableScopes,
 }: AuthorizedClientsHeaderActionProps) {
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const scopeEnvironmentId = environmentId === undefined ? primaryEnvironmentId : environmentId;
-  const pairingDenial = managedCapabilityDenial(
-    useManagedPolicy(scopeEnvironmentId),
-    "remoteClients",
-  );
+  const pairingDenial = managedCapabilityDenial(useManagedPolicy(environmentId), "remoteClients");
+  const createPairingCredential = useAtomCommand(authEnvironment.createPairingCredential, {
+    reportFailure: false,
+  });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pairingLabel, setPairingLabel] = useState("");
   const [pairingScopes, setPairingScopes] = useState<ReadonlyArray<AuthGrantScope>>([
@@ -609,27 +603,26 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
 
   const handleCreatePairingLink = async () => {
     if (
-      scopeEnvironmentId === null ||
       selectedScopes.length === 0 ||
-      !readEnvironmentScope(scopeEnvironmentId, AuthAccessWriteScope) ||
-      !selectedScopes.every((scope) => readEnvironmentScope(scopeEnvironmentId, scope))
+      !readEnvironmentScope(environmentId, AuthAccessWriteScope) ||
+      !selectedScopes.every((scope) => readEnvironmentScope(environmentId, scope))
     )
       return;
     setIsCreatingPairingLink(true);
-    const settled = await settlePromise(async () => {
-      const created = await (createPairingCredential ?? createServerPairingCredential)({
-        label: pairingLabel,
-        scopes: selectedScopes,
-      });
-      onPairingLinkCreated(created);
+    const trimmedLabel = pairingLabel.trim();
+    const result = await createPairingCredential({
+      environmentId,
+      input: { ...(trimmedLabel ? { label: trimmedLabel } : {}), scopes: selectedScopes },
+    });
+    if (result._tag === "Success") {
+      onPairingLinkCreated(result.value);
       setPairingLabel("");
       setPairingScopes(
         AuthStandardClientScopes.filter((scope) => delegatableScopes.includes(scope)),
       );
       setDialogOpen(false);
-    });
-    if (settled._tag === "Failure") {
-      const error = Cause.squash(settled.cause);
+    } else if (!isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
       const message = error instanceof Error ? error.message : "Failed to create pairing URL.";
       toastManager.add(
         stackedThreadToast({
@@ -803,10 +796,10 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
 });
 
 type PairingClientsListProps = {
+  servedByEnvironment: boolean;
   endpointUrl: string | null | undefined;
   endpoints: ReadonlyArray<AdvertisedEndpoint>;
   defaultEndpointKey: string | null;
-  shareFromCurrentOrigin?: boolean;
   isLoading: boolean;
   pairingLinks: ReadonlyArray<ServerPairingLinkRecord>;
   createdPairingCredentials: ReadonlyMap<string, string>;
@@ -820,10 +813,10 @@ type PairingClientsListProps = {
 };
 
 export const PairingClientsList = memo(function PairingClientsList({
+  servedByEnvironment,
   endpointUrl,
   endpoints,
   defaultEndpointKey,
-  shareFromCurrentOrigin,
   isLoading,
   pairingLinks,
   createdPairingCredentials,
@@ -843,10 +836,10 @@ export const PairingClientsList = memo(function PairingClientsList({
           pairingLink={pairingLink}
           credential={createdPairingCredentials.get(pairingLink.id)}
           defaultShareOpen={pairingLink.id === sharedPairingLinkId}
+          servedByEnvironment={servedByEnvironment}
           endpointUrl={endpointUrl}
           endpoints={endpoints}
           defaultEndpointKey={defaultEndpointKey}
-          {...(shareFromCurrentOrigin === undefined ? {} : { shareFromCurrentOrigin })}
           revokingPairingLinkId={revokingPairingLinkId}
           onRevoke={onRevokePairingLink}
           canRevoke={canRevoke}

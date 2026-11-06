@@ -169,6 +169,7 @@ export function IssueDetailPanel({
     remarkPlugins: issueAutolinkPlugins(detail),
     lineBreaks: hostClient.hardLineBreaks ?? false,
     threadRef,
+    repository: detail?.repository ?? null,
   };
 
   if (detail === null) {

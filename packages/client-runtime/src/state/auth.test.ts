@@ -23,7 +23,6 @@ import type { RpcSession } from "../rpc/session.ts";
 import {
   addRouteOverConnection,
   applyAuthAccessStreamEvent,
-  AuthAccessConnectionNotReadyError,
   createAuthEnvironmentAtoms,
   EMPTY_AUTH_ACCESS_SNAPSHOT,
 } from "./auth.ts";
@@ -188,7 +187,7 @@ describe("auth access commands", () => {
       const { auth, calls, registry } = yield* makeAccessHarness({ remotePrepared: true });
 
       const result = yield* Effect.promise(() =>
-        runAtomCommand(registry, auth.createPairingLink, {
+        runAtomCommand(registry, auth.createPairingCredential, {
           environmentId: REMOTE_ID,
           input: { label: "Phone", scopes: ["orchestration:read"] },
         }),
@@ -217,7 +216,7 @@ describe("auth access commands", () => {
 
       expect(result._tag).toBe("Failure");
       expect(result._tag === "Failure" && squashAtomCommandFailure(result)).toBeInstanceOf(
-        AuthAccessConnectionNotReadyError,
+        RpcHttp.RemoteEnvironmentAuthFetchError,
       );
       expect(calls).toEqual([]);
     }).pipe(Effect.scoped),

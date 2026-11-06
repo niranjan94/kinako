@@ -1,7 +1,6 @@
 import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
-  type AuthCreatePairingCredentialInput,
   type AuthPairingCredentialResult,
   type AuthEnvironmentScope,
   type EnvironmentId,
@@ -45,9 +44,6 @@ export function useEnvironmentAccessManagement(
       ? authEnvironment.accessChanges({ environmentId, input: null })
       : null,
   );
-  const createPairingLinkCommand = useAtomCommand(authEnvironment.createPairingLink, {
-    reportFailure: false,
-  });
   const revokePairingLinkCommand = useAtomCommand(authEnvironment.revokePairingLink, {
     reportFailure: false,
   });
@@ -92,14 +88,6 @@ export function useEnvironmentAccessManagement(
     toastManager.add(stackedThreadToast({ type: "error", title, description: message }));
   };
 
-  // The header action guards scopes and reports failures, as it does for the primary environment.
-  const createPairingCredential = async (input: AuthCreatePairingCredentialInput) => {
-    if (environmentId === null) throw new Error("This environment is unavailable.");
-    setMutationError(null);
-    const result = await createPairingLinkCommand({ environmentId, input });
-    if (result._tag === "Failure") throw squashAtomCommandFailure(result);
-    return result.value;
-  };
   const onPairingLinkCreated = (created: AuthPairingCredentialResult) => {
     setCreatedPairingCredentials((current) => new Map(current).set(created.id, created.credential));
     setNewestPairingLinkId(created.id);
@@ -150,7 +138,7 @@ export function useEnvironmentAccessManagement(
         result,
       );
     } else {
-      const { revokedCount } = result.value;
+      const revokedCount = result.value;
       toastManager.add({
         type: "success",
         title: revokedCount === 1 ? "Revoked 1 other client" : `Revoked ${revokedCount} clients`,
@@ -175,7 +163,6 @@ export function useEnvironmentAccessManagement(
     revokingPairingLinkId,
     revokingClientSessionId,
     isRevokingOtherClients,
-    createPairingCredential,
     onPairingLinkCreated,
     revokePairingLink,
     revokeClientSession,

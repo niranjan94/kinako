@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import { useCallback } from "react";
 import { Keyboard, Linking, Platform, Share } from "react-native";
 import type { MenuProps } from "../../components/ui/Menu.types";
-import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import {
   issueHandoffMenuAction,
   parseIssueHandoffEvent,

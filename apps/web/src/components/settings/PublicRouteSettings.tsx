@@ -157,7 +157,7 @@ export function PublicRouteSetting({
   const canWrite = useAtomValue(publicRouteEnvironment.enable.permissionAtom(environmentId));
   const enableRoute = useAtomCommand(publicRouteEnvironment.enable, { reportFailure: false });
   const disableRoute = useAtomCommand(publicRouteEnvironment.disable, { reportFailure: false });
-  const createPairingLink = useAtomCommand(authEnvironment.createPairingLink, {
+  const createPairingLink = useAtomCommand(authEnvironment.createPairingCredential, {
     reportFailure: false,
   });
   const grantedScopes = useEnvironmentSessionScopes(environmentId);
