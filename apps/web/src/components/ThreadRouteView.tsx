@@ -9,6 +9,9 @@ import { useEffect, useState } from "react";
 import ChatView from "./ChatView";
 import { BackgroundThreadContext } from "./chat/backgroundThread";
 import { SidebarInset } from "./ui/sidebar";
+import { useThreadOnScreen } from "../onScreenThreads";
+import { useSplitViewStore } from "../splitViewStore";
+import { SplitPaneLayout } from "./chat/SplitPaneLayout";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import {
@@ -48,6 +51,18 @@ export function ThreadRouteView({
   );
   const serverThreadRef = target.kind === "server" ? target.threadRef : null;
   const serverThreadShell = useQuietThreadShell(serverThreadRef);
+  useThreadOnScreen(background ? null : serverThreadRef);
+  // Drafts and pages without a thread show one chat; a split resumes on the next server thread.
+  const splitRoot = useSplitViewStore((state) => (serverThreadRef ? state.root : null));
+  const routeEnvironmentId = serverThreadRef?.environmentId;
+  const routeThreadId = serverThreadRef?.threadId;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the route is the source of truth for the focused pane, and any navigation path can change it
+  useEffect(() => {
+    if (routeEnvironmentId && routeThreadId)
+      useSplitViewStore
+        .getState()
+        .followRoute({ environmentId: routeEnvironmentId, threadId: routeThreadId });
+  }, [routeEnvironmentId, routeThreadId]);
   const shellStatus = useEnvironmentShellStatus(serverThreadRef?.environmentId ?? null);
   const environmentThreadRefs = useEnvironmentThreadRefs(serverThreadRef?.environmentId ?? null);
   const bootstrapComplete = isThreadRouteSnapshotAuthoritative(shellStatus);
@@ -192,6 +207,11 @@ export function ThreadRouteView({
   } else if (offShellBlocked) {
     // Before the shell bootstraps, a listed visible thread can still look off-shell.
     if (bootstrapComplete && unlistedThread !== null) redirect = <Navigate to="/" replace />;
+  } else if (
+    splitRoot &&
+    (renderState === "ready" || (renderState === "loading" && serverThreadShell !== null))
+  ) {
+    view = <SplitPaneLayout root={splitRoot} routeRef={target.threadRef} />;
   } else if (renderState === "ready" || (renderState === "loading" && serverThreadShell !== null)) {
     view = (
       <ChatView

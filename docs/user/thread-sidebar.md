@@ -358,6 +358,25 @@ thread. Only threads on the same environment can open beside each other. Closing
 tab never deletes the thread. Suggested commands from a thread in another folder are
 copied instead of run in this thread's terminal.
 
+## Split view
+
+Split view shows up to four threads side by side on web and desktop, each with its own
+conversation and composer. Press `mod+\` or choose **Split chat with...** in the command
+palette, then pick a thread. The first split puts the threads side by side; splitting
+again stacks panes, up to a 2x2 grid.
+
+The focused pane is the thread you are on: it has the header, the right panel, and the
+terminal. Click another pane, or press `mod+alt+\`, to focus it. Opening a thread from
+the sidebar shows it in the focused pane, or focuses the pane already showing it. Drag
+the line between panes to resize them. Close a pane with its ×, `mod+shift+\`, or
+**Close pane** in the palette; one pane left ends split view. Closing a pane never
+closes or deletes its thread.
+
+A pane you are not focused on has no terminal of its own, so suggested commands there
+are copied instead of run. Threads you can see in any pane do not show "Thread
+completed" notices. Each visible pane keeps its thread streaming, so four busy panes use
+more of your connection than one.
+
 ## Snooze until later
 
 To change the choices in the snooze menu, open **Settings → Threads → Snooze options**.

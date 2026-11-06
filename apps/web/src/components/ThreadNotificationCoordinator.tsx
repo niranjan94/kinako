@@ -7,6 +7,7 @@ import {
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import type { AnyRouter } from "@tanstack/react-router";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
+import { isThreadOnScreen } from "../onScreenThreads";
 import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
 import type { ClientSettings } from "@t3tools/contracts/settings";
 import * as Option from "effect/Option";
@@ -125,16 +126,12 @@ export function startThreadNotifications(
     )
       return;
     const { notificationMode: mode, inAppNotificationsEnabled } = getClientSettings();
-    const active = (router.state.matches.at(-1)?.params ?? {}) as {
-      environmentId?: string;
-      threadId?: string;
-    };
+    const onScreen = isThreadOnScreen({ environmentId, threadId: thread.id });
     if (
       kind === "wake" &&
       document.visibilityState === "visible" &&
       document.hasFocus() &&
-      active.environmentId === environmentId &&
-      active.threadId === thread.id
+      onScreen
     )
       return;
     const title =
@@ -160,7 +157,7 @@ export function startThreadNotifications(
       inAppNotificationsEnabled &&
       document.visibilityState === "visible" &&
       document.hasFocus() &&
-      (active.environmentId !== environmentId || active.threadId !== thread.id)
+      !onScreen
     ) {
       const toastKey = threadKey({ environmentId, threadId: thread.id });
       const toastId: ToastId = toastManager.add({
