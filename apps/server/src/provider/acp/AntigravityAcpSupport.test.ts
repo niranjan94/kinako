@@ -14,7 +14,6 @@ import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/compat";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
-import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import {
   applyAntigravityAcpModelSelection,
   antigravityClientInfo,
@@ -90,7 +89,7 @@ describe("Antigravity release gates", () => {
         filter || native ? { antigravity } : undefined,
       );
       expect(isQualifiedAntigravityRelease(version)).toBe(native);
-      expect(antigravityClientInfo(version).name).toBe(ownName ? FORK_CLI_NAME : "zed");
+      expect(antigravityClientInfo(version).name).toBe(ownName ? "t3-code" : "zed");
     },
   );
 });

@@ -43,7 +43,7 @@ import {
   deriveAuthClientMetadata,
   timingSafeEqualBase64Url,
 } from "./utils.ts";
-import { FORK_DISPLAY_NAME, FORK_THREAD_LINK_ORIGIN } from "@t3tools/shared/forkBrand";
+import { FORK_THREAD_LINK_ORIGIN } from "@t3tools/shared/forkBrand";
 import { requestUrl } from "../requestUrl.ts";
 
 // Request-derived origins support loopback, Tailscale and tunnels.
@@ -81,7 +81,7 @@ export const protectedResourceMetadata = (
   authorization_servers: [urls.issuer],
   scopes_supported: MCP_OAUTH_SCOPES,
   bearer_methods_supported: ["header"],
-  resource_name: FORK_DISPLAY_NAME,
+  resource_name: "T3 Code",
 });
 
 export const authorizationServerMetadata = (

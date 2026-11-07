@@ -20,7 +20,6 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import { loadCursorSdk } from "./sdk.ts";
 import type { ProviderAuthController } from "@t3tools/provider-core/server/auth";
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const AUTH_TIMEOUT_MS = 300_000;
 
@@ -196,7 +195,7 @@ export const makeCursorAuth = Effect.fn("makeCursorAuth")(function* (options: Cu
             openBrowser: false,
             store: pendingStore,
             signal,
-            apiKeyName: `${FORK_DISPLAY_NAME} - ${options.displayName}`,
+            apiKeyName: `T3 Code - ${options.displayName}`,
             onLoginUrl: (authorizationUrl) => {
               if (active === flow) Queue.offerUnsafe(urls, authorizationUrl);
             },
