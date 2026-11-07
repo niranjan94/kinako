@@ -64,6 +64,7 @@ export function describeProjectMutationFailure(cause: ProjectServiceError): stri
     case "ProjectNotEmptyError":
     case "ProjectConflictError":
     case "ProjectRelocationBlockedError":
+    case "ProjectInvalidError":
       return cause.message;
     case "ProjectOperationError":
       return cause.operation === "normalize-workspace"

@@ -261,9 +261,9 @@ export interface SourceControlDefinition {
   /** Hosts whose issues the server reads; the rest leave issue links as plain links. */
   readonly parseIssueUrl?: (url: URL) => ParsedChangeRequestUrl | null;
   /**
-   * The change request URL a bare `#123` autolink might name, for hosts that write every
-   * reference through their issue route. Only a candidate: the caller must read it as a change
-   * request before treating it as one.
+   * The change request URL a `reference` autolink might name, such as a GitHub `#123` written
+   * through the issue route. Only a candidate: the caller must read it as a change request
+   * before treating it as one.
    */
   readonly changeRequestUrlFromReferenceAutolink: (url: URL) => string | null;
   /**

@@ -300,6 +300,8 @@ export declare namespace Typename {
   export type Actor = "Bot" | "EnterpriseUserAccount" | "Mannequin" | "Organization" | "User"
   /** Every possible `__typename` of interface `GitObject`. */
   export type GitObject = "Blob" | "Commit" | "Tag" | "Tree"
+  /** Every possible `__typename` of union `IssueOrPullRequest`. */
+  export type IssueOrPullRequest = "Issue" | "PullRequest"
   /** Every possible `__typename` of interface `Node`. */
   export type Node =
     | "AddedToMergeQueueEvent" | "AddedToProjectEvent" | "AddedToProjectV2Event" | "AddedToStackEvent" | "App"

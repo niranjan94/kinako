@@ -49,6 +49,7 @@ import {
 import { authScopesFlag } from "./authScopes.ts";
 import { baseDirFlag, DurationFromString } from "./config.ts";
 import { FORK_CLI_NAME, FORK_DISPLAY_NAME, FORK_NPM_PACKAGE_NAME } from "@t3tools/shared/forkBrand";
+import { resolveHostCliCommand } from "./invocation.ts";
 
 const WELL_KNOWN_ENVIRONMENT_PATH = "/.well-known/t3/environment";
 const PAIR_PROBE_TIMEOUT = Duration.millis(2_500);
@@ -66,6 +67,7 @@ export class NoRunningServerError extends Schema.TaggedError<NoRunningServerErro
   {
     checkedStatePaths: Schema.Array(Schema.String),
     inLinkedWorktree: Schema.Boolean,
+    serveCommand: Schema.String,
   },
 ) {
   override get message(): string {
@@ -75,7 +77,7 @@ export class NoRunningServerError extends Schema.TaggedError<NoRunningServerErro
       ...(this.inLinkedWorktree
         ? ["In a linked worktree, pass --base-dir to pair with a server outside it."]
         : []),
-      `Start one with \`${FORK_CLI_NAME} serve\`.`,
+      `Start one with \`${this.serveCommand}\`.`,
     ].join("\n");
   }
 }
@@ -246,7 +248,8 @@ const discoverPairTarget = Effect.fn("pair.discoverPairTarget")(function* (
 ) {
   const bases: Array<string> = [];
   let inLinkedWorktree = false;
-  if (explicitBaseDir !== undefined && explicitBaseDir.trim().length > 0) {
+  const hasExplicitBaseDir = explicitBaseDir !== undefined && explicitBaseDir.trim().length > 0;
+  if (hasExplicitBaseDir) {
     bases.push(yield* resolveBaseDir(explicitBaseDir));
   } else {
     // Same precedence as dev-runner: inside a linked worktree only its own
@@ -293,7 +296,12 @@ const discoverPairTarget = Effect.fn("pair.discoverPairTarget")(function* (
       } satisfies DiscoveredPairTarget;
     }
   }
-  return yield* new NoRunningServerError({ checkedStatePaths, inLinkedWorktree });
+  const baseDirArgs = hasExplicitBaseDir ? ["--base-dir", explicitBaseDir] : [];
+  return yield* new NoRunningServerError({
+    checkedStatePaths,
+    inLinkedWorktree,
+    serveCommand: (yield* resolveHostCliCommand("serve", baseDirArgs)).command,
+  });
 });
 
 /** Use the discovered state directory, independent of ambient config variables. */
