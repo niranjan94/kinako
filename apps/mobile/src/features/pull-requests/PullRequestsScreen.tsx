@@ -434,6 +434,8 @@ export function PullRequestsScreen(
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         renderItem={renderRow}
+        // Lifted above the rows so an iOS filter menu's dismissal morph is not covered.
+        ListHeaderComponentStyle={{ zIndex: 1 }}
         ListHeaderComponent={
           <>
             {showKindToggle ? (

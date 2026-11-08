@@ -174,6 +174,7 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   scheduledTaskThreadModes: Schema.optionalKey(Schema.Boolean),
   /** Server can transcribe 16 kHz mono PCM audio on the environment machine. */
   voiceTranscription: Schema.optionalKey(Schema.Boolean),
+  cloudVoiceTranscription: Schema.optionalKey(Schema.Boolean),
   // Fork additions stay last so upstream's list merges cleanly.
   worktreeSnapshots: Schema.optionalKey(Schema.Boolean),
   /** Server copies the files `worktreeIncludePatterns` selects into new worktrees. */

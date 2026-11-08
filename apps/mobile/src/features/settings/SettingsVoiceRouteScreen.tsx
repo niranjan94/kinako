@@ -30,6 +30,7 @@ import {
   hasEnvironmentVoiceCapture,
 } from "../voice-input/voiceDestination";
 import { VoiceModelSection } from "./VoiceModelSection";
+import { CloudVoiceSection } from "./CloudVoiceSection";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { ThreadSwipeable } from "../home/thread-swipe-actions";
 import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
@@ -242,7 +243,10 @@ export function SettingsVoiceRouteScreen() {
               <EnvironmentChoice
                 key={environment.environmentId}
                 environment={environment}
-                selected={grant?.destination.environmentId === environment.environmentId}
+                selected={
+                  grant?.destination.kind === "environment" &&
+                  grant.destination.environmentId === environment.environmentId
+                }
               />
             ))}
           {isReady && grant && !grantEnvironment ? (
@@ -256,7 +260,27 @@ export function SettingsVoiceRouteScreen() {
             />
           ) : null}
         </SettingsSection>
-        {grantEnvironment ? (
+        {hasEnvironmentVoiceCapture &&
+          environments
+            .filter(
+              (env) =>
+                env.serverConfig?.environment.capabilities.cloudVoiceTranscription ||
+                (grant?.destination.kind === "cloud" &&
+                  grant.destination.environmentId === env.environmentId),
+            )
+            .map((environment) => (
+              <CloudVoiceSection
+                key={environment.environmentId}
+                environment={environment}
+                active={
+                  grant?.destination.kind === "cloud" &&
+                  grant.destination.environmentId === environment.environmentId
+                    ? grant.destination
+                    : null
+                }
+              />
+            ))}
+        {grantEnvironment && grant?.destination.kind === "environment" ? (
           <VoiceModelSection
             environmentId={grantEnvironment.environmentId}
             label={grantEnvironment.label}
