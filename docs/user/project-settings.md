@@ -90,8 +90,9 @@ Under **Destination**, choose where runs go. **New thread each run** keeps every
 run separate. The two one-thread choices start a thread on the first run and post
 later runs there: one continues the same conversation, the other starts each run
 in a fresh session that doesn't see earlier runs, so the thread stays readable
-without the agent's context growing. Moving such a task to another project starts
-a new thread there on its next run.
+without the agent's context growing. To move a one-thread task, pick another
+thread in its project under **Destination**. Moving such a task to another
+project starts a new thread there on its next run.
 
 Deleting a thread also deletes tasks that post into that thread. Tasks that start
 a new thread on each run survive deletion of their previous threads.
@@ -218,6 +219,19 @@ If you move, rename, or restore a project's folder, point the project at its new
 The folder must already exist. Nothing is moved on disk. Threads keep their history, and their next message runs in the new folder. An agent that cannot resume its own session there, such as one that stores sessions by folder, starts a fresh session with the thread's history handed over. Worktrees inside the old folder follow it, and worktrees elsewhere are relinked to the moved repository with `git worktree repair`. If that repair fails, run it yourself from the new folder.
 
 Stop running turns, background tasks, and checkpoint restores first, and save or discard open file edits in the project; the change is refused until they finish. To undo a change, change the path back.
+
+## Fast worktree checkout on macOS
+
+Fast worktree checkout is a beta. Turn it on for each Mac in **Settings → Labs → Fast worktree
+checkout**. T3 Code then keeps a few recent checkouts of each repository in the `caches` folder of
+the T3 home directory. A new worktree is cloned from one of them with APFS copy-on-write, which is
+about twice as fast as writing every file and makes the first `git status` in it fast as well.
+Turning it off deletes the cache.
+
+The first worktree of a repository uses Git's normal checkout and fills the cache. It needs Git 2.42
+or newer. Git's normal checkout is also used for worktrees on a different drive from the T3 home
+directory, sparse checkouts, repositories whose attributes use filters such as Git LFS, and
+repositories whose checkout settings changed.
 
 ## Storage cleanup
 

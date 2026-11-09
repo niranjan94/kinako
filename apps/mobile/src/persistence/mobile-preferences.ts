@@ -119,7 +119,6 @@ export interface Preferences {
   readonly microphones?: ReadonlyArray<MicrophoneEntry>;
   readonly projectGroupingEnabled?: boolean;
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
-  readonly planModeEnabled?: boolean;
   /** Device-local counterpart of web's `contextWindowMeterEnabled`; unset means on. */
   readonly contextWindowIndicatorEnabled?: boolean;
   readonly toolCallVisibility?: ToolCallVisibility;
@@ -208,7 +207,6 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     microphones?: ReadonlyArray<MicrophoneEntry>;
     projectGroupingEnabled?: boolean;
     projectGroupingMode?: SidebarProjectGroupingMode;
-    planModeEnabled?: boolean;
     contextWindowIndicatorEnabled?: boolean;
     toolCallVisibility?: ToolCallVisibility;
     workingShelfEnabled?: boolean;
@@ -335,9 +333,6 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     parsed.projectGroupingMode === "separate"
   ) {
     preferences.projectGroupingMode = parsed.projectGroupingMode;
-  }
-  if (typeof parsed.planModeEnabled === "boolean") {
-    preferences.planModeEnabled = parsed.planModeEnabled;
   }
   if (typeof parsed.contextWindowIndicatorEnabled === "boolean") {
     preferences.contextWindowIndicatorEnabled = parsed.contextWindowIndicatorEnabled;

@@ -166,6 +166,16 @@ the text is an unedited recalled prompt, with the caret on the first visual line
 the last visual line for `ArrowDown`, counting wrapped lines. Editing a recalled prompt turns it
 into a normal draft.
 
+## Suggested next prompt
+
+Turn on **Suggest next prompt** in Settings > Labs. After a Claude or Codex turn completes, the
+empty composer shows a predicted next message. Press `Tab` to fill it in, then edit or send it, or
+press `Escape` to dismiss it. Each suggestion is one extra request that reuses the turn's prompt
+cache, so it uses a little of your plan's usage. Claude skips suggestions on the first turn of a
+thread and near usage limits. Codex needs version 0.165 or later; if T3 Code manages
+Codex, update it in Settings > Providers. Codex follows a change to the setting at once; open Claude
+threads follow it after they restart. Suggestions show on web and desktop.
+
 ## Edit an earlier prompt
 
 On web and desktop, choose **Edit from here** beneath a sent message to rewind
@@ -293,7 +303,7 @@ session** in the command palette on web and desktop. The conversation continues,
 and your next message starts the agent again with the new setup.
 
 Provider commands, `/side`, and `/btw` must start the message to run. T3 Code commands such as
-`/model` and `/plan`, and skill mentions, work on any line.
+`/model` and skill mentions work on any line.
 
 The context meter next to the composer shows how full the thread's context window is. Hover it on web and desktop, or tap it on mobile, to see what fills the window. Claude itemizes the window by category, such as system prompt, tools, memory files, and messages. Other providers report how the last request split into cached input, new input, and output. Claude's breakdown updates when a turn finishes, so the cached and new input split shows while a turn runs. Turn the meter off in **Settings → Chat → Context window indicator** on web and desktop, or **Settings → Chat** on mobile.
 
@@ -306,10 +316,9 @@ earlier messages, and the thread marks where it began with **New session**.
 Earlier messages and diffs stay in the thread. Dismiss the notice above the
 composer to keep the current session instead.
 
-On web and desktop, turn on **Settings → Labs → Legacy → Context
-window indicator (legacy)** to see context usage. The meter is off by default
-and appears once the provider reports usage. Open it for usage details and
-**Compact context** when the provider supports compaction.
+On web and desktop, turn on **Context window** in **Settings → Appearance →
+Thread details** to see context usage in the thread details card. It appears
+once the provider reports usage.
 
 Claude instances can also compact idle threads for you. See
 [compact long conversations](./providers-claude.md#compact-long-conversations).

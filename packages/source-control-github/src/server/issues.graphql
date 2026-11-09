@@ -70,6 +70,7 @@ query IssueDetail($owner: String!, $name: String!, $number: Int!, $after: String
           createdAt
           lastEditedAt
           url
+          isMinimized
           author {
             login
             avatarUrl

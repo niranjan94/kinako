@@ -189,6 +189,8 @@ export const IssueComment = Schema.Struct({
   lastEditedAt: Schema.NullOr(Shared.DateTime),
   /** The HTTP URL for this issue comment */
   url: Shared.URI,
+  /** Returns whether or not a comment has been minimized. */
+  isMinimized: Schema.Boolean,
   /** The actor who authored the comment. */
   author: Schema.NullOr(Schema.Union([
     AuthorUser,
@@ -239,7 +241,7 @@ export const IssueDetail = GraphQL.query("IssueDetail", {
       { name: "after", body: "String" }
     ],
     selections: [
-      { name: "repository", body: ["(owner:$", "owner", " name:$", "name", "){viewerPermission issue(number:$", "number", "){...IssueRow body locked comments(first:100 after:$", "after", "){totalCount pageInfo{hasNextPage endCursor}nodes{id body createdAt lastEditedAt url author{__typename login avatarUrl...on User{name}}}}}}"] }
+      { name: "repository", body: ["(owner:$", "owner", " name:$", "name", "){viewerPermission issue(number:$", "number", "){...IssueRow body locked comments(first:100 after:$", "after", "){totalCount pageInfo{hasNextPage endCursor}nodes{id body createdAt lastEditedAt url isMinimized author{__typename login avatarUrl...on User{name}}}}}}"] }
     ],
     fragments: [
       { name: "IssueRow", body: ["on Issue{number title url state createdAt updatedAt closedAt repository{nameWithOwner}author{__typename login avatarUrl...on User{name}}labels(first:20){nodes{name color}}assignees(first:10){nodes{login avatarUrl name}}}"] }

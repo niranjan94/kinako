@@ -21,6 +21,7 @@ import {
   toReviewerCandidates,
   toReviewThreadCommentsPage,
   toCanWrite,
+  toIssueDetailPage,
   toReviewThreadPage,
   toViewerPermissions,
 } from "./gitHubPullRequestJson.ts";
@@ -108,6 +109,7 @@ const reactionGroups = (groups: ReadonlyArray<Json> | undefined) =>
 const remark = ({ author, reactionGroups: groups, ...raw }: Json) => ({
   body: "",
   lastEditedAt: null,
+  isMinimized: false,
   url: "https://github.com/acme/web/pull/1#discussion",
   ...raw,
   author: actor(author),
@@ -172,6 +174,7 @@ const withReviewDefaults = (raw: string): string => {
       latestReviews: {
         nodes: nodesIn(latestReviews).map((node) => ({
           state: "COMMENTED",
+          isMinimized: false,
           ...node,
           author: actor(node["author"]),
         })),
@@ -233,7 +236,16 @@ function listJson(entries: ReadonlyArray<Record<string, unknown>>): string {
                       ),
                     },
                   }),
-              ...(latestReviews === undefined ? {} : { latestReviews: { nodes: latestReviews } }),
+              ...(latestReviews === undefined
+                ? {}
+                : {
+                    latestReviews: {
+                      nodes: (latestReviews as ReadonlyArray<Json>).map((review) => ({
+                        isMinimized: false,
+                        ...review,
+                      })),
+                    },
+                  }),
               ...(checks === undefined
                 ? {}
                 : { commits: { nodes: [{ commit: { statusCheckRollup: { state: checks } } }] } }),
@@ -283,6 +295,13 @@ describe("pull request list decoding", () => {
             reviewDecision: null,
             latestReviews: [{ author: user("octocat"), state: "COMMENTED" }],
           },
+          {
+            reviewDecision: null,
+            latestReviews: [
+              { author: user("octocat"), state: "APPROVED" },
+              { author: user("drive-by"), state: "CHANGES_REQUESTED", isMinimized: true },
+            ],
+          },
         ]),
       ),
     );
@@ -291,6 +310,7 @@ describe("pull request list decoding", () => {
       "changes-requested",
       "approved",
       null,
+      "approved",
     ]);
   });
 
@@ -469,6 +489,7 @@ describe("pull request detail decoding", () => {
                 (comment) => ({
                   lastEditedAt: null,
                   url: "https://github.com/c",
+                  isMinimized: false,
                   author: null,
                   ...comment,
                 }),
@@ -480,6 +501,7 @@ describe("pull request detail decoding", () => {
                 (review) => ({
                   lastEditedAt: null,
                   url: "https://github.com/r",
+                  isMinimized: false,
                   author: null,
                   submittedAt: null,
                   ...review,
@@ -621,6 +643,29 @@ describe("pull request detail decoding", () => {
     expect(detail.comments.map((comment) => comment.id)).toEqual(["c1", "r5"]);
   });
 
+  it("leaves out the comments and reviews a maintainer hid", () => {
+    const detail = expectSuccess(
+      activity({
+        comments: [
+          { id: "c1", body: "kept", createdAt: "2026-07-04T00:00:00Z" },
+          { id: "c2", body: "spam", createdAt: "2026-07-05T00:00:00Z", isMinimized: true },
+        ],
+        reviews: [
+          {
+            id: "r1",
+            body: "spam",
+            state: "CHANGES_REQUESTED",
+            submittedAt: "2026-07-03T00:00:00Z",
+            isMinimized: true,
+          },
+          { id: "r2", body: "", state: "APPROVED", submittedAt: "2026-07-06T00:00:00Z" },
+        ],
+      }),
+    );
+
+    expect(detail.comments.map((comment) => comment.id)).toEqual(["c1", "r2"]);
+  });
+
   it.each(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"])(
     "keeps a bodyless %s review, which is the event itself",
     (state) => {
@@ -635,6 +680,33 @@ describe("pull request detail decoding", () => {
       expect(detail.comments.map((comment) => comment.id)).toContain("r6");
     },
   );
+});
+
+describe("issue detail decoding", () => {
+  it("leaves out the issue comments a maintainer hid", () => {
+    const page = toIssueDetailPage(
+      {
+        repository: {
+          issue: {
+            number: 7,
+            title: "Crash on launch",
+            url: "https://github.com/acme/app/issues/7",
+            createdAt: "2026-07-01T00:00:00Z",
+            updatedAt: "2026-07-02T00:00:00Z",
+            comments: {
+              nodes: [
+                { id: "c1", body: "kept", createdAt: "2026-07-03T00:00:00Z" },
+                { id: "c2", body: "spam", createdAt: "2026-07-04T00:00:00Z", isMinimized: true },
+              ],
+            },
+          },
+        },
+      },
+      "acme/app",
+    );
+
+    expect(page?.comments.map((comment) => comment.id)).toEqual(["c1"]);
+  });
 });
 
 describe("review thread decoding", () => {
@@ -860,6 +932,37 @@ describe("review thread decoding", () => {
     expect(comments.map((comment) => comment.id)).toEqual(["t1", "t2"]);
   });
 
+  it("leaves out hidden thread comments, and a thread with none left", () => {
+    const result = expectSuccess(
+      decodeReviewThreadsJson(
+        threadsJson([
+          {
+            id: "PRRT_hidden_root",
+            path: "apps/server/src/ws.ts",
+            comments: {
+              nodes: [
+                { id: "t1", createdAt: "2026-07-01T00:00:00Z", isMinimized: true },
+                { id: "t2", createdAt: "2026-07-01T01:00:00Z" },
+              ],
+            },
+          },
+          {
+            id: "PRRT_all_hidden",
+            path: "apps/web/src/main.tsx",
+            comments: {
+              nodes: [{ id: "t3", createdAt: "2026-07-01T00:00:00Z", isMinimized: true }],
+            },
+          },
+        ]),
+      ),
+    );
+
+    expect(result.threads.map((entry) => [entry.thread.id, entry.commentCount])).toEqual([
+      ["PRRT_hidden_root", 1],
+    ]);
+    expect(result.threads[0]?.thread.comments.map((comment) => comment.id)).toEqual(["t2"]);
+  });
+
   it("keeps GitHub's own count of a thread whose comments were not all read", () => {
     const result = expectSuccess(
       decodeReviewThreadsJson(
@@ -883,7 +986,7 @@ describe("review thread decoding", () => {
     });
   });
 
-  it("ends a thread's walk on the last page, which still names a cursor", () => {
+  it("ends a thread's walk on the last page, which still names a cursor, counting what it hid", () => {
     const decoded = expectSuccess(
       decodeReviewThreadCommentsJson(
         JSON.stringify({
@@ -893,7 +996,10 @@ describe("review thread decoding", () => {
               pullRequest: { id: "PR_1" },
               comments: {
                 pageInfo: { hasNextPage: false, endCursor: "Y3Vyc29yOjk" },
-                nodes: [{ id: "t9", body: "last", createdAt: "2026-07-01T00:00:00Z" }],
+                nodes: [
+                  { id: "t8", body: "spam", createdAt: "2026-07-01T00:00:00Z", isMinimized: true },
+                  { id: "t9", body: "last", createdAt: "2026-07-01T00:00:00Z" },
+                ],
               },
             },
           },
@@ -901,6 +1007,7 @@ describe("review thread decoding", () => {
       ),
     );
     expect(decoded.comments.map((comment) => comment.id)).toEqual(["t9"]);
+    expect(decoded.hiddenCount).toBe(1);
     expect(decoded.nextCursor).toBeNull();
   });
 });

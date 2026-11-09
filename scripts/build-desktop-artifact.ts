@@ -2844,6 +2844,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         // macOS 26 offers Messages/Mail codes in every text field unless opted out.
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSLocalNetworkUsageDescription: `${FORK_DISPLAY_NAME} connects to devices on your local network for remote environments and commands run by terminals and coding agents.`,
+        NSCalendarsUsageDescription: `Commands you run in ${FORK_DISPLAY_NAME} may need access to your calendars.`,
+        NSCalendarsFullAccessUsageDescription: `Commands you run in ${FORK_DISPLAY_NAME} may need to read and write your calendar events.`,
+        NSCalendarsWriteOnlyAccessUsageDescription: `Commands you run in ${FORK_DISPLAY_NAME} may need to add events to your calendars.`,
         NSScreenCaptureUsageDescription: `${FORK_DISPLAY_NAME} captures the active window when you use the window capture shortcut.`,
         NSCameraUsageDescription: `${FORK_DISPLAY_NAME} lets commands run by terminals and coding agents use the camera.`,
         NSMicrophoneUsageDescription: `${FORK_DISPLAY_NAME} lets commands run by terminals and coding agents use the microphone.`,
