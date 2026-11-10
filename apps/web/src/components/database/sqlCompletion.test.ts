@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CompletionContext } from "@codemirror/autocomplete";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { sql, PostgreSQL, SQLite } from "@codemirror/lang-sql";
 import type { DatabaseEngine, DatabaseIntrospectScope } from "@t3tools/contracts";
@@ -7,14 +8,14 @@ import { createSqlSchemaCompletion, sqlFunctionCompletion } from "./sqlCompletio
 
 function context(text: string, engine: DatabaseEngine = "postgres") {
   const pos = text.indexOf("|");
-  return new CompletionContext(
-    EditorState.create({
-      doc: text.replace("|", ""),
-      extensions: [sql({ dialect: engine === "postgres" ? PostgreSQL : SQLite })],
-    }),
-    pos,
-    true,
-  );
+  const created = EditorState.create({
+    doc: text.replace("|", ""),
+    extensions: [sql({ dialect: engine === "postgres" ? PostgreSQL : SQLite })],
+  });
+  // A new state parses for only 20ms, which a loaded CI worker can exhaust; an editor view
+  // would finish in the background. Finish here, then take the state that carries the tree.
+  ensureSyntaxTree(created, created.doc.length, 5_000);
+  return new CompletionContext(created.update({}).state, pos, true);
 }
 
 function fixture(engine: DatabaseEngine = "postgres") {
