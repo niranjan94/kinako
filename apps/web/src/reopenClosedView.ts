@@ -4,6 +4,7 @@ import type { OpenPreviewMutation } from "./browser/openFileInPreview";
 import type { ClosedView, ClosedViewEntry } from "./closedViewStore";
 import type { PullRequestListPreferences } from "./components/pullRequest/pullRequestListPreferences";
 import { openPreviewSession } from "./components/preview/openPreviewSession";
+import { useOpenThreadTabsStore } from "./openThreadTabsStore";
 import {
   rightPanelHostRef,
   type RightPanelSurface,
@@ -20,6 +21,7 @@ export interface ReopenOwnerState {
   sideChatExists: boolean;
   shellLive: boolean;
   panel: ThreadRightPanelState;
+  threadTabOpen: boolean;
 }
 
 export function planNextReopen(
@@ -39,11 +41,13 @@ export function planNextReopen(
       break;
     }
     const alreadyOpen =
-      entry.kind === "panel-tab"
-        ? owner.panel.isOpen && owner.panel.surfaces.some((s) => s.id === entry.surface.id)
-        : owner.panel.surfaces.some(
-            (s) => s.kind === "preview" && s.resourceId === entry.snapshot.tabId,
-          );
+      entry.kind === "thread-tab"
+        ? owner.threadTabOpen
+        : entry.kind === "panel-tab"
+          ? owner.panel.isOpen && owner.panel.surfaces.some((s) => s.id === entry.surface.id)
+          : owner.panel.surfaces.some(
+              (s) => s.kind === "preview" && s.resourceId === entry.snapshot.tabId,
+            );
     if (alreadyOpen) {
       drop.push(entry);
       continue;
@@ -103,6 +107,11 @@ export async function reopenClosedView(
 ): Promise<boolean> {
   const panels = useRightPanelStore.getState();
   const ref = view.threadRef;
+
+  if (view.kind === "thread-tab") {
+    useOpenThreadTabsStore.getState().open(ref);
+    return true;
+  }
 
   if (view.kind === "browser") {
     const url = view.snapshot.navStatus._tag === "Idle" ? undefined : view.snapshot.navStatus.url;

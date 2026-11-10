@@ -329,6 +329,19 @@ Use **Layout** to arrange the office and add pets. Layouts, character assignment
 and office preferences are saved in the current browser or desktop app; use
 **Settings → Export Layout** and **Import Layout** to move a layout between devices.
 
+## Thread tabs
+
+On web and desktop, every thread you open gets a tab above the conversation, so the
+threads you are working in stay one click away. Drag a tab to reorder it, and close
+it with its × or a middle-click. Closing the tab you are on shows the next one. A
+thread tab never closes or deletes the thread itself, and `mod+shift+t` brings a
+closed tab back. A dot on a tab means its thread is running or waiting for you.
+
+Tabs are saved in this browser or desktop app. A tab for a machine that is offline
+stays until it reconnects. To hide the strip, turn off **Settings → Appearance →
+Thread tabs**. See [Keybindings](./keybindings.md#commands-with-special-behavior) for
+the tab shortcuts.
+
 ## Side chats
 
 A side chat lets you ask a question about a thread without adding to it. It starts

@@ -450,6 +450,31 @@ describe("chat/editor shortcuts", () => {
     }
   });
 
+  it("switches and closes thread tabs by default without taking terminal keystrokes", () => {
+    for (const platform of ["MacIntel", "Win32", "Linux"]) {
+      const mod = { metaKey: platform === "MacIntel", ctrlKey: platform !== "MacIntel" };
+      for (const [input, command] of [
+        [event({ key: "Tab", ctrlKey: true }), "threadTab.next"],
+        [event({ key: "Tab", ctrlKey: true, shiftKey: true }), "threadTab.previous"],
+        [event({ key: "w", altKey: true, ...mod }), "threadTab.close"],
+      ] as const) {
+        assert.strictEqual(
+          resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+            platform,
+            context: { terminalFocus: false },
+          }),
+          command,
+        );
+        assert.isNull(
+          resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+            platform,
+            context: { terminalFocus: true },
+          }),
+        );
+      }
+    }
+  });
+
   it("preserves a user-configured thread panel shortcut instead of its default", () => {
     const bindings = mergeWithDefaultKeybindings(
       compile([

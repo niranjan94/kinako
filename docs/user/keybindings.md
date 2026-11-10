@@ -175,6 +175,11 @@ field gets its own undo back. Terminals always keep their native shortcut.
 `navigation.back` (`mod+[` by default) and `navigation.forward` (`mod+]`) move
 through the pages you have visited, like a browser's back and forward buttons.
 
+`threadTab.next` (`ctrl+tab`), `threadTab.previous` (`ctrl+shift+tab`), and
+`threadTab.close` (`mod+alt+w`) move through and close [thread tabs](./thread-sidebar.md#thread-tabs).
+`thread.previous` and `thread.next` keep following sidebar order. Most browsers keep
+`ctrl+tab` for their own tabs, so on the web rebind the tab commands if they do nothing.
+
 `chat.new` may ask you to choose a project when there is more than one.
 `chat.newLocal` skips that chooser. Both use your
 [new-thread defaults](./thread-sidebar.md#start-a-thread). `chat.newWithoutProject`
@@ -187,8 +192,8 @@ tab. When nothing remains to close, it does nothing; it never closes the window.
 closes the browser tab; rebind `rightPanel.close` and `terminal.close` to an available
 shortcut such as `alt+w`.
 
-`mod+shift+t` reopens the last closed tab across the app, including files,
-diffs, pull requests, browsers, and devices, in the order you closed them.
+`mod+shift+t` reopens the last closed tab across the app, including thread tabs,
+files, diffs, pull requests, browsers, and devices, in the order you closed them.
 A browser opens in a fresh session without its old page history. Incognito tabs
 can reopen until you reload or quit the app. This shortcut does not undo deleted work.
 Browsers also use it to reopen browser tabs; choose another binding in Settings
