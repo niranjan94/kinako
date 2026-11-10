@@ -41,6 +41,8 @@ import {
 import { useManagedPolicy } from "~/state/managedPolicy";
 import { mintMcpApprovalCodeOn } from "~/state/peerPairingCode";
 import { peerLinkEnvironment } from "~/state/peerLinks";
+import { desktopCloudflareBridge } from "~/state/desktopCloudflare";
+import { publicRouteEnvironment } from "~/state/publicRoute";
 import { useEnvironmentQuery } from "~/state/query";
 import { relayEnvironmentDiscovery } from "~/state/relay";
 import { useEnvironmentScope, useEnvironmentSessionState } from "~/state/session";
@@ -83,21 +85,25 @@ function UseInAnotherAppDialog({ requested }: { readonly requested: EnvironmentI
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : close())}>
       <WizardPopup>
-        {environment !== null && hasCloudPublicConfig() ? (
-          <Wizard key={environment.environmentId} environment={environment} title={title} />
-        ) : (
+        {environment === null ? (
           <>
             <WizardHeader title={title} />
             <WizardPanel>
-              <GateMessage
-                title={
-                  environment === null
-                    ? "Connect to an environment first."
-                    : "T3 Connect is not available in this build."
-                }
-              />
+              <GateMessage title="Connect to an environment first." />
             </WizardPanel>
           </>
+        ) : hasCloudPublicConfig() ? (
+          <T3ConnectWizard
+            key={environment.environmentId}
+            environment={environment}
+            title={title}
+          />
+        ) : (
+          <PublicRouteWizard
+            key={environment.environmentId}
+            environment={environment}
+            title={title}
+          />
         )}
       </WizardPopup>
     </Dialog>
@@ -108,7 +114,7 @@ const STEPS = ["App", "Access", "Connect"] as const;
 type Step = 0 | 1 | 2;
 type Choice = McpApp | "other";
 
-function Wizard({
+function T3ConnectWizard({
   environment,
   title,
 }: {
@@ -116,12 +122,106 @@ function Wizard({
   readonly title: string;
 }) {
   const gate = useGate(environment);
+  return (
+    <Wizard
+      environment={environment}
+      title={title}
+      mcpUrl={gate.gate.kind === "open" ? gate.gate.mcpUrl : null}
+      blocked={<GateScreen environment={environment} gate={gate} />}
+    />
+  );
+}
+
+/** Builds without T3 Connect reach cloud apps through the environment's own public route. */
+function PublicRouteWizard({
+  environment,
+  title,
+}: {
+  readonly environment: EnvironmentPresentation;
+  readonly title: string;
+}) {
+  const result = useAtomValue(
+    publicRouteEnvironment.status({ environmentId: environment.environmentId, input: {} }),
+  );
+  const status = result._tag === "Success" ? result.value : null;
+  const connected = environment.connection.phase === "connected";
+  const serverConfig = environment.serverConfig;
+  const approvalCodes =
+    serverConfig === null
+      ? undefined
+      : serverConfig.environment.capabilities.mcpApprovalCodes === true;
+  const mcpUrl =
+    connected && approvalCodes === true && status?.state === "live" && status.hostname !== null
+      ? `https://${status.hostname}/mcp`
+      : null;
+  const name = environment.label;
+  return (
+    <Wizard
+      environment={environment}
+      title={title}
+      mcpUrl={mcpUrl}
+      blocked={
+        !connected ? (
+          <GateMessage title={`Connect to ${name} first.`} />
+        ) : approvalCodes === false ? (
+          <GateMessage title={`Update ${APP_BASE_NAME} on ${name}`} />
+        ) : result._tag === "Initial" || approvalCodes === undefined ? (
+          <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner size="sm" tone="muted" />
+            Checking the public route…
+          </p>
+        ) : result._tag === "Failure" ? (
+          <GateMessage title={`Can't check the public route on ${name}`} />
+        ) : status?.state === "failed" ? (
+          <GateMessage
+            title={`${name}'s public route is not running`}
+            lines={[status.detail ?? "The tunnel connector failed to start."]}
+          >
+            <ManageAccessButton environment={environment} label="Open Sharing & access" />
+          </GateMessage>
+        ) : status?.state === "connecting" || status?.state === "cloudflared-missing" ? (
+          <GateMessage title={`${name}'s public route is connecting`}>
+            <ManageAccessButton environment={environment} label="Open Sharing & access" />
+          </GateMessage>
+        ) : (
+          <GateMessage
+            title={`Turn on a public route for ${name}`}
+            lines={[
+              `Apps like Poke and Claude run in the cloud. They need a public https address to reach ${name}.`,
+              "A public route gives it one through your Cloudflare account. Each app still needs your approval.",
+              ...(desktopCloudflareBridge()
+                ? []
+                : [`Public routes are set up from the ${APP_BASE_NAME} desktop app.`]),
+            ]}
+          >
+            {desktopCloudflareBridge() ? (
+              <ManageAccessButton environment={environment} label="Open Sharing & access" />
+            ) : null}
+          </GateMessage>
+        )
+      }
+    />
+  );
+}
+
+function Wizard({
+  environment,
+  title,
+  mcpUrl,
+  blocked,
+}: {
+  readonly environment: EnvironmentPresentation;
+  readonly title: string;
+  /** Null until the environment has a public address; `blocked` shows instead. */
+  readonly mcpUrl: string | null;
+  readonly blocked: ReactNode;
+}) {
   const levels = useGrantableLevels(environment);
   const [step, setStep] = useState<Step>(0);
   const [choice, setChoice] = useState<Choice | null>(null);
   const [picked, setPicked] = useState<AuthMcpClientAccess | null>(null);
   const access = picked ?? DEFAULT_LEVELS.find((level) => levels.get(level) === undefined) ?? null;
-  const open = gate.gate.kind === "open";
+  const open = mcpUrl !== null;
   const appName = choice === null || choice === "other" ? "the app" : choice.name;
   return (
     <>
@@ -136,8 +236,8 @@ function Wizard({
         ) : null}
       </WizardHeader>
       <WizardPanel>
-        {gate.gate.kind !== "open" ? (
-          <GateScreen environment={environment} gate={gate} />
+        {mcpUrl === null ? (
+          blocked
         ) : step === 0 ? (
           <AppStep choice={choice} onChoose={setChoice} />
         ) : step === 1 ? (
@@ -162,12 +262,7 @@ function Wizard({
             </RadioGroup>
           </section>
         ) : choice !== null && access !== null ? (
-          <ConnectStep
-            environment={environment}
-            mcpUrl={gate.gate.mcpUrl}
-            choice={choice}
-            access={access}
-          />
+          <ConnectStep environment={environment} mcpUrl={mcpUrl} choice={choice} access={access} />
         ) : null}
       </WizardPanel>
       {open ? (
