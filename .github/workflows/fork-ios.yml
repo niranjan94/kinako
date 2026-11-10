@@ -88,6 +88,10 @@ jobs:
       - name: Build
         if: steps.expo-token.outputs.present == 'true'
         working-directory: apps/mobile
+        # The default macOS temp dir is behind the /var -> /private/var symlink, so the
+        # widget bundle's absolute initialLayout import fails to resolve in Metro.
+        env:
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
         run: eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/kinako.ipa"
 
       - name: Submit to TestFlight
