@@ -7,12 +7,13 @@ description: Merge pingdotgg/t3code's main into this Kinako fork and resolve the
 
 This repository is a fork of `pingdotgg/t3code` that ships as **Kinako**. Its identity (display name, `~/.kinako`, the `kinako` CLI and release archives, `io.niranjan.kinako` app IDs, `kinako://` schemes, service names, default ports 3873 and 8443, SnapShot helper names, `kinako/<hex>` worktree branches) is routed through `packages/shared/src/forkBrand.ts`. FORK.md has the full list under "Rebrand seams". Read it before resolving anything.
 
-A merge can break Kinako in four ways, and only the first is loud:
+A merge can break Kinako in five ways, and only the first is loud:
 
 1. **Conflicts** where upstream edited a line the fork changed.
 2. **Silent regressions** where upstream adds a new `t3code://` link, `~/.t3` path, `t3` executable name, `com.t3tools.t3code` ID or 3773 port in code the fork never touched. Git merges these cleanly, and the next build collides with an installed upstream T3 Code or sends links to the wrong app.
 3. **Silent reverts** where a clean merge or a careless resolution drops a `FORK_*` reference the fork had.
 4. **New exposure** where upstream changes what anyone can reach without a credential. Kinako hosts can sit on the public internet through public routes, so an upstream route that reads a body or writes state before authenticating, or a resolution that drops one of the fork's guards, is a security bug in Kinako even if it is harmless for upstream (step 6).
+5. **Connect-only features** where upstream adds something that needs a public address and gets it only from T3 Connect. Kinako has no T3 Connect, so it ships dead unless it also works through a public route (FORK.md "Public routes stand in for T3 Connect").
 
 Merge often. Conflict count grows with the gap, not with upstream's activity: a week of upstream is a dozen conflicts, a month is a hundred.
 
@@ -130,7 +131,16 @@ git diff --cached -U0 HEAD -- . ':!pnpm-lock.yaml' | grep -E '^\+[^+]' \
 
 The first command looks only at lines the merge added. `--drift` lists files whose code lost `FORK_*` references or Kinako literals against the fork's side; each entry is a revert unless upstream deleted that code on purpose.
 
-Done when every section 4 line, every added-line hit and every drift entry has a decision.
+Then look for new T3 Connect dependencies:
+
+```bash
+git diff --cached -U0 HEAD -- . ':!pnpm-lock.yaml' | grep -E '^\+[^+]' \
+  | grep -nE 'hasCloudPublicConfig|inspectConnector|tunnelHostname|relayHookBaseUrl|CloudManagedEndpointRuntime'
+```
+
+Each hit is either an account feature (stays hidden) or one that only needs a public address, which gets a public route fallback and a line in FORK.md's list.
+
+Done when every section 4 line, every added-line hit, every drift entry and every Connect hit has a decision.
 
 ## 6. Audit the unauthenticated surface
 
@@ -189,6 +199,7 @@ Report:
 - How many upstream commits came in, how many files conflicted, and how many hunks the classifier resolved.
 - Each conflicted file that needed judgement and how it was resolved, in a sentence each.
 - Each upstream literal changed to a Kinako value, and any left alone on purpose that a reviewer might question.
+- Each new T3 Connect dependency and whether it got a public route fallback.
 - The unauthenticated surface audit: what upstream changed there, the decision for each change, and any fork fix it needed.
 - Each upstream migration that touches a fork-altered table, whether the fork schema test passed, and any fork migration added to restore schema.
 - New workflows to disable.

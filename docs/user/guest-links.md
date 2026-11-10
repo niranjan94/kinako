@@ -7,8 +7,8 @@ until you send or dismiss it.
 ## Share a thread
 
 Guest links are a beta. Turn on **Settings → Labs → Guest links** for the machine that runs the
-thread. They also need [T3 Connect](./remote-access.md): sign in and link that machine, because the
-link points at its T3 Connect address. The machine must stay online while the guest uses it.
+thread. They also need a live [public route](./remote-access.md#public-routes-with-your-cloudflare-account) on that machine, because the
+link points at its public address. The machine must stay online while the guest uses it.
 While the setting is off, every guest link on that machine stops working; links that have not
 expired work again when you turn it back on.
 
@@ -21,7 +21,7 @@ expired work again when you turn it back on.
    message, and **Send** includes them.
 
 Choose **Stop sharing** to end the link at once. Archiving the thread, creating a new link, or
-unlinking the machine from T3 Connect also ends it. You can send or dismiss guest messages from the mobile app.
+turning off the machine's public route also ends it. You can send or dismiss guest messages from the mobile app.
 
 ## What the guest sees
 

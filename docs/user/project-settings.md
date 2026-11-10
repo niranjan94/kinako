@@ -107,8 +107,10 @@ Leaving an edited form asks before discarding unsaved changes.
 In **Settings → Scheduled tasks**, choose **On webhook**
 as a task's schedule to run it whenever another service calls its URL, such as
 GitHub on a new pull request or a CI job that failed. A public URL needs a
-[T3 Connect](remote-access.md) managed tunnel; after you save the task, copy
-its URL from the editor. Without one, the editor shows only the URL's path.
+[public route](remote-access.md#public-routes-with-your-cloudflare-account) on
+the environment; after you save the task, copy its URL from the editor. Without
+one, the editor shows the address your device uses to reach the environment, or
+only the URL's path.
 **Rotate** replaces the URL and the old one stops working.
 
 The prompt decides what the agent sees. Placeholders pull values out of the
