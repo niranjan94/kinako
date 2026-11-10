@@ -449,10 +449,30 @@ export const recordPinnedRuntimeLauncher = Effect.fn("cloud.pinned_runtime.recor
   },
 );
 
+const VERSION_EXECUTABLE_PATTERN = new RegExp(
+  `^(?!\\.\\.)[^\\\\/]+[\\\\/]${FORK_CLI_NAME}(?:\\.exe)?$`,
+  "i",
+);
+
+/** Whether `candidate` is a version's own executable, `<versionsDir>/<version>/kinako[.exe]`. */
+export function isVersionExecutable(
+  path: Path.Path,
+  versionsDir: string,
+  candidate: string,
+): boolean {
+  const relative = path.relative(versionsDir, path.resolve(candidate));
+  // On another Windows drive, relative() returns the absolute path, like `D:\kinako.exe`.
+  return !path.isAbsolute(relative) && VERSION_EXECUTABLE_PATTERN.test(relative);
+}
+
 /** The executable a `t3.cmd` shim written by the install script or `t3 update` runs. */
 export const windowsShimTarget = (contents: string) => /^"([^"]+)"/m.exec(contents)?.[1];
 
-/** Where the `kinako` launchers written by the install scripts and `kinako update` point. */
+/** Like {@link windowsShimTarget}, but only for a shim exactly as written; never a user's wrapper. */
+export const generatedWindowsShimTarget = (contents: string) =>
+  /^@echo off\r?\n"([^"]+)" %\*\s*$/.exec(contents)?.[1];
+
+/** Where the `t3` launchers written by the install scripts and `t3 update` point. */
 const shellLauncherTargets = Effect.fn("cloud.pinned_runtime.shell_launcher_targets")(function* (
   baseDir: string,
 ) {

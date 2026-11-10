@@ -28,3 +28,5 @@ export const APP_DISPLAY_NAME =
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
 export const APP_BUILD_SOURCE = import.meta.env.APP_BUILD_SOURCE || null;
 export const DESKTOP_DOWNLOAD_URL = `https://github.com/${FORK_REPOSITORY}/releases`;
+// Redirects to the App Store or Google Play to match the phone that opens it.
+export const MOBILE_APP_URL = "https://t3.codes/mobile";
