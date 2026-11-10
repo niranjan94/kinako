@@ -56,6 +56,16 @@ Merge conflicts come from fork changes that touch the same lines as upstream. Ke
 
 Fork-only migrations live in `apps/server/src/persistence/Migrations/fork/` and record into their own `fork_sql_migrations` ledger (`ForkMigrations.ts`), so upstream migrations keep upstream's ids and merge without renumbering. Fork migrations run after every upstream migration; give a new one the next fork id and record the latest upstream id beside it in `firstRanAfterUpstream` (`ForkMigrations.test.ts`), which checks that later upstream migrations never drop fork schema from existing databases. Builds before this split recorded fork migrations in upstream's ledger at shifted ids; `splitForkMigrationLedger` moves them once on startup, and those older builds refuse to open the database afterwards. The mobile store promotion row is omitted until Kinako has public distribution links.
 
+## Public routes stand in for T3 Connect
+
+T3 Connect is two things: an account service (sign-in, relay discovery, push notifications, agent activity, holding webhooks while offline) and a tunnel that gives a host a public https address. Kinako has no account service, so those features stay hidden. The tunnel part is replaced by public routes, so any upstream feature that only needs a public address must also work when the host has a public route. Prefer T3 Connect's address when both exist, so upstream behavior is unchanged.
+
+Upstream code usually reaches the tunnel through `hasCloudPublicConfig()` on clients, or `CloudManagedEndpointRuntime.inspectConnector` and the relay hook URL on the server. Current fallbacks, each with a test or a client-only gate:
+
+- MCP "Use in another app": `PublicRouteWizard` in `apps/web/src/components/mcp/UseInAnotherAppDialog.tsx`.
+- Guest share links: `servedHostnames` in `apps/server/src/guest/GuestShareService.ts`.
+- Scheduled task webhook URLs: `webhookBaseUrl` in `apps/server/src/scheduledTasks/ScheduledTaskService.ts`.
+
 ## Unauthenticated surface
 
 Kinako hosts can be on the public internet through public routes, so anything a request reaches before a credential check is security-critical here even where upstream treats it as LAN-only. Every upstream merge audits it (`merge-upstream` skill, step 6): `scan-upstream.sh` section 5 lists what upstream changed there, and `scan-upstream.sh --guards` fails if a resolution dropped one of the fork's guards. A new route, body read, cookie, forwarded-header check or pre-auth write from upstream gets a decision in the merge report, and an upstream bug found there gets its own fix commit with a test.
