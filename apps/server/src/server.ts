@@ -159,7 +159,7 @@ import * as HeldHooksWaker from "./relay/HeldHooksWaker.ts";
 import * as McpOAuth from "./auth/McpOAuth.ts";
 import * as McpOAuthHttp from "./auth/mcpOAuthHttp.ts";
 import {
-  relayHookBaseUrl,
+  webhookBaseUrl,
   ScheduledTaskWebhookOrigin,
 } from "./scheduledTasks/ScheduledTaskService.ts";
 import {
@@ -559,19 +559,21 @@ const layerScheduledTaskWebhookOrigin = Layer.effect(
   ScheduledTaskWebhookOrigin,
   Effect.gen(function* () {
     const secrets = yield* ServerSecretStore.ServerSecretStore;
+    const publicRoute = yield* PublicRoute.PublicRoute;
     return Effect.gen(function* () {
       const [relayUrl, tunnelConfig] = yield* Effect.all([
         secrets.get(RELAY_URL_SECRET),
         secrets.get(CLOUD_ENDPOINT_RUNTIME_CONFIG),
       ]).pipe(Effect.orElseSucceed(() => [Option.none(), Option.none()] as const));
-      if (Option.isNone(relayUrl) || Option.isNone(tunnelConfig)) {
-        return { relayHookBaseUrl: null };
-      }
-      const config = decodeRuntimeConfig(new TextDecoder().decode(tunnelConfig.value));
+      const linked = Option.isSome(relayUrl) && Option.isSome(tunnelConfig);
+      const config = linked
+        ? decodeRuntimeConfig(new TextDecoder().decode(tunnelConfig.value))
+        : Option.none();
       return {
-        relayHookBaseUrl: relayHookBaseUrl({
-          relayUrl: new TextDecoder().decode(relayUrl.value),
+        hookBaseUrl: webhookBaseUrl({
+          relayUrl: linked ? new TextDecoder().decode(relayUrl.value) : null,
           tunnelName: Option.isSome(config) ? config.value.tunnelName : undefined,
+          publicBaseUrl: yield* publicRoute.publicBaseUrl,
         }),
       };
     });

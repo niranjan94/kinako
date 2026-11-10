@@ -13,6 +13,7 @@ import {
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  type PublicRouteState,
   RunId,
   ThreadId,
   TurnItemId,
@@ -52,6 +53,7 @@ import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterReg
 import * as ResourceCleanupService from "../orchestration-v2/ResourceCleanupService.ts";
 import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as PublicRoute from "../publicRoute/PublicRoute.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
 import * as GuestShareService from "./GuestShareService.ts";
@@ -84,6 +86,21 @@ const layerConnect = Layer.mock(CloudManagedEndpointRuntime)({
     readyConnections: 1,
     hostname: value,
     protocol: "http2",
+  })),
+});
+// The hostname of the user's own Cloudflare public route, null while none is configured.
+const publicHostname = Ref.makeUnsafe<string | null>(null);
+const publicState = Ref.makeUnsafe<PublicRouteState>("live");
+const layerPublicRoute = Layer.mock(PublicRoute.PublicRoute)({
+  publicBaseUrl: Effect.map(Ref.get(publicHostname), (value) =>
+    value === null ? null : `https://${value}/`,
+  ),
+  getStatus: Effect.map(Ref.get(publicState), (state) => ({
+    state,
+    hostname: null,
+    tunnelId: null,
+    originPort: 1,
+    detail: null,
   })),
 });
 const layerProviders = Layer.mock(ProviderRegistry.ProviderRegistry)({
@@ -144,6 +161,7 @@ const layerTest = GuestShareService.layer.pipe(
   Layer.provide(layerProviders),
   Layer.provideMerge(ServerSettings.layerTest({ guestSharingEnabled: true })),
   Layer.provide(layerConnect),
+  Layer.provide(layerPublicRoute),
   Layer.provideMerge(layerAnalytics),
   Layer.provide(ServerSecretStore.layer),
   Layer.provideMerge(layerConfig),
@@ -154,6 +172,8 @@ const threadId = ThreadId.make("thread:guest-share-service");
 
 const shareThreadFor = Effect.fn(function* (threadId: ThreadId) {
   yield* Ref.set(hostname, "env.t3.test");
+  yield* Ref.set(publicHostname, null);
+  yield* Ref.set(publicState, "live");
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   yield* orchestrator.dispatch({
     type: "thread.create",
@@ -335,6 +355,32 @@ it.effect("closes an open guest stream when T3 Connect stops serving the link's 
     assert.isTrue(Exit.isFailure(yield* Effect.exit(guestShares.stream(session))));
     yield* Ref.set(hostname, "env.t3.test");
     assert.isTrue(Exit.isSuccess(yield* Effect.exit(guestShares.stream(session))));
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("shares through the public route while T3 Connect is off", () =>
+  Effect.gen(function* () {
+    const { guestShares } = yield* shareThread;
+    yield* Ref.set(publicHostname, "kn-public.example.com");
+    const preferred = yield* guestShares.create({ threadId });
+    assert.isTrue(preferred.url.startsWith("https://env.t3.test/guest#"));
+    yield* Ref.set(hostname, null);
+    const { url } = yield* guestShares.create({ threadId });
+    assert.isTrue(url.startsWith("https://kn-public.example.com/guest#"));
+    const { token: session, shareId } = yield* guestShares.redeem({
+      credential: url.slice(url.indexOf("#") + 1),
+      name: "Sam",
+    });
+    yield* guestShares.submit(session, { shareId, text: "Hello" }, []);
+    // A reconnecting route keeps its guests but mints no link nobody could open yet.
+    yield* Ref.set(publicState, "connecting");
+    yield* guestShares.submit(session, { shareId, text: "Still here" }, []);
+    assert.isTrue(Exit.isFailure(yield* Effect.exit(guestShares.create({ threadId }))));
+    yield* Ref.set(publicHostname, null);
+    const submitted = yield* Effect.exit(
+      guestShares.submit(session, { shareId, text: "Again" }, []),
+    );
+    assert.isTrue(Exit.isFailure(submitted));
   }).pipe(Effect.provide(layerTest)),
 );
 

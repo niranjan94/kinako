@@ -50,7 +50,7 @@ export class PublicRoute extends Context.Service<
     readonly disable: () => Effect.Effect<PublicRouteStatus, PublicRouteError>;
     readonly getStatus: Effect.Effect<PublicRouteStatus>;
     readonly status: Stream.Stream<PublicRouteStatus>;
-    /** The HTTPS base URL clients can learn, while a route is configured. */
+    /** The HTTPS base URL clients can learn, while a route is configured and policy allows it. */
     readonly publicBaseUrl: Effect.Effect<string | null>;
   }
 >()("t3/publicRoute/PublicRoute") {}
@@ -261,7 +261,9 @@ export const make = Effect.gen(function* () {
     getStatus: SubscriptionRef.get(statusRef),
     status: SubscriptionRef.changes(statusRef),
     publicBaseUrl: Ref.get(routeRef).pipe(
-      Effect.map((route) => (route === null ? null : `https://${route.hostname}/`)),
+      Effect.map((route) =>
+        route === null || !allowedByPolicy ? null : `https://${route.hostname}/`,
+      ),
     ),
   });
 });
