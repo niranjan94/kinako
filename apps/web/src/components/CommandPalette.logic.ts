@@ -73,7 +73,7 @@ export type SearchOverlayMode = "command" | "files" | "content";
 
 export type CommandPaletteOpenIntent =
   | { readonly kind: "add-project"; readonly environmentId?: EnvironmentId }
-  | { readonly kind: "new-thread-in" | "change-theme" }
+  | { readonly kind: "new-thread-in" | "change-theme" | "split-chat" }
   | {
       readonly kind: "search";
       readonly query: string;
@@ -102,6 +102,7 @@ export type CommandPaletteUiAction =
   | { readonly _tag: "OpenAddProject"; readonly environmentId?: EnvironmentId }
   | { readonly _tag: "OpenNewThreadIn" }
   | { readonly _tag: "OpenChangeTheme" }
+  | { readonly _tag: "OpenSplitChat" }
   | {
       readonly _tag: "OpenChildSearch";
       readonly mode: "files" | "content";
@@ -162,6 +163,8 @@ export function reduceCommandPaletteUiState(
       return openWithIntent({ kind: "new-thread-in" });
     case "OpenChangeTheme":
       return openWithIntent({ kind: "change-theme" });
+    case "OpenSplitChat":
+      return openWithIntent({ kind: "split-chat" });
   }
 }
 

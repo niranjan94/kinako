@@ -450,6 +450,32 @@ describe("chat/editor shortcuts", () => {
     }
   });
 
+  it("splits, closes, and cycles chat panes by default without taking terminal keystrokes", () => {
+    for (const platform of ["MacIntel", "Win32", "Linux"]) {
+      const mod = { metaKey: platform === "MacIntel", ctrlKey: platform !== "MacIntel" };
+      for (const [input, command] of [
+        [event({ key: "\\", ...mod }), "chat.split"],
+        // Shift reports "|" on a US layout.
+        [event({ key: "|", code: "Backslash", shiftKey: true, ...mod }), "chat.split.close"],
+        [event({ key: "\\", altKey: true, ...mod }), "chat.split.focusNext"],
+      ] as const) {
+        assert.strictEqual(
+          resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+            platform,
+            context: { terminalFocus: false },
+          }),
+          command,
+        );
+        assert.isNull(
+          resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+            platform,
+            context: { terminalFocus: true },
+          }),
+        );
+      }
+    }
+  });
+
   it("preserves a user-configured thread panel shortcut instead of its default", () => {
     const bindings = mergeWithDefaultKeybindings(
       compile([

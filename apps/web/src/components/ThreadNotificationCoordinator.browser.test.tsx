@@ -9,7 +9,6 @@ import { stubGlobal } from "../../test/render";
 
 const state = vi.hoisted(() => ({
   mode: "off" as ClientSettings["notificationMode"],
-  active: { environmentId: "env-1", threadId: "other-thread" },
   focused: true,
   add: vi.fn(
     (_toast: { title: string; description: string; actionProps: { onClick: () => void } }) =>
@@ -68,6 +67,9 @@ vi.mock(import("./ui/toast"), async (original) => {
   };
 });
 
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+
+import { showThreadOnScreen } from "../onScreenThreads";
 import { startThreadNotifications } from "./ThreadNotificationCoordinator";
 
 const shellAtom = Atom.family((_id: string) => Atom.make<unknown>(null));
@@ -127,7 +129,6 @@ function setup() {
   vi.clearAllMocks();
   Object.assign(state, {
     mode: "off",
-    active: { environmentId: "env-1", threadId: "other-thread" },
     focused: true,
   });
   const stack = new AsyncDisposableStack();
@@ -139,17 +140,20 @@ function setup() {
   stack.use(
     stubGlobal("Notification", Object.assign(state.notification, { permission: "granted" })),
   );
-  const router = {
-    get state() {
-      return { matches: [{ params: state.active }] };
-    },
-    navigate: state.navigate,
-  } as unknown as AnyRouter;
+  const router = { navigate: state.navigate } as unknown as AnyRouter;
   return {
     start: () => {
       stack.defer(startThreadNotifications(registry, router));
     },
     setShell: (value: unknown) => registry.set(shellAtom("env-1"), value),
+    showOnScreen: (threadId: string) => {
+      stack.defer(
+        showThreadOnScreen({
+          environmentId: EnvironmentId.make("env-1"),
+          threadId: ThreadId.make(threadId),
+        }),
+      );
+    },
     [Symbol.asyncDispose]: () => stack.disposeAsync(),
   };
 }
@@ -191,10 +195,11 @@ describe("snooze reminders", () => {
       );
     },
   );
-  it("suppresses the focused thread, including sound", async () => {
+  // The routed thread, a side chat, or a split pane: whichever is visible, not just the URL's.
+  it("suppresses a thread on screen, including sound", async () => {
     await using app = setup();
     state.mode = "notifications-and-sound";
-    state.active.threadId = "thread-1";
+    app.showOnScreen("thread-1");
     app.setShell(liveShell(null));
     app.start();
     app.setShell(liveShell(WAKE_AT));
