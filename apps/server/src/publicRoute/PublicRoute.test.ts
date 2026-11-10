@@ -150,6 +150,28 @@ describe("PublicRoute", () => {
     }),
   );
 
+  it.effect("advertises no address for a stored route the managed policy refuses", () =>
+    Effect.gen(function* () {
+      const fixture = yield* makeFixture(
+        JSON.stringify({
+          hostname: HOSTNAME,
+          tunnelId: "tunnel-1",
+          connectorToken: "stored-token",
+        }),
+        { schemaVersion: 1, organization: "Acme", limits: { connect: false } },
+      );
+      yield* Effect.gen(function* () {
+        const publicRoute = yield* PublicRoute.PublicRoute;
+        const refused = yield* publicRoute.status.pipe(
+          Stream.filter((status) => status.state === "failed"),
+          Stream.runHead,
+        );
+        expect(Option.getOrThrow(refused).hostname).toBe(HOSTNAME);
+        expect(yield* publicRoute.publicBaseUrl).toBeNull();
+      }).pipe(Effect.provide(fixture.layer));
+    }),
+  );
+
   it.effect("keeps a just-enabled route through rejections while Cloudflare propagates it", () =>
     Effect.gen(function* () {
       const fixture = yield* makeFixture();

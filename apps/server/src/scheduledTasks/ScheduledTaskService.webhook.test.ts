@@ -172,7 +172,7 @@ const withService = <A, E>(
     readonly failLaunches?: { remaining: number };
     readonly gate?: Deferred.Deferred<void>;
     readonly gateForTask?: (input: LaunchInput) => Deferred.Deferred<void> | undefined;
-    readonly relayHookBaseUrl?: string;
+    readonly hookBaseUrl?: string;
     readonly sql?: SqlClient.SqlClient;
     readonly workers?: Map<string, Effect.Effect<void>>;
     readonly policy?: ManagedPolicyDocument;
@@ -252,7 +252,7 @@ const withService = <A, E>(
       }),
       Layer.succeed(
         ScheduledTaskService.ScheduledTaskWebhookOrigin,
-        Effect.succeed({ relayHookBaseUrl: options.relayHookBaseUrl ?? null }),
+        Effect.succeed({ hookBaseUrl: options.hookBaseUrl ?? null }),
       ),
       ManagedPolicy.layerTest(options.policy),
     );
@@ -329,6 +329,26 @@ it("builds the relay hook URL from the managed tunnel's key, never the environme
   }
 });
 
+it("prefers the relay hook URL and falls back to the public route", () => {
+  const tunnelName = "t3coderelay-managedendpoint-0123456789abcdef";
+  const publicBaseUrl = "https://kn-public.example.com/";
+  assert.equal(
+    ScheduledTaskService.webhookBaseUrl({
+      relayUrl: "https://relay.example.com",
+      tunnelName,
+      publicBaseUrl,
+    }),
+    "https://relay.example.com/v1/hooks/0123456789abcdef",
+  );
+  assert.equal(
+    ScheduledTaskService.webhookBaseUrl({ relayUrl: null, tunnelName, publicBaseUrl }),
+    `https://kn-public.example.com${ScheduledTaskService.WEBHOOK_ROUTE_PREFIX}`,
+  );
+  assert.isNull(
+    ScheduledTaskService.webhookBaseUrl({ relayUrl: null, tunnelName, publicBaseUrl: null }),
+  );
+});
+
 it.effect("gives webhook tasks a relay URL when the environment has a managed tunnel", () =>
   withService(
     ({ service }) =>
@@ -340,7 +360,7 @@ it.effect("gives webhook tasks a relay URL when the environment has a managed tu
           `https://relay.example.com/v1/hooks/0123456789abcdef/scheduled-task%3Ahook/${token}`,
         );
       }),
-    { relayHookBaseUrl: "https://relay.example.com/v1/hooks/0123456789abcdef" },
+    { hookBaseUrl: "https://relay.example.com/v1/hooks/0123456789abcdef" },
   ),
 );
 

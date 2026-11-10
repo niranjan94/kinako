@@ -56,6 +56,7 @@ import {
   threadStreamEventItem,
 } from "../orchestration-v2/WireProjection.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as PublicRoute from "../publicRoute/PublicRoute.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
 import { guestShareView, guestThreadModel } from "./guestView.ts";
@@ -223,6 +224,7 @@ const make = Effect.gen(function* () {
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const managedEndpoint = yield* CloudManagedEndpointRuntime;
+  const publicRoute = yield* PublicRoute.PublicRoute;
   const { attachmentsDir } = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const random = yield* SecureRandom.SecureRandom;
@@ -279,8 +281,16 @@ const make = Effect.gen(function* () {
     return decodeSessionClaims(base64UrlDecodeUtf8(parts.payload));
   });
 
-  const connectHostname = managedEndpoint.inspectConnector.pipe(
-    Effect.map((facts) => facts?.hostname ?? null),
+  // T3 Connect's tunnel first, then the user's own public route; a link stays bound to its host.
+  const servedHostnames = Effect.all([
+    managedEndpoint.inspectConnector,
+    publicRoute.publicBaseUrl,
+  ]).pipe(
+    Effect.map(([facts, publicBaseUrl]) =>
+      [facts?.hostname, publicBaseUrl === null ? null : new URL(publicBaseUrl).hostname].filter(
+        (host): host is string => typeof host === "string",
+      ),
+    ),
   );
   // A beta: while it is off, no link opens and every guest request is refused.
   const sharingEnabled = serverSettings.getSettings.pipe(
@@ -306,7 +316,7 @@ const make = Effect.gen(function* () {
       Effect.orDie,
     );
 
-  /** Checks a token against the live share: same id, not expired, and Connect still serving it. */
+  /** Checks a token against the live share: same id, not expired, and its host still served. */
   const authorize = Effect.fn("GuestShareService.authorize")(function* (
     token: string,
     kind: "invite" | "session",
@@ -328,7 +338,7 @@ const make = Effect.gen(function* () {
       thread.deletedAt !== null ||
       DateTime.toEpochMillis(now) >= Date.parse(share.expiresAt) ||
       (kind === "session" && share.guestName === null) ||
-      (yield* connectHostname) !== share.host
+      !(yield* servedHostnames).includes(share.host)
     ) {
       return yield* inactive;
     }
@@ -339,7 +349,18 @@ const make = Effect.gen(function* () {
     if (!(yield* sharingEnabled)) {
       return yield* new GuestShareCreateError({ reason: "disabled" });
     }
-    const host = yield* connectHostname;
+    const [connectHost, publicHost] = yield* Effect.all([
+      managedEndpoint.inspectConnector.pipe(Effect.map((facts) => facts?.hostname ?? null)),
+      // Existing sessions ride out a route reconnecting; a new link waits until it answers.
+      Effect.all([publicRoute.getStatus, publicRoute.publicBaseUrl]).pipe(
+        Effect.map(([status, publicBaseUrl]) =>
+          status.state === "live" && publicBaseUrl !== null
+            ? new URL(publicBaseUrl).hostname
+            : null,
+        ),
+      ),
+    ]);
+    const host = connectHost ?? publicHost;
     if (host === null) {
       return yield* new GuestShareCreateError({ reason: "connect_unavailable" });
     }
@@ -590,14 +611,14 @@ const make = Effect.gen(function* () {
         }),
       ),
       Stream.takeUntil((event) => event.type === "ended"),
-      // Unlinking T3 Connect closes it quietly, so a tunnel that comes back on the same host
-      // keeps the guest in. Turning the beta off closes it the same way. Closing and expiry end
-      // it above, with `ended`.
+      // Losing its host (T3 Connect unlinked, public route off) closes it quietly, so a host
+      // that comes back keeps the guest in. Turning the beta off closes it the same way. Closing
+      // and expiry end it above, with `ended`.
       Stream.interruptWhen(
-        Effect.all([connectHostname, sharingEnabled]).pipe(
+        Effect.all([servedHostnames, sharingEnabled]).pipe(
           Effect.repeat({
             schedule: Schedule.spaced(ACCESS_RECHECK_INTERVAL),
-            until: ([host, enabled]) => host !== share.host || !enabled,
+            until: ([hosts, enabled]) => !hosts.includes(share.host) || !enabled,
           }),
         ),
       ),
