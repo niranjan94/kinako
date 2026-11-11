@@ -41,8 +41,9 @@ function DrawerTab({
     </button>
   );
   return (
+    // Sits above the drawer's taller touch resize handle so the whole tab keeps its taps.
     <div
-      className={`relative flex shrink-0 items-center border-r pl-2 pr-1 ${active ? "bg-background after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary" : "text-muted-foreground"}`}
+      className={`relative flex shrink-0 items-center border-r pl-2 pr-1 any-pointer-coarse:z-30 ${active ? "bg-background after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-primary" : "text-muted-foreground"}`}
     >
       {hint ? <DatabaseHint label={hint}>{button}</DatabaseHint> : button}
       {children}
