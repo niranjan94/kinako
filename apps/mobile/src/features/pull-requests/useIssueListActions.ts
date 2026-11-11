@@ -52,7 +52,7 @@ export function useIssueListActions() {
         issueHandoffMenuAction(
           "send",
           projects,
-          Platform.OS === "ios" ? "sparkles" : "auto_awesome",
+          Platform.OS === "ios" ? "hammer" : "build",
           disabled,
         ),
         issueHandoffMenuAction(

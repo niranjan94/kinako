@@ -72,7 +72,7 @@
     "node-pty": "^1.2.0-beta.15",
     "pg": "^8.23.0",
     "pg-cursor": "^2.22.1",
-    "playwright-core": "1.60.0",
+    "playwright-core": "1.64.1",
     "proper-lockfile": "4.1.2",
     "saxes": "6.0.0",
     "stream-chain": "^4.2.5",

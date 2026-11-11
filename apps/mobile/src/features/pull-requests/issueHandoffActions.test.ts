@@ -64,12 +64,12 @@ describe("issue handoff projects", () => {
 
 describe("issue handoff menu", () => {
   it("asks for a project only when there is a choice", () => {
-    const single = issueHandoffMenuAction("send", [project("a")], "sparkles", false);
+    const single = issueHandoffMenuAction("send", [project("a")], "hammer", false);
     expect(single).not.toHaveProperty("subactions");
     expect(single.attributes.disabled).toBe(false);
     const several = issueHandoffMenuAction("ask", [project("a"), project("b")], "q", false);
     expect(several.subactions?.map((action) => action.id)).toEqual(["ask:a", "ask:b"]);
-    expect(issueHandoffMenuAction("send", [], "sparkles", false).attributes.disabled).toBe(true);
+    expect(issueHandoffMenuAction("send", [], "hammer", false).attributes.disabled).toBe(true);
   });
 
   it("reads back the chosen action and project", () => {

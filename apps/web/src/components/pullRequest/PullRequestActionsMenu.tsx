@@ -24,7 +24,7 @@ import {
   MessageCircleQuestionIcon,
   MoreHorizontalIcon,
   RotateCcwIcon,
-  SparklesIcon,
+  ScrollTextIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useId, useState } from "react";
@@ -289,7 +289,7 @@ export function PullRequestActionsMenu({
         </MenuItem>
         {canWriteGuide ? (
           <MenuItem disabled={guideRunning} onClick={writeGuide}>
-            <SparklesIcon className="size-3.5" />
+            <ScrollTextIcon className="size-3.5" />
             {guideRunning ? "Writing guide..." : !guideWritten ? "Write guide" : "Rewrite guide"}
           </MenuItem>
         ) : null}

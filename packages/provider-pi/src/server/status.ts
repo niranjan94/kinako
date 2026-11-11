@@ -31,8 +31,9 @@ import {
   buildServerProvider,
   DEFAULT_TIMEOUT_MS,
   isCommandMissingCause,
-  parseGenericCliVersion,
+  parseCliVersionResult,
   providerModelsFromSettings,
+  providerProbeEnvironment,
   spawnAndCollect,
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
@@ -206,7 +207,7 @@ export const discoverPiCommandsForCwd = Effect.fn("discoverPiCommandsForCwd")(
     }
     const connection = yield* makePiDiscoveryConnection(
       piSettings,
-      environment,
+      providerProbeEnvironment(environment),
       launchArgs.args,
       cwd,
     );
@@ -351,7 +352,8 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
     });
   }
 
-  const versionResult = yield* runPiVersionCommand(piSettings, environment).pipe(
+  const probeEnvironment = providerProbeEnvironment(environment);
+  const versionResult = yield* runPiVersionCommand(piSettings, probeEnvironment).pipe(
     Effect.timeoutOption(VERSION_PROBE_TIMEOUT_MS),
     Effect.result,
   );
@@ -393,7 +395,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
   }
 
   const versionOutput = versionResult.success.value;
-  const version = parseGenericCliVersion(`${versionOutput.stdout}\n${versionOutput.stderr}`);
+  const version = parseCliVersionResult(versionOutput);
   if (versionOutput.code !== 0) {
     return buildServerProvider({
       presentation: PI_PRESENTATION,
@@ -461,7 +463,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
 
   const discoveryExit = yield* discoverPiViaRpc(
     piSettings,
-    environment,
+    probeEnvironment,
     resolvedLaunchArgs.args,
     cwd,
   ).pipe(Effect.timeoutOption(PI_RPC_DISCOVERY_TIMEOUT_MS), Effect.exit);
@@ -508,7 +510,7 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
       ? undefined
       : yield* describeUnavailablePiModel(
           piSettings,
-          environment,
+          probeEnvironment,
           version,
           resolvedLaunchArgs.args,
           discovery.unavailableActiveModel,

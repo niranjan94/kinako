@@ -51,22 +51,22 @@ device is connected over, so an agent on the same device can reach it.
 
 ## Approve a sign-in
 
-The first time an agent connects, it opens a sign-in page on the environment.
-The page names the agent and where its access goes:
+The first time an agent connects, it opens a sign-in page. When the agent
+reaches the environment through T3 Connect, the page opens on the T3 Code web
+app: sign in with the T3 Connect account the environment is linked to and
+approve there, without a code. Otherwise the page opens on the environment.
+Either page names the agent and where its access goes:
 
 - For an agent on your computer, approval returns to a `localhost` address on
   the computer that opened the page.
 - For a hosted agent, approval goes to that service, such as `chatgpt.com`.
   Anyone who runs that service gets the access.
 
-Only approve a sign-in you just started. To approve, enter a code from
-**Use T3 Code in another app (MCP)**, **Settings → Sharing & access**, or
-`t3 auth pairing create` on the host. A browser already signed in to the
-environment with permission to manage access can approve without a code.
-
-When the page opens on the environment's T3 Connect address, choose the level
-and select **Approve with T3 Connect** instead. Sign in with the T3 Connect
-account the environment is linked to, and the sign-in completes without a code.
+Only approve a sign-in you just started. On the environment's own page, enter a
+code from **Use T3 Code in another app (MCP)**, **Settings → Sharing & access**,
+or `t3 auth pairing create` on the host. A browser already signed in to the
+environment with permission to manage access can approve without a code. On the
+web app, **Use a sign-in code instead** opens the environment's own page.
 
 A code from **Use T3 Code in another app (MCP)** already carries the level you
 picked there. With another code, choose what the agent may do here: **Auto** is

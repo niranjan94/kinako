@@ -197,6 +197,7 @@ function makeHarness(options: HarnessOptions = {}) {
               : Option.none(),
         ),
       getByWorkspaceRoot: () => Effect.succeedSome(project),
+      workspaceScanDirectory: () => Effect.die("unused"),
       snapshot: Effect.die("unused"),
       getShell: () => Effect.die("unused"),
       listShells: () => Effect.die("unused"),
@@ -1574,7 +1575,7 @@ it.effect(
               headSha: "abc",
             },
           } as never),
-        git: { isRepository: () => Effect.succeed(true) },
+        git: { repositoryRoot: (cwd: string) => Effect.succeed(cwd) },
       });
       yield* Effect.gen(function* () {
         const launches = yield* ThreadLaunch.ThreadLaunchService;
@@ -1622,7 +1623,7 @@ it.effect("names an additional worktree on its own when the thread has no worktr
         Effect.succeed({
           worktree: { path: `${input.cwd}-worktree`, refName: input.newRefName, headSha: "abc" },
         } as never),
-      git: { isRepository: () => Effect.succeed(true) },
+      git: { repositoryRoot: (cwd: string) => Effect.succeed(cwd) },
     });
     yield* Effect.gen(function* () {
       const launches = yield* ThreadLaunch.ThreadLaunchService;
@@ -1661,7 +1662,7 @@ it.effect("fails the launch when an additional worktree directory is not a repos
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const folder = yield* fs.makeTempDirectoryScoped();
-    const harness = makeHarness({ git: { isRepository: () => Effect.succeed(false) } });
+    const harness = makeHarness({ git: { repositoryRoot: () => Effect.succeed(null) } });
     yield* Effect.gen(function* () {
       const launches = yield* ThreadLaunch.ThreadLaunchService;
       const launched = yield* launches.launch({

@@ -13,12 +13,14 @@ import { extractJsonObject, fromLenientJson } from "@t3tools/shared/schemaJson";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -54,7 +56,10 @@ const SSH_READY_PROBE_TIMEOUT_MS = 1_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const TUNNEL_STDERR_TAIL_CHARS = 16_384;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
-const REMOTE_LAUNCH_TIMEOUT_MS = 90_000;
+const REMOTE_LAUNCH_BASE_TIMEOUT_MS = 90_000;
+// Matches the node-script launch command's ssh run without the launch lock wait.
+const SSH_TUNNEL_CONNECT_TIMEOUT_MS = REMOTE_LAUNCH_BASE_TIMEOUT_MS;
+const SSH_TUNNEL_FORWARD_PROBE_INTERVAL_MS = 100;
 // The service launcher gives its server five seconds to exit, so stopping waits past that in 100 ms ticks.
 const REMOTE_STOP_WAIT_TICKS = 100;
 // Every route to a host shares one server record; route state directories are hex digests, so no collision.
@@ -69,6 +74,17 @@ const REMOTE_ARCHIVE_DOWNLOAD_SECONDS = 240;
 const REMOTE_ARCHIVE_LOCK_WAIT_SECONDS = 360;
 const REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS = 900_000;
 const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
+// A launch holds the home lock through an owned server's readiness, a fresh start's readiness,
+// a reuse probe and two server stops; each probe may overrun its deadline by one request.
+const REMOTE_LAUNCH_LOCK_WAIT_SECONDS = Math.ceil(
+  (2 * REMOTE_READY_TIMEOUT_MS +
+    REMOTE_REUSE_READY_TIMEOUT_MS +
+    2 * REMOTE_STOP_WAIT_TICKS * 100 +
+    4 * SSH_READY_PROBE_TIMEOUT_MS) /
+    1000,
+);
+const REMOTE_LAUNCH_TIMEOUT_MS =
+  REMOTE_LAUNCH_LOCK_WAIT_SECONDS * 1000 + REMOTE_LAUNCH_BASE_TIMEOUT_MS;
 
 export interface RemoteT3RunnerOptions {
   readonly nodeScriptPath?: string | null;
@@ -503,17 +519,14 @@ if ! t3_runtime_ready; then
   trap 'rm -rf "$T3_LOCK"' EXIT
 fi
 if ! t3_runtime_ready; then
-  case "$(uname -s)" in
-    Darwin) T3_PLATFORM="darwin" ;;
-    Linux) T3_PLATFORM="linux" ;;
-    *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -s)" >&2; exit 1 ;;
+  # Keep aligned with CLI_ARCHIVE_PLATFORM_KEYS in packages/shared/src/cliRelease.ts.
+  case "$(uname -s) $(uname -m)" in
+    "Darwin arm64") T3_PLATFORM_KEY="darwin-arm64" ;;
+    "Linux arm64" | "Linux aarch64") T3_PLATFORM_KEY="linux-arm64" ;;
+    "Linux x86_64" | "Linux amd64") T3_PLATFORM_KEY="linux-x64" ;;
+    *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -s) $(uname -m)" >&2; exit 1 ;;
   esac
-  case "$(uname -m)" in
-    arm64 | aarch64) T3_ARCH="arm64" ;;
-    x86_64 | amd64) T3_ARCH="x64" ;;
-    *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -m)" >&2; exit 1 ;;
-  esac
-  T3_ARCHIVE="${FORK_CLI_NAME}-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"
+  T3_ARCHIVE="${FORK_CLI_NAME}-$T3_ARCHIVE_VERSION-$T3_PLATFORM_KEY.tar.gz"
   T3_STAGING="$(mktemp -d "$HOME/${FORK_HOME_DIR_NAME}/runtime/versions/.staging-XXXXXX")"
   trap 'rm -rf "$T3_STAGING" "$T3_LOCK"' EXIT
   t3_fetch() {
@@ -590,16 +603,25 @@ SERVER_RUNNER_FILE="$SERVER_DIR/run-t3.sh"
 LOG_FILE="$SERVER_DIR/server.log"
 RUNNER_FILE="$STATE_DIR/run-t3.sh"
 RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
+LAUNCH_LOCK="$LAUNCH_DIR/.launch.lock"
+LAUNCH_BREAK_LOCK="$LAUNCH_LOCK.break"
 mkdir -p "$STATE_DIR" "$SERVER_DIR"
-cleanup_runner_next() {
+cleanup_launch() {
   rm -f "$RUNNER_NEXT"
+  for OWNED_LOCK in "$LAUNCH_LOCK" "$LAUNCH_BREAK_LOCK"; do
+    if [ "$(cat "$OWNED_LOCK" 2>/dev/null || true)" = "$$" ]; then
+      rm -f "$OWNED_LOCK"
+    fi
+  done
 }
-trap cleanup_runner_next EXIT
+trap cleanup_launch EXIT
+# A dropped SSH session signals the launch (PIPE on its next write); exit so
+# the lock is released.
+trap 'exit 1' HUP INT PIPE TERM
 cat >"$RUNNER_NEXT" <<'SH'
 @@T3_RUNNER_SCRIPT@@
 SH
-mv "$RUNNER_NEXT" "$RUNNER_FILE"
-chmod 700 "$RUNNER_FILE"
+chmod 700 "$RUNNER_NEXT"
 T3_ARCHIVE_MODE=@@T3_ARCHIVE_MODE@@
 # Release archives run under the service launcher so the server can replace
 # itself when a client asks it to update. A dev checkout has no pinned
@@ -616,11 +638,54 @@ if [ "$T3_ARCHIVE_MODE" = "1" ]; then
   # The archive ships the helpers below inside the executable; the remote
   # needs no Node at all. Resolving the runner once here also downloads the
   # archive before the port and readiness probes rely on it.
-  "$RUNNER_FILE" --version >/dev/null
+  "$RUNNER_NEXT" --version >/dev/null
 elif ! ensure_remote_node_path; then
   printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
 fi
+# Recovery runs under its own lock and re-reads the owner there, so a waiter
+# that judged an earlier lock stale cannot remove its successor's lock. No
+# launch removes another's recovery lock: only SIGKILL inside these lines
+# leaves one behind, and the wait below then fails naming it.
+discard_stale_launch_lock() {
+  (set -C; printf '%s\\n' "$$" >"$LAUNCH_BREAK_LOCK") 2>/dev/null || return 1
+  if [ "$(cat "$LAUNCH_LOCK" 2>/dev/null || true)" = "$1" ]; then
+    rm -f "$LAUNCH_LOCK"
+  fi
+  rm -f "$LAUNCH_BREAK_LOCK"
+}
+# Concurrent launches share this home's owner lock and may share this record.
+# Hold the lock from comparing the runner until the server is recorded and
+# ready, so a waiting launch reuses that server instead of starting or
+# replacing one.
+LAUNCH_LOCK_WAITED=0
+LAUNCH_LOCK_UNOWNED=0
+while ! (set -C; printf '%s\\n' "$$" >"$LAUNCH_LOCK") 2>/dev/null; do
+  LAUNCH_LOCK_OWNER="$(cat "$LAUNCH_LOCK" 2>/dev/null || true)"
+  if [ -n "$LAUNCH_LOCK_OWNER" ]; then
+    LAUNCH_LOCK_UNOWNED=0
+    if ! kill -0 "$LAUNCH_LOCK_OWNER" 2>/dev/null && discard_stale_launch_lock "$LAUNCH_LOCK_OWNER"; then
+      continue
+    fi
+  else
+    LAUNCH_LOCK_UNOWNED=$((LAUNCH_LOCK_UNOWNED + 1))
+    if [ "$LAUNCH_LOCK_UNOWNED" -ge 5 ] && discard_stale_launch_lock ""; then
+      LAUNCH_LOCK_UNOWNED=0
+      continue
+    fi
+  fi
+  if [ "$LAUNCH_LOCK_WAITED" -ge @@T3_LAUNCH_LOCK_WAIT_SECONDS@@ ]; then
+    if [ -e "$LAUNCH_BREAK_LOCK" ]; then
+      printf 'A T3 server launch stopped while recovering %s. If no launch is running, delete %s.\\n' "$LAUNCH_LOCK" "$LAUNCH_BREAK_LOCK" >&2
+    else
+      printf 'Another T3 server launch has held %s for too long.\\n' "$LAUNCH_LOCK" >&2
+    fi
+    exit 1
+  fi
+  sleep 1
+  LAUNCH_LOCK_WAITED=$((LAUNCH_LOCK_WAITED + 1))
+done
+mv "$RUNNER_NEXT" "$RUNNER_FILE"
 pick_port() {
   if [ "$T3_ARCHIVE_MODE" = "1" ]; then
     "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@T3_DEFAULT_REMOTE_PORT@@" "@@T3_REMOTE_PORT_SCAN_WINDOW@@"
@@ -941,6 +1006,7 @@ function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
     T3_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
     T3_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
     T3_STOP_WAIT_TICKS: String(REMOTE_STOP_WAIT_TICKS),
+    T3_LAUNCH_LOCK_WAIT_SECONDS: String(REMOTE_LAUNCH_LOCK_WAIT_SECONDS),
   });
 }
 
@@ -1229,6 +1295,29 @@ const reserveLocalTunnelPort = Effect.fn("ssh/tunnel.reserveLocalTunnelPort")(fu
   return yield* net.reserveLoopbackPort();
 });
 
+// ssh only binds the forward after it connects, which can take ConnectTimeout per dead address.
+const waitForTunnelForward = Effect.fn("ssh/tunnel.waitForTunnelForward")(function* (input: {
+  readonly target: DesktopSshEnvironmentTarget;
+  readonly localPort: number;
+}) {
+  const net = yield* NetService.NetService;
+  yield* net.hasListenerOnHost(input.localPort, "127.0.0.1").pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(Duration.millis(SSH_TUNNEL_FORWARD_PROBE_INTERVAL_MS)),
+      until: (listening) => listening,
+    }),
+    Effect.timeoutOrElse({
+      duration: Duration.millis(SSH_TUNNEL_CONNECT_TIMEOUT_MS),
+      orElse: () =>
+        Effect.fail(
+          new SshReadinessError({
+            message: `SSH connection to ${input.target.alias} did not come up within ${SSH_TUNNEL_CONNECT_TIMEOUT_MS}ms.`,
+          }),
+        ),
+    }),
+  );
+});
+
 const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: {
   readonly key: string;
   readonly resolvedTarget: DesktopSshEnvironmentTarget;
@@ -1406,10 +1495,14 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     }),
   );
   yield* Effect.raceFirst(
-    waitForHttpReady({
-      baseUrl: input.httpBaseUrl,
-      timeoutMs: SSH_READY_TIMEOUT_MS,
-    }),
+    waitForTunnelForward({ target: input.resolvedTarget, localPort: input.localPort }).pipe(
+      Effect.andThen(
+        waitForHttpReady({
+          baseUrl: input.httpBaseUrl,
+          timeoutMs: SSH_READY_TIMEOUT_MS,
+        }),
+      ),
+    ),
     exitFailure,
   ).pipe(
     Effect.tap(() =>

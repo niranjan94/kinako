@@ -291,6 +291,7 @@ export const make = Effect.gen(function* () {
       mcpModeLimitHeader: true,
       linkFence: true,
       mcpApprovalCodes: true,
+      mcpHostedApproval: true,
       // Fork additions stay last so upstream's list merges cleanly.
       worktreeSnapshots: true,
       worktreeIncludePatterns: true,

@@ -330,7 +330,7 @@ const make = Effect.gen(function* () {
         return yield* fail(`Additional directory ${directory.path} does not exist.`);
       }
       if (directory.mode !== "worktree" || directory.worktreePath !== null) continue;
-      if (!(yield* git.isRepository(directory.path).pipe(Effect.mapError(fail)))) {
+      if ((yield* git.repositoryRoot(directory.path).pipe(Effect.mapError(fail))) === null) {
         return yield* fail(
           `Additional directory ${directory.path} is not a Git repository, so it cannot use worktree mode.`,
         );
@@ -559,6 +559,7 @@ const make = Effect.gen(function* () {
               attachments: message.attachments,
               ...(message.context ? { context: message.context } : {}),
               modelSelection,
+              projectId: input.projectId,
             })
             .pipe(
               Effect.map((result) => ({
