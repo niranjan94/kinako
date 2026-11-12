@@ -9,12 +9,13 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect has no free-space query.
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's access check has no execute flag.
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as SqlClient from "effect/sql/SqlClient";
 import { isSqlError } from "effect/sql/SqlError";
 
+import { DiskSpaceCheckError, readDiskSpace } from "../diskSpace.ts";
 import * as ProjectionMaintenance from "../orchestration-v2/ProjectionMaintenance.ts";
 import { rebuildMessageSearch } from "../orchestration-v2/messageSearchIndex.ts";
 
@@ -60,15 +61,6 @@ export class LegacyDatabaseRemoveError extends Schema.TaggedError<LegacyDatabase
 ) {
   override get message() {
     return "Could not delete the database from before 0.1.0. Check that this user can write to the data directory.";
-  }
-}
-
-export class DiskSpaceCheckError extends Schema.TaggedError<DiskSpaceCheckError>()(
-  "DiskSpaceCheckError",
-  { path: Schema.String, cause: Schema.Defect() },
-) {
-  override get message() {
-    return "Could not check free disk space.";
   }
 }
 
@@ -329,10 +321,7 @@ const sqliteTempDirectory = Effect.gen(function* () {
 });
 
 const freeBytes = (directory: string) =>
-  Effect.tryPromise({
-    try: () => NodeFSP.statfs(directory),
-    catch: (cause) => new DiskSpaceCheckError({ path: directory, cause }),
-  }).pipe(Effect.map((stats) => stats.bavail * stats.bsize));
+  readDiskSpace(directory).pipe(Effect.map((space) => space.availableBytes));
 
 /**
  * VACUUM copies the live pages to a temporary file, then writes them again to the WAL.
