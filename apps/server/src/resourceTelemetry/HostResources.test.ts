@@ -1,4 +1,7 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- mocks the statfs call HostResources makes.
+import type * as NodeFSP from "node:fs/promises";
 import type * as NodeOS from "node:os";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
@@ -10,6 +13,7 @@ import { ChildProcessSpawner } from "effect/process";
 import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vite-plus/test";
 
+import { ServerConfig } from "../config.ts";
 import * as HostResources from "./HostResources.ts";
 
 // An 8-CPU host; every cpus() call advances each CPU by 100 ms at `host.busy` utilization.
@@ -32,9 +36,26 @@ vi.mock("node:os", async (importOriginal) => {
     },
   };
 });
-const setup = (busy = 0) => {
+const disk = vi.hoisted(() => ({
+  paths: [] as string[],
+  stats: null as { bsize: number; blocks: number; bavail: number } | null,
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof NodeFSP>();
+  return {
+    ...actual,
+    statfs: async (path: string) => {
+      disk.paths.push(path);
+      if (disk.stats === null) throw new Error("statfs unavailable");
+      return disk.stats;
+    },
+  };
+});
+const setup = (busy = 0, stats: typeof disk.stats = null) => {
   host.busy = busy;
   host.reads = 0;
+  disk.paths = [];
+  disk.stats = stats;
 };
 
 const GiB = 1024 ** 3;
@@ -54,6 +75,11 @@ const unlimitedCgroup = {
 const linuxHost = (files: Record<string, ReadonlyArray<string>>) => {
   const reads = new Map<string, number>();
   return HostResources.layer.pipe(
+    Layer.provideMerge(
+      ServerConfig.layerTest(process.cwd(), { prefix: "t3-host-resources-" }).pipe(
+        Layer.provide(NodeServices.layer),
+      ),
+    ),
     Layer.provide(
       Layer.mergeAll(
         FileSystem.layerNoop({
@@ -224,4 +250,83 @@ describe("HostResources.layer", () => {
       ),
     ),
   );
+
+  it.effect("reports free space on the data directory's file system", () =>
+    Effect.gen(function* () {
+      setup(0, { bsize: 4096, blocks: (100 * GiB) / 4096, bavail: (40 * GiB) / 4096 });
+      const snapshot = yield* read;
+      const { baseDir } = yield* ServerConfig;
+
+      assert.deepStrictEqual(disk.paths, [baseDir]);
+      assert.strictEqual(snapshot.diskTotalBytes, 100 * GiB);
+      assert.strictEqual(snapshot.diskAvailableBytes, 40 * GiB);
+    }).pipe(Effect.provide(linuxHost(unlimitedCgroup))),
+  );
+
+  it.effect("still reports CPU and memory when the disk cannot be read", () =>
+    Effect.gen(function* () {
+      setup();
+      const snapshot = yield* read;
+
+      assert.strictEqual(snapshot.availableMemoryBytes, 2 * GiB);
+      assert.isFalse("diskTotalBytes" in snapshot);
+      assert.isFalse("diskAvailableBytes" in snapshot);
+    }).pipe(Effect.provide(linuxHost(unlimitedCgroup))),
+  );
+
+  it.effect("records a 30-second history with CPU averaged across each interval", () =>
+    Effect.gen(function* () {
+      setup(0.25, { bsize: 4096, blocks: (100 * GiB) / 4096, bavail: (40 * GiB) / 4096 });
+      const host = yield* HostResources.HostResources;
+      // The first tick takes the CPU baseline; samples land at 60s and 90s.
+      yield* TestClock.adjust("90 seconds");
+      const history = yield* host.history({ windowMs: 10 * 60_000, bucketMs: 60_000 });
+
+      assert.strictEqual(history.sampleIntervalMs, 30_000);
+      assert.strictEqual(history.endsAt, 120_000);
+      assert.strictEqual(history.buckets.length, 10);
+      assert.isTrue(history.buckets.slice(0, 9).every((bucket) => bucket === null));
+      assert.deepStrictEqual(history.buckets[9], {
+        cpuAverage: 0.25,
+        cpuPeak: 0.25,
+        memoryAverage: 0.5,
+        memoryPeak: 0.5,
+        diskUsed: 0.6,
+      });
+    }).pipe(Effect.provide(linuxHost(unlimitedCgroup))),
+  );
+});
+
+describe("bucketHostResourcesHistory", () => {
+  const sample = (sampledAt: number, cpuUtilization: number | null) => ({
+    sampledAt,
+    cpuUtilization,
+    cpuCount: 4,
+    availableMemoryBytes: 3 * GiB,
+    totalMemoryBytes: 4 * GiB,
+  });
+
+  it("aligns buckets to a fixed grid, leaves gaps empty, and caps the bucket count", () => {
+    const samples = [sample(0, 0.1), sample(30_000, 0.5), sample(150_000, null)];
+    const history = HostResources.bucketHostResourcesHistory(samples, {
+      windowMs: 180_000,
+      bucketMs: 60_000,
+      now: 170_000,
+    });
+
+    assert.strictEqual(history.endsAt, 180_000);
+    assert.deepStrictEqual(history.buckets, [
+      { cpuAverage: 0.3, cpuPeak: 0.5, memoryAverage: 0.25, memoryPeak: 0.25, diskUsed: null },
+      null,
+      { cpuAverage: null, cpuPeak: null, memoryAverage: 0.25, memoryPeak: 0.25, diskUsed: null },
+    ]);
+
+    const day = HostResources.bucketHostResourcesHistory([], {
+      windowMs: 7 * 24 * 60 * 60_000,
+      bucketMs: 1,
+      now: 0,
+    });
+    assert.isAtMost(day.buckets.length, 500);
+    assert.isAtMost(day.buckets.length * day.bucketMs, 24 * 60 * 60_000 + day.bucketMs);
+  });
 });
