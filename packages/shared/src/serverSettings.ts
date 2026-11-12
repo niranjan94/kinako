@@ -375,6 +375,26 @@ function patchedIdleCompaction(
   return globalIdleCompaction(current) === "off" ? "off" : "onReturn";
 }
 
+/** Creates an unconfigured default slot when needed and skips an instance of a different driver. */
+function withProviderCustomModels(
+  providerInstances: ServerSettings["providerInstances"],
+  changes: NonNullable<ServerSettingsPatch["setProviderCustomModels"]>,
+): ServerSettings["providerInstances"] {
+  if (changes.length === 0) return providerInstances;
+  const next = { ...providerInstances };
+  for (const { provider, driver, customModels } of changes) {
+    const instance = Object.hasOwn(next, provider) ? next[provider] : undefined;
+    if (instance === undefined) {
+      if (provider !== defaultInstanceIdForDriver(driver) || customModels.length === 0) continue;
+    } else if (instance.driver !== driver) {
+      continue;
+    }
+    const config = Predicate.isObject(instance?.config) ? instance.config : {};
+    next[provider] = { ...(instance ?? { driver }), config: { ...config, customModels } };
+  }
+  return next;
+}
+
 export function applyServerSettingsPatch(
   current: ServerSettings,
   rawPatch: ServerSettingsPatch,
@@ -386,6 +406,7 @@ export function applyServerSettingsPatch(
     setModelFavorites,
     setModelsHidden,
     setProviderModelOrder,
+    setProviderCustomModels,
     providerModelPreferences,
     automaticGitFetchInterval,
     providerHealthRefreshInterval,
@@ -536,8 +557,13 @@ export function applyServerSettingsPatch(
     ...(backgroundActivity === undefined && backgroundActivityPatch !== undefined
       ? { backgroundActivity: backgroundActivityPatch }
       : {}),
-    ...(patch.providerInstances !== undefined
-      ? { providerInstances: patch.providerInstances }
+    ...(patch.providerInstances !== undefined || setProviderCustomModels !== undefined
+      ? {
+          providerInstances: withProviderCustomModels(
+            patch.providerInstances ?? current.providerInstances,
+            setProviderCustomModels ?? [],
+          ),
+        }
       : {}),
     ...(patch.worktreesDirectory !== undefined &&
     patch.worktreesDirectory !== current.worktreesDirectory

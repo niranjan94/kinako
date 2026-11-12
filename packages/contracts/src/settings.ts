@@ -1805,6 +1805,16 @@ export const ServerSettingsPatch = Schema.Struct({
   setProviderModelOrder: Schema.optionalKey(
     Schema.Struct({ provider: ProviderInstanceId, modelOrder: Schema.Array(TrimmedString) }),
   ),
+  // Replaces only config.customModels, so a write from another environment keeps this host's paths and env.
+  setProviderCustomModels: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        provider: ProviderInstanceId,
+        driver: ProviderDriverKind,
+        customModels: Schema.Array(CustomModelSetting),
+      }),
+    ),
+  ),
   favorites: Schema.optionalKey(ModelFavorites),
   providerModelPreferences: Schema.optionalKey(ProviderModelPreferences),
   // Applied under the settings service's write lock, only while still unset.
@@ -1995,6 +2005,7 @@ export function requiredScopesForServerSettingsPatch(
     if (
       key === "providers" ||
       key === "providerInstances" ||
+      key === "setProviderCustomModels" ||
       key === "usageLimitSources" ||
       key === "textGenerators" ||
       key === "secretProviders"

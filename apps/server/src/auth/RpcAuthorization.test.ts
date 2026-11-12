@@ -362,6 +362,19 @@ describe("settings mutation authorization", () => {
           patch: { secretProviders: { [SecretProviderId.make("personal")]: null } },
         }).pipe(Effect.flip),
       ).toMatchObject({ requiredPermission: AuthProvidersManageScope });
+      expect(
+        yield* client[WS_METHODS.serverUpdateSettings]({
+          patch: {
+            setProviderCustomModels: [
+              {
+                provider: ProviderInstanceId.make("codex"),
+                driver: ProviderDriverKind.make("codex"),
+                customModels: ["gpt-x"],
+              },
+            ],
+          },
+        }).pipe(Effect.flip),
+      ).toMatchObject({ requiredPermission: AuthProvidersManageScope });
       expect(handled).toBe(false);
     }).pipe(Effect.scoped),
   );
