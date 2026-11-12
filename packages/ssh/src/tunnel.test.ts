@@ -1136,6 +1136,18 @@ esac
         yield* host.stop(routeA);
         assert.isTrue(isAlive(otherPid));
 
+        // Launchers that saved no start time, with a host-wide and a per-route record.
+        yield* writeStaleRecord;
+        yield* host.fs.remove(`${serverDir}/started`);
+        yield* host.stop(routeA);
+        assert.isTrue(isAlive(otherPid));
+        const legacyDir = `${host.home}/.kinako/ssh-launch/${routeB}`;
+        yield* host.fs.makeDirectory(legacyDir, { recursive: true });
+        yield* host.fs.writeFileString(`${legacyDir}/pid`, `${otherPid}\n`);
+        yield* host.fs.writeFileString(`${legacyDir}/managed`, "managed\n");
+        yield* host.stop(routeB);
+        assert.isTrue(isAlive(otherPid));
+
         yield* writeStaleRecord;
         const result = yield* host.launch(routeA);
         assert.deepEqual(result, { remotePort: 4400, serverKind: "managed", networkAccess: false });

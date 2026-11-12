@@ -561,10 +561,9 @@ fi
 exec "$T3_RUNTIME_DIR/${FORK_CLI_NAME}" "$@"
 `;
 
-// A pid file outlives a reboot, and kill -0 also accepts Linux thread ids, so
-// a recorded pid is only trusted when ps lists it with the start time saved at
-// launch. Records without a start time fall back to ps listing the pid at all,
-// and a host without a usable ps falls back to kill -0.
+// A pid file outlives a reboot and kill -0 accepts Linux thread ids, so a pid is
+// trusted only when ps shows the start time saved at launch, or for records
+// without one, a command this launcher starts. Without a usable ps, kill -0.
 const REMOTE_PROCESS_IDENTITY_SCRIPT = `PS_USABLE=""
 if [ -n "$(ps -o lstart= -p "$$" 2>/dev/null || true)" ]; then
   PS_USABLE=1
@@ -578,8 +577,14 @@ process_is() {
   [ -n "$PS_USABLE" ] || return 0
   PROCESS_START="$(ps -o lstart= -p "$1" 2>/dev/null || true)"
   [ -n "$PROCESS_START" ] || return 1
-  [ -n "$2" ] && [ -f "$2" ] || return 0
-  [ "$PROCESS_START" = "$(cat "$2" 2>/dev/null || true)" ]
+  if [ -n "$2" ] && [ -f "$2" ]; then
+    [ "$PROCESS_START" = "$(cat "$2" 2>/dev/null || true)" ]
+    return
+  fi
+  case "$(ps -ww -o args= -p "$1" 2>/dev/null || true)" in
+    *" __service-launcher" | *" serve --host "*" --port "[0-9]*) return 0 ;;
+  esac
+  return 1
 }`;
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu
