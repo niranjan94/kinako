@@ -75,6 +75,7 @@ import {
   withRememberedModelOptions,
 } from "../../state/use-model-option-memory";
 import { ChatGptSharingStatus } from "./ChatGptSharingStatus";
+import { useSyncModelSettings } from "./useSyncModelSettings";
 import { environmentCatalog } from "../../connection/catalog";
 import { useEnvironmentQuery } from "../../state/query";
 import { scopedThreadKey } from "../../lib/scopedEntities";
@@ -355,6 +356,7 @@ function ThreadSettingsSessionProvider(
     favorites: legacyFavorites,
   }).favorites;
   const saveSettings = useAtomCommand(serverEnvironment.updateSettings, "model favorites update");
+  const syncModelSettings = useSyncModelSettings(props.environmentId);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- writes the one-time legacy model favorites migration to server settings once per connection
   useEffect(() => {
     if (
@@ -420,6 +422,20 @@ function ThreadSettingsSessionProvider(
         },
       },
     });
+    if (AsyncResult.isSuccess(result)) {
+      syncModelSettings(
+        {
+          setModelFavorites: [
+            {
+              provider: option.selection.instanceId,
+              model: option.selection.model,
+              favorite: pending.favorite,
+            },
+          ],
+        },
+        legacyFavorites,
+      );
+    }
     if (
       AsyncResult.isSuccess(result) &&
       registry.get(environmentServerConfigsAtom).get(environmentId)?.settings.favorites ===
@@ -451,20 +467,20 @@ function ThreadSettingsSessionProvider(
     pendingHidden.current.add(option.key);
     setPendingHiddenKeys(new Set(pendingHidden.current));
     void Haptics.selectionAsync();
+    const patch = {
+      setModelsHidden: [
+        {
+          provider: option.selection.instanceId,
+          model: option.selection.model,
+          hidden: !option.isHidden,
+        },
+      ],
+    };
     void saveSettings({
       environmentId: props.environmentId,
-      input: {
-        patch: {
-          setModelsHidden: [
-            {
-              provider: option.selection.instanceId,
-              model: option.selection.model,
-              hidden: !option.isHidden,
-            },
-          ],
-        },
-      },
-    }).then(() => {
+      input: { patch },
+    }).then((result) => {
+      if (AsyncResult.isSuccess(result)) syncModelSettings(patch, legacyFavorites);
       pendingHidden.current.delete(option.key);
       setPendingHiddenKeys(new Set(pendingHidden.current));
     });
