@@ -1,11 +1,18 @@
 import {
+  AuthProvidersManageScope,
   DEFAULT_SERVER_SETTINGS,
+  EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
+  type ServerSettings,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 
-import { filterSharedServerPatch } from "./sharedSettings.ts";
+import {
+  copyModelSettingsPatch,
+  filterSharedServerPatch,
+  planModelSettingsSync,
+} from "./sharedSettings.ts";
 
 describe("filterSharedServerPatch", () => {
   it("holds the restart preference until the target's config loads", () => {
@@ -79,4 +86,113 @@ describe("filterSharedServerPatch", () => {
       );
     },
   );
+});
+
+const codex = ProviderDriverKind.make("codex");
+const claude = ProviderDriverKind.make("claudeAgent");
+const codexDefault = ProviderInstanceId.make("codex");
+const work = ProviderInstanceId.make("work");
+const personal = ProviderInstanceId.make("personal");
+const model = { slug: "gpt-x", name: "gpt-x" };
+
+describe("planModelSettingsSync", () => {
+  const sourceId = EnvironmentId.make("source");
+  const targetId = EnvironmentId.make("target");
+  const environment = (
+    environmentId: EnvironmentId,
+    providerInstances: ServerSettings["providerInstances"],
+    modelSettingsSync = true,
+  ) => ({
+    environmentId,
+    serverConfig: {
+      settings: { ...DEFAULT_SERVER_SETTINGS, providerInstances },
+      environment: { capabilities: { modelSettingsSync } },
+    },
+  });
+
+  it("keeps changes only for instances that run the same driver on the target", () => {
+    const source = { providerInstances: { work: { driver: codex }, personal: { driver: codex } } };
+    const target = environment(targetId, { [work]: { driver: claude } });
+    const patch = {
+      setModelFavorites: [
+        { provider: codexDefault, model: "sol", favorite: true },
+        { provider: work, model: "sol", favorite: true },
+        { provider: personal, model: "sol", favorite: true },
+      ],
+      setModelsHidden: [{ provider: work, model: "luna", hidden: true }],
+      setProviderModelOrder: { provider: codexDefault, modelOrder: ["sol"] },
+      setProviderCustomModels: [{ provider: work, driver: codex, customModels: [model] }],
+    };
+    const plan = planModelSettingsSync({
+      sourceEnvironmentId: sourceId,
+      source,
+      patch,
+      connectedTargets: [environment(sourceId, {}), target, environment(targetId, {}, false)],
+      mayWrite: () => true,
+    });
+    expect(plan.map((entry) => entry.patch)).toEqual([
+      {
+        setModelFavorites: [{ provider: codexDefault, model: "sol", favorite: true }],
+        setProviderModelOrder: { provider: codexDefault, modelOrder: ["sol"] },
+      },
+    ]);
+  });
+
+  it("drops custom models where only settings may be written", () => {
+    const patch = {
+      setProviderCustomModels: [{ provider: codexDefault, driver: codex, customModels: [model] }],
+    };
+    const plan = (mayWrite: (environmentId: EnvironmentId, scope: string) => boolean) =>
+      planModelSettingsSync({
+        sourceEnvironmentId: sourceId,
+        source: { providerInstances: {} },
+        patch,
+        connectedTargets: [environment(targetId, {})],
+        mayWrite,
+      });
+    expect(plan((_, scope) => scope !== AuthProvidersManageScope)).toEqual([]);
+    expect(plan(() => true).map((entry) => entry.patch)).toEqual([patch]);
+  });
+});
+
+describe("copyModelSettingsPatch", () => {
+  it("mirrors matching instances and leaves the target's other instances alone", () => {
+    const source = {
+      providerInstances: { work: { driver: codex, config: { customModels: [model] } } },
+      favorites: [
+        { provider: codexDefault, model: "sol" },
+        { provider: work, model: "gpt-x" },
+      ],
+      providerModelPreferences: { work: { hiddenModels: ["luna"], modelOrder: ["gpt-x"] } },
+    };
+    const target = {
+      providerInstances: {
+        work: { driver: codex, config: { binaryPath: "/opt/codex" } },
+        personal: { driver: claude, config: { customModels: [model] } },
+      },
+      favorites: [
+        { provider: codexDefault, model: "astra" },
+        { provider: personal, model: "opus" },
+      ],
+      providerModelPreferences: {
+        codex: { hiddenModels: ["astra"], modelOrder: [] },
+        personal: { hiddenModels: ["haiku"], modelOrder: [] },
+      },
+    };
+    expect(copyModelSettingsPatch(source, target, { includeCustomModels: true })).toEqual({
+      favorites: [
+        { provider: personal, model: "opus" },
+        { provider: codexDefault, model: "sol" },
+        { provider: work, model: "gpt-x" },
+      ],
+      providerModelPreferences: {
+        personal: { hiddenModels: ["haiku"], modelOrder: [] },
+        work: { hiddenModels: ["luna"], modelOrder: ["gpt-x"] },
+      },
+      setProviderCustomModels: [{ provider: work, driver: codex, customModels: ["gpt-x"] }],
+    });
+    expect(
+      copyModelSettingsPatch(source, target, { includeCustomModels: false }),
+    ).not.toHaveProperty("setProviderCustomModels");
+  });
 });
