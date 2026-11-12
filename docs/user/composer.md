@@ -107,6 +107,12 @@ messages while disconnected. Uploads resume when you reconnect. Drafts and queue
 messages survive app restarts. Signing out of T3 Connect keeps that work on your
 device until you sign back into the same account.
 
+## Model settings across environments
+
+Favorites, hidden models, model order, and custom models are saved on each environment. When you change one while connected to several environments, the change is also made on every connected environment where that provider exists with the same ID and type. Built-in providers such as `codex` and `claudeAgent` always match. A provider you added yourself matches only where it has the same ID. Custom models sync only to environments where you can manage providers.
+
+Environments that were disconnected, or that run an older version, miss those changes. To catch one up, open Settings → Providers for that environment and choose **Copy models from** to replace its model settings with another environment's.
+
 ## Custom models
 
 On web and desktop, use Settings → Providers → **Models** to add an unlisted model with a custom
