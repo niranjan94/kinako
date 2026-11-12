@@ -23,6 +23,7 @@ import {
   FORK_DESKTOP_NAME,
   FORK_DEV_URL_SCHEME,
   FORK_DISPLAY_NAME,
+  FORK_LINUX_APP_ID,
   FORK_URL_SCHEME,
 } from "@t3tools/shared/forkBrand";
 import { clerkFrontendApiHostnameFromPublishableKey } from "@t3tools/shared/relayAuth";
@@ -2922,7 +2923,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ],
       desktop: {
         entry: {
-          StartupWMClass: FORK_DESKTOP_NAME,
+          // Match Electron's WM_CLASS from setDesktopName so docks use this launcher.
+          StartupWMClass: FORK_LINUX_APP_ID,
         },
       },
     };

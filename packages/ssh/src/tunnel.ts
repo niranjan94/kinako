@@ -36,6 +36,7 @@ import {
   resolveSshCommand,
   resolveSshTarget,
   runSshCommand,
+  shellSingleQuote,
   sshTargetLogFields,
   targetConnectionKey,
 } from "./command.ts";
@@ -250,10 +251,6 @@ function normalizeSshErrorMessage(stderr: string, fallbackMessage: string): stri
 
 function stripTrailingNewlines(value: string): string {
   return value.replace(/\n+$/u, "");
-}
-
-function shellSingleQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function applyScriptPlaceholders(

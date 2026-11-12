@@ -44,6 +44,7 @@ import * as DesktopCliCommand from "./app/DesktopCliCommand.ts";
 import * as DesktopCloudflare from "./backend/DesktopCloudflare.ts";
 import * as DesktopApplicationMenu from "./window/DesktopApplicationMenu.ts";
 import * as DesktopAssets from "./app/DesktopAssets.ts";
+import * as DesktopPrimaryPaste from "./app/DesktopPrimaryPaste.ts";
 import * as DesktopBackendConfiguration from "./backend/DesktopBackendConfiguration.ts";
 import * as DesktopBackendPool from "./backend/DesktopBackendPool.ts";
 import * as DesktopLocalEnvironmentAuth from "./backend/DesktopLocalEnvironmentAuth.ts";
@@ -59,6 +60,7 @@ import * as DesktopClientSettings from "./settings/DesktopClientSettings.ts";
 import * as DesktopSavedEnvironments from "./settings/DesktopSavedEnvironments.ts";
 import * as DesktopSnapShot from "./snapShot/DesktopSnapShot.ts";
 import * as DesktopAppSettings from "./settings/DesktopAppSettings.ts";
+import * as DesktopPreReadyFileSystem from "./app/DesktopPreReadyFileSystem.ts";
 import * as DesktopPreReadyPlatform from "./app/DesktopPreReadyPlatform.ts";
 import * as DesktopShellEnvironment from "./shell/DesktopShellEnvironment.ts";
 import * as DesktopSshEnvironment from "./ssh/DesktopSshEnvironment.ts";
@@ -152,6 +154,7 @@ const layerDesktopFoundation = Layer.mergeAll(
   DesktopClientSettings.layer,
   DesktopConnectionCatalogStore.layer.pipe(Layer.provideMerge(DesktopSavedEnvironments.layer)),
   DesktopAssets.layer,
+  DesktopPrimaryPaste.layer,
   DesktopObservability.layer,
   DesktopRendererHistory.layer,
 ).pipe(Layer.provideMerge(layerDesktopEnvironment));
@@ -227,7 +230,9 @@ const layerDesktopApplication = Layer.mergeAll(
   Layer.provideMerge(layerDesktopLocalEnvironmentAuth),
 );
 
+// Clerk resolves userData before Electron is ready, so it gets the synchronous FileSystem.
 const layerDesktopClerk = DesktopClerk.layer.pipe(
+  Layer.provide(DesktopPreReadyFileSystem.layer),
   Layer.provideMerge(ElectronShell.layer),
   Layer.provideMerge(layerDesktopEnvironment),
   Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),

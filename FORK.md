@@ -134,7 +134,7 @@ Upstream's `ci.yml` runs unchanged except for its runners. GitHub's standard run
 
 ```bash
 perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-24.04/ || s/blacksmith-\d+vcpu-macos-26/macos-26/) { $d = 1; next } if ($d && s/^(    timeout-minutes: )(\d+)$/$1 . $2 * 2/e) { $d = 0 }' .github/workflows/ci.yml
-perl -pi -e 's/^(        run: vp run --filter \@t3tools\/web test)$/$1 --testTimeout=30000 --hookTimeout=30000/' .github/workflows/ci.yml
+perl -pi -e 's/^(        run: vp run --filter \@t3tools\/web test)( --shard |$)/$1 --testTimeout=30000 --hookTimeout=30000$2/' .github/workflows/ci.yml
 ```
 
 CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does not support Ubuntu 26.04 yet, so the server browser tests cannot install Chromium there. Linux release artifacts also link against the build machine's glibc, so a 26.04 build would not start on older distributions.

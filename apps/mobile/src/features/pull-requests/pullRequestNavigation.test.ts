@@ -36,7 +36,13 @@ describe("native PR entry points", () => {
       ),
     ).toEqual({
       name: "PullRequest",
-      params: { ...context, host: "github.com", repository: "org/repo", number: 12 },
+      params: {
+        ...context,
+        host: "github.com",
+        repository: "org/repo",
+        number: 12,
+        navigationUrl: "https://github.com/org/repo/pull/12/files#diff",
+      },
     });
     expect(
       nativePullRequestDestination(
@@ -69,7 +75,13 @@ describe("native PR entry points", () => {
       ),
     ).toEqual({
       name: "Issue",
-      params: { ...context, host: "github.com", repository: "org/repo", number: 12 },
+      params: {
+        ...context,
+        host: "github.com",
+        repository: "org/repo",
+        number: 12,
+        navigationUrl: "https://github.com/Org/Repo/issues/12#issuecomment-1",
+      },
     });
   });
 

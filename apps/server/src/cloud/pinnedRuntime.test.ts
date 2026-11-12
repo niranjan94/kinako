@@ -426,7 +426,7 @@ it.layer(NodeServices.layer)("prunePinnedRuntimes", (it) => {
     ) {
       const directory = path.join(versionsDir, version);
       yield* fs.makeDirectory(directory, { recursive: true });
-      yield* fs.writeFileString(path.join(directory, "t3"), "");
+      yield* fs.writeFileString(path.join(directory, FORK_CLI_NAME), "");
       if (completed === "never") return;
       const sentinel = path.join(directory, ".install-complete");
       yield* fs.writeFileString(sentinel, `${version}\n`);
@@ -465,12 +465,18 @@ it.layer(NodeServices.layer)("prunePinnedRuntimes", (it) => {
       yield* fs.makeDirectory(binDir);
       yield* fs.makeDirectory(customBinDir);
       // Chained: the launcher reaches its runtime through a second link.
-      yield* fs.symlink(path.join(versionsDir, "1.2.0", "t3"), path.join(baseDir, "alias-t3"));
+      yield* fs.symlink(
+        path.join(versionsDir, "1.2.0", FORK_CLI_NAME),
+        path.join(baseDir, "alias-t3"),
+      );
       yield* fs.symlink(path.join(baseDir, "alias-t3"), path.join(binDir, FORK_CLI_NAME));
-      yield* fs.symlink(path.join(versionsDir, "1.2.5", "t3"), path.join(customBinDir, "t3"));
+      yield* fs.symlink(
+        path.join(versionsDir, "1.2.5", FORK_CLI_NAME),
+        path.join(customBinDir, FORK_CLI_NAME),
+      );
       yield* fs.writeFileString(
         path.join(baseDir, "runtime", "launchers"),
-        `${path.join(customBinDir, "t3")}\n`,
+        `${path.join(customBinDir, FORK_CLI_NAME)}\n`,
       );
       yield* fs.writeFileString(
         path.join(baseDir, "runtime", "service-state.json"),
@@ -484,11 +490,13 @@ it.layer(NodeServices.layer)("prunePinnedRuntimes", (it) => {
       const removed = yield* prunePinnedRuntimes({
         baseDir,
         keep: ["2.0.0"],
-        references: [`ExecStart=${path.join(versionsDir, "1.3.5", "t3")} __service-launcher`],
+        references: [
+          `ExecStart=${path.join(versionsDir, "1.3.5", FORK_CLI_NAME)} __service-launcher`,
+        ],
       }).pipe(
         Effect.provideService(
           ProcessRunner.ProcessRunner,
-          lsofRunner(`p42\nftxt\nn${path.join(versionsDir, "1.3.0", "t3")}\n`),
+          lsofRunner(`p42\nftxt\nn${path.join(versionsDir, "1.3.0", FORK_CLI_NAME)}\n`),
         ),
         Effect.provideService(HostProcess.Platform, "darwin"),
         Effect.provideService(HostProcess.Environment, { T3CODE_INSTALL_BIN_DIR: binDir }),
@@ -501,7 +509,7 @@ it.layer(NodeServices.layer)("prunePinnedRuntimes", (it) => {
       // The launcher found on PATH is remembered for a service that cannot see it.
       assert.equal(
         yield* fs.readFileString(path.join(baseDir, "runtime", "launchers")),
-        `${path.join(customBinDir, "t3")}\n\n${path.join(binDir, FORK_CLI_NAME)}\n`,
+        `${path.join(customBinDir, FORK_CLI_NAME)}\n\n${path.join(binDir, FORK_CLI_NAME)}\n`,
       );
       assert.deepEqual((yield* fs.readDirectory(versionsDir)).toSorted(), [
         ".staging-abc",
@@ -521,6 +529,103 @@ it.layer(NodeServices.layer)("prunePinnedRuntimes", (it) => {
   );
 
   it.effect.each([
+    { name: "its directory is on PATH", onPath: true, recorded: false, linkedHome: false },
+    {
+      name: "an earlier prune recorded its entry as a launcher",
+      onPath: false,
+      recorded: true,
+      linkedHome: false,
+    },
+    {
+      name: "its real directory in a symlinked home is on PATH",
+      onPath: true,
+      recorded: false,
+      linkedHome: true,
+    },
+  ])("removes a runtime only its own entry names when $name", ({ onPath, recorded, linkedHome }) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { baseDir, versionsDir } = yield* setup(["1.0.0", "1.1.0"]);
+      const binDir = path.join(baseDir, "bin");
+      yield* fs.makeDirectory(binDir);
+      yield* fs.symlink(
+        path.join(versionsDir, "1.1.0", FORK_CLI_NAME),
+        path.join(binDir, FORK_CLI_NAME),
+      );
+      const ownDir = path.join(versionsDir, "1.0.0");
+      if (recorded) {
+        yield* fs.writeFileString(
+          path.join(baseDir, "runtime", "launchers"),
+          `${path.join(ownDir, FORK_CLI_NAME)}\n`,
+        );
+      }
+
+      const home = linkedHome
+        ? path.join(yield* fs.makeTempDirectoryScoped({ prefix: "t3-pinned-link-" }), "home")
+        : baseDir;
+      if (linkedHome) yield* fs.symlink(baseDir, home);
+
+      // The launch agent puts the running runtime's own directory on PATH.
+      const removed = yield* prunePinnedRuntimes({ baseDir: home, keep: ["2.0.0"] }).pipe(
+        Effect.provideService(
+          ProcessRunner.ProcessRunner,
+          lsofRunner("p1\nftxt\nn/sbin/launchd\n"),
+        ),
+        Effect.provideService(HostProcess.Platform, "darwin"),
+        Effect.provideService(HostProcess.Environment, {
+          T3CODE_INSTALL_BIN_DIR: binDir,
+          PATH: onPath ? `${ownDir}:/usr/bin:/bin` : "/usr/bin:/bin",
+        }),
+      );
+      assert.deepEqual(removed, ["1.0.0"]);
+    }),
+  );
+
+  it.effect.each([
+    { name: "a launcher inside the versions directory", via: "bin" as const },
+    { name: "a PATH directory linked to its version directory", via: "linked dir" as const },
+    {
+      name: "a PATH directory in the versions directory linked to its version directory",
+      via: "linked versions dir" as const,
+    },
+  ])("keeps a runtime $name names", ({ via }) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { baseDir, versionsDir } = yield* setup(["1.0.0", "1.1.0"]);
+      let pathDirs = "/usr/bin:/bin";
+      if (via === "bin") {
+        // The installer accepts any bin directory, including one under the versions directory.
+        const binDir = path.join(versionsDir, "bin");
+        yield* fs.makeDirectory(binDir);
+        yield* fs.symlink(
+          path.join(versionsDir, "1.0.0", FORK_CLI_NAME),
+          path.join(binDir, FORK_CLI_NAME),
+        );
+        yield* fs.writeFileString(
+          path.join(baseDir, "runtime", "launchers"),
+          `${path.join(binDir, FORK_CLI_NAME)}\n`,
+        );
+      } else {
+        const linkedDir = path.join(via === "linked dir" ? baseDir : versionsDir, "current");
+        yield* fs.symlink(path.join(versionsDir, "1.0.0"), linkedDir);
+        pathDirs = `${linkedDir}:${pathDirs}`;
+      }
+
+      const removed = yield* prunePinnedRuntimes({ baseDir, keep: ["2.0.0"] }).pipe(
+        Effect.provideService(
+          ProcessRunner.ProcessRunner,
+          lsofRunner("p1\nftxt\nn/sbin/launchd\n"),
+        ),
+        Effect.provideService(HostProcess.Platform, "darwin"),
+        Effect.provideService(HostProcess.Environment, { PATH: pathDirs }),
+      );
+      assert.deepEqual(removed, ["1.1.0"]);
+    }),
+  );
+
+  it.effect.each([
     // An interrupted append cut this record short.
     { name: "an unterminated launcher record", recorded: "/opt/t", cut: "" },
     // Another process's append is cut short after prune reads the records.
@@ -532,7 +637,10 @@ it.layer(NodeServices.layer)("prunePinnedRuntimes", (it) => {
       const { baseDir, versionsDir } = yield* setup(["1.0.0", "1.1.0"]);
       const binDir = path.join(baseDir, "custom-bin");
       yield* fs.makeDirectory(binDir);
-      yield* fs.symlink(path.join(versionsDir, "1.0.0", "t3"), path.join(binDir, FORK_CLI_NAME));
+      yield* fs.symlink(
+        path.join(versionsDir, "1.0.0", FORK_CLI_NAME),
+        path.join(binDir, FORK_CLI_NAME),
+      );
       const launchersFile = path.join(baseDir, "runtime", "launchers");
       yield* fs.writeFileString(launchersFile, recorded);
       const prune = (environment: Record<string, string>) =>
@@ -562,7 +670,7 @@ it.layer(NodeServices.layer)("prunePinnedRuntimes", (it) => {
       const removed = yield* prune({});
 
       assert.deepEqual(removed, []);
-      assert.isTrue(yield* fs.exists(path.join(versionsDir, "1.0.0", "t3")));
+      assert.isTrue(yield* fs.exists(path.join(versionsDir, "1.0.0", FORK_CLI_NAME)));
     }),
   );
 

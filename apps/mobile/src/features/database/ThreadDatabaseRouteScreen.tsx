@@ -17,7 +17,8 @@ import {
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, View } from "react-native";
+import { LegendList } from "@legendapp/list/react-native";
+import { Modal, Pressable, ScrollView, View } from "react-native";
 import { AppBar } from "../../components/ui/AppBar";
 import { AppText, AppTextInput } from "../../components/ui/AppText";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
@@ -498,10 +499,12 @@ function DatabaseScreen({
                         </AppText>
                       ))}
                     </View>
-                    <FlatList
+                    {/* oxlint-disable-next-line t3code/require-registered-list-scroll -- Rows scroll inside the result grid's horizontal ScrollView, not the screen. */}
+                    <LegendList
                       data={result.rows}
                       keyExtractor={(_row, index) => String(index)}
-                      getItemLayout={(_data, index) => ({ length: 40, offset: 40 * index, index })}
+                      estimatedItemSize={40}
+                      extraData={resultColumns}
                       onEndReached={() => {
                         if (result.hasMore && !busy) void more();
                       }}

@@ -50,6 +50,7 @@ const PREVIEW_FORWARDED_COMMANDS = [
   "rightPanel.toggle",
   "rightPanel.toggleMaximized",
   "preview.focusUrl",
+  "preview.find",
   "database.open",
 ] as const;
 

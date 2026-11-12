@@ -1,3 +1,4 @@
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { SheetHeader } from "../../components/ui/SheetHeader";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { useAtomValue } from "@effect/atom-react";
@@ -9,7 +10,7 @@ import {
   partitionThreadsByGroup,
 } from "@t3tools/client-runtime/state/thread-groups";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, FlatList, Modal, Pressable, useWindowDimensions, View } from "react-native";
+import { Animated, Modal, Pressable, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Reanimated, { ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { threadDragGapOffset } from "./threadDragGap";
@@ -296,7 +297,7 @@ function ThreadArrangementSheet(props: { onClose: () => void }) {
     }
     return result;
   }, [sections, expanded, visibleSettled, settledCount, rowHeight, headerHeight]);
-  const list = useRef<FlatList<Row>>(null);
+  const list = useRef<LegendListRef>(null);
   const geometry = useRef({ height: 0, offset: 0 });
   const drag = useRef<Drag | null>(null);
   const frame = useRef<number | null>(null);
@@ -463,21 +464,28 @@ function ThreadArrangementSheet(props: { onClose: () => void }) {
                 className="flex-1"
                 style={{ overflow: "hidden" }}
               >
-                <FlatList
+                {/* oxlint-disable-next-line t3code/require-registered-list-scroll -- A full-screen Modal with an inline header; there is no navigation header to register with. */}
+                <LegendList
                   ref={list}
                   data={rows}
                   keyExtractor={(row) => row.key}
+                  extraData={{
+                    visiblePreview,
+                    insertionOffset,
+                    dropBusy,
+                    pendingOrder,
+                    listEnvironments,
+                    planners,
+                    configs,
+                  }}
+                  // Rows hold their drag gesture, so each keeps its own view.
+                  recycleItems={false}
                   scrollEnabled={visiblePreview === null}
-                  removeClippedSubviews={false}
                   onScroll={(event) => {
                     geometry.current.offset = event.nativeEvent.contentOffset.y;
                   }}
                   scrollEventThrottle={16}
-                  getItemLayout={(_, index) => ({
-                    length: rows[index]!.height,
-                    offset: rows[index]!.offset,
-                    index,
-                  })}
+                  getFixedItemSize={(row) => row.height}
                   renderItem={({ item }) => {
                     const thread = item.thread;
                     const planner =
