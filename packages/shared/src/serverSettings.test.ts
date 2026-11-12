@@ -1003,6 +1003,44 @@ describe("synchronized model preferences", () => {
     ).toEqual([]);
   });
 
+  it("replaces only custom models and leaves other instances' host config alone", () => {
+    const codex = ProviderDriverKind.make("codex");
+    const claude = ProviderDriverKind.make("claudeAgent");
+    const model = { slug: "gpt-x", name: "GPT X" };
+    const claudeWork = ProviderInstanceId.make("claude_work");
+    const initial = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      providerInstances: {
+        [provider]: { driver: codex, config: { binaryPath: "/opt/codex", customModels: [] } },
+        [claudeWork]: { driver: claude },
+      },
+    });
+    const next = applyServerSettingsPatch(initial, {
+      setProviderCustomModels: [
+        { provider, driver: codex, customModels: [model] },
+        // Same id, different driver on this host.
+        { provider: claudeWork, driver: codex, customModels: [model] },
+        // Unconfigured default slot: created.
+        { provider: ProviderInstanceId.make("claudeAgent"), driver: claude, customModels: [model] },
+        // Unknown non-default instance: skipped.
+        { provider: ProviderInstanceId.make("codex_other"), driver: codex, customModels: [model] },
+        // Clearing an unconfigured default slot does not create it.
+        { provider: ProviderInstanceId.make("codex"), driver: codex, customModels: [] },
+      ],
+    });
+    expect(next.providerInstances[provider]).toEqual({
+      driver: codex,
+      config: { binaryPath: "/opt/codex", customModels: [model] },
+    });
+    expect(next.providerInstances[claudeWork]).toEqual({ driver: claude });
+    expect(next.providerInstances[ProviderInstanceId.make("claudeAgent")]).toEqual({
+      driver: claude,
+      config: { customModels: [model] },
+    });
+    expect(Object.keys(next.providerInstances).toSorted()).toEqual(
+      [provider, "claude_work", "claudeAgent"].toSorted(),
+    );
+  });
+
   it("keeps the same model on different provider instances as separate favorites", () => {
     const otherProvider = ProviderInstanceId.make("codex_personal");
     const first = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
