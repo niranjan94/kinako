@@ -17,6 +17,7 @@ import {
   type ClientSettings,
   DEFAULT_CLIENT_SETTINGS,
   type EnvironmentIdentificationMode,
+  type ModelPreferences,
   type UnifiedSettings,
 } from "@t3tools/contracts/settings";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
@@ -27,6 +28,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   filterSharedServerPatch,
+  planModelSettingsSync,
   splitSharedServerPatch,
   supportsSharedSettingsSync,
 } from "@t3tools/client-runtime/state/shared-settings";
@@ -50,7 +52,7 @@ import { toastManager } from "~/components/ui/toast";
 import { isHostedStaticApp } from "~/hostedPairing";
 import { environmentCatalog } from "~/connection/catalog";
 import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
-import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
+import { readEnvironments, useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
 import {
@@ -415,14 +417,25 @@ export function useEnvironmentIdentificationMode(): EnvironmentIdentificationMod
   });
 }
 
+async function clientSettingsForModelPreferences(settings: ServerSettings) {
+  if (settings.favorites === null || settings.providerModelPreferences === null) {
+    await ensureClientSettingsHydrated();
+  }
+  return getClientSettings();
+}
+
 export async function prepareModelPreferencesPatch(
   settings: ServerSettings,
   patch: ServerSettingsPatch,
 ): Promise<ServerSettingsPatch> {
-  if (settings.favorites === null || settings.providerModelPreferences === null) {
-    await ensureClientSettingsHydrated();
-  }
-  return { ...modelPreferencesMigrationPatch(settings, getClientSettings()), ...patch };
+  const clientSettings = await clientSettingsForModelPreferences(settings);
+  return { ...modelPreferencesMigrationPatch(settings, clientSettings), ...patch };
+}
+
+/** Includes this browser's pre-migration lists while the server has not claimed its own yet. */
+export async function readModelPreferences(settings: ServerSettings): Promise<ModelPreferences> {
+  const clientSettings = await clientSettingsForModelPreferences(settings);
+  return resolveModelPreferences(settings, selectLegacyModelPreferences(clientSettings));
 }
 
 export function useUpdateEnvironmentModelPreferences(environmentId: EnvironmentId | null) {
@@ -430,6 +443,7 @@ export function useUpdateEnvironmentModelPreferences(environmentId: EnvironmentI
     environmentId ? serverEnvironment.settingsValueAtom(environmentId) : noEnvironmentSettingsAtom,
   );
   const save = useAtomCommand(serverEnvironment.updateSettings, "model preferences update");
+  const syncModelSettings = useSyncModelSettingsToOtherEnvironments(environmentId);
   return async (patch: ServerSettingsPatch) => {
     if (!environmentId || !settings) return;
     let prepared: ServerSettingsPatch;
@@ -443,7 +457,55 @@ export function useUpdateEnvironmentModelPreferences(environmentId: EnvironmentI
       });
       return;
     }
-    return save({ environmentId, input: { patch: prepared } });
+    const result = await save({ environmentId, input: { patch: prepared } });
+    if (AsyncResult.isSuccess(result)) syncModelSettings(patch);
+    return result;
+  };
+}
+
+/** Sends a model-settings edit to other connected environments whose instance runs the same driver. */
+export function useSyncModelSettingsToOtherEnvironments(sourceEnvironmentId: EnvironmentId | null) {
+  const persist = useAtomCommand(serverEnvironment.updateSettings, {
+    label: "model settings sync",
+    reportFailure: false,
+  });
+  return (patch: ServerSettingsPatch) => {
+    if (sourceEnvironmentId === null) return;
+    const environments = readEnvironments();
+    const source = environments.find(
+      (environment) => environment.environmentId === sourceEnvironmentId,
+    )?.serverConfig?.settings;
+    if (!source) return;
+    const plan = planModelSettingsSync({
+      sourceEnvironmentId,
+      source,
+      patch,
+      connectedTargets: environments.filter(supportsSharedSettingsSync),
+      // Like shared settings, a session still loading its grants is left to the server to authorize.
+      mayWrite: (environmentId, scope) =>
+        appAtomRegistry.get(environmentSession.sessionStateAtom(environmentId))._tag ===
+          "Initial" || readEnvironmentScope(environmentId, scope),
+    });
+    for (const { target, patch: targetPatch } of plan) {
+      void (async () => {
+        const prepared = await prepareModelPreferencesPatch(
+          target.serverConfig.settings,
+          targetPatch,
+        );
+        const result = await persist({
+          environmentId: target.environmentId,
+          input: { patch: prepared },
+        });
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          toastManager.add({
+            id: `model-settings-sync:${target.environmentId}`,
+            type: "warning",
+            title: "Model settings not synced",
+            description: `Could not update ${target.label}. Open its provider settings and choose Copy models from to catch up.`,
+          });
+        }
+      })().catch(() => undefined);
+    }
   };
 }
 

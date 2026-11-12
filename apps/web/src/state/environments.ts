@@ -39,14 +39,20 @@ function projectEnvironmentPresentation(
   };
 }
 
+function projectEnvironmentPresentations(
+  presentationById: ReadonlyMap<EnvironmentId, BaseEnvironmentPresentation>,
+): EnvironmentPresentation[] {
+  return [...presentationById.entries()].map(([environmentId, presentation]) =>
+    projectEnvironmentPresentation(environmentId, presentation),
+  );
+}
+
 export function useEnvironments() {
   const catalog = useAtomValue(environmentCatalog.catalogValueAtom);
   const networkStatus = useAtomValue(environmentCatalog.networkStatusValueAtom);
   const presentationById = useAtomValue(environmentPresentations.presentationsAtom);
 
-  const environments = [...presentationById.entries()].map(([environmentId, presentation]) =>
-    projectEnvironmentPresentation(environmentId, presentation),
-  );
+  const environments = projectEnvironmentPresentations(presentationById);
 
   return {
     isReady: catalog.isReady,
@@ -75,6 +81,12 @@ export function readEnvironment(environmentId: EnvironmentId): EnvironmentPresen
     .get(environmentPresentations.presentationsAtom)
     .get(environmentId);
   return presentation ? projectEnvironmentPresentation(environmentId, presentation) : null;
+}
+
+export function readEnvironments(): EnvironmentPresentation[] {
+  return projectEnvironmentPresentations(
+    appAtomRegistry.get(environmentPresentations.presentationsAtom),
+  );
 }
 
 export function useEnvironment(

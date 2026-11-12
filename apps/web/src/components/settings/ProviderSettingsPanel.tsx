@@ -29,6 +29,7 @@ import {
   resolveProviderInstanceEnabled,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS, type UnifiedSettings } from "@t3tools/contracts/settings";
+import { instanceCustomModels } from "@t3tools/client-runtime/state/shared-settings";
 import {
   getBackgroundActivityPresetSettings,
   resolveServerBackgroundActivitySettings,
@@ -46,6 +47,7 @@ import {
   useUpdateEnvironmentSettings,
   useUpdateEnvironmentModelPreferences,
   useToggleEnvironmentModelFavorite,
+  useSyncModelSettingsToOtherEnvironments,
 } from "../../hooks/useSettings";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { ensureLocalApi } from "../../localApi";
@@ -77,6 +79,7 @@ import {
   type ProviderSettingsUpdateCandidate,
 } from "../ProviderUpdateLaunchNotification.logic";
 import { ProviderUpdatesAction } from "../ProviderUpdatesAction";
+import { CopyModelSettingsAction } from "./CopyModelSettingsAction";
 import { Button } from "../ui/button";
 import {
   Empty,
@@ -557,6 +560,7 @@ export function EnvironmentProviderSettings({
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
   const updateModelPreferences = useUpdateEnvironmentModelPreferences(environmentId);
   const toggleModelFavorite = useToggleEnvironmentModelFavorite(environmentId);
+  const syncModelSettings = useSyncModelSettingsToOtherEnvironments(environmentId);
   const persistProviderInstance = usePersistEnvironmentProviderInstanceMutation(environmentId);
   const serverProviders = useAtomValue(providersIgnoringCheckedAtAtom(environmentId));
   // Hide overrides on older servers that silently ignore providerInstances patches.
@@ -808,6 +812,7 @@ export function EnvironmentProviderSettings({
         description: error instanceof Error ? error.message : "The settings update failed.",
       });
     }
+    return result._tag === "Success";
   };
 
   const updateInstance = useStableCallback(
@@ -821,17 +826,27 @@ export function EnvironmentProviderSettings({
         isDisabling &&
         resolveAppModelSelectionState(settings, serverProviders).instanceId === instanceId &&
         readEnvironmentScope(environmentId, AuthSettingsWriteScope);
+      const customModels = instanceCustomModels(next);
+      const customModelsChanged =
+        JSON.stringify(instanceCustomModels(previous)) !== JSON.stringify(customModels);
       void persistInstance(
         instanceId,
         next,
         shouldClearTextGen ? DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection : undefined,
-      );
+      ).then((saved) => {
+        if (saved && customModelsChanged) {
+          syncModelSettings({
+            setProviderCustomModels: [{ provider: instanceId, driver: next.driver, customModels }],
+          });
+        }
+      });
     },
   );
 
   const enableInstance = useStableCallback(
-    (instanceId: ProviderInstanceId, next: ProviderInstanceConfig) =>
-      persistInstance(instanceId, next),
+    async (instanceId: ProviderInstanceId, next: ProviderInstanceConfig) => {
+      await persistInstance(instanceId, next);
+    },
   );
 
   const deleteInstance = useStableCallback(
@@ -999,6 +1014,12 @@ export function EnvironmentProviderSettings({
           // The ghost button's padding would inset its label, so pull the text to the card edge.
           <div className="-me-2 flex min-w-0 items-center gap-2">
             <ProviderUpdatesAction />
+            {readOnly ? null : (
+              <CopyModelSettingsAction
+                environmentId={environmentId}
+                environmentLabel={environmentLabel}
+              />
+            )}
             <Tooltip>
               <TooltipTrigger
                 render={
