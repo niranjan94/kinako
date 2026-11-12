@@ -6,14 +6,43 @@ import { DesktopUpdateChannelSchema, DesktopUpdateStateSchema } from "./ipc.ts";
 
 export const RESOURCE_MONITOR_PROTOCOL_VERSION = 3 as const;
 
+const UsedFraction = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }));
+
 export const HostResourcesSnapshot = Schema.Struct({
   sampledAt: NonNegativeInt,
-  cpuUtilization: Schema.NullOr(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))),
+  cpuUtilization: Schema.NullOr(UsedFraction),
   cpuCount: NonNegativeInt,
   availableMemoryBytes: NonNegativeInt,
   totalMemoryBytes: NonNegativeInt,
+  // Of the file system holding the server's data directory; absent from older servers.
+  diskAvailableBytes: Schema.optionalKey(NonNegativeInt),
+  diskTotalBytes: Schema.optionalKey(NonNegativeInt),
 });
 export type HostResourcesSnapshot = typeof HostResourcesSnapshot.Type;
+
+export const HostResourcesHistoryInput = Schema.Struct({
+  windowMs: PositiveInt,
+  bucketMs: PositiveInt,
+});
+export type HostResourcesHistoryInput = typeof HostResourcesHistoryInput.Type;
+
+export const HostResourcesHistoryBucket = Schema.Struct({
+  cpuAverage: Schema.NullOr(UsedFraction),
+  cpuPeak: Schema.NullOr(UsedFraction),
+  memoryAverage: UsedFraction,
+  memoryPeak: UsedFraction,
+  diskUsed: Schema.NullOr(UsedFraction),
+});
+export type HostResourcesHistoryBucket = typeof HostResourcesHistoryBucket.Type;
+
+export const HostResourcesHistory = Schema.Struct({
+  sampleIntervalMs: PositiveInt,
+  bucketMs: PositiveInt,
+  // Exclusive end of the last bucket; buckets are oldest first, null where nothing was sampled.
+  endsAt: NonNegativeInt,
+  buckets: Schema.Array(Schema.NullOr(HostResourcesHistoryBucket)),
+});
+export type HostResourcesHistory = typeof HostResourcesHistory.Type;
 
 export const ResourceTelemetryIoSemantics = Schema.Literals([
   "storage",
