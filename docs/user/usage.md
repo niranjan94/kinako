@@ -191,11 +191,15 @@ Claude quotas. Tap it to open **Usage → Limits**; on Android this works while 
 the background, otherwise open the app from the launcher. On iOS, use **Edit Widget** to choose
 Session, Weekly, or both for each provider. Reopen T3 to refresh expired readings.
 
+## Check machine usage
+
+**Usage → Machine** shows the CPU, memory, and disk use of each selected environment's machine, refreshed every few seconds while the view is open. Below each reading, a graph shows the past 24 hours: each server samples every 30 seconds, and the shaded band above the line marks the highest reading in each step, so short spikes stay visible. History is kept in memory and starts again when the server restarts. When the server runs in a container or a resource-limited cgroup, CPU and memory are measured against those limits rather than the whole host. Disk is the volume that holds the environment's data directory, where its worktrees and database live. Environments running an older server show current CPU and memory only, without disk or history.
+
 ## Keyboard shortcuts
 
 On web and desktop, open Usage from the command palette. While on Usage,
-press `C`, `T`, or `L` for Cost, Tokens, or Limits while not typing in a field.
+press `C`, `T`, `L`, or `M` for Cost, Tokens, Limits, or Machine while not typing in a field.
 Use `Ctrl+Shift+1/2/3/4` (`Cmd+Shift+1/2/3/4` on macOS) for the past
-24 hours, 7 days, 30 days, or 90 days. Period shortcuts do nothing on Limits.
+24 hours, 7 days, 30 days, or 90 days. Period shortcuts do nothing on Limits or Machine.
 Press `Escape` to return to the previous page. Customize these shortcuts in
 **Settings → Keybindings**.
