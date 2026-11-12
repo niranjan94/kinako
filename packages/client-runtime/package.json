@@ -327,6 +327,10 @@
       "types": "./src/state/usage.ts",
       "default": "./src/state/usage.ts"
     },
+    "./state/host-resources": {
+      "types": "./src/state/hostResources.ts",
+      "default": "./src/state/hostResources.ts"
+    },
     "./state/usage-progress": {
       "types": "./src/state/usageProgress.ts",
       "default": "./src/state/usageProgress.ts"
