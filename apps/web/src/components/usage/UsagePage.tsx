@@ -1,7 +1,7 @@
 import { ChatGptUsageButton } from "../settings/ChatGptUsageButton";
 import { usesChatGptSharing } from "@t3tools/shared/usageLimits";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
 import {
   USAGE_CONTRACT_VERSION,
@@ -10,7 +10,7 @@ import {
   type UsageSummaryInput,
 } from "@t3tools/contracts";
 import { CircleAlertIcon, ChevronDownIcon, InfoIcon, SlidersHorizontalIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Cause from "effect/Cause";
@@ -101,6 +101,7 @@ import {
   providersWithUsage,
   rankProvidersByMetric,
 } from "./usageProviders";
+import { refreshMachineUsage, UsageMachineSection } from "./UsageMachine";
 import {
   readUsagePagePreferences,
   saveUsagePagePreferences,
@@ -196,6 +197,10 @@ export function UsagePage() {
   }));
   const metric = preferences.metric;
   const showingLimits = metric === "limits";
+  const showingMachine = metric === "machine";
+  const showingUsage = !showingLimits && !showingMachine;
+  const emptyNoun = showingMachine ? "machine usage" : showingLimits ? "limits" : "usage";
+  const registry = useContext(RegistryContext);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [limitsNow, setLimitsNow] = useState(() => Date.now());
   const refreshingRef = useRef(false);
@@ -216,7 +221,7 @@ export function UsagePage() {
   const merged = shown?.merged ?? answeredUsage;
   const shownWindow = shown?.window ?? window;
   const shownHourly = shownWindow.resolution === "hour";
-  const refreshingUsage = isRefreshing && !showingLimits;
+  const refreshingUsage = isRefreshing && showingUsage;
   const showingKept = shown !== null && shown.window !== window;
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
   const presentationsWithProviders = useAtomValue(
@@ -284,7 +289,7 @@ export function UsagePage() {
     event.preventDefault();
     event.stopPropagation();
     if (metricOption) selectMetric(metricOption.value);
-    if (periodOption && !showingLimits) selectWindow(periodOption.days);
+    if (periodOption && showingUsage) selectWindow(periodOption.days);
   });
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- window capture keydown listener for usage metric and period shortcuts
@@ -296,6 +301,13 @@ export function UsagePage() {
   const refreshWindow = () => {
     if (refreshingRef.current) return;
 
+    if (showingMachine) {
+      refreshMachineUsage(
+        registry,
+        selectedEnvironments.map((environment) => environment.environmentId),
+      );
+      return;
+    }
     if (showingLimits) {
       refreshingRef.current = true;
       setIsRefreshing(true);
@@ -369,7 +381,7 @@ export function UsagePage() {
             selectedEnvironments={selectedEnvironments}
             selectedEnvironmentIds={selectedEnvironmentIds}
             onSelectionChange={setSelectedEnvironmentIds}
-            showUsageStatus={!showingLimits}
+            showUsageStatus={showingUsage}
             refreshing={refreshingUsage}
             isPartial={isPartial}
             duplicateSources={merged.duplicateSources}
@@ -377,23 +389,27 @@ export function UsagePage() {
             onOpenModelPrices={() => setPriceDialog({})}
           />
         </WorkspaceBreadcrumbItem>
-        <WorkspaceBreadcrumbSeparator />
-        <WorkspaceBreadcrumbItem current className="min-w-10">
-          <UsageProviderFilter
-            hiddenProviders={hiddenProviders}
-            onChange={(next) => updatePreferences({ hiddenProviders: next })}
-          />
-        </WorkspaceBreadcrumbItem>
+        {showingMachine ? null : (
+          <>
+            <WorkspaceBreadcrumbSeparator />
+            <WorkspaceBreadcrumbItem current className="min-w-10">
+              <UsageProviderFilter
+                hiddenProviders={hiddenProviders}
+                onChange={(next) => updatePreferences({ hiddenProviders: next })}
+              />
+            </WorkspaceBreadcrumbItem>
+          </>
+        )}
       </WorkspaceBreadcrumb>
-      {!showingLimits ? (
+      {showingUsage ? (
         <span className="hidden min-w-0 truncate text-xs text-muted-foreground @7xl/usage-header:block">
           {windowLabel}
         </span>
       ) : null}
       <div className="ms-auto hidden shrink-0 items-center justify-end gap-2 @4xl/usage-header:flex">
-        {/* Limits are always current, so they have no period. The period sits before the metric
+        {/* Limits and machine usage are always current, so they have no period. The period sits before the metric
             tabs so dropping it never moves them. */}
-        {showingLimits ? null : (
+        {showingUsage ? (
           <ToggleGroup
             aria-label="Usage period"
             variant="segmented"
@@ -409,7 +425,7 @@ export function UsagePage() {
               </Toggle>
             ))}
           </ToggleGroup>
-        )}
+        ) : null}
         <ToggleGroup
           aria-label="Usage metric"
           variant="segmented"
@@ -427,9 +443,15 @@ export function UsagePage() {
         </ToggleGroup>
         <Button
           onClick={refreshWindow}
-          aria-label={showingLimits ? "Refresh limits" : "Refresh usage"}
+          aria-label={
+            showingMachine
+              ? "Refresh machine usage"
+              : showingLimits
+                ? "Refresh limits"
+                : "Refresh usage"
+          }
           aria-busy={isRefreshing}
-          disabled={isRefreshing || (!showingLimits && !canReadDiagnostics)}
+          disabled={isRefreshing || (showingUsage && !canReadDiagnostics)}
           size="icon-sm"
           variant="ghost"
         >
@@ -437,7 +459,7 @@ export function UsagePage() {
         </Button>
       </div>
       <div className="ms-auto flex shrink-0 items-center justify-end gap-1 @4xl/usage-header:hidden">
-        {showingLimits ? null : (
+        {showingUsage ? (
           <Select value={String(windowDays)} onValueChange={(value) => selectWindow(Number(value))}>
             <SelectTrigger
               aria-label="Usage period"
@@ -461,7 +483,7 @@ export function UsagePage() {
               ))}
             </SelectPopup>
           </Select>
-        )}
+        ) : null}
         <Select
           value={metric}
           onValueChange={(value) => {
@@ -488,9 +510,15 @@ export function UsagePage() {
         </Select>
         <Button
           onClick={refreshWindow}
-          aria-label={showingLimits ? "Refresh limits" : "Refresh usage"}
+          aria-label={
+            showingMachine
+              ? "Refresh machine usage"
+              : showingLimits
+                ? "Refresh limits"
+                : "Refresh usage"
+          }
           aria-busy={isRefreshing}
-          disabled={isRefreshing || (!showingLimits && !canReadDiagnostics)}
+          disabled={isRefreshing || (showingUsage && !canReadDiagnostics)}
           size="icon-sm"
           variant="ghost"
         >
@@ -513,9 +541,11 @@ export function UsagePage() {
             {selectedEnvironments.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {environments.length === 0
-                  ? `Connect an environment to see ${showingLimits ? "limits" : "usage"}.`
-                  : `Select an environment to see ${showingLimits ? "limits" : "usage"}.`}
+                  ? `Connect an environment to see ${emptyNoun}.`
+                  : `Select an environment to see ${emptyNoun}.`}
               </p>
+            ) : showingMachine ? (
+              <UsageMachineSection environments={selectedEnvironments} />
             ) : showingLimits ? (
               <UsageLimitsSection
                 selectedEnvironmentIds={selectedEnvironmentIds}
@@ -552,7 +582,7 @@ export function UsagePage() {
           </WorkspacePageContainer>
         </ScrollArea>
       </div>
-      {showingLimits ? null : (
+      {showingUsage ? (
         <UsageModelDialogHost
           models={merged.models}
           environments={selectedEnvironments}
@@ -567,7 +597,7 @@ export function UsagePage() {
           }}
           onSetPrice={(model) => setPriceDialog({ model })}
         />
-      )}
+      ) : null}
       {priceDialog ? (
         <UsagePriceOverrides
           usage={environments}
