@@ -104,14 +104,9 @@ separately. Signing out of T3 Connect does not stop or uninstall the service.
 
 ## Keep the computer awake
 
-A sleeping computer stops running agents and disconnects every remote client. To prevent that, open **Settings → Maintenance** and choose **Keep awake**. The setting belongs to each environment and applies to the computer that runs it, even when you change it from another device.
+A sleeping computer stops running agents and disconnects every remote client. By default, Kinako keeps the computer awake while any agent is running, and for a minute after the last run ends, so back-to-back turns do not let it sleep in between. To turn this off, open **Settings → Maintenance** and turn off **Keep awake while agents work**. The setting belongs to each environment and applies to the computer that runs it, even when you change it from another device.
 
-- **While agents work** keeps the computer awake while any turn is running or waiting for your answer, and for 30 seconds after the last one ends. Scheduled tasks count too.
-- **Always** keeps it awake for as long as Kinako runs.
-
-The screen can still turn off. Closing a laptop lid usually still puts it to sleep, unless the laptop is plugged in and connected to an external display.
-
-Keep awake works on macOS, on Windows, and on Linux with systemd. It is hidden where the computer does not support it. If the computer cannot be kept awake, the setting shows the reason. Choose another option and then your setting again to retry.
+The screen can still turn off, and closing a laptop lid still puts it to sleep. Keep awake works on macOS, on Windows, and on Linux with systemd.
 
 ## Keep the server responsive when agents use all memory
 
@@ -193,8 +188,11 @@ pass `--fix` to run the recommended ones without a prompt (for scripts), or
 `--dry-run` to only report. An installed background service for the same data
 directory is stopped for the repair and started again afterwards, also when
 the repair fails. Quit a server you started by hand, or the desktop app, first:
-the repair refuses to touch a database that is in use. Use `--base-dir` for a
-different data directory.
+the repair refuses to touch a database that is in use, and names the server
+process that holds it when it can tell. While the repair runs, a server started
+for the same data directory, for example by a desktop app connecting over SSH,
+is refused until the repair ends. Use `--base-dir` for a different data
+directory.
 
 The repair's time grows with the size of the whole database, not only the
 space it reclaims, and can exceed an hour on a large database or a slow disk;

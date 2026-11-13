@@ -279,14 +279,17 @@ export function ServerUpdateAction({
   const updatesDenial = managedUpdatesDenial(useManagedPolicy(environmentId));
   const update = useServerUpdate();
   // Installs without a known npm origin get the CLI's own `update` command.
-  const copiesUpdate = installation === undefined || installation.kind === "npm-global";
+  const updatesInstall =
+    installation === undefined ||
+    installation.kind === "npm-global" ||
+    installation.kind === "t3-launcher";
   const { copyToClipboard } = useCopyToClipboard<{ command: string }>({
-    target: copiesUpdate ? "update command" : "relaunch command",
+    target: updatesInstall ? "update command" : "relaunch command",
     onCopy: ({ command }) => {
       toastManager.add({
         type: "success",
-        title: copiesUpdate ? "Update command copied" : "Relaunch command copied",
-        description: copiesUpdate
+        title: updatesInstall ? "Update command copied" : "Relaunch command copied",
+        description: updatesInstall
           ? `Run \`${command}\` on ${serverLabel}, then restart ${FORK_CLI_NAME} with your usual options.`
           : `Stop ${FORK_CLI_NAME} on ${serverLabel}, then relaunch with \`${command}\` using the same subcommand and options. This does not update an installed ${FORK_CLI_NAME} command.`,
       });
@@ -355,7 +358,7 @@ export function ServerUpdateAction({
     selfUpdate === null ? manualServerUpdateCommand(targetVersion, installation) : null;
   const actionLabel =
     manualCommand !== null
-      ? copiesUpdate
+      ? updatesInstall
         ? "Copy update command"
         : "Copy relaunch command"
       : label;

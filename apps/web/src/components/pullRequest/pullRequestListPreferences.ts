@@ -34,8 +34,8 @@ export interface PullRequestListPreferences {
   readonly draft?: "only" | "hide";
   readonly review?: NonNullable<PullRequestListFilters["review"]>;
   readonly checks?: NonNullable<PullRequestListFilters["checks"]>;
-  readonly author?: string;
-  readonly labels?: ReadonlyArray<string>;
+  readonly author?: string | undefined;
+  readonly labels?: ReadonlyArray<string> | undefined;
   readonly sort?: PullRequestListSort;
 }
 

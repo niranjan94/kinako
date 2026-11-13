@@ -6,6 +6,7 @@ import {
   ModelSelection,
   NodeId,
   OrchestrationV2ConversationSummaryRollback,
+  NonNegativeInt,
   ProviderSessionId,
   RunAttemptId,
   ProviderApprovalDecision,
@@ -70,6 +71,7 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     providerTurnId: ProviderTurnId,
     messageId: MessageId,
     modelSelection: Schema.optional(ModelSelection),
+    steerFollowUpAfterRunOrdinal: Schema.optional(NonNegativeInt),
   }),
   Schema.Struct({
     type: Schema.Literal("provider-turn.restart"),

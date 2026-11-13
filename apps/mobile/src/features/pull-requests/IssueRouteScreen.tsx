@@ -7,12 +7,13 @@ import {
   type IssueListEntry,
 } from "@t3tools/contracts";
 import { useCallback, useState, type ReactElement } from "react";
-import { Linking, Platform, Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Linking, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppBar } from "../../components/ui/AppBar";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
+import { RefreshControl } from "../../components/ui/RefreshControl";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -239,7 +240,7 @@ function IssueActionToolbar(props: {
 }
 
 export function IssueRouteScreen({ route }: StaticScreenProps<IssueParams>) {
-  const returnToList = useAndroidWorkspaceBack("pullRequests");
+  const returnToList = useAndroidWorkspaceBack();
   const { layout } = useAdaptiveWorkspaceLayout();
   const navigation = useNavigation();
   const params = route.params;

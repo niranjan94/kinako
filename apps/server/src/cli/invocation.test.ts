@@ -1,5 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
+import {
+  FORK_CLI_NAME,
+  FORK_HOME_DIR_NAME,
+  FORK_NPM_PACKAGE_NAME,
+} from "@t3tools/shared/forkBrand";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -108,6 +113,40 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
           executable: true,
         }),
       ).toBe("sudo /opt/t3/t3 browser setup");
+
+      // A standalone executable started directly (systemd, no launcher) is still this install.
+      expect(
+        yield* rootCommand({
+          node: "/opt/t3/t3",
+          entry: "/opt/t3/t3",
+          executable: true,
+          path: yield* pathWithT3,
+        }),
+      ).toBe("sudo /opt/t3/t3 browser setup");
+
+      // A global npm launcher runs the downloaded executable; PATH's CLI is that launcher.
+      const prefix = path.join(home, "npm");
+      const npmLauncher = path.join(
+        prefix,
+        `lib/node_modules/${FORK_NPM_PACKAGE_NAME}/bin/${FORK_CLI_NAME}.mjs`,
+      );
+      yield* fs.makeDirectory(path.dirname(npmLauncher), { recursive: true });
+      yield* fs.makeDirectory(path.join(prefix, "bin"));
+      yield* fs.writeFileString(npmLauncher, "", { mode: 0o755 });
+      yield* fs.writeFileString(
+        path.join(prefix, `lib/node_modules/${FORK_NPM_PACKAGE_NAME}/package.json`),
+        `{"name":"${FORK_NPM_PACKAGE_NAME}","version":"${packageJson.version}"}`,
+      );
+      yield* fs.symlink(npmLauncher, path.join(prefix, "bin", FORK_CLI_NAME));
+      expect(
+        yield* rootCommand({
+          node: `/home/theo/${FORK_HOME_DIR_NAME}/runtime/versions/1.0.0/${FORK_CLI_NAME}`,
+          entry: `/home/theo/${FORK_HOME_DIR_NAME}/runtime/versions/1.0.0/${FORK_CLI_NAME}`,
+          executable: true,
+          path: path.join(prefix, "bin"),
+          env: { T3CODE_NPM_LAUNCHER_PATH: npmLauncher },
+        }),
+      ).toBe(`sudo env "PATH=$PATH" ${FORK_CLI_NAME} browser setup`);
 
       expect(
         yield* rootCommand({ ...desktop, env: { T3CODE_CLI_PATH: path.join(home, "gone") } }),
@@ -263,6 +302,46 @@ it.layer(NodeServices.layer)("manual server installation ownership", (it) => {
         `{"name":"t3","version":"${packageJson.version}","bin":{"t3":"./bin/t3.mjs"}}`,
       );
       expect(yield* resolve).toBeNull();
+    }),
+  );
+
+  it.effect("names the launcher symlink that started a downloaded runtime", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped());
+      // The install script's launcher names the home dir, which here links to a home elsewhere.
+      const executable = path.join(root, `data/runtime/versions/1.0.0/${FORK_CLI_NAME}`);
+      const launcher = path.join(root, "bin", FORK_CLI_NAME);
+      const copy = path.join(root, `bin/${FORK_CLI_NAME}-copy`);
+      yield* fs.makeDirectory(path.dirname(executable), { recursive: true });
+      yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
+      yield* fs.writeFileString(executable, "", { mode: 0o755 });
+      yield* fs.writeFileString(copy, "", { mode: 0o755 });
+      yield* fs.symlink(path.join(root, "data"), path.join(root, FORK_HOME_DIR_NAME));
+      yield* fs.symlink(
+        path.join(root, FORK_HOME_DIR_NAME, `runtime/versions/1.0.0/${FORK_CLI_NAME}`),
+        launcher,
+      );
+      // Earlier PATH entries hold a directory and a non-executable file with the CLI's name.
+      yield* fs.makeDirectory(path.join(root, "shadow-dir", FORK_CLI_NAME), { recursive: true });
+      yield* fs.makeDirectory(path.join(root, "shadow-file"));
+      yield* fs.writeFileString(path.join(root, "shadow-file", FORK_CLI_NAME), "");
+      const resolve = (invokedAs: string) =>
+        resolveServerInstallation.pipe(
+          Effect.provideService(HostProcess.ExecutablePath, executable),
+          Effect.provideService(HostProcess.IsExecutable, true),
+          Effect.provideService(HostProcess.InvokedAs, invokedAs),
+          Effect.provideService(HostProcess.WorkingDirectory, root),
+          Effect.provideService(HostProcess.Environment, { PATH: "shadow-dir:shadow-file:bin" }),
+          Effect.provideService(HostProcess.Platform, "linux"),
+        );
+      const baseDir = path.join(root, FORK_HOME_DIR_NAME);
+
+      expect(yield* resolve(FORK_CLI_NAME)).toEqual({ kind: "t3-launcher", launcher, baseDir });
+      expect(yield* resolve(launcher)).toEqual({ kind: "t3-launcher", launcher, baseDir });
+      expect(yield* resolve(executable)).toBeNull();
+      expect(yield* resolve(copy)).toBeNull();
     }),
   );
 

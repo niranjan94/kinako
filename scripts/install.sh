@@ -29,7 +29,7 @@ case "$t3_home" in
     ;;
 esac
 bin_dir="${T3CODE_INSTALL_BIN_DIR:-$HOME/.local/bin}"
-# Trailing slashes would put `//` in the paths the t3 command guard compares.
+# Trailing slashes would put `//` in the paths the kinako command guard compares.
 while [ "${t3_home%/}" != "$t3_home" ] && [ "$t3_home" != / ]; do t3_home="${t3_home%/}"; done
 while [ "${bin_dir%/}" != "$bin_dir" ] && [ "$bin_dir" != / ]; do bin_dir="${bin_dir%/}"; done
 # Absolute, so the PATH hint never adds a folder that changes with the working directory.
@@ -171,7 +171,7 @@ case "$(uname -m)" in
   *) fail "unsupported architecture $(uname -m)" ;;
 esac
 if [ "${platform}-${arch}" = darwin-x64 ]; then
-  fail "there is no t3 CLI for Intel Macs. Install the desktop app from https://t3.codes/download, or run a server from source: https://github.com/${repo}/blob/main/docs/user/install.md#intel-macs"
+  fail "there is no kinako CLI for Intel Macs. Install the desktop app from https://github.com/${repo}/releases, or run a server from source: https://github.com/${repo}/blob/main/docs/user/install.md#intel-macs"
 fi
 command -v tar >/dev/null 2>&1 || fail "tar is required"
 if command -v sha256sum >/dev/null 2>&1; then
@@ -248,7 +248,7 @@ else
   fi
   expected="$(grep " \*\{0,1\}${archive}\$" "${staging}/SHA256SUMS" | cut -d' ' -f1)"
   [ -n "$expected" ] || fail "kinako ${version} has no release archive for ${platform}-${arch}"
-  download "${base_url}/v${version}/${archive}" "${staging}/${archive}"
+  download "${base_url}/v${version}/${archive}" "${staging}/${archive}" || fail "could not download ${archive}"
 
   step "Verifying the download..."
   actual="$(checksum "${staging}/${archive}")"

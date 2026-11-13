@@ -432,9 +432,23 @@ const make = Effect.gen(function* () {
       if (existing.value.thread.historyOrigin !== "v1_import") {
         return yield* new AgentSessionThreadModifiedError({ threadId });
       }
+      // Other recorded transcripts mean this one changed after the import, and the
+      // thread does not hold its new messages, so it must stay unrecorded.
+      const recorded = Option.flatMap(yield* runtimes.getByThreadId({ threadId }), (row) =>
+        AgentSessionScanner.decodeImportedTranscriptPayload(row.runtimePayload),
+      ).pipe(Option.flatMapNullishOr((payload) => payload.importedTranscripts));
+      if (
+        Option.isSome(recorded) &&
+        recorded.value.length > 0 &&
+        !recorded.value.some((imported) =>
+          AgentSessionScanner.sameTranscriptIdentity(imported, source),
+        )
+      ) {
+        return { threadId, imported: false, recorded: false } as const;
+      }
       yield* persistRuntime;
       yield* runtimes.recordImportedTranscript({ threadId, source });
-      return { threadId, imported: false } as const;
+      return { threadId, imported: false, recorded: true } as const;
     }
 
     const providerThreadId = idAllocator.derive.providerThread({
@@ -470,7 +484,7 @@ const make = Effect.gen(function* () {
     if (committed.length === 0) return null;
     yield* persistRuntime;
     yield* runtimes.recordImportedTranscript({ threadId, source });
-    return { threadId, imported: true } as const;
+    return { threadId, imported: true, recorded: true } as const;
   });
 
   const readProject = (projectId: ProjectId) =>
@@ -574,6 +588,7 @@ const make = Effect.gen(function* () {
         (result) => result !== null,
         () => new AgentSessionNativeThreadOwnedError(),
       ),
+      Effect.map(({ threadId, imported }) => ({ threadId, imported })),
       Effect.mapError(
         (cause) =>
           new AgentSessionImportFailedError({ providerSessionId: input.providerSessionId, cause }),
@@ -644,7 +659,7 @@ const make = Effect.gen(function* () {
           source,
           runtimeMode,
         }).pipe(
-          Effect.map((result) => (result === null ? null : true)),
+          Effect.map((result) => (result === null ? null : result.recorded)),
           Effect.catch((cause) =>
             Effect.logWarning("Could not import an agent session", {
               provider: outcome.thread.source,

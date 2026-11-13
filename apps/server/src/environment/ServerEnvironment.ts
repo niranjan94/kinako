@@ -15,7 +15,6 @@ import * as Schema from "effect/Schema";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
-import { resolveKeepAwakeCommand } from "../background/KeepAwake.ts";
 import { resolveServerInstallation } from "../cli/invocation.ts";
 import { readAgentActivityPublishingActive } from "../cloud/config.ts";
 import { resolveServerSelfUpdateCapability } from "../cloud/selfUpdate.ts";
@@ -202,7 +201,6 @@ export const make = Effect.gen(function* () {
     launcherManaged: launcher.managed,
   });
   const serverInstallation = serverSelfUpdate === null ? yield* resolveServerInstallation : null;
-  const keepAwake = (yield* resolveKeepAwakeCommand(process.pid)) !== null;
   // The desktop reports whether it can install updates; requests travel over its control fd.
   const desktopAppUpdate =
     serverSelfUpdate === "desktop-managed" &&
@@ -239,6 +237,7 @@ export const make = Effect.gen(function* () {
       storageCleanupRun: true,
       databaseStorage: true,
       otlpEndpointCheck: true,
+      secretSourceCheck: true,
       projectWorktreeCleanup: true,
       settledWorktreeCleanup: true,
       worktreesDirectory: true,
@@ -294,6 +293,8 @@ export const make = Effect.gen(function* () {
       linkFence: true,
       mcpApprovalCodes: true,
       mcpHostedApproval: true,
+      shellThreadFamilies: true,
+      shellOlderSettled: true,
       // Fork additions stay last so upstream's list merges cleanly.
       worktreeSnapshots: true,
       worktreeIncludePatterns: true,
@@ -302,7 +303,6 @@ export const make = Effect.gen(function* () {
       threadPullRequestAutoFix: true,
       agentSessionImport: true,
       agentSessionHistoryImport: true,
-      ...(keepAwake ? { keepAwake: true } : {}),
     },
   };
 

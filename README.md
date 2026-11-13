@@ -6,6 +6,8 @@
 
 Kinako is a personal, opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code), a GUI for driving the coding agents on your machine from web, desktop, and mobile clients.
 
+It works with Claude Code, Codex, Cursor, OpenCode, Grok Build, Antigravity, Kiro, Pi, Muse Code, fx, and any [ACP](./docs/user/providers-acp.md) agent. If an agent is set up on your computer, Kinako can control it.
+
 This fork exists so I can run T3 Code the way I want it. It is kept up to date with upstream on a best-effort basis, with my own changes layered on top. It is built for my own use first; anyone else is welcome to use it, but there are no support or stability promises. For the official app, use upstream.
 
 ## How it differs from upstream
@@ -22,7 +24,6 @@ Feature highlights:
 - **Workspaces:** give threads additional directories, copy gitignored files such as `.env` into new worktrees, move a thread between the local checkout and a worktree, point a project at a moved folder, and save recovery snapshots before worktree cleanup. [Guide](./docs/user/project-settings.md#additional-directories)
 - **GitHub:** read and reply to issues, send issues and PRs to agents, and opt into automatic CI fixes on watched PRs. [Guide](./docs/user/source-control.md)
 - **Remote access:** reach an environment from anywhere through a Cloudflare Tunnel on your own Cloudflare account, add it to a phone with a QR code, manage pairing on remote environments, update SSH servers from the app, and pair using stable local or Tailscale names. [Guide](./docs/user/remote-access.md#public-routes-with-your-cloudflare-account)
-- **Keep awake:** prevent the host from sleeping while agents work, including scheduled tasks. [Guide](./docs/user/background-service.md#keep-the-computer-awake)
 
 Remote access uses LAN, Tailscale, SSH, or your own Cloudflare account; T3 Connect is not built in. Pairing stays on your server, and builds and updates come from this repository.
 
@@ -106,7 +107,7 @@ User and internal docs are inherited from upstream and live in [docs/](./docs). 
 - Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
 - [Run Kinako as a background service](./docs/user/background-service.md)
 
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
+[All docs](./docs/README.md) has the full list. Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
 
 ## Building from source
 
@@ -128,6 +129,8 @@ Then install dependencies and start the dev server:
 vp i
 vp run dev
 ```
+
+The [development runbook](./docs/operations/development.md#first-checkout) covers the rest of a first checkout.
 
 ## Issues and contributions
 

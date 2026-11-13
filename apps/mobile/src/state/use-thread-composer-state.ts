@@ -9,9 +9,15 @@ import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thre
 import { threadSteersDuringCompaction } from "@t3tools/client-runtime/state/thread-workflows";
 import { resolvePendingHandoff } from "@t3tools/client-runtime/handoff";
 import {
+  announcedRun,
+  isDetailBehindShell,
+} from "@t3tools/client-runtime/state/thread-activity-announcement";
+import {
+  canResumeThread,
   deriveProviderSubagentStatus,
   deriveProviderExtensionStatuses,
   deriveResumableRunId,
+  deriveLatestThreadRun,
   deriveRunlessWorkStartedAt,
   deriveThreadActivityRun,
   deriveThreadRuntime,
@@ -24,7 +30,6 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   MessageId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
-  orchestrationV2WorktreePending,
   type EnvironmentId,
   type ModelSelection,
   type RuntimeMode,
@@ -86,6 +91,7 @@ import {
   useComposerDraftSettings,
 } from "./use-composer-drafts";
 import { isClearComposerCommand, parseSideChatCommand } from "@t3tools/shared/composerTrigger";
+import { orchestrationV2WorktreePending } from "@t3tools/shared/orchestrationV2ThreadError";
 import {
   compactionBlocksSteering,
   resolveComposerDispatchMode,
@@ -340,6 +346,14 @@ export function useThreadComposerState(input: {
   const selectedThreadActivityRun = selectedThreadProjection
     ? deriveThreadActivityRun(selectedThreadProjection.projection)
     : (selectedThreadShell?.latestRun ?? null);
+  const selectedThreadAnnouncedRun = announcedRun(
+    selectedThreadActivityRun,
+    selectedThreadProjection?.projection.runs ?? [],
+  );
+  const selectedThreadDetailBehindShell = isDetailBehindShell(
+    selectedThreadProjection ? deriveLatestThreadRun(selectedThreadProjection.projection) : null,
+    selectedThreadShell?.latestRun ?? null,
+  );
 
   const activeRunId =
     selectedThreadRuntime?.activeRunId && threadRuntimeIsActive(selectedThreadRuntime)
@@ -393,6 +407,9 @@ export function useThreadComposerState(input: {
   const resumableRunId = selectedThreadProjection
     ? deriveResumableRunId(selectedThreadProjection.projection, selectedThreadRuntime)
     : null;
+  const canResume = selectedThreadProjection
+    ? canResumeThread(selectedThreadProjection.projection, resumableRunId, queueHeld)
+    : queueHeld;
 
   const runlessWorkStartedAt = selectedThreadProjection
     ? deriveRunlessWorkStartedAt(selectedThreadProjection.projection)
@@ -900,6 +917,8 @@ export function useThreadComposerState(input: {
     dismissFeedback,
     selectedThreadFeed,
     selectedThreadActivityRun,
+    selectedThreadAnnouncedRun,
+    selectedThreadDetailBehindShell,
     selectedThreadQueueCount,
     selectedThreadQueuedMessages,
     dispatchingQueuedMessageId,
@@ -924,6 +943,7 @@ export function useThreadComposerState(input: {
     canSteerActiveTurn,
     queueHeld,
     resumableRunId,
+    canResume,
     queuedRunEdit,
     isSavingQueuedEdit,
     cancelQueuedRunEdit,

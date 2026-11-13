@@ -17,10 +17,11 @@ import {
   generatedWindowsShimTarget,
   isVersionExecutable,
   pinnedRuntimeVersionsDir,
+  resolveLauncherPath,
 } from "../cloud/pinnedRuntime.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
 import * as CliService from "./service.ts";
-import { findWindowsShim, resolveLauncherPath } from "./update.ts";
+import { findWindowsShim } from "./update.ts";
 
 export class CliUninstallError extends Schema.TaggedError<CliUninstallError>()(
   "CliUninstallError",
@@ -33,6 +34,7 @@ export class CliUninstallError extends Schema.TaggedError<CliUninstallError>()(
 
 export interface UninstallPlan {
   readonly service: boolean;
+  readonly otherHomeService: string | undefined;
   readonly versionsDir: string;
   readonly launchers: ReadonlyArray<string>;
   readonly runtimeDir: string | undefined;
@@ -147,15 +149,18 @@ const planUninstall = Effect.fn("cli.uninstall.plan")(function* (input: {
   const path = yield* Path.Path;
   const service = yield* BootService.BootService;
   const status = yield* service.status;
+  const installedBaseDir =
+    status.supported && status.installed ? status.installedBaseDir : undefined;
   const servesThisHome =
-    status.installedBaseDir !== undefined &&
-    path.resolve(status.installedBaseDir) === path.resolve(input.baseDir);
+    installedBaseDir !== undefined &&
+    path.resolve(installedBaseDir) === path.resolve(input.baseDir);
   const versionsDir = pinnedRuntimeVersionsDir(path, input.baseDir);
   const runtimeDir = path.dirname(versionsDir);
   const launchedAs = (yield* HostProcess.IsExecutable) ? yield* resolveLauncherPath : undefined;
   const launchedFrom = yield* findOwnedLauncher({ launchedAs, versionsDir });
   const plan: UninstallPlan = {
-    service: status.supported && status.installed && servesThisHome,
+    service: servesThisHome,
+    otherHomeService: servesThisHome ? undefined : installedBaseDir,
     versionsDir,
     launchers: [
       ...new Set([
@@ -195,6 +200,13 @@ export const uninstallCommand = Command.make("uninstall", {
   ),
 );
 
+const logOtherHomeService = (plan: UninstallPlan) =>
+  plan.otherHomeService === undefined
+    ? Effect.void
+    : Console.log(
+        `The ${FORK_DISPLAY_NAME} service serves ${plan.otherHomeService}, so it was not removed. Pass \`${BootService.formatBootServiceBaseDirOption(plan.otherHomeService)}\` to remove it.`,
+      );
+
 const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
   readonly baseDir: string;
   readonly assumeYes: boolean;
@@ -214,6 +226,7 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
         `  This ${FORK_CLI_NAME} runs from a Node script, so it was built from source. Remove it by deleting the checkout.`,
       );
     }
+    yield* logOtherHomeService(plan);
     return;
   }
 
@@ -250,7 +263,7 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
   for (const launcher of plan.launchers) {
     // The prompt can wait a long time; never delete a file that replaced the launcher meanwhile.
     if (!(yield* ownsLauncher(launcher, plan.versionsDir))) {
-      yield* Console.log(`Left ${launcher}: it no longer runs this t3.`);
+      yield* Console.log(`Left ${launcher}: it no longer runs this ${FORK_CLI_NAME}.`);
       continue;
     }
     yield* fs
@@ -288,4 +301,5 @@ const runUninstall = Effect.fn("cli.uninstall.run")(function* (input: {
   }
   yield* Console.log("");
   yield* Console.log(`${FORK_CLI_NAME} is uninstalled. Thanks for trying ${FORK_DISPLAY_NAME}.`);
+  yield* logOtherHomeService(plan);
 });

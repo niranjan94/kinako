@@ -256,6 +256,29 @@ function upsertVisibleTurnItem(
   return updated;
 }
 
+// A user item retained for a queued run stays hidden until the run leaves the
+// queue, and its update can arrive before or after that run update. Items in
+// `turnItems` were loaded or streamed, so they skip the partial-window check;
+// items never received stay absent.
+function restoreQueuedUserItems(
+  projection: OrchestrationV2ThreadProjection,
+  runId: OrchestrationV2Run["id"],
+): OrchestrationV2ThreadProjection["visibleTurnItems"] {
+  let visibleTurnItems = projection.visibleTurnItems;
+  for (const item of projection.turnItems) {
+    if (item.runId !== runId || item.type !== "user_message" || item.inputIntent !== "queued_turn")
+      continue;
+    if (!shouldShowLocalTurnItem(projection, item)) continue;
+    visibleTurnItems = upsertVisibleTurnItem(
+      { ...projection, visibleTurnItems },
+      item,
+      false,
+      null,
+    );
+  }
+  return visibleTurnItems;
+}
+
 export function applyOrchestrationV2ProjectionEvent(
   projection: OrchestrationV2ThreadProjection | null,
   event: OrchestrationV2DomainEvent,
@@ -312,7 +335,10 @@ export function applyOrchestrationV2ProjectionEvent(
             : {}),
         }),
       };
-      return { ...next, visibleTurnItems: activeVisibleTurnItems(next) };
+      const visible = { ...next, visibleTurnItems: activeVisibleTurnItems(next) };
+      return current?.status === "queued" && event.payload.status !== "queued"
+        ? { ...visible, visibleTurnItems: restoreQueuedUserItems(visible, event.payload.id) }
+        : visible;
     }
     case "run.recap-updated":
       return {

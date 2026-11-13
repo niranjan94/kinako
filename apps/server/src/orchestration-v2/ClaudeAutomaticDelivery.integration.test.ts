@@ -183,6 +183,7 @@ it.effect.each(deliveries)(
               }),
             forkSession: () => Effect.die("unused"),
             subagentLaunchToolUseId: () => Effect.succeed(null),
+            subagentModel: () => Effect.succeed(null),
             assertComplete: Effect.void,
           },
         });
@@ -538,6 +539,7 @@ it.effect("applies an effort change to the running Claude query without waiting 
             }),
           forkSession: () => Effect.die("unused"),
           subagentLaunchToolUseId: () => Effect.succeed(null),
+          subagentModel: () => Effect.succeed(null),
           assertComplete: Effect.void,
         },
       });
@@ -736,6 +738,7 @@ it.effect("offers a continuation for a later wake after a queued continuation is
                 }),
               forkSession: () => Effect.die("unused"),
               subagentLaunchToolUseId: () => Effect.succeed(null),
+              subagentModel: () => Effect.succeed(null),
               assertComplete: Effect.void,
             },
           }).pipe(Effect.provideContext(services));

@@ -81,6 +81,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.serverDisableAcpRegistryProvider]: "server",
   [WS_METHODS.serverLogoutAcpRegistry]: "server",
   [WS_METHODS.serverDiscoverSourceControl]: "server",
+  [WS_METHODS.serverCheckSecretSource]: "server",
   [WS_METHODS.serverGetTraceDiagnostics]: "server",
   [WS_METHODS.serverGetProcessDiagnostics]: "server",
   [WS_METHODS.serverGetHostResources]: "server",
@@ -232,7 +233,6 @@ const RPC_AGGREGATES = {
   [WS_METHODS.subscribeAuthAccess]: "auth",
   // Fork additions stay last so upstream's list merges cleanly.
   [ORCHESTRATION_V2_WS_METHODS.getRunHistory]: "orchestration",
-  [WS_METHODS.serverSubscribeKeepAwakeStatus]: "server",
   [WS_METHODS.followUpsStart]: "follow-ups",
   [WS_METHODS.followUpsSetDismissed]: "follow-ups",
   [WS_METHODS.issuesList]: "pull-requests",

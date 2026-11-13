@@ -6,9 +6,11 @@ import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
 
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { Argument, Command } from "effect/cli";
 
 import packageJson from "../../package.json" with { type: "json" };
+import * as DesktopUpdateMarker from "../desktopUpdate/DesktopUpdateMarker.ts";
 import { seedServiceState } from "../serviceLauncher.ts";
 
 const canBind = (port: number) =>
@@ -140,7 +142,28 @@ const seedServiceStateCommand = Command.make("seed-service-state", {
   ),
 );
 
+const updateRemaining = Command.make("update-remaining", {
+  markerFile: Argument.String("marker-file"),
+}).pipe(
+  Command.withHandler(({ markerFile }) =>
+    DesktopUpdateMarker.DesktopUpdateMarker.use((marker) => marker.remainingWait(markerFile)).pipe(
+      Effect.flatMap((remaining) =>
+        Effect.sync(() => {
+          process.stdout.write(Option.match(remaining, { onNone: () => "", onSome: String }));
+        }),
+      ),
+    ),
+  ),
+  Command.provide(DesktopUpdateMarker.layer),
+);
+
 export const sshHelperCommand = Command.make("__ssh-helper").pipe(
   Command.unlisted,
-  Command.withSubcommands([pickPort, waitReady, runtimePort, seedServiceStateCommand]),
+  Command.withSubcommands([
+    pickPort,
+    waitReady,
+    runtimePort,
+    seedServiceStateCommand,
+    updateRemaining,
+  ]),
 );

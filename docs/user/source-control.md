@@ -176,7 +176,9 @@ publish it. If Git has no name or email on that machine, the project is created 
 first commit.
 
 Use **Add Project** in the command palette (`Cmd/Ctrl+K`) to clone a repository. Choose a hosting
-provider or paste a Git URL, then choose where to save it. A branch or file page copied from GitHub,
+provider or paste a Git URL, then choose where to save it. Only GitHub is listed at first. To list
+another provider here and in **Publish Repository**, turn on its switch under
+**Settings → Source control**. A branch or file page copied from GitHub,
 GitLab, GitCafe, Codeberg or Bitbucket also works: T3 Code clones that repository's default branch.
 On other hosts, paste the repository's clone URL. The project opens right away while the
 clone runs in the background: you can write your first prompt, and sending waits until the files
@@ -354,7 +356,8 @@ review is terminal. An open or unsynced link keeps it active.
 Ask the agent to watch, monitor, or babysit a pull request and it calls `watch_pull_request`. While
 the thread is active, the server checks the pull request every two minutes and wakes the agent when a
 check fails or waits for a maintainer's approval, the required checks pass, someone else comments or reviews, or the branch starts to
-conflict. Threads in a project that watch the same pull request share one check. On GitHub, a check
+conflict. On github.com it also wakes the agent, with GitHub's reason, when the merge queue drops
+the pull request without merging it. Threads in a project that watch the same pull request share one check. On GitHub, a check
 first asks whether anything changed and reads the pull request only when it did, which keeps
 watching inside GitHub's rate limit. Comments from your own account do not wake it. Watching ends
 when the pull request merges or closes, after 10 wakes in a row that bring only comments, after 8
@@ -367,9 +370,12 @@ watched pull request shows an eye; click it to stop watching.
 
 **Auto-fix CI** lets the agent fix its own failing checks. Turn it on from the row menu in the **Linked pull requests** panel, with **Auto-fix CI** in a pull request's AI helpers on mobile, or by asking the agent. It starts watching if the pull request is not watched yet. When a check fails on a new commit, the agent gets a turn to reproduce and fix it, at most once per commit. Fix turns wait for any running turn and for your answers to pending questions. After 3 attempts in a row without the checks passing, or when a fix turn ends without pushing a commit, Auto-fix pauses and the agent tells you why. While paused, failing checks do not wake the agent; comments and conflicts still do. Checks passing resets the count. To resume after a pause, choose **Resume auto-fix CI** in the row menu. Turning Auto-fix off keeps the watch; stopping the watch turns Auto-fix off too.
 
-A watched thread counts as working between wakes, so it stays in the **Working** section and does
-not auto-settle. Agents stop watching when they hand the work back to you, and the thread then
-returns to your inbox.
+A watched thread counts as working while the pull request still has checks running, so it stays in
+the **Working** section, including after the agent pushes a fix. Once every check has finished,
+including review bots that report as checks, the thread returns to your inbox: what happens next is
+up to a person. That includes a workflow waiting for a maintainer to approve it, which runs only
+once someone does. The watch stays on and still wakes the agent on new comments, failed checks or
+conflicts, and a watched thread never auto-settles.
 
 Cross-repository links use a project on the same host. Azure DevOps reviews require a project checked
 out from the matching organization and repository.

@@ -183,7 +183,9 @@ The Projects category, under Code, holds the project's name, icon, actions,
 checkouts and removal. Actions belong to a project: editing them creates the project's own list
 on each selected environment, and reset returns to the environment's shared list. A project's
 `kinako.json` actions can be imported there. A repository without a `kinako.json` has its
-upstream T3 Code `t3.json` read instead; new settings belong in `kinako.json`.
+upstream T3 Code `t3.json` read instead; new settings belong in `kinako.json`. When a project has
+several checkouts on one environment, choose one in the scope line at the top to see or change only
+that checkout's settings.
 
 Settings a repository can also declare in `kinako.json`, such as the workspace for new threads,
 resolve in one order: a project override, then the environment setting, then `kinako.json`, then the

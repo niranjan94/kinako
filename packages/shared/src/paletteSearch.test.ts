@@ -338,6 +338,15 @@ describe("scoreThreadSearch beyond Latin text and titles", () => {
       ranges: [{ start: 0, end: 7 }],
     });
     expect(scoreThreadSearch("trim", subject, NOW)?.explain?.()).toBeUndefined();
+    // Nor is it in the flat <prefix>-<hex> form used when a prefix branch blocks nested refs.
+    const P = WORKTREE_BRANCH_PREFIX;
+    const flat = thread("Add search", { branch: `${P}-abcd1234` });
+    expect(scoreThreadSearch(P, flat, NOW)).toBeNull();
+    expect(scoreThreadSearch(`${P} connect`, flat, NOW)).toBeNull();
+    expect(scoreThreadSearch("abcd1234", flat, NOW)).not.toBeNull();
+    for (const query of [`${P}-abcd`, `${P}-abcd1234 connect`, `connect ${P}-abcd1234`]) {
+      expect(scoreThreadSearch(query, { ...flat, projectTitle: "connect" }, NOW)).not.toBeNull();
+    }
   });
 
   it("reads letters and numbers typed together, without forgiving typos in numbers", () => {

@@ -219,7 +219,6 @@ export const RPC_REQUIRED_SCOPES = {
   // Fork additions stay last so upstream's list merges cleanly.
   [ORCHESTRATION_V2_WS_METHODS.getRunHistory]: AuthOrchestrationReadScope,
   [WS_METHODS.vcsSubscribeWorktreeSnapshots]: AuthOrchestrationReadScope,
-  [WS_METHODS.serverSubscribeKeepAwakeStatus]: AuthOrchestrationReadScope,
   [WS_METHODS.issuesList]: AuthOrchestrationReadScope,
   [WS_METHODS.issuesDetail]: AuthOrchestrationReadScope,
   [WS_METHODS.agentSessionsList]: AuthOrchestrationReadScope,

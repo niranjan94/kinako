@@ -73,6 +73,7 @@ export class DesktopSshEnvironment extends Context.Service<
       target: DesktopSshEnvironmentTarget,
       enabled: boolean,
     ) => Effect.Effect<DesktopSshNetworkAccessState | null, DesktopSshEnvironmentOperationError>;
+    readonly closeAllTunnels: Effect.Effect<void>;
   }
 >()("@t3tools/desktop/ssh/DesktopSshEnvironment") {}
 
@@ -179,6 +180,7 @@ export const make = Effect.gen(function* () {
       Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
       Effect.provide(runtimeContext),
     ),
+    closeAllTunnels: manager.closeAllTunnels,
   });
 });
 
