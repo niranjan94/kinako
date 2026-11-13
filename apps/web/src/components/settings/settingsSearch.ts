@@ -717,7 +717,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "thread-notifications",
     title: "Thread notifications",
     to: "/settings/general",
-    searchTerms: ["notification sound alert completion input approval desktop"],
+    searchTerms: [
+      "notification sound theme preview sounds.sh alert completion input approval desktop minecraft retro age of empires sims resident evil argento smooth",
+    ],
   },
   {
     id: "in-app-notifications",

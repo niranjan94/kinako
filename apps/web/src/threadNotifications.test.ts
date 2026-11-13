@@ -57,6 +57,21 @@ describe("playNotificationSound", () => {
     await playNotificationSound("input", () => true);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(audio.started).toBe(2);
+
+    unlockNotificationAudio("aoe2");
+    await playNotificationSound("completion", () => true, "aoe2");
+    await playNotificationSound("input", () => true, "aoe2");
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => url)).toEqual([
+      expect.stringContaining("notification-completion.mp3"),
+      expect.stringContaining("notification-input.mp3"),
+      expect.stringContaining("aoe2-completion.mp3"),
+      expect.stringContaining("aoe2-input.mp3"),
+    ]);
+    expect(audio.started).toBe(4);
+
+    unlockNotificationAudio("default");
+    unlockNotificationAudio("aoe2");
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it("retries failed preloads on an alert rather than every gesture", async () => {

@@ -140,7 +140,11 @@ export function startThreadNotifications(
         .has(threadKey({ environmentId, threadId: thread.id }))
     )
       return;
-    const { notificationMode: mode, inAppNotificationsEnabled } = getClientSettings();
+    const {
+      notificationMode: mode,
+      notificationSoundTheme,
+      inAppNotificationsEnabled,
+    } = getClientSettings();
     const active = activeThread();
     if (
       kind === "wake" &&
@@ -165,8 +169,16 @@ export function startThreadNotifications(
                   ? "Guest request"
                   : "Input needed";
     if (hasNotificationSound(mode)) {
-      void playNotificationSound(kind === "wake" ? "completion" : kind, () =>
-        hasNotificationSound(getClientSettings().notificationMode),
+      void playNotificationSound(
+        kind === "wake" ? "completion" : kind,
+        () => {
+          const current = getClientSettings();
+          return (
+            hasNotificationSound(current.notificationMode) &&
+            current.notificationSoundTheme === notificationSoundTheme
+          );
+        },
+        notificationSoundTheme,
       );
     }
     if (
@@ -425,11 +437,12 @@ export function startThreadNotifications(
       });
     }
     if (hasNotificationSound(nextMode)) {
-      document.addEventListener("pointerdown", unlockNotificationAudio);
-      document.addEventListener("keydown", unlockNotificationAudio);
+      const unlockAudio = () => unlockNotificationAudio(getClientSettings().notificationSoundTheme);
+      document.addEventListener("pointerdown", unlockAudio);
+      document.addEventListener("keydown", unlockAudio);
       stops.push(() => {
-        document.removeEventListener("pointerdown", unlockNotificationAudio);
-        document.removeEventListener("keydown", unlockNotificationAudio);
+        document.removeEventListener("pointerdown", unlockAudio);
+        document.removeEventListener("keydown", unlockAudio);
       });
     }
     stopModeListeners = () => {

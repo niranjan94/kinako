@@ -74,6 +74,7 @@ vi.mock(import("../hooks/useSettings"), async (original) => ({
   }) as never,
   getClientSettings: (() => ({
     notificationMode: state.mode,
+    notificationSoundTheme: "retro",
     inAppNotificationsEnabled: state.inApp,
   })) as never,
 }));
@@ -290,7 +291,7 @@ it("presents completion notifications and sound as soon as the shell completes",
     }),
   );
   expect(TestNotification.sent.map((sent) => sent.title)).toEqual(["Thread completed"]);
-  expect(state.sound).toHaveBeenCalledWith("completion", expect.any(Function));
+  expect(state.sound).toHaveBeenCalledWith("completion", expect.any(Function), "retro");
 });
 
 it.each([false, true])(

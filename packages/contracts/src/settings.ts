@@ -280,6 +280,18 @@ export const NotificationMode = Schema.Literals([
 ]);
 export type NotificationMode = typeof NotificationMode.Type;
 
+export const NotificationSoundTheme = Schema.Literals([
+  "default",
+  "smooth",
+  "aoe2",
+  "retro",
+  "minecraft",
+  "sims",
+  "re",
+  "argento",
+]);
+export type NotificationSoundTheme = typeof NotificationSoundTheme.Type;
+
 export const QuitConfirmationMode = Schema.Literals(["direct", "hold", "double-click"]);
 export type QuitConfirmationMode = typeof QuitConfirmationMode.Type;
 const DEFAULT_QUIT_CONFIRMATION_MODE: QuitConfirmationMode = "hold";
@@ -404,6 +416,9 @@ export type VoiceTranscriptionDestination = typeof VoiceTranscriptionDestination
 export const ClientSettingsSchema = Schema.Struct({
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("off" as const)),
+  ),
+  notificationSoundTheme: NotificationSoundTheme.pipe(
+    Schema.withDecodingDefault(Effect.succeed("default" as const)),
   ),
   inAppNotificationsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   diffColorScheme: DiffColorScheme.pipe(
@@ -2049,6 +2064,7 @@ export function requiredScopesForProjectMutation(
 
 export const ClientSettingsPatch = Schema.Struct({
   notificationMode: Schema.optionalKey(NotificationMode),
+  notificationSoundTheme: Schema.optionalKey(NotificationSoundTheme),
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),

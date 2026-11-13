@@ -308,10 +308,23 @@ describe("resolveIdleCompaction", () => {
 describe("ClientSettings notifications", () => {
   it("requires opt-in when existing settings omit notification preferences", () => {
     expect(decodeClientSettings({}).notificationMode).toBe("off");
+    expect(decodeClientSettings({}).notificationSoundTheme).toBe("default");
     expect(decodeClientSettings({}).inAppNotificationsEnabled).toBe(false);
     expect(decodeClientSettingsPatch({})).not.toHaveProperty("inAppNotificationsEnabled");
     expect(decodeClientSettingsPatch({})).not.toHaveProperty("notificationMode");
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("notificationSoundTheme");
   });
+
+  it.each(["default", "smooth", "aoe2", "retro", "minecraft", "sims", "re", "argento"])(
+    "persists the %s sound theme independently of notification mode",
+    (notificationSoundTheme) => {
+      const patch = decodeClientSettingsPatch({ notificationSoundTheme });
+      const settings = decodeClientSettings(patch);
+      expect(settings.notificationMode).toBe("off");
+      expect(encodeClientSettings(settings).notificationSoundTheme).toBe(notificationSoundTheme);
+      expect(() => decodeClientSettingsPatch({ notificationSoundTheme: "unknown" })).toThrow();
+    },
+  );
 });
 
 describe("ClientSettings quit confirmation", () => {

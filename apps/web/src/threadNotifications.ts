@@ -1,8 +1,7 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import type { ClientSettings } from "@t3tools/contracts/settings";
+import type { ClientSettings, NotificationSoundTheme } from "@t3tools/contracts/settings";
 
-import completionUrl from "./assets/notification-completion.mp3";
-import inputUrl from "./assets/notification-input.mp3";
+import { NOTIFICATION_SOUND_THEMES } from "./notificationSounds";
 
 type NotificationMode = ClientSettings["notificationMode"];
 export const NOTIFICATION_MODE_LABELS = {
@@ -82,6 +81,7 @@ export function setNotificationBadge(count: number) {
 
 let audioContext: AudioContext | undefined;
 const buffers = new Map<string, Promise<AudioBuffer>>();
+const preloadedThemes = new Set<NotificationSoundTheme>();
 /** When each sound's current playback ends, on the audio context's clock. */
 const playingUntil = new Map<string, number>();
 
@@ -101,24 +101,27 @@ function loadNotificationBuffer(context: AudioContext, url: string): Promise<Aud
 }
 
 /** Called from a gesture so browsers allow later background playback. */
-export function unlockNotificationAudio() {
-  const firstUnlock = audioContext === undefined;
+export function unlockNotificationAudio(theme: NotificationSoundTheme = "default") {
   audioContext ??= new AudioContext();
-  void audioContext.resume().catch(() => undefined);
-  if (!firstUnlock) return;
+  const resumed = audioContext.resume().catch(() => undefined);
+  if (preloadedThemes.has(theme)) return resumed;
+  preloadedThemes.add(theme);
   // Fetch and decode during interaction so the first alert is ready when the thread finishes.
-  for (const url of [completionUrl, inputUrl]) {
+  const sounds = NOTIFICATION_SOUND_THEMES[theme];
+  for (const url of [sounds.completion, sounds.input]) {
     void loadNotificationBuffer(audioContext, url).catch(() => undefined);
   }
+  return resumed;
 }
 
 export async function playNotificationSound(
   kind: "completion" | "input",
   shouldPlay: () => boolean,
+  theme: NotificationSoundTheme = "default",
 ) {
   if (!audioContext || audioContext.state !== "running") return;
   const context = audioContext;
-  const url = kind === "completion" ? completionUrl : inputUrl;
+  const url = NOTIFICATION_SOUND_THEMES[theme][kind];
   try {
     const decoded = await loadNotificationBuffer(context, url);
     if (!shouldPlay() || context.state !== "running") return;
