@@ -108,10 +108,18 @@ function watchGuideRun(
         },
       });
     };
-    const mode = getClientSettings().notificationMode;
+    const { notificationMode: mode, notificationSoundTheme } = getClientSettings();
     if (hasNotificationSound(mode)) {
-      void playNotificationSound(failure === null ? "completion" : "input", () =>
-        hasNotificationSound(getClientSettings().notificationMode),
+      void playNotificationSound(
+        failure === null ? "completion" : "input",
+        () => {
+          const current = getClientSettings();
+          return (
+            hasNotificationSound(current.notificationMode) &&
+            current.notificationSoundTheme === notificationSoundTheme
+          );
+        },
+        notificationSoundTheme,
       );
     }
     if (looking) {

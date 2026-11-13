@@ -51,6 +51,7 @@ vi.mock(import("../hooks/useSettings"), async (original) => ({
   subscribeClientSettings: (() => () => undefined) as never,
   getClientSettings: (() => ({
     notificationMode: state.mode,
+    notificationSoundTheme: "default",
     inAppNotificationsEnabled: true,
   })) as never,
 }));
