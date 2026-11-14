@@ -202,9 +202,16 @@ async function serviceUnitFromEnvironment(
 // Only the version segment changes, so quoted or escaped paths stay as rendered.
 // The launch agent's PATH names a versions directory without the executable; leave it.
 const SERVICE_UNIT_PROGRAMS = [
-  /^(ExecStart=.*?[\\/]runtime[\\/]versions[\\/])([^\\/\s"]+)([\\/]t3)(?=["\s])/m,
-  /(<string>[^<]*?[\\/]runtime[\\/]versions[\\/])([^\\/<]+)([\\/]t3<\/string>\s*<string>__service-launcher<\/string>)/,
-  /(<Arguments>--headless "[^"<]*?[\\/]runtime[\\/]versions[\\/])([^\\/"<]+)([\\/]t3\.exe" "__service-launcher")/,
+  new RegExp(
+    String.raw`^(ExecStart=.*?[\\/]runtime[\\/]versions[\\/])([^\\/\s"]+)([\\/]${FORK_CLI_NAME})(?=["\s])`,
+    "m",
+  ),
+  new RegExp(
+    String.raw`(<string>[^<]*?[\\/]runtime[\\/]versions[\\/])([^\\/<]+)([\\/]${FORK_CLI_NAME}<\/string>\s*<string>__service-launcher<\/string>)`,
+  ),
+  new RegExp(
+    String.raw`(<Arguments>--headless "[^"<]*?[\\/]runtime[\\/]versions[\\/])([^\\/"<]+)([\\/]${FORK_CLI_NAME}\.exe" "__service-launcher")`,
+  ),
 ] as const;
 
 /**
