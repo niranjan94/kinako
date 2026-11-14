@@ -11,6 +11,8 @@ export interface CaptureCheckpointInput {
   readonly cwd: string;
   readonly checkpointRef: CheckpointRef;
   readonly message?: string;
+  /** The checkpoint this one follows, so a turn that switched branches starts where it landed. */
+  readonly previousCheckpointRef?: CheckpointRef;
 }
 
 export interface RestoreCheckpointInput {

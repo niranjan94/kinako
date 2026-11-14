@@ -133,7 +133,7 @@ Nothing migrates automatically: Kinako never reads `~/.t3` or upstream's desktop
 Upstream's `ci.yml` runs unchanged except for its runners. GitHub's standard runners are free for public repositories but have half the cores of upstream's Blacksmith machines, so job timeouts are doubled, and so is the web suite's 15 s per-test timeout, which the heaviest browser tests otherwise hit on these runners. The substitutions are safe to rerun:
 
 ```bash
-perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-24.04/ || s/blacksmith-\d+vcpu-macos-26/macos-26/) { $d = 1; next } if ($d && s/^(    timeout-minutes: )(\d+)$/$1 . $2 * 2/e) { $d = 0 }' .github/workflows/ci.yml
+perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-24.04/ || s/blacksmith-\d+vcpu-macos-\d+/macos-26/) { $d = 1; next } if ($d && s/^(    timeout-minutes: )(\d+)$/$1 . $2 * 2/e) { $d = 0 }' .github/workflows/ci.yml
 perl -pi -e 's/^(        run: vp run --filter \@t3tools\/web test)( --shard |$)/$1 --testTimeout=30000 --hookTimeout=30000$2/' .github/workflows/ci.yml
 ```
 

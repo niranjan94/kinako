@@ -39,7 +39,9 @@ import { planThreadWorkspaceRelocation } from "../orchestration-v2/ThreadWorkspa
 import * as ServerSettings from "../serverSettings.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import { makeIsManagedWorktreePath } from "../worktreesDirectory.ts";
+import * as ProcessRunner from "../processRunner.ts";
 import * as ProjectEnrichmentService from "./ProjectEnrichmentService.ts";
+import { makeIsWorktreeContainer } from "./worktreeContainer.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 
 export interface ProjectCreateInput extends ProjectCreatePayload {
@@ -217,6 +219,9 @@ export const make = Effect.gen(function* () {
   const git = yield* GitVcsDriver.GitVcsDriver;
   const fileSystem = yield* FileSystem.FileSystem;
   const isManagedWorktreePath = yield* makeIsManagedWorktreePath;
+  const isWorktreeContainer = yield* makeIsWorktreeContainer.pipe(
+    Effect.provide(ProcessRunner.layer),
+  );
   const projectLocks = yield* KeyedLock.make<ProjectId>();
   const workspaceLocks = yield* KeyedLock.make<string>();
 
@@ -279,6 +284,17 @@ export const make = Effect.gen(function* () {
             }),
         ),
       );
+
+  const rejectWorktreeContainer = Effect.fn("ProjectService.rejectWorktreeContainer")(function* (
+    projectId: ProjectId,
+    workspaceRoot: string,
+  ) {
+    if (!(yield* isWorktreeContainer(workspaceRoot))) return;
+    return yield* new ProjectInvalidError({
+      projectId,
+      detail: `${workspaceRoot} holds a repository's worktrees but is not a checkout itself. Add one of its worktrees as the project instead.`,
+    });
+  });
 
   const commit = Effect.fn("ProjectService.commit")(function* (command: ProjectCommand) {
     const { projectId } = command;
@@ -419,6 +435,7 @@ export const make = Effect.gen(function* () {
         workspaceRoot: input.workspaceRoot,
         createIfMissing: input.createWorkspaceRootIfMissing ?? false,
       });
+      yield* rejectWorktreeContainer(input.projectId, workspaceRoot);
       yield* commit({
         type: "project.create",
         commandId: input.commandId,
@@ -640,6 +657,7 @@ export const make = Effect.gen(function* () {
             );
       const relocating = workspaceRoot !== previousRoot;
       if (relocating) {
+        yield* rejectWorktreeContainer(input.projectId, workspaceRoot);
         // Rebasing threads onto a root the project commit will refuse would
         // strand them, so the commit's ownership check runs first too.
         const owner = yield* projects.findActiveByWorkspaceRoot(workspaceRoot).pipe(

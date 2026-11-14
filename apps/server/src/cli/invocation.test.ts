@@ -57,8 +57,8 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
           entry: "/home/theo/.local/lib/node_modules/t3/dist/bin.mjs",
           path: yield* pathWithT3,
         }),
-      ).toBe('sudo env "PATH=$PATH" kinako browser setup');
-    }).pipe(Effect.scoped),
+      ).toBe(`sudo env "PATH=$PATH" ${FORK_CLI_NAME} browser setup`);
+    }),
   );
 
   it.effect("keeps the arguments, so root runs setup on the same T3 home", () =>
@@ -75,7 +75,7 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
       expect(
         yield* rootCommand({ node: "/opt/t3/t3", entry: "/opt/t3/t3", executable: true, args }),
       ).toBe("sudo /opt/t3/t3 browser setup --base-dir '/srv/t3 home'");
-    }).pipe(Effect.scoped),
+    }),
   );
 
   it.effect("names this install's launcher when t3 is not on PATH", () =>
@@ -150,8 +150,8 @@ it.layer(NodeServices.layer)("root CLI commands", (it) => {
 
       expect(
         yield* rootCommand({ ...desktop, env: { T3CODE_CLI_PATH: path.join(home, "gone") } }),
-      ).toBe('sudo env "PATH=$PATH" kinako browser setup');
-    }).pipe(Effect.scoped),
+      ).toBe(`sudo env "PATH=$PATH" ${FORK_CLI_NAME} browser setup`);
+    }),
   );
 });
 
@@ -192,7 +192,7 @@ it.layer(NodeServices.layer)("host CLI commands", (it) => {
       expect((yield* hostCommand("linux", { T3CODE_CLI_PATH: shim })).command).toMatch(
         / doctor --base-dir 'C:\\Users\\Jane Doe\\\.t3'$/,
       );
-    }).pipe(Effect.scoped),
+    }),
   );
 });
 

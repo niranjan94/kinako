@@ -276,6 +276,13 @@ function resolveHeadRepositoryNameWithOwner(pullRequest: PullRequestHeadRemoteIn
   return normalizeOptionalString(pullRequest.headRepositoryNameWithOwner);
 }
 
+const PULL_REQUEST_WORKTREE_LOCAL_BRANCH = new RegExp(`^${FORK_CLI_NAME}[/-]pr-\\d+[/-]`, "u");
+
+// Both names `resolvePullRequestWorktreeLocalBranchName` gives a fork pull request's branch.
+function isPullRequestWorktreeLocalBranchName(branch: string): boolean {
+  return PULL_REQUEST_WORKTREE_LOCAL_BRANCH.test(branch);
+}
+
 function resolvePullRequestWorktreeLocalBranchName(
   pullRequest: ResolvedPullRequest & PullRequestHeadRemoteInfo,
   localBranches: ReadonlySet<string>,
@@ -1880,7 +1887,12 @@ export const make = Effect.gen(function* () {
         };
       }
     }
-    if (headContext.headBranch === details.branch || headContext.isCrossRepository) {
+    // A fork's default branch can be a PR head. When that fork is origin it is also where new
+    // branches start, so only a branch made for a pull request takes it as its head.
+    const tracksForkHead =
+      headContext.isCrossRepository &&
+      (headContext.remoteName !== "origin" || isPullRequestWorktreeLocalBranchName(details.branch));
+    if (headContext.headBranch === details.branch || tracksForkHead) {
       return { headContext, lookup: true };
     }
     const upstreamHeadIsBase =

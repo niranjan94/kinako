@@ -224,6 +224,8 @@ export function importedThreadId(
 
 const MAX_IMPORT_GENERATIONS = 100;
 
+type AgentSessionWorktree = { readonly path: string; readonly branch: string | null };
+
 /** Events that create an imported thread with its visible history, bound to its native session. */
 export function importedThreadEvents(input: {
   readonly threadId: ThreadId;
@@ -232,6 +234,7 @@ export function importedThreadEvents(input: {
   readonly thread: AgentSessionScanner.AgentSessionThread;
   readonly nativeThreadId?: string;
   readonly runtimeMode?: OrchestrationV2AppThread["runtimeMode"];
+  readonly worktree?: AgentSessionWorktree | null;
 }): ReadonlyArray<OrchestrationV2DomainEvent> {
   const { threadId, thread, providerThreadId } = input;
   const nativeThreadId = input.nativeThreadId ?? thread.providerSessionId;
@@ -249,8 +252,8 @@ export function importedThreadEvents(input: {
     modelSelection: { instanceId: thread.providerInstanceId, model },
     runtimeMode: input.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-    branch: null,
-    worktreePath: null,
+    branch: input.worktree?.branch ?? null,
+    worktreePath: input.worktree?.path ?? null,
     linkedPullRequest: null,
     branchPullRequest: null,
     activeProviderThreadId: providerThreadId,
@@ -386,6 +389,7 @@ const make = Effect.gen(function* () {
     readonly thread: AgentSessionScanner.AgentSessionThread;
     readonly source: AgentSessionImportSource;
     readonly runtimeMode: OrchestrationV2AppThread["runtimeMode"];
+    readonly worktree?: AgentSessionWorktree | null | undefined;
     readonly generation?: number;
   }) {
     const { thread, source } = input;
@@ -416,7 +420,7 @@ const make = Effect.gen(function* () {
           thread.source === "claudeAgent"
             ? { threadId, resume: thread.providerSessionId }
             : { threadId: nativeThreadId },
-        runtimePayload: { cwd: input.workspaceRoot },
+        runtimePayload: { cwd: input.worktree?.path ?? input.workspaceRoot },
       },
       { onConflict: "ignore" },
     );
@@ -479,6 +483,7 @@ const make = Effect.gen(function* () {
         thread,
         nativeThreadId,
         runtimeMode: input.runtimeMode,
+        worktree: input.worktree ?? null,
       }),
     });
     if (committed.length === 0) return null;
@@ -581,6 +586,7 @@ const make = Effect.gen(function* () {
       workspaceRoot: project.workspaceRoot,
       thread: session.value.thread,
       source: session.value.source,
+      worktree: session.value.worktree,
       runtimeMode: yield* importRuntimeMode(input.projectId, project),
       generation,
     }).pipe(
@@ -657,6 +663,7 @@ const make = Effect.gen(function* () {
           workspaceRoot: project.workspaceRoot,
           thread: outcome.thread,
           source,
+          worktree: outcome.worktree,
           runtimeMode,
         }).pipe(
           Effect.map((result) => (result === null ? null : result.recorded)),

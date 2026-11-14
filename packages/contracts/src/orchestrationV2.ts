@@ -598,6 +598,24 @@ export const OrchestrationV2AppThread = Schema.Struct({
 });
 export type OrchestrationV2AppThread = typeof OrchestrationV2AppThread.Type;
 
+/** A visit changes read state only, so its event leaves the rest of the thread out. */
+export const OrchestrationV2ThreadVisit = Schema.Struct({
+  lastVisitedAt: OrchestrationV2AppThread.fields.lastVisitedAt,
+  opens: OrchestrationV2AppThread.fields.opens,
+});
+export type OrchestrationV2ThreadVisit = typeof OrchestrationV2ThreadVisit.Type;
+
+export function applyOrchestrationV2ThreadVisit<Thread extends OrchestrationV2AppThread>(
+  thread: Thread,
+  visit: OrchestrationV2ThreadVisit,
+): Thread {
+  return {
+    ...thread,
+    lastVisitedAt: visit.lastVisitedAt,
+    ...(visit.opens === undefined ? {} : { opens: visit.opens }),
+  };
+}
+
 /** A thread another agent drives: a local subagent or a task delegated from a linked environment. */
 export const isDelegatedAppThread = (
   thread: Pick<OrchestrationV2AppThread, "lineage" | "delegatedFrom">,
@@ -1429,6 +1447,8 @@ export const OrchestrationV2ConversationMessage = Schema.Struct({
   notification: Schema.optional(OrchestrationV2Notification),
   ...OrchestrationV2CreationFields,
   scheduledTaskId: Schema.optional(ScheduledTaskId),
+  /** A scheduled delivery that named no model; it runs on the thread's selection at start. */
+  followsThreadSelection: Schema.optional(Schema.Literal(true)),
   senderThreadId: Schema.optional(ThreadId),
   linkedSender: Schema.optional(OrchestrationV2LinkedSender),
   idleCompaction: Schema.optional(OrchestrationV2IdleCompaction),
@@ -2095,6 +2115,11 @@ export const OrchestrationV2DomainEvent = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2EventBase.fields,
+    type: Schema.Literal("thread.visit-recorded"),
+    payload: OrchestrationV2ThreadVisit,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2EventBase.fields,
     type: Schema.Literal("run.created"),
     payload: OrchestrationV2Run,
   }),
@@ -2557,6 +2582,11 @@ export const OrchestrationV2AppThreadJson = OrchestrationV2AppThread.mapFields((
   deletedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 }));
 export type OrchestrationV2AppThreadJson = typeof OrchestrationV2AppThreadJson.Type;
+
+export const OrchestrationV2ThreadVisitJson = Schema.Struct({
+  lastVisitedAt: OrchestrationV2AppThreadJson.fields.lastVisitedAt,
+  opens: OrchestrationV2AppThreadJson.fields.opens,
+});
 
 export const OrchestrationV2RunJson = OrchestrationV2Run.mapFields((fields) => ({
   ...fields,
@@ -3068,6 +3098,11 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
   }),
   Schema.Struct({
     ...OrchestrationV2JsonEventBaseFields,
+    type: Schema.Literal("thread.visit-recorded"),
+    payload: OrchestrationV2ThreadVisitJson,
+  }),
+  Schema.Struct({
+    ...OrchestrationV2JsonEventBaseFields,
     type: Schema.Literal("run.created"),
     payload: OrchestrationV2RunJson,
   }),
@@ -3349,6 +3384,8 @@ export const OrchestrationV2Command = Schema.Union([
     associatedWorktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
     additionalDirectories: Schema.optional(Schema.Array(ThreadAdditionalDirectory)),
     expectedBranch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+    /** A message queued in the same commit, so a workspace change cannot settle the thread first. */
+    continuation: Schema.optional(Schema.Struct({ messageId: MessageId, text: Schema.String })),
     /** Reject unless no message or run has landed on this thread. */
     expectedEmpty: Schema.optional(Schema.Boolean),
     requireIdle: Schema.optional(Schema.Boolean),

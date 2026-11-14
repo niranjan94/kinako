@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
+import { FORK_THREAD_LINK_ORIGIN } from "./forkBrand.ts";
 
 import {
   formatHostedThreadLink,
@@ -268,5 +269,30 @@ describe("hosted thread links", () => {
     expect(threadLinkRefs("Open https://kinako.niranjan.io/threads/there/t%3A1", local)).toEqual([
       ref("there", "t:1"),
     ]);
+  });
+
+  it("leaves a hosted link that is part of another link as written", () => {
+    const hosted = `${FORK_THREAD_LINK_ORIGIN}/threads/there/t1`;
+    const relabeled = "[There](t3-thread://v2/there/t1)";
+    const title = titlesIn({ there: { t1: "There" } });
+    for (const [markdown, expected] of [
+      [`https://example.com/?next=${hosted}`],
+      [`[Example](https://example.com/?next=${hosted})`],
+      [`[ ${hosted} ](https://example.com)`],
+      [`[${hosted}](<https://example.com/a b> "Title")`],
+      [`[a](https://example.com/x_(y)) ${hosted}`, `[a](https://example.com/x_(y)) ${relabeled}`],
+      [`(${hosted}) **${hosted}**`, `(${relabeled}) **${relabeled}**`],
+      [`[[[ [old](${hosted})`, `[[[ ${relabeled}`],
+      [`\\\\[old](${hosted})`, `\\\\${relabeled}`],
+      [`\\\\\\\\[old](${hosted})`, `\\\\\\\\${relabeled}`],
+      [`\\[old](${hosted})`, `\\[old](${relabeled})`],
+      [`\\[ ${hosted} ](https://example.com)`, `\\[ ${relabeled} ](https://example.com)`],
+      ["\\[old](t3-thread://v2/there/t1) \\<t3-thread://v2/there/t1>"],
+    ] as const) {
+      expect(relabelThreadLinks(markdown, local, title)).toBe(expected ?? markdown);
+      expect(threadLinkRefs(markdown, local)).toEqual(
+        expected === undefined ? [] : [ref("there", "t1")],
+      );
+    }
   });
 });

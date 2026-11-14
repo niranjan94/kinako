@@ -183,7 +183,7 @@ vp run knip:check > "$S/knip.log" 2>&1; echo "knip=$?"
 "${clean[@]}" vp run --filter t3 test > "$S/test-server.log" 2>&1; echo "server=$?"
 ```
 
-These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/ci.yml`); if CI's commands change, follow them. Run them in the background where you can; the server suite is the long one. Typecheck is step 4's job. `clean` is an array because zsh does not word-split a string variable; an exit code of 127 means the suite never ran.
+Run them on the Node version in the root `package.json` `engines` (older Node fails on missing APIs such as `Uint8Array.fromBase64`), with `HOME` pointed at an empty directory so tests do not read your real `~/.claude` settings, and `PLAYWRIGHT_BROWSERS_PATH` kept on the real cache. If upstream bumped Playwright or Electron, install the browser (`pnpm exec playwright install chromium` in `apps/web`) and Electron's binary first; a missing one fails whole files. These mirror CI's Lint, Test, Test web and Test server jobs (`.github/workflows/ci.yml`); if CI's commands change, follow them. Run them in the background where you can; the server suite is the long one. Typecheck is step 4's job. `clean` is an array because zsh does not word-split a string variable; an exit code of 127 means the suite never ran.
 
 `vp run` stops launching packages after the first failure, so a single known failure hides every package that had not started yet. Check the `vp run: N/M successful` line: every one of the M tasks must have printed a `Test Files` summary. If a known machine failure (below) stopped the run, rerun with that package excluded (for example `--filter '!./apps/desktop'`) until all the others report.
 

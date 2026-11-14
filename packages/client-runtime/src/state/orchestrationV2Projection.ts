@@ -1,4 +1,5 @@
 import { applyThreadPullRequestLinkUpdate } from "../threadPullRequests.ts";
+import { applyOrchestrationV2ThreadVisit } from "@t3tools/contracts";
 import type {
   OrchestrationV2DomainEvent,
   OrchestrationV2Run,
@@ -323,6 +324,11 @@ export function applyOrchestrationV2ProjectionEvent(
     case "thread.marked-unread":
     case "thread.group-set":
       return { ...projection, thread: event.payload };
+    case "thread.visit-recorded":
+      return {
+        ...projection,
+        thread: applyOrchestrationV2ThreadVisit(projection.thread, event.payload),
+      };
     case "run.created":
     case "run.updated": {
       const current = base.runs.find((run) => run.id === event.payload.id);

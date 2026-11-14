@@ -112,6 +112,8 @@ export interface RemoteT3RunnerOptions {
 
 export interface SshEnvironmentManagerOptions {
   readonly resolveCliRunner?: Effect.Effect<RemoteT3RunnerOptions>;
+  // Identifies this install to the remote across edits of a connection; null when unknown.
+  readonly resolveLauncherId?: Effect.Effect<string | null>;
 }
 
 interface SshTunnelEntry {
@@ -1115,6 +1117,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
     target: DesktopSshEnvironmentTarget,
     input?: SshAuth.SshAuthOptions,
     runner?: RemoteT3RunnerOptions,
+    launcherId?: string | null,
   ): Effect.fn.Return<
     {
       readonly remotePort: number;
@@ -1125,6 +1128,11 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
     ChildProcessSpawner.ChildProcessSpawner | Digest.Digest | FileSystem.FileSystem | Path.Path
   > {
     const stateKey = yield* remoteStateKey(target);
+    // The launcher ID is interpolated into the remote shell command, so only hex passes.
+    const launchArgs =
+      typeof launcherId === "string" && /^[0-9a-f]{32}$/u.test(launcherId)
+        ? `${stateKey} ${launcherId}`
+        : stateKey;
     yield* Effect.logInfo("ssh.remoteServer.launch.start", {
       ...sshTargetLogFields(target),
       ...sshRunnerLogFields(runner),
@@ -1137,7 +1145,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
         "sh",
         "-c",
         shellSingleQuote(
-          `case "\${SHELL##*/}" in bash|zsh|ksh|fish|nu) exec "$SHELL" -l -c "exec sh -s -- ${stateKey}" ;; *) exec sh -l -s -- ${stateKey} ;; esac`,
+          `case "\${SHELL##*/}" in bash|zsh|ksh|fish|nu) exec "$SHELL" -l -c "exec sh -s -- ${launchArgs}" ;; *) exec sh -l -s -- ${launchArgs} ;; esac`,
         ),
       ],
       stdin: buildRemoteLaunchScript(runner),
@@ -1824,11 +1832,13 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ...sshRunnerLogFields(input.runner),
       key: input.key,
     });
+    const launcherId =
+      options.resolveLauncherId === undefined ? null : yield* options.resolveLauncherId;
     const remoteLaunch = yield* runWithSshAuth({
       key: input.key,
       target: input.resolvedTarget,
       operation: (authOptions) =>
-        launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner),
+        launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner, launcherId),
     });
     const remotePort = remoteLaunch.remotePort;
     yield* Effect.logDebug("ssh.environment.remotePort.ready", {

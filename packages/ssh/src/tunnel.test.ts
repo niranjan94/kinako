@@ -168,7 +168,7 @@ serve(40);
 // The launch's POSIX bootstrap without the account login shell around it, so the
 // test machine's login profile cannot move HOME.
 const launchStateKey = (command: ChildProcess.Command) =>
-  /exec sh -s -- (\S+)"/u.exec(commandArgs(command).join(" "))?.[1];
+  /exec sh -s -- ([^"]+)"/u.exec(commandArgs(command).join(" "))?.[1];
 
 // Runs the remote half of an SSH launch as a local shell
 // whose HOME is the given directory. Every launch after the first starts once
@@ -1591,7 +1591,7 @@ server.listen(Number(flag("--port") ?? 0), "127.0.0.1", () => {
         const remoteArgs =
           stateKey === undefined
             ? command.args.slice(command.args.indexOf("--") + 2)
-            : ["sh", "-s", "--", stateKey];
+            : ["sh", "-s", "--", ...stateKey.split(" ")];
         return realSpawner.spawn(
           ChildProcess.make("setsid", ["-w", ...remoteArgs], {
             ...command.options,
