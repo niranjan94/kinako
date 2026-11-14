@@ -27,7 +27,7 @@ const WorktreeToolFailure = Schema.Union([WorktreeMcpFailure, OrchestratorMcpFai
 
 const WorktreeHandoffTool = Tool.make("t3_worktree_handoff", {
   description:
-    "Move THIS thread's workspace, keeping tracked and non-ignored untracked changes. Needs an idle thread and a clean destination. `target:worktree` creates a branch or reuses its worktree (must match the source commit); omit `branch` to reuse the associated one. `target:local` returns to the project checkout, keeping the worktree. Runs the setup script by default. Retries: pass the original `expectedWorktreePath` (null for local). Call last in your turn. The move ends the live session. `continuationPrompt` resumes work there next turn. Without it, the thread waits. A separate agent in a worktree: `t3_thread_launch` with `workspaceStrategy`.",
+    "Move THIS thread into a new git worktree on a new branch. Runs the setup script by default. A separate agent in a worktree: `t3_thread_launch` with `workspaceStrategy`. Call last in your turn. The move ends the live session. `continuationPrompt` resumes work there next turn. Without it, the thread waits. The worktree stays after the thread is deleted. Fails if this thread has a worktree.",
   parameters: WorktreeMcpHandoffInput,
   success: WorktreeMcpHandoffResult,
   failure: WorktreeToolFailure,

@@ -2,18 +2,12 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
-/** Uses the managed worktree folder; moves need an idle thread and restore the conversation on its next run. */
+/** Uses the managed worktree folder; handoff detaches the provider, ending this turn and resuming there next run. */
 export const WorktreeMcpHandoffInput = Schema.Struct({
-  target: Schema.optional(Schema.Literals(["local", "worktree"])),
-  expectedWorktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
-  branch: Schema.optional(
-    TrimmedNonEmptyString.annotate({
-      description: "New or existing worktree branch. Omitted: reuse the associated worktree.",
-    }),
-  ),
+  branch: TrimmedNonEmptyString,
   baseRef: Schema.optional(
     TrimmedNonEmptyString.annotate({
-      description: "Must match the source commit. Default: source checkout's HEAD.",
+      description: "Default: checked-out branch.",
     }),
   ),
   startFromOrigin: Schema.optional(
@@ -29,7 +23,7 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
   ),
   continuationPrompt: Schema.optional(
     TrimmedNonEmptyString.check(Schema.isMaxLength(120_000)).annotate({
-      description: "Work to resume after the move, next turn. Omitted: thread waits.",
+      description: "Work to resume in the worktree next turn. Omitted: thread waits.",
     }),
   ),
 });
@@ -70,8 +64,8 @@ export const WorktreeMcpContinuationStatus = Schema.Union([
 export type WorktreeMcpContinuationStatus = typeof WorktreeMcpContinuationStatus.Type;
 
 export const WorktreeMcpHandoffResult = Schema.Struct({
-  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
-  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: TrimmedNonEmptyString,
+  branch: TrimmedNonEmptyString,
   baseRef: TrimmedNonEmptyString,
   startedFromOrigin: Schema.Boolean,
   setupScript: WorktreeMcpSetupScriptStatus,
