@@ -197,11 +197,14 @@ export function RevertConfirmHost(props: {
   readonly threadKey: string;
   readonly restoreNote?: string | null;
   readonly checkpoints: OrchestrationV2ThreadProjection["checkpoints"] | undefined;
+  readonly worktreePath: string | null;
   readonly onConfirm: (turnCount: number, messageId: MessageId, restoreFiles: boolean) => void;
 }) {
   const pending = useThreadOverlay(revertConfirmAtom, props.threadKey);
+  // The server refuses file restore outside an isolated worktree.
   const canRestoreFiles =
     pending !== null &&
+    props.worktreePath !== null &&
     findRevertCheckpoint(props.checkpoints ?? [], pending.turnCount)?.status === "ready";
   const confirm = (restoreFiles: boolean) => {
     if (pending === null || (restoreFiles && !canRestoreFiles)) return;

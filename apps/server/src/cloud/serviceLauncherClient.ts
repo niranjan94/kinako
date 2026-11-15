@@ -10,7 +10,12 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import packageJson from "../../package.json" with { type: "json" };
-import { pinnedRuntimePaths, pinnedRuntimeVersionsDir } from "./pinnedRuntime.ts";
+import {
+  pinnedRuntimePaths,
+  pinnedRuntimeVersionsDir,
+  readPosixLauncherTarget,
+  writePosixLauncher,
+} from "./pinnedRuntime.ts";
 import {
   decodeServiceLauncherContext,
   decodeServiceLauncherParentMessage,
@@ -111,7 +116,7 @@ export class ServiceLauncherClient extends Context.Service<
       readonly targetVersion: string;
       readonly dbPath: string;
     }) => Effect.Effect<string, ServiceLauncherClientError | ServiceLauncherRejectedError>;
-    /** Owned `t3` symlinks move to the new runtime only when this start commits the trial. */
+    /** Owned `t3` launchers move to the new runtime only when this start commits the trial. */
     readonly prepareTrial: (input: {
       readonly baseDir: string;
     }) => Effect.Effect<ServerSelfUpdateOutcome | undefined, ServiceLauncherClientError>;
@@ -190,11 +195,12 @@ export const repointLaunchers = Effect.fn("cloud.service_launcher_client.repoint
               () => Effect.succeedNone,
             ),
           );
-          if (Option.isNone(linkTarget)) return;
-          const relative = path.relative(
-            versionsDir,
-            path.resolve(path.dirname(launchedAs), linkTarget.value),
-          );
+          // A legacy symlink, or the script install.sh and `kinako update` write.
+          const current = Option.isSome(linkTarget)
+            ? path.resolve(path.dirname(launchedAs), linkTarget.value)
+            : yield* readPosixLauncherTarget(launchedAs);
+          if (current === undefined) return;
+          const relative = path.relative(versionsDir, current);
           if (
             relative.length === 0 ||
             relative === ".." ||
@@ -202,22 +208,23 @@ export const repointLaunchers = Effect.fn("cloud.service_launcher_client.repoint
             path.isAbsolute(relative)
           )
             return;
-          const temporary = yield* fs.makeTempDirectoryScoped({
-            directory: path.dirname(launchedAs),
-            prefix: ".t3-launcher-",
+          yield* writePosixLauncher({
+            launcher: launchedAs,
+            executable: target.entryPath,
+            exclusive: false,
           });
-          const link = path.join(temporary, FORK_CLI_NAME);
-          yield* fs.symlink(target.entryPath, link);
-          yield* fs.rename(link, launchedAs);
         }),
       ).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterrupts(cause)
             ? Effect.interrupt
-            : Effect.logWarning("Could not move the t3 command to the updated version", {
-                launchedAs,
-                cause,
-              }),
+            : Effect.logWarning(
+                `Could not move the ${FORK_CLI_NAME} command to the updated version`,
+                {
+                  launchedAs,
+                  cause,
+                },
+              ),
         ),
       );
     }

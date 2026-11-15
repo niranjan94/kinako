@@ -14,6 +14,7 @@ import * as RelayClient from "@t3tools/shared/relayClient";
 import type { ManagedPolicyDocument } from "@t3tools/contracts";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import * as RelayClientLedger from "../cloud/RelayClientLedger.ts";
 import * as ServerConfig from "../config.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as PublicRoute from "./PublicRoute.ts";
@@ -85,6 +86,7 @@ const makeFixture = Effect.fnUntraced(function* (stored?: string, policy?: Manag
           remove: (name) => Effect.sync(() => void secrets.delete(name)),
         }),
         ManagedPolicy.layerTest(policy),
+        RelayClientLedger.layerTest,
         ServerConfig.layerTest(process.cwd(), { prefix: "t3-public-route-test-" }),
       ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),

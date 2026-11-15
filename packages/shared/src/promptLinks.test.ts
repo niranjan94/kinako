@@ -140,4 +140,16 @@ describe("link round trips", () => {
     expect(promptLinkAppPath("https://app.t3.codes/threads/env-1/thread-1")).toBeNull();
     expect(promptLinkAppPath("kinako://app/index.html")).toBeNull();
   });
+
+  it("maps links in browsers without URL.canParse, such as Safari before 17", () => {
+    const canParse = URL.canParse;
+    Reflect.deleteProperty(URL, "canParse");
+    try {
+      expect(promptLinkAppPath("https://kinako.niranjan.io/new?prompt=hi")).toBe("/new?prompt=hi");
+      expect(promptLinkAppPath("https://kinako.niranjan.io/")).toBeNull();
+      expect(promptLinkAppPath("not a url")).toBeNull();
+    } finally {
+      URL.canParse = canParse;
+    }
+  });
 });

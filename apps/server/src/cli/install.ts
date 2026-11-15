@@ -16,7 +16,9 @@ import packageJson from "../../package.json" with { type: "json" };
 import {
   generatedWindowsShimTarget,
   isVersionExecutable,
+  readPosixLauncherTarget,
   recordPinnedRuntimeLauncher,
+  writePosixLauncher,
 } from "../cloud/pinnedRuntime.ts";
 import { detectCliRunner, resolveCliCommand, resolveEntryPath } from "./invocation.ts";
 
@@ -85,7 +87,10 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
         Effect.flatMap((target) =>
           fs.realPath(link).pipe(Effect.orElseSucceed(() => path.resolve(binDir, target))),
         ),
+        // Not a link: the script this command and the install scripts write.
+        Effect.catch(() => readPosixLauncherTarget(link)),
         Effect.option,
+        Effect.map(Option.filter((target) => target !== undefined)),
       );
   // A dangling symlink is occupied too: writing the shim would follow it.
   const occupied =
@@ -116,22 +121,10 @@ export const installCli = Effect.fn("cli.install.install")(function* () {
     yield* fs
       .writeFileString(link, `@echo off\r\n"${executable}" %*`, occupied ? {} : { flag: "wx" })
       .pipe(Effect.mapError(failed(`Could not write ${link}.`)));
-  } else if (!occupied) {
-    yield* fs.symlink(executable, link).pipe(Effect.mapError(failed(`Could not link ${link}.`)));
   } else {
-    // Swap a temporary link into place so a running `t3` never sees the command missing.
-    const staging = `${link}.${process.pid}.tmp`;
-    // Clean up only a staging link this call made, never a file that was already there.
-    yield* fs
-      .symlink(executable, staging)
-      .pipe(
-        Effect.andThen(
-          fs
-            .rename(staging, link)
-            .pipe(Effect.tapError(() => fs.remove(staging, { force: true }).pipe(Effect.ignore))),
-        ),
-        Effect.mapError(failed(`Could not link ${link}.`)),
-      );
+    yield* writePosixLauncher({ launcher: link, executable, exclusive: !occupied }).pipe(
+      Effect.mapError(failed(`Could not write ${link}.`)),
+    );
   }
 
   // Pruning keeps what recorded launchers point at; a background service cannot see binDir otherwise.

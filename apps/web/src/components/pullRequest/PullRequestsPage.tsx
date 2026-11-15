@@ -1272,6 +1272,9 @@ export function PullRequestsPage() {
       {panelToggleControls}
     </div>
   );
+  const listError = listQuery.error
+    ? `${environmentLabels.get(listQuery.error.environmentId) || "Environment"}: ${listQuery.error.message}`
+    : null;
   const carriedToNothing =
     shownCount === 0 &&
     typedQuery.length === 0 &&
@@ -1287,9 +1290,9 @@ export function PullRequestsPage() {
         />
       ) : firstLoad ? (
         <PullRequestListGhost rows={7} caption="Loading pull requests…" />
-      ) : listQuery.error && shownCount === 0 ? (
+      ) : listError && shownCount === 0 ? (
         <PullRequestsUnavailableState
-          error={listQuery.error}
+          error={listError}
           refreshing={listQuery.isPending}
           onRetry={() => listQuery.refresh()}
         />
@@ -1332,9 +1335,9 @@ export function PullRequestsPage() {
         />
       )}
 
-      {listQuery.error && shownCount > 0 ? (
+      {listError && shownCount > 0 ? (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning-surface px-3 py-2 text-xs">
-          <span>{listQuery.error} Showing the last pull requests loaded.</span>
+          <span>{listError} Showing the last pull requests loaded.</span>
           <Button size="xs" variant="outline" onClick={() => listQuery.refresh()}>
             Retry
           </Button>
@@ -1368,7 +1371,11 @@ export function PullRequestsPage() {
       <IssueListBody
         entries={issueEntries}
         firstLoad={issueView.firstLoad}
-        error={issueView.error}
+        error={
+          issueView.error
+            ? `${environmentLabels.get(issueView.error.environmentId) || "Environment"}: ${issueView.error.message}`
+            : null
+        }
         refreshing={refreshing}
         filtered={
           search.state !== "open" ||
@@ -1593,14 +1600,7 @@ export function PullRequestsPage() {
       sourceControlClients.findByChangeRequestUrl(url) ?? sourceControlClients.get(undefined)
     ).changeRequest;
     void writeTextToClipboard(url, issue ? "issue link" : `${singular} link`).then(
-      (didCopy) => {
-        if (didCopy)
-          toastManager.add({
-            type: "success",
-            title: issue ? "Issue link copied" : `${shortLabel} link copied`,
-            description: url,
-          });
-      },
+      undefined,
       (error) => {
         toastManager.add({
           type: "error",

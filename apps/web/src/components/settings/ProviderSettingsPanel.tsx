@@ -812,7 +812,7 @@ export function EnvironmentProviderSettings({
         description: error instanceof Error ? error.message : "The settings update failed.",
       });
     }
-    return result._tag === "Success";
+    return result._tag !== "Failure";
   };
 
   const updateInstance = useStableCallback(
@@ -829,7 +829,7 @@ export function EnvironmentProviderSettings({
       const customModels = instanceCustomModels(next);
       const customModelsChanged =
         JSON.stringify(instanceCustomModels(previous)) !== JSON.stringify(customModels);
-      void persistInstance(
+      return persistInstance(
         instanceId,
         next,
         shouldClearTextGen ? DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection : undefined,
@@ -839,14 +839,14 @@ export function EnvironmentProviderSettings({
             setProviderCustomModels: [{ provider: instanceId, driver: next.driver, customModels }],
           });
         }
+        return saved;
       });
     },
   );
 
   const enableInstance = useStableCallback(
-    async (instanceId: ProviderInstanceId, next: ProviderInstanceConfig) => {
-      await persistInstance(instanceId, next);
-    },
+    (instanceId: ProviderInstanceId, next: ProviderInstanceConfig) =>
+      persistInstance(instanceId, next),
   );
 
   const deleteInstance = useStableCallback(
@@ -1218,11 +1218,11 @@ interface ProviderInstanceRowActions {
     instanceId: ProviderInstanceId,
     previous: ProviderInstanceConfig,
     next: ProviderInstanceConfig,
-  ) => void;
+  ) => Promise<boolean>;
   readonly enableInstance: (
     instanceId: ProviderInstanceId,
     next: ProviderInstanceConfig,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   readonly deleteInstance: (
     instanceId: ProviderInstanceId,
     instance: ProviderInstanceConfig,

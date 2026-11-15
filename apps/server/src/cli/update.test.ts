@@ -13,6 +13,7 @@ import * as Path from "effect/Path";
 import * as TestClock from "effect/testing/TestClock";
 import * as TestConsole from "effect/testing/TestConsole";
 import { HttpClient, HttpClientResponse } from "effect/http";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { afterEach, vi } from "vite-plus/test";
 
@@ -20,7 +21,9 @@ import packageJson from "../../package.json" with { type: "json" };
 import * as BootService from "../cloud/bootService.ts";
 import {
   pinnedRuntimePaths,
+  posixLauncherScript,
   prunePinnedRuntimes,
+  readPosixLauncherTarget,
   resolveLauncherPath,
 } from "../cloud/pinnedRuntime.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
@@ -197,14 +200,14 @@ it.layer(NodeServices.layer)("t3 update under a managed policy", (it) => {
 });
 
 it.layer(NodeServices.layer)("t3 update launcher", (it) => {
-  it.effect("repoints a symlink that lives in a runtime versions tree", () =>
+  it.effect("replaces a legacy symlink with a script that execs the new version", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-      const oldExe = path.join(root, "runtime/versions/1.0.0/t3");
-      const newExe = path.join(root, "runtime/versions/2.0.0/t3");
-      const launcher = path.join(root, "bin/t3");
+      const oldExe = path.join(root, `runtime/versions/1.0.0/${FORK_CLI_NAME}`);
+      const newExe = path.join(root, `runtime/versions/2.0.0/${FORK_CLI_NAME}`);
+      const launcher = path.join(root, `bin/${FORK_CLI_NAME}`);
       for (const file of [oldExe, newExe]) {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });
         yield* fs.writeFileString(file, "");
@@ -219,8 +222,82 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
       });
 
       assert.deepStrictEqual(Option.getOrUndefined(repointed), launcher);
-      assert.equal(yield* fs.readLink(launcher), newExe);
-    }).pipe(Effect.provideService(HostProcess.Platform, "linux")),
+      assert.equal(yield* fs.readFileString(launcher), posixLauncherScript(newExe));
+      // Replaced, not written through.
+      assert.equal(yield* fs.readFileString(oldExe), "");
+    }).pipe(Effect.scoped, Effect.provideService(HostProcess.Platform, "linux")),
+  );
+
+  it.effect.skipIf(HostProcess.Platform.defaultValue() === "win32")(
+    "finds the script that ran this executable and rewrites it, keeping aliases and arguments",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const root = yield* fs.realPath(
+          yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" }),
+        );
+        // A quote and a space in the home path exercise the script's quoting.
+        const home = path.join(root, "it's home");
+        const entry = (version: string) =>
+          path.join(home, "runtime/versions", version, FORK_CLI_NAME);
+        for (const version of ["1.0.0", "2.0.0"]) {
+          yield* fs.makeDirectory(path.dirname(entry(version)), { recursive: true });
+          yield* fs.writeFileString(entry(version), '#!/bin/sh\nprintf \'[%s]\\n\' "$0" "$@"\n', {
+            mode: 0o755,
+          });
+        }
+        const launcher = path.join(root, `bin/${FORK_CLI_NAME}`);
+        const alias = path.join(root, `alias/${FORK_CLI_NAME}`);
+        yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
+        yield* fs.makeDirectory(path.dirname(alias), { recursive: true });
+        yield* fs.writeFileString(launcher, posixLauncherScript(entry("1.0.0")), { mode: 0o755 });
+        yield* fs.symlink(launcher, alias);
+        const repoint = (environment: Record<string, string>) =>
+          repointLauncher({
+            // The script execs by absolute path, so argv0 names the executable.
+            launchedAs: entry("1.0.0"),
+            baseDir: home,
+            targetEntryPath: entry("2.0.0"),
+          }).pipe(Effect.provideService(HostProcess.Environment, environment));
+
+        assert.equal(
+          Option.getOrUndefined(yield* repoint({ PATH: path.dirname(alias) })),
+          launcher,
+        );
+        assert.equal(yield* fs.readLink(alias), launcher);
+        const args = ["two words", "it's quoted", "", "*", "$HOME"];
+        assert.equal(
+          yield* spawner.string(ChildProcess.make(alias, args, { cwd: root })),
+          [entry("2.0.0"), ...args].map((arg) => `[${arg}]\n`).join(""),
+        );
+
+        // Like the shell, a relative PATH entry resolves from the working directory, and a
+        // script nobody can execute is passed over.
+        const unrunnable = path.join(root, `unrunnable/${FORK_CLI_NAME}`);
+        yield* fs.makeDirectory(path.dirname(unrunnable), { recursive: true });
+        yield* fs.writeFileString(unrunnable, posixLauncherScript(entry("2.0.0")), { mode: 0o644 });
+        yield* fs.writeFileString(launcher, posixLauncherScript(entry("2.0.0")), { mode: 0o755 });
+        const relative = yield* repointLauncher({
+          launchedAs: entry("2.0.0"),
+          baseDir: home,
+          targetEntryPath: entry("1.0.0"),
+        }).pipe(
+          Effect.provideService(HostProcess.Environment, {
+            PATH: `${path.dirname(unrunnable)}:bin`,
+          }),
+          Effect.provideService(HostProcess.WorkingDirectory, root),
+        );
+        assert.equal(Option.getOrUndefined(relative), launcher);
+        assert.equal(yield* fs.readFileString(unrunnable), posixLauncherScript(entry("2.0.0")));
+
+        // An edited script is the user's own wrapper now.
+        const edited = `${posixLauncherScript(entry("1.0.0"))}# mine\n`;
+        yield* fs.writeFileString(launcher, edited);
+        assert.isTrue(Option.isNone(yield* repoint({ PATH: path.dirname(launcher) })));
+        assert.equal(yield* fs.readFileString(launcher), edited);
+      }).pipe(Effect.scoped, Effect.provideService(HostProcess.Platform, "linux")),
   );
 
   it.effect.each([
@@ -241,7 +318,7 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
       for (const version of ["1.0.0", "2.0.0"]) {
         const directory = path.join(root, "runtime/versions", version);
         yield* fs.makeDirectory(directory, { recursive: true });
-        yield* fs.writeFileString(path.join(directory, "t3"), "");
+        yield* fs.writeFileString(path.join(directory, FORK_CLI_NAME), "");
         yield* fs.writeFileString(path.join(directory, ".install-complete"), `${version}\n`);
         yield* fs.utimes(path.join(directory, ".install-complete"), 0, 0);
       }
@@ -249,14 +326,14 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
         yield* fs.writeFileString(path.join(root, "runtime/launchers"), recorded);
       }
       // A launcher in the T3 home itself, which neither PATH nor the default bin dir reaches.
-      const launcher = path.join(root, "t3");
-      yield* fs.symlink(path.join(root, "runtime/versions/1.0.0/t3"), launcher);
+      const launcher = path.join(root, FORK_CLI_NAME);
+      yield* fs.symlink(path.join(root, `runtime/versions/1.0.0/${FORK_CLI_NAME}`), launcher);
 
       const launchersFile = path.join(root, "runtime/launchers");
       yield* repointLauncher({
         launchedAs: launcher,
         baseDir: root,
-        targetEntryPath: path.join(root, "runtime/versions/2.0.0/t3"),
+        targetEntryPath: path.join(root, `runtime/versions/2.0.0/${FORK_CLI_NAME}`),
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
@@ -281,10 +358,9 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
       );
 
       assert.deepStrictEqual(removed, ["1.0.0"]);
-      // macOS temp dirs sit behind the /var -> /private/var symlink, so compare canonical paths.
       assert.equal(
-        yield* fs.realPath(launcher),
-        yield* fs.realPath(path.join(root, "runtime/versions/2.0.0/t3")),
+        yield* readPosixLauncherTarget(launcher),
+        path.join(root, `runtime/versions/2.0.0/${FORK_CLI_NAME}`),
       );
     }).pipe(Effect.provideService(HostProcess.Platform, "linux")),
   );
@@ -293,9 +369,9 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-    const oldExe = path.join(root, "runtime/versions/1.0.0/t3");
-    const newExe = path.join(root, "runtime/versions/2.0.0/t3");
-    const launcher = path.join(root, "t3");
+    const oldExe = path.join(root, `runtime/versions/1.0.0/${FORK_CLI_NAME}`);
+    const newExe = path.join(root, `runtime/versions/2.0.0/${FORK_CLI_NAME}`);
+    const launcher = path.join(root, FORK_CLI_NAME);
     for (const file of [oldExe, newExe]) {
       yield* fs.makeDirectory(path.dirname(file), { recursive: true });
       yield* fs.writeFileString(file, "");
@@ -364,7 +440,7 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
           Effect.exit,
         );
 
-        const repointed = (yield* fs.readLink(launcher)) === newExe;
+        const repointed = (yield* readPosixLauncherTarget(launcher)) === newExe;
         const recorded = (yield* fs
           .readFileString(launchersFile)
           .pipe(Effect.orElseSucceed(() => "")))
@@ -379,12 +455,12 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-      const newExe = path.join(root, "runtime/versions/2.0.0/t3");
-      const copy = path.join(root, "copy/t3");
-      const foreign = path.join(root, "foreign/t3");
-      const elsewhere = path.join(root, "elsewhere/t3");
-      const otherHome = path.join(root, "other/runtime/versions/1.0.0/t3");
-      const otherLauncher = path.join(root, "other/bin/t3");
+      const newExe = path.join(root, `runtime/versions/2.0.0/${FORK_CLI_NAME}`);
+      const copy = path.join(root, `copy/${FORK_CLI_NAME}`);
+      const foreign = path.join(root, `foreign/${FORK_CLI_NAME}`);
+      const elsewhere = path.join(root, `elsewhere/${FORK_CLI_NAME}`);
+      const otherHome = path.join(root, `other/runtime/versions/1.0.0/${FORK_CLI_NAME}`);
+      const otherLauncher = path.join(root, `other/bin/${FORK_CLI_NAME}`);
       for (const file of [newExe, copy, elsewhere, otherHome]) {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });
         yield* fs.writeFileString(file, "");
@@ -413,24 +489,24 @@ it.layer(NodeServices.layer)("t3 update launcher", (it) => {
       const path = yield* Path.Path;
       const delimiter = (yield* HostProcess.Platform) === "win32" ? ";" : ":";
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-update-" });
-      const launcher = path.join(root, "bin/t3");
+      const launcher = path.join(root, `bin/${FORK_CLI_NAME}`);
       yield* fs.makeDirectory(path.dirname(launcher), { recursive: true });
       yield* fs.writeFileString(launcher, "", { mode: 0o755 });
 
       const bare = yield* resolveLauncherPath.pipe(
-        Effect.provideService(HostProcess.InvokedAs, "t3"),
+        Effect.provideService(HostProcess.InvokedAs, FORK_CLI_NAME),
         Effect.provideService(HostProcess.Environment, {
           PATH: [path.join(root, "missing"), path.join(root, "bin")].join(delimiter),
         }),
         Effect.provideService(HostProcess.WorkingDirectory, root),
       );
       const relative = yield* resolveLauncherPath.pipe(
-        Effect.provideService(HostProcess.InvokedAs, "./bin/t3"),
+        Effect.provideService(HostProcess.InvokedAs, `./bin/${FORK_CLI_NAME}`),
         Effect.provideService(HostProcess.Environment, { PATH: "" }),
         Effect.provideService(HostProcess.WorkingDirectory, root),
       );
       const absent = yield* resolveLauncherPath.pipe(
-        Effect.provideService(HostProcess.InvokedAs, "t3"),
+        Effect.provideService(HostProcess.InvokedAs, FORK_CLI_NAME),
         Effect.provideService(HostProcess.Environment, { PATH: path.join(root, "missing") }),
         Effect.provideService(HostProcess.WorkingDirectory, root),
       );

@@ -11,7 +11,7 @@ import { Argument, Command } from "effect/cli";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as DesktopUpdateMarker from "../desktopUpdate/DesktopUpdateMarker.ts";
-import { seedServiceState } from "../serviceLauncher.ts";
+import { seedServiceState, serviceLauncherIsServing, stateDirOwned } from "../serviceLauncher.ts";
 
 const canBind = (port: number) =>
   new Promise<boolean>((resolve) => {
@@ -157,6 +157,19 @@ const updateRemaining = Command.make("update-remaining", {
   Command.provide(DesktopUpdateMarker.layer),
 );
 
+/** Exits 0 while a server holds this home or a boot service is about to start one. */
+const homeOwned = Command.make("home-owned", {
+  baseDir: Argument.String("base-dir"),
+}).pipe(
+  Command.withHandler(({ baseDir }) =>
+    Effect.promise(async () => {
+      if (!((await serviceLauncherIsServing(baseDir)) || (await stateDirOwned(baseDir)))) {
+        process.exitCode = 1;
+      }
+    }),
+  ),
+);
+
 export const sshHelperCommand = Command.make("__ssh-helper").pipe(
   Command.unlisted,
   Command.withSubcommands([
@@ -165,5 +178,6 @@ export const sshHelperCommand = Command.make("__ssh-helper").pipe(
     runtimePort,
     seedServiceStateCommand,
     updateRemaining,
+    homeOwned,
   ]),
 );
