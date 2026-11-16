@@ -60,6 +60,20 @@ interface DraftEnvironmentRoutingInput {
   readonly sendInFlightRef: { readonly current: boolean };
 }
 
+// Multiple-model selections are kept per route, so a draft moving machine takes them along.
+function carryFanoutSelections(
+  draft: Pick<DraftSessionState, "environmentId" | "threadId">,
+  environmentId: EnvironmentId,
+) {
+  if (draft.environmentId === environmentId) return;
+  const selectionsOn = (id: EnvironmentId) =>
+    draftFanoutSelectionsAtom(scopedThreadKey(scopeThreadRef(id, draft.threadId)));
+  appAtomRegistry.set(
+    selectionsOn(environmentId),
+    appAtomRegistry.get(selectionsOn(draft.environmentId)),
+  );
+}
+
 /**
  * Which machine an unsent draft runs on: automatic load balancing across the
  * project's machines, or a manual switch, which may first open a scratch
@@ -177,18 +191,7 @@ export function useDraftEnvironmentRouting(input: DraftEnvironmentRoutingInput) 
         return false;
       }
       const projectRef = scopeProjectRef(target.environmentId, target.projectId);
-      if (originalDraft && target.environmentId !== originalDraft.environmentId) {
-        appAtomRegistry.set(
-          draftFanoutSelectionsAtom(
-            scopedThreadKey(scopeThreadRef(target.environmentId, originalDraft.threadId)),
-          ),
-          appAtomRegistry.get(
-            draftFanoutSelectionsAtom(
-              scopedThreadKey(scopeThreadRef(originalDraft.environmentId, originalDraft.threadId)),
-            ),
-          ),
-        );
-      }
+      if (originalDraft) carryFanoutSelections(originalDraft, target.environmentId);
       // The send must read the target project's composer and provider context after retargeting.
       flushSync(() =>
         setDraftThreadContext(draftId, {
@@ -208,6 +211,8 @@ export function useDraftEnvironmentRouting(input: DraftEnvironmentRoutingInput) 
       (environment) => environment.environmentId === loadBalancing.environmentId,
     );
     if (!target?.projectId) return;
+    const draft = getDraftSession(draftId);
+    if (draft) carryFanoutSelections(draft, target.environmentId);
     setDraftThreadContext(draftId, {
       projectRef: scopeProjectRef(target.environmentId, target.projectId),
       environmentSelection: "auto",
@@ -220,6 +225,7 @@ export function useDraftEnvironmentRouting(input: DraftEnvironmentRoutingInput) 
     draftId,
     logicalProjectEnvironments,
     sendInFlightRef,
+    getDraftSession,
     setDraftThreadContext,
   ]);
   const onAutoEnvironment = () => {
@@ -320,6 +326,7 @@ export function useDraftEnvironmentRouting(input: DraftEnvironmentRoutingInput) 
         const nextPrompt = replaceTriagePlaybookLink(prompt, triagePrompt);
         if (nextPrompt !== prompt) setPrompt(draftId, nextPrompt);
       }
+      carryFanoutSelections(currentDraft, target.environmentId);
       const projectRef = scopeProjectRef(target.environmentId, project.id);
       if (activeProjectIsScratch) {
         setLogicalProjectDraftThreadId(

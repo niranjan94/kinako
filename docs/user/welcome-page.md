@@ -100,9 +100,10 @@ a time and skips files larger than 4 GiB. It also skips a conversation when the
 message text and metadata it keeps need more than 32 MiB of memory. Tool output
 does not count toward that limit. It skips a conversation with more than 100,000
 records every time, so opening the page again does not import it. It ignores
-malformed records and skips unreadable or unparseable conversations.
+malformed records and conversations with no messages, such as a session opened
+in an editor but never used. It skips unreadable or unparseable conversations.
 
-Each project leaves out conversations that may still be open in a terminal. Each import attempt reads up to 100 conversation files and 4 GiB per project. To continue a large batch, open the Welcome page again and pick the project in **Review all**. Completed conversations are not imported again. To bring in older history or pick individual conversations later, use **Import CLI history** from the command palette.
+Each project leaves out conversations that may still be open in a terminal. Each import attempt reads up to 100 conversations and 4 GiB per project. Conversations with no messages count toward the 4 GiB but not the 100. To continue a large batch, open the Welcome page again and pick the project in **Review all**. Completed conversations are not imported again. You can continue without the remaining history. To bring in older history or pick individual conversations later, use **Import CLI history** from the command palette.
 
 You can start without importing. While an import runs, T3 Code stays on the
 Welcome page. If you quit, open the Welcome page again from **Settings → About**; the

@@ -1,9 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
+  applyPullRequestSummaryEdits,
   createLinkedPullRequestSummaryAtomFamily,
   createPullRequestEnvironmentAtoms,
   createPullRequestStackAtomFamily,
+  pullRequestPendingEditsFor,
+  pullRequestHostAnswer,
+  type PullRequestPendingEdit,
 } from "@t3tools/client-runtime/state/pull-requests";
 import {
   PullRequestListResult,
@@ -69,6 +73,24 @@ export function newestPullRequestSummary(
   if (current === null) return observed;
   if (observed === null) return current;
   return compareSummaries(current, observed) >= 0 ? observed : current;
+}
+
+/** A stored snapshot carries no edit, so a shared summary dated the same wins over it. */
+export function newestDisplayedPullRequestSummary(
+  detail: PullRequestSummary | null,
+  fromSnapshot: boolean,
+  shared: PullRequestSummary | null,
+  reference: PullRequestRef,
+  edits: ReadonlyArray<PullRequestPendingEdit>,
+): PullRequestSummary | null {
+  // With no shared summary the snapshot is all there is, and no answer applied its edits yet.
+  return applyPullRequestSummaryEdits(
+    reference,
+    fromSnapshot
+      ? newestPullRequestSummary(detail, shared)
+      : newestPullRequestSummary(shared, detail),
+    edits,
+  );
 }
 
 export function pullRequestListEntryToSummary(entry: PullRequestListEntry): PullRequestSummary {
@@ -405,6 +427,20 @@ export function subscribePullRequestFilesViewedAnswers(
 
 // Answers are stamped on arrival: older servers leave no other ordering for same-dated reads.
 export const pullRequestEnvironment = createPullRequestEnvironmentAtoms(connectionAtomRuntime, {
+  acceptedEdit: ({ environmentId, input }, edit, registry) =>
+    Effect.map(Clock.currentTimeMillis, (observedAt) => {
+      const saved = registry.get(
+        savedPullRequestSummaryAtom(savedPullRequestKey(environmentId, input)),
+      );
+      recordObservation(registry, pullRequestSummaryKey(environmentId, input), (current) => {
+        const summary = applyPullRequestSummaryEdits(
+          input,
+          newestPullRequestSummary(saved, observedPullRequestSummary(current)),
+          [edit],
+        );
+        return summary === null ? current : { ...current, metadata: { summary, observedAt } };
+      });
+    }),
   filesViewed: (target, answer) =>
     Effect.sync(() => {
       for (const listener of filesViewedAnswerListeners.get(filesViewedAnswerKey(target)) ?? [])
@@ -545,6 +581,7 @@ export function useSharedPullRequestSummary(
       ? "none"
       : pullRequestSummaryKey(environmentId, reference);
   const observations = useAtomValue(pullRequestObservationsAtom(key));
+  const edits = useAtomValue(pullRequestPendingEditsFor(environmentId, reference));
   const saved = useAtomValue(
     savedPullRequestSummaryAtom(
       environmentId === null || reference === null
@@ -552,7 +589,11 @@ export function useSharedPullRequestSummary(
         : savedPullRequestKey(environmentId, reference),
     ),
   );
-  return newestPullRequestSummary(observedPullRequestSummary(observations), saved);
+  return applyPullRequestSummaryEdits(
+    reference,
+    newestPullRequestSummary(saved, observedPullRequestSummary(observations)),
+    edits,
+  );
 }
 export const pullRequestStackAtom = createPullRequestStackAtomFamily(
   connectionAtomRuntime,
@@ -666,6 +707,13 @@ function createMergedEnvironmentQuery<Input, A>(
   };
 }
 
+const usePullRequestHostListsQuery = createMergedEnvironmentQuery(
+  "web-pull-requests:host-list",
+  (target: EnvironmentQueryTarget<PullRequestListInput>) =>
+    pullRequestHostAnswer(pullRequestEnvironment.list(target)),
+  observeFailedPullRequestList,
+);
+
 const usePullRequestListsQuery = createMergedEnvironmentQuery(
   "web-pull-requests:list",
   pullRequestEnvironment.list,
@@ -714,6 +762,8 @@ export interface MergedPullRequestListView {
   readonly refresh: (targets?: ReadonlyArray<EnvironmentQueryTarget<PullRequestListInput>>) => void;
 }
 
+// Merge inside each hook: the React Compiler memoizes it on `query.values` only there, and
+// PullRequestsPage sets state when the merged list's identity changes.
 export function usePullRequestList(
   targets: ReadonlyArray<EnvironmentQueryTarget<PullRequestListInput>>,
 ): MergedPullRequestListView {
@@ -742,6 +792,20 @@ export function useIssueList(
   const query = useIssueListsQuery(targets);
   const data = (() => mergeIssueLists(query.values))();
   return { data, error: query.error, isPending: query.isPending, refresh: query.refresh };
+}
+
+export function usePullRequestHostList(
+  targets: ReadonlyArray<EnvironmentQueryTarget<PullRequestListInput>>,
+): MergedPullRequestListView {
+  const query = usePullRequestHostListsQuery(targets);
+  const data = mergePullRequestLists(query.values);
+  return {
+    data,
+    error: query.error,
+    isPending: query.isPending,
+    observations: query.observations,
+    refresh: query.refresh,
+  };
 }
 
 export function usePullRequestListStats(

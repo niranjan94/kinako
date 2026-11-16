@@ -173,6 +173,7 @@ function ColumnScreen(props: {
             />
             <ColumnContent
               primary={sidebar}
+              column={props.primary ? "primary" : undefined}
               insetHorizontally={
                 (options as AppNativeStackNavigationOptions).nativeContentInsetHorizontally
               }
@@ -440,7 +441,7 @@ function WorkspaceColumns(
             <PaneContext value="content">
               <EmptyDetailHeader onCompose={detailCompose} />
             </PaneContext>
-            <ColumnContent>
+            <ColumnContent column="empty-detail">
               <WorkspaceEmptyDetail
                 tab={settingsOpen ? "settings" : selectedTab}
                 onStartNewTask={
@@ -543,6 +544,7 @@ function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean
     render: () => (
       <WorkspaceNativeTabs
         tabsInSidebarColumn={props.nativeColumns && !workspacePage && deviceType === "pad"}
+        detailOpen={projection.detail.length > 0}
         hidden={
           projection.detail.length > 0 &&
           !primaryVisible &&
@@ -550,27 +552,30 @@ function WorkspaceStackView(props: ViewProps & { readonly nativeColumns: boolean
           (metrics?.verticalBarEdge ?? "none") === "none"
         }
       >
-        {props.nativeColumns && !workspacePage ? (
-          <WorkspaceColumns
-            {...props}
-            descriptors={descriptors}
-            primary={primaryRoute}
-            detail={projection.detail}
-          />
-        ) : (
-          <V5CardStackView
-            {...props}
-            onRootVisibilityChange={setPrimaryVisible}
-            onNativePopChange={setNativelyPoppingWorkspaceRoute}
-            descriptors={descriptors}
-            state={{
-              ...props.state,
-              routes: [primaryRoute, ...projection.detail],
-              index: projection.detail.length,
-              preloadedRoutes: [],
-            }}
-          />
-        )}
+        {(slotWorkspace) =>
+          props.nativeColumns &&
+          workspaceUsesColumns(slotWorkspace.state.selectedTab, slotWorkspace.settingsOpen) ? (
+            <WorkspaceColumns
+              {...props}
+              descriptors={descriptors}
+              primary={primaryRoute}
+              detail={projection.detail}
+            />
+          ) : (
+            <V5CardStackView
+              {...props}
+              onRootVisibilityChange={setPrimaryVisible}
+              onNativePopChange={setNativelyPoppingWorkspaceRoute}
+              descriptors={descriptors}
+              state={{
+                ...props.state,
+                routes: [primaryRoute, ...projection.detail],
+                index: projection.detail.length,
+                preloadedRoutes: [],
+              }}
+            />
+          )
+        }
       </WorkspaceNativeTabs>
     ),
   };

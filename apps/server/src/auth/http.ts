@@ -203,6 +203,7 @@ export const failEnvironmentInternal =
     return yield* new EnvironmentInternalError({ code: "internal_error", reason, traceId });
   });
 
+// Plaintext LAN servers still need the cookie; TLS arrives through a proxy that sets X-Forwarded-Proto.
 const sessionCookieOptions = (request: HttpServerRequest.HttpServerRequest) =>
   ({
     httpOnly: true,

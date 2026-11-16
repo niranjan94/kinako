@@ -655,7 +655,6 @@ const make = Effect.gen(function* () {
         const threadId = importedThreadId(source);
         if (outcome._tag === "AlreadyImported") {
           importedThreadIds.add(threadId);
-          importedCount += 1;
           return;
         }
         if (outcome._tag === "Duplicate") {
@@ -673,20 +672,23 @@ const make = Effect.gen(function* () {
           worktree: outcome.worktree,
           runtimeMode,
         }).pipe(
-          Effect.map((result) => (result === null ? null : result.recorded)),
+          Effect.map((result) =>
+            result === null ? null : result.recorded ? result.imported : ("skipped" as const),
+          ),
           Effect.catch((cause) =>
             Effect.logWarning("Could not import an agent session", {
               provider: outcome.thread.source,
               sessionId: outcome.thread.providerSessionId,
               cause,
-            }).pipe(Effect.as(false)),
+            }).pipe(Effect.as("skipped" as const)),
           ),
         );
-        if (imported === true) {
-          importedThreadIds.add(threadId);
-          importedCount += 1;
-        } else if (imported === false) {
+        if (imported === "skipped") {
           skippedCount += 1;
+        } else if (imported !== null) {
+          importedThreadIds.add(threadId);
+          // A thread an earlier import already holds is adopted, not counted again.
+          if (imported) importedCount += 1;
         }
       }),
     );
