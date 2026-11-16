@@ -1,4 +1,4 @@
-import type { ManagedPolicyDocument } from "@t3tools/contracts";
+import { type ManagedPolicyDocument, RUNTIME_MODE_LABELS, RuntimeMode } from "@t3tools/contracts";
 import {
   FORK_CLI_NAME,
   FORK_DESKTOP_APP_ID,
@@ -48,12 +48,10 @@ interface Policy {
   readonly elements?: ReadonlyArray<Element>;
 }
 
-const RUNTIME_MODES = [
-  { value: "approval-required", label: "Supervised" },
-  { value: "auto-accept-edits", label: "Auto-accept edits" },
-  { value: "auto", label: "Auto" },
-  { value: "full-access", label: "Full access" },
-];
+const RUNTIME_MODES = RuntimeMode.literals.map((value) => ({
+  value,
+  label: RUNTIME_MODE_LABELS[value],
+}));
 
 const policies = (): ReadonlyArray<Policy> => [
   {

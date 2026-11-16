@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { RuntimeMode } from "@t3tools/contracts";
 import {
   WINDOWS_POLICY_GROUPS,
   WINDOWS_POLICY_KEY,
@@ -18,6 +19,9 @@ it("gives every registry value the Windows reader accepts a Group Policy control
   }
   for (const name of Object.keys(WINDOWS_POLICY_GROUPS)) {
     assert.include(admx, `valueName="${name}"`);
+  }
+  for (const mode of RuntimeMode.literals) {
+    assert.include(admx, `<string>${mode}</string>`);
   }
 });
 

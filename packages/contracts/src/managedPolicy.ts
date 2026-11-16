@@ -167,7 +167,7 @@ export function managedPolicyDeniedMessage(organization: string, capability: str
   return `${organization}'s policy does not allow ${capability}.`;
 }
 
-const RUNTIME_MODE_LABELS: Record<RuntimeMode, string> = {
+export const RUNTIME_MODE_LABELS: Record<RuntimeMode, string> = {
   "approval-required": "Supervised",
   "auto-accept-edits": "Auto-accept edits",
   auto: "Auto",
