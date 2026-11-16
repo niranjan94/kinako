@@ -1,0 +1,372 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import {
+  effectiveSandboxSettings,
+  resolveSandboxPolicy,
+  type SandboxAccess,
+  type SandboxPathKind,
+  type SandboxPolicy,
+  type SandboxPolicyInput,
+} from "./sandboxPolicy.ts";
+
+const HOME = "/home/user";
+
+type FakeEntry = SandboxPathKind | { readonly link: string };
+
+function fakeFacts(tree: Record<string, FakeEntry>) {
+  const resolve = (path: string): string => {
+    for (const [from, entry] of Object.entries(tree)) {
+      if (typeof entry === "object" && (path === from || path.startsWith(`${from}/`))) {
+        return resolve(entry.link + path.slice(from.length));
+      }
+    }
+    return path;
+  };
+  return {
+    stat: (path: string) => {
+      const realPath = resolve(path);
+      const kind = tree[realPath];
+      return typeof kind === "string" ? { realPath, kind } : undefined;
+    },
+    list: (directory: string) =>
+      Object.keys(tree)
+        .filter((path) => path.startsWith(`${directory}/`))
+        .map((path) => path.slice(directory.length + 1))
+        .filter((name) => !name.includes("/")),
+  };
+}
+
+const LINUX_TREE: Record<string, FakeEntry> = {
+  "/home": "directory",
+  [HOME]: "directory",
+  [`${HOME}/.kinako/bin`]: "directory",
+  [`${HOME}/code/app`]: "directory",
+  [`${HOME}/code/app/.git`]: "directory",
+  [`${HOME}/code/app-wt`]: "directory",
+  [`${HOME}/code/other`]: "directory",
+  [`${HOME}/.kinako`]: "directory",
+  [`${HOME}/.kinako/worktrees`]: "directory",
+  [`${HOME}/.kinako/worktrees/app/thread-1`]: "directory",
+  [`${HOME}/.kinako/userdata`]: "directory",
+  [`${HOME}/.kinako/userdata/attachments`]: "directory",
+  [`${HOME}/.claude`]: "directory",
+  [`${HOME}/.claude.json`]: "file",
+  [`${HOME}/.cache`]: "directory",
+  [`${HOME}/.cache/tool/bin`]: "directory",
+  [`${HOME}/.local/share/pnpm`]: "directory",
+  [`${HOME}/.local/share/pnpm/bin`]: "directory",
+  [`${HOME}/.local/bin`]: "directory",
+  [`${HOME}/.cargo`]: "directory",
+  [`${HOME}/.cargo/bin`]: "directory",
+  [`${HOME}/.cargo/registry`]: "directory",
+  [`${HOME}/.gitconfig`]: "file",
+  [`${HOME}/.config/git`]: { link: `${HOME}/dotfiles/git` },
+  [`${HOME}/dotfiles/git`]: "directory",
+  [`${HOME}/.ssh`]: "directory",
+  [`${HOME}/.ssh/config`]: "file",
+  [`${HOME}/.ssh/known_hosts`]: "file",
+  [`${HOME}/.ssh/id_ed25519`]: "file",
+  [`${HOME}/.ssh/id_ed25519.pub`]: "file",
+  [`${HOME}/.docker`]: "directory",
+  "/tmp": "directory",
+  "/run/user/1000": "directory",
+  "/run/user/1000/bus": "file",
+  "/run/user/1000/keyring/ssh": "file",
+  "/run/docker.sock": "file",
+  "/var/run": { link: "/run" },
+  "/srv/kinako": "directory",
+  "/srv/kinako/worktrees/app/thread-2": "directory",
+  "/srv/kinako/userdata/attachments": "directory",
+};
+
+const linuxInput = (overrides: Partial<SandboxPolicyInput> = {}): SandboxPolicyInput => ({
+  platform: "linux",
+  home: HOME,
+  uid: 1000,
+  cwd: `${HOME}/code/app`,
+  gitCommonDirs: [`${HOME}/code/app/.git`],
+  additionalDirectories: [],
+  providerPaths: [`${HOME}/.claude`, `${HOME}/.claude.json`],
+  attachmentsDir: `${HOME}/.kinako/userdata/attachments`,
+  baseDir: `${HOME}/.kinako`,
+  worktreesDir: `${HOME}/.kinako/worktrees`,
+  pathEnv: [
+    "/usr/bin",
+    `${HOME}/.local/share/pnpm/bin`,
+    `${HOME}/.cache/tool/bin`,
+    `${HOME}/.cargo/bin`,
+    `${HOME}/.kinako/bin`,
+  ].join(":"),
+  tmpDir: undefined,
+  sshAuthSock: undefined,
+  settings: effectiveSandboxSettings(
+    { readWritePaths: null, readOnlyPaths: null, allowDocker: false, allowSshAgent: true },
+    undefined,
+    "linux",
+  ),
+  ...overrides,
+});
+
+/** The access a path ends up with: its deepest covering entry, else the read-only root. */
+function accessOf(policy: SandboxPolicy, path: string): SandboxAccess {
+  const covering = policy.entries.filter(
+    (entry) => path === entry.path || path.startsWith(`${entry.path}/`),
+  );
+  return covering.at(-1)?.access ?? "read-only";
+}
+
+function resolved(input: SandboxPolicyInput, tree = LINUX_TREE): SandboxPolicy {
+  const resolution = resolveSandboxPolicy(input, fakeFacts(tree));
+  if (resolution._tag !== "Resolved") throw new Error(resolution.reason);
+  return resolution.policy;
+}
+
+describe("resolveSandboxPolicy", () => {
+  it.each<{
+    readonly name: string;
+    readonly input: SandboxPolicyInput;
+    readonly access: ReadonlyArray<readonly [string, SandboxAccess]>;
+  }>([
+    {
+      name: "project checkout",
+      input: linuxInput(),
+      access: [
+        [`${HOME}/code/app/src/index.ts`, "read-write"],
+        [`${HOME}/code/app/.git/hooks/pre-commit`, "read-write"],
+        [`${HOME}/code/other`, "hidden"],
+        [`${HOME}/.ssh/id_ed25519`, "hidden"],
+        [`${HOME}/.ssh/id_ed25519.pub`, "read-only"],
+        [`${HOME}/.ssh/config`, "read-only"],
+        [`${HOME}/.ssh/known_hosts`, "read-write"],
+        [`${HOME}/.gitconfig`, "read-only"],
+        [`${HOME}/dotfiles/git/config`, "read-only"],
+        [`${HOME}/.claude/settings.json`, "read-write"],
+        [`${HOME}/.claude.json`, "read-write"],
+        [`${HOME}/.kinako/userdata/settings.json`, "hidden"],
+        [`${HOME}/.kinako/userdata/attachments/a.png`, "read-only"],
+        [`${HOME}/.kinako/bin`, "hidden"],
+        [`${HOME}/.cargo/bin/cargo`, "read-only"],
+        [`${HOME}/.cargo/registry/index`, "read-write"],
+        [`${HOME}/.local/share/pnpm/bin/pnpm`, "read-write"],
+        ["/usr/bin/git", "read-only"],
+        ["/tmp/build", "read-write"],
+        ["/run/user/1000/bus", "hidden"],
+        ["/run/docker.sock", "hidden"],
+        [`${HOME}/.docker/config.json`, "hidden"],
+      ],
+    },
+    {
+      name: "linked worktree",
+      input: linuxInput({ cwd: `${HOME}/code/app-wt` }),
+      access: [
+        [`${HOME}/code/app-wt/src/index.ts`, "read-write"],
+        [`${HOME}/code/app/.git/worktrees/app-wt/HEAD`, "read-write"],
+        [`${HOME}/code/app/src/index.ts`, "hidden"],
+      ],
+    },
+    {
+      name: "worktree under the base dir",
+      input: linuxInput({ cwd: `${HOME}/.kinako/worktrees/app/thread-1`, gitCommonDirs: [] }),
+      access: [
+        [`${HOME}/.kinako/worktrees/app/thread-1/file`, "read-write"],
+        [`${HOME}/.kinako/worktrees/app/thread-2`, "hidden"],
+        [`${HOME}/.kinako/userdata/statev2.sqlite`, "hidden"],
+      ],
+    },
+    {
+      name: "base dir outside home",
+      input: linuxInput({
+        cwd: "/srv/kinako/worktrees/app/thread-2",
+        gitCommonDirs: [],
+        baseDir: "/srv/kinako",
+        worktreesDir: "/srv/kinako/worktrees",
+        attachmentsDir: "/srv/kinako/userdata/attachments",
+      }),
+      access: [
+        ["/srv/kinako/worktrees/app/thread-2/file", "read-write"],
+        ["/srv/kinako/userdata/statev2.sqlite", "hidden"],
+        ["/srv/kinako/userdata/attachments/a.png", "read-only"],
+      ],
+    },
+    {
+      name: "ssh agent and docker opted in",
+      input: linuxInput({
+        sshAuthSock: "/run/user/1000/keyring/ssh",
+        settings: {
+          ...linuxInput().settings,
+          allowDocker: true,
+        },
+      }),
+      access: [
+        ["/run/user/1000/keyring/ssh", "read-write"],
+        ["/run/user/1000/bus", "hidden"],
+        ["/run/docker.sock", "read-write"],
+        [`${HOME}/.docker/config.json`, "read-write"],
+      ],
+    },
+    {
+      name: "ssh agent opted out",
+      input: linuxInput({
+        sshAuthSock: "/run/user/1000/keyring/ssh",
+        settings: { ...linuxInput().settings, allowSshAgent: false },
+      }),
+      access: [["/run/user/1000/keyring/ssh", "hidden"]],
+    },
+  ])("$name", ({ input, access }) => {
+    const policy = resolved(input);
+    expect(access.map(([path]) => [path, accessOf(policy, path)])).toEqual(access);
+  });
+
+  it("orders each entry after every entry that contains it, without duplicates or redundancy", () => {
+    const policy = resolved(linuxInput());
+    const paths = policy.entries.map((entry) => entry.path);
+    expect(new Set(paths).size).toBe(paths.length);
+    policy.entries.forEach((entry, index) => {
+      const later = policy.entries.slice(index + 1);
+      expect(later.some((other) => entry.path.startsWith(`${other.path}/`))).toBe(false);
+    });
+    // Covered by a read-write parent, or by the read-only root.
+    expect(paths).not.toContain(`${HOME}/.cache/tool/bin`);
+    expect(paths).not.toContain(`${HOME}/.local/share/pnpm/bin`);
+    expect(paths).not.toContain(`${HOME}/code/app/.git`);
+    expect(paths).not.toContain(`${HOME}/.kinako`);
+    expect(paths).not.toContain("/usr/bin");
+    // Missing optional defaults are dropped.
+    expect(paths).not.toContain(`${HOME}/.nvm`);
+  });
+
+  it("keeps read-write when a path is listed both ways", () => {
+    const policy = resolved(
+      linuxInput({
+        settings: {
+          ...linuxInput().settings,
+          readOnlyPaths: ["~/.cache"],
+          readWritePaths: ["~/.cache"],
+        },
+      }),
+    );
+    expect(policy.entries.filter((entry) => entry.path === `${HOME}/.cache`)).toEqual([
+      {
+        path: `${HOME}/.cache`,
+        access: "read-write",
+        kind: "directory",
+        source: "user-read-write",
+      },
+    ]);
+  });
+
+  it("rejects user entries that would expose home or always-hidden paths", () => {
+    const policy = resolved(
+      linuxInput({
+        settings: {
+          ...linuxInput().settings,
+          readWritePaths: [
+            "~",
+            "/home",
+            "~/.kinako/userdata",
+            "relative/dir",
+            "/run/user/1000/bus",
+          ],
+          readOnlyPaths: ["~/.kinako/worktrees", "~/*/git"],
+        },
+      }),
+    );
+    expect(policy.rejected.map(({ path, reason }) => [path, reason])).toEqual([
+      ["relative/dir", "Not an absolute or home-relative path."],
+      [`${HOME}/*/git`, "Only the last path segment may hold a wildcard."],
+      [HOME, "Exposes the whole home directory."],
+      ["/home", "Exposes the whole home directory."],
+      [`${HOME}/.kinako/userdata`, `Inside ${HOME}/.kinako, which always stays hidden.`],
+      ["/run/user/1000/bus", "Inside /run/user/1000, which always stays hidden."],
+      [`${HOME}/.kinako/worktrees`, `Inside ${HOME}/.kinako, which always stays hidden.`],
+      [`${HOME}/.kinako/bin`, `Inside ${HOME}/.kinako, which always stays hidden.`],
+    ]);
+    expect(accessOf(policy, `${HOME}/code/other`)).toBe("hidden");
+    expect(accessOf(policy, `${HOME}/.kinako/userdata/settings.json`)).toBe("hidden");
+  });
+
+  it.each<readonly [string, Partial<SandboxPolicyInput>, string]>([
+    ["the home directory", { cwd: HOME, gitCommonDirs: [] }, "contains the whole home directory"],
+    [
+      "the base dir outside worktrees",
+      { cwd: `${HOME}/.kinako/userdata` },
+      `is inside ${HOME}/.kinako`,
+    ],
+    [
+      "an additional directory containing the base dir",
+      {
+        additionalDirectories: [{ path: "/srv", access: "read-write" }],
+        baseDir: "/srv/kinako",
+        worktreesDir: "/srv/kinako/worktrees",
+      },
+      "contains /srv/kinako",
+    ],
+    ["a missing cwd", { cwd: `${HOME}/code/missing` }, "does not exist"],
+  ])("refuses a workspace at %s", (_name, overrides, reason) => {
+    const tree = { ...LINUX_TREE, "/srv": "directory" as const };
+    const resolution = resolveSandboxPolicy(linuxInput(overrides), fakeFacts(tree));
+    expect(resolution._tag === "Refused" ? resolution.reason : "resolved").toContain(reason);
+  });
+});
+
+describe("effectiveSandboxSettings", () => {
+  const defaults = {
+    readWritePaths: null,
+    readOnlyPaths: null,
+    allowDocker: false,
+    allowSshAgent: true,
+  };
+
+  it.each([
+    ["linux", "~/.cache", "~/Library/Caches"],
+    ["darwin", "~/Library/Caches", "~/.cache"],
+  ] as const)("uses %s defaults", (platform, included, excluded) => {
+    const settings = effectiveSandboxSettings(defaults, undefined, platform);
+    expect(settings.readWritePaths).toContain(included);
+    expect(settings.readWritePaths).not.toContain(excluded);
+    expect(settings.readOnlyPaths).toContain("~/.ssh/*.pub");
+    expect([...settings.readWritePaths, ...settings.readOnlyPaths]).not.toContain("~/.ssh");
+  });
+
+  it("lets a project add entries but keeps the environment's", () => {
+    const settings = effectiveSandboxSettings(
+      { ...defaults, readWritePaths: ["~/.npm"] },
+      { readWritePaths: ["/data/fixtures"], readOnlyPaths: ["~/.m2"] },
+      "linux",
+    );
+    expect(settings.readWritePaths).toEqual(["~/.npm", "/data/fixtures"]);
+    expect(settings.readOnlyPaths.at(-1)).toBe("~/.m2");
+  });
+
+  it("exposes macOS caches but has no runtime dir to hide", () => {
+    const tree: Record<string, FakeEntry> = {
+      "/Users/user": "directory",
+      "/Users/user/code/app": "directory",
+      "/Users/user/Library/Caches": "directory",
+      "/private/tmp": "directory",
+      "/tmp": { link: "/private/tmp" },
+    };
+    const policy = resolved(
+      {
+        ...linuxInput(),
+        platform: "darwin",
+        home: "/Users/user",
+        cwd: "/Users/user/code/app",
+        gitCommonDirs: [],
+        providerPaths: [],
+        baseDir: "/Users/user/.kinako",
+        worktreesDir: "/Users/user/.kinako/worktrees",
+        attachmentsDir: "/Users/user/.kinako/userdata/attachments",
+        pathEnv: undefined,
+        settings: effectiveSandboxSettings(defaults, undefined, "darwin"),
+      },
+      tree,
+    );
+    expect(policy.entries.map(({ path, access }) => [path, access])).toEqual([
+      ["/Users/user", "hidden"],
+      ["/private/tmp", "read-write"],
+      ["/Users/user/Library/Caches", "read-write"],
+      ["/Users/user/code/app", "read-write"],
+    ]);
+  });
+});
