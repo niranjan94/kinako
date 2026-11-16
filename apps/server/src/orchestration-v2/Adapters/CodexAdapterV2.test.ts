@@ -1348,19 +1348,28 @@ describe("CodexAdapterV2 process exit", () => {
   it.effect("starts a sandboxed thread's app-server unshared, inside the sandbox", () =>
     Effect.gen(function* () {
       const policies: Array<SandboxPolicy> = [];
-      const { opened, spawned, executable, root, uid } = yield* openSandboxed({
-        availability: Effect.succeed({ _tag: "Available", command: "/test/sandbox" }),
-        wrap: (input) =>
-          Effect.sync(() => {
-            policies.push(input.policy);
-            return {
-              command: "/test/sandbox",
-              args: ["--", input.command, ...input.args],
-              env: input.env,
-            };
-          }),
-      });
+      const environments: Array<NodeJS.ProcessEnv | undefined> = [];
+      const { opened, spawned, executable, root, uid } = yield* openSandboxed(
+        {
+          availability: Effect.succeed({ _tag: "Available", command: "/test/sandbox" }),
+          wrap: (input) =>
+            Effect.sync(() => {
+              policies.push(input.policy);
+              environments.push(input.env);
+              return {
+                command: "/test/sandbox",
+                args: ["--", input.command, ...input.args],
+                env: input.env,
+              };
+            }),
+        },
+        ({ home }) =>
+          Effect.succeed({ environment: { DISPLAY: ":0", XAUTHORITY: `${home}/.Xauthority` } }),
+      );
       assert.equal(opened._tag, "Success");
+      // The user's X display stays reachable through its abstract socket, so tools are not told it.
+      assert.isFalse(environments.some((env) => env === undefined || "DISPLAY" in env));
+      assert.isFalse(environments.some((env) => env === undefined || "XAUTHORITY" in env));
       // Made before the policy, so bwrap hides it even before the desktop app starts.
       assert.deepInclude(policies[0]?.entries ?? [], {
         path: `${root}/tmp/t3code-${uid}`,

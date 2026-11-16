@@ -138,11 +138,15 @@ export const sandboxProviderLaunch = Effect.fn("SandboxLaunch.provider")(functio
     multiplexerDir,
   });
   const sandbox = yield* Sandbox.Sandbox;
+  // Left unset so tools stay off the user's display by default; see the display policy entry.
+  const env = Object.fromEntries(
+    Object.entries(input.env).filter(([name]) => name !== "DISPLAY" && name !== "XAUTHORITY"),
+  );
   return yield* sandbox.wrap({
     command: executable,
     args: input.args ?? [],
     env: {
-      ...input.env,
+      ...env,
       TMUX_TMPDIR: multiplexerDir,
       SCREENDIR: path.join(multiplexerDir, "screen"),
     },

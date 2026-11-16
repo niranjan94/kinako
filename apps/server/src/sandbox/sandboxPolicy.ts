@@ -55,7 +55,8 @@ export type SandboxEntrySource =
   | "git-config"
   | "server"
   | "multiplexer"
-  | "app-control";
+  | "app-control"
+  | "display";
 
 export interface SandboxPolicyEntry {
   readonly path: string;
@@ -365,6 +366,8 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
       ? []
       : dockerSocketDirs(input).map((path) => candidate(path, "hidden", "docker"))),
     ...multiplexerSocketDirs(input).map((path) => candidate(path, "hidden", "multiplexer")),
+    // An X client can type into the user's windows. The abstract socket stays reachable.
+    ...(input.platform === "linux" ? [candidate("/tmp/.X11-unix", "hidden", "display")] : []),
     // The desktop app's control socket opens any folder as a project, outside the sandbox.
     ...desktopAppControlDirectories({
       tempDirs: [input.tmpDir, input.darwinUserTempDir].filter((dir) => dir !== undefined),
