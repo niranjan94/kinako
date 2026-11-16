@@ -14,6 +14,7 @@ import {
   type OrchestrationV2ProviderThread,
   type OrchestrationV2ProviderTurnTokenUsage,
   type OrchestrationV2ThreadProjection,
+  type RuntimeMode,
   ProjectId,
   ProviderInstanceId,
   ProviderSessionId,
@@ -133,11 +134,16 @@ function makeTestAdapter(input: {
   readonly backgroundTasksEndWithProcess?: true;
   readonly backgroundWork?: Ref.Ref<boolean>;
   readonly closedSessions?: Ref.Ref<ReadonlyArray<string>>;
+  /** Like Codex's sandboxed mode: these threads get a session each, serving only them. */
+  readonly dedicatedSessionRuntimeModes?: ReadonlyArray<RuntimeMode>;
 }): ProviderAdapter.ProviderAdapterV2["Service"] {
   return {
     instanceId: input.instanceId,
     driver: input.driver,
     getCapabilities: () => Effect.succeed(input.capabilities),
+    ...(input.dedicatedSessionRuntimeModes === undefined
+      ? {}
+      : { dedicatedSessionRuntimeModes: input.dedicatedSessionRuntimeModes }),
     planSelectionTransition: () => Effect.succeed({ type: "apply_on_next_turn" }),
     openSession: (sessionInput) =>
       Effect.gen(function* () {
@@ -156,7 +162,18 @@ function makeTestAdapter(input: {
           status: "ready",
           cwd: sessionInput.runtimePolicy.cwd ?? process.cwd(),
           model: input.modelSelection.model,
-          capabilities: input.capabilities,
+          capabilities: input.dedicatedSessionRuntimeModes?.includes(
+            sessionInput.runtimePolicy.runtimeMode,
+          )
+            ? {
+                ...input.capabilities,
+                sessions: {
+                  ...input.capabilities.sessions,
+                  supportsMultipleProviderThreadsPerSession: false,
+                  supportsRuntimeModeSwitchInSession: false,
+                },
+              }
+            : input.capabilities,
           createdAt: now,
           updatedAt: now,
           lastError: null,
@@ -2022,6 +2039,100 @@ describe("orchestration v2 provider switching", () => {
             layerRegistry,
           ),
         ),
+      );
+    }),
+  );
+
+  it.live("gives sandboxed threads their own session and moves a thread between classes", () =>
+    Effect.gen(function* () {
+      const key = "dedicated-sessions";
+      const cwd = yield* checkpointWorkspace(key);
+      const capturedTurns = yield* Ref.make<ReadonlyArray<CapturedTurn>>([]);
+      const layerRegistry = ProviderAdapterRegistry.layerFromAdapters([
+        makeTestAdapter({
+          instanceId: CODEX_MODEL_SELECTION.instanceId,
+          driver: CODEX_DRIVER,
+          capabilities: CodexProviderCapabilitiesV2,
+          modelSelection: CODEX_MODEL_SELECTION,
+          responseByRunOrdinal: {},
+          capturedTurns,
+          dedicatedSessionRuntimeModes: ["sandboxed-full-access"],
+        }),
+      ]);
+      yield* Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+        const threadIds = ["full-a", "full-b", "sandboxed"].map((name) =>
+          ThreadId.make(`thread:${key}:${name}`),
+        );
+        let ordinal = 0;
+        const send = (target: ThreadId) =>
+          Effect.gen(function* () {
+            ordinal += 1;
+            yield* orchestrator.dispatch({
+              type: "message.dispatch",
+              createdBy: "user",
+              creationSource: "web",
+              commandId: CommandId.make(`command:${key}:message:${ordinal}`),
+              threadId: target,
+              messageId: MessageId.make(`message:${key}:${ordinal}`),
+              text: `Turn ${ordinal}`,
+              attachments: [],
+              modelSelection: CODEX_MODEL_SELECTION,
+              dispatchMode: { type: "start_immediately" },
+            });
+            yield* worker.drain();
+            const projection = yield* waitForIdle(target);
+            const providerThread = projection.providerThreads.find(
+              (candidate) => candidate.id === projection.thread.activeProviderThreadId,
+            );
+            return {
+              providerSessionId: providerThread?.providerSessionId,
+              nativeThreadId: providerThread?.nativeThreadRef?.nativeId,
+            };
+          });
+        for (const [index, target] of threadIds.entries()) {
+          yield* orchestrator.dispatch({
+            type: "thread.create",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make(`command:${key}:create:${index}`),
+            threadId: target,
+            projectId,
+            title: "Dedicated sessions",
+            modelSelection: CODEX_MODEL_SELECTION,
+            runtimeMode: index === 2 ? "sandboxed-full-access" : "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: cwd,
+          });
+        }
+        const [fullA, fullB, sandboxed] = threadIds as [ThreadId, ThreadId, ThreadId];
+        const first = yield* send(fullA);
+        assert.equal((yield* send(fullB)).providerSessionId, first.providerSessionId);
+        const isolated = yield* send(sandboxed);
+        assert.notEqual(isolated.providerSessionId, first.providerSessionId);
+
+        const setMode = (runtimeMode: RuntimeMode) =>
+          orchestrator
+            .dispatch({
+              type: "thread.runtime-mode.set",
+              commandId: CommandId.make(`command:${key}:mode:${runtimeMode}`),
+              threadId: fullA,
+              runtimeMode,
+            })
+            .pipe(Effect.andThen(worker.drain()));
+        yield* setMode("sandboxed-full-access");
+        const moved = yield* send(fullA);
+        assert.notEqual(moved.providerSessionId, first.providerSessionId);
+        assert.notEqual(moved.providerSessionId, isolated.providerSessionId);
+        assert.equal(moved.nativeThreadId, first.nativeThreadId);
+        yield* setMode("full-access");
+        const back = yield* send(fullA);
+        assert.equal(back.providerSessionId, first.providerSessionId);
+        assert.equal(back.nativeThreadId, first.nativeThreadId);
+      }).pipe(
+        Effect.provide(ProviderReplayHarness.layerWithRegistry({ name: key }, layerRegistry)),
       );
     }),
   );

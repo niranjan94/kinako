@@ -1,16 +1,9 @@
 import type { SandboxPlatform } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveCommandPath } from "@t3tools/shared/shell";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import type { SandboxRequest } from "../../sandbox/externalSandbox.ts";
-import {
-  resolveSandboxPolicy,
-  SandboxPolicyRefusedError,
-} from "../../sandbox/resolveSandboxPolicy.ts";
-import * as Sandbox from "../../sandbox/Sandbox.ts";
+import { sandboxProviderLaunch } from "../../sandbox/sandboxLaunch.ts";
 
 /**
  * Whether a Keychain login can refresh its token with read-only access to `~/Library/Keychains`
@@ -64,12 +57,7 @@ export function claudeSandboxPaths(input: {
   ];
 }
 
-const CLAUDE_SCRIPT_EXTENSIONS = [".js", ".mjs", ".tsx", ".ts", ".jsx"];
-
-/**
- * The command that starts `executable` inside the thread's sandbox. Fails, so the turn fails,
- * whenever the sandbox cannot be built or applied.
- */
+/** The command that starts Claude inside the thread's sandbox, or a failure that ends the turn. */
 export const sandboxClaudeLaunch = Effect.fn("ClaudeSandbox.launch")(function* (input: {
   readonly request: SandboxRequest;
   readonly cwd: string;
@@ -78,53 +66,22 @@ export const sandboxClaudeLaunch = Effect.fn("ClaudeSandbox.launch")(function* (
   readonly executable: string;
   readonly env: NodeJS.ProcessEnv;
 }) {
-  const platform = yield* HostProcess.Platform;
-  if (platform !== "linux" && platform !== "darwin") {
-    return yield* new SandboxPolicyRefusedError({
-      reason: "The filesystem sandbox only runs on Linux and macOS.",
-    });
-  }
-  const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const home = yield* HostProcess.HomeDirectory;
-  const uid = (yield* HostProcess.UserId) ?? -1;
-  const resolved = yield* resolveCommandPath(input.executable, { env: input.env }).pipe(
-    Effect.orElseSucceed(() => null),
-  );
-  const executable =
-    resolved === null
-      ? undefined
-      : yield* fileSystem.realPath(resolved).pipe(Effect.orElseSucceed(() => undefined));
-  if (executable === undefined) {
-    return yield* new SandboxPolicyRefusedError({
-      reason: `Claude's executable ${input.executable} was not found.`,
-    });
-  }
-  if (CLAUDE_SCRIPT_EXTENSIONS.some((extension) => executable.endsWith(extension))) {
-    return yield* new SandboxPolicyRefusedError({
-      reason: `Claude's executable ${executable} is a script; the sandbox needs the native executable.`,
-    });
-  }
-  const policy = yield* resolveSandboxPolicy({
-    platform,
-    home,
-    uid,
+  return yield* sandboxProviderLaunch({
+    providerName: "Claude",
+    request: input.request,
     cwd: input.cwd,
-    additionalDirectories: input.additionalDirectories.map((directory) => ({
-      path: path.resolve(input.cwd, directory),
-      access: "read-write",
-    })),
-    providerPaths: claudeSandboxPaths({
-      platform,
-      home,
-      configDir: input.configDir ?? input.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
-      executable,
-    }),
-    ...input.request,
-    pathEnv: input.env.PATH,
-    tmpDir: input.env.TMPDIR,
-    sshAuthSock: input.env.SSH_AUTH_SOCK,
+    additionalDirectories: input.additionalDirectories,
+    executable: input.executable,
+    env: input.env,
+    providerPaths: ({ platform, home, executable }) =>
+      Effect.succeed(
+        claudeSandboxPaths({
+          platform,
+          home,
+          configDir: input.configDir ?? input.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
+          executable,
+        }),
+      ),
   });
-  const sandbox = yield* Sandbox.Sandbox;
-  return yield* sandbox.wrap({ command: executable, args: [], env: input.env, policy });
 });

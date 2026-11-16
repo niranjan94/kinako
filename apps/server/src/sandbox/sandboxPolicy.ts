@@ -369,7 +369,10 @@ export function resolveSandboxPolicy(
         if (isWithin(root, path)) {
           return refuse(`${candidate.source} ${path} contains ${root}, which always stays hidden.`);
         }
-        if (isWithin(path, root) && !(root === realBase && isWithin(path, realWorktrees))) {
+        // A provider's own state may live in the server's state dir, such as a managed home.
+        const carvedOut =
+          root === realBase && (isWithin(path, realWorktrees) || candidate.source === "provider");
+        if (isWithin(path, root) && !carvedOut) {
           return refuse(
             `${candidate.source} ${path} is inside ${root}, which always stays hidden.`,
           );

@@ -51,6 +51,7 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.kinako/userdata/attachments`]: "directory",
   [`${HOME}/.kinako/userdata/device`]: "directory",
   [`${HOME}/.kinako/tools`]: "directory",
+  [`${HOME}/.kinako/userdata/providers/codex/work/shadow`]: "directory",
   [`${HOME}/.claude`]: "directory",
   [`${HOME}/.claude.json`]: "file",
   [`${HOME}/.cache`]: "directory",
@@ -213,6 +214,19 @@ describe("resolveSandboxPolicy", () => {
         ["/run/user/1000/bus", "hidden"],
         ["/run/docker.sock", "read-write"],
         [`${HOME}/.docker/config.json`, "read-write"],
+      ],
+    },
+    {
+      name: "a managed provider home inside the base dir",
+      input: linuxInput({
+        providerPaths: [
+          { path: `${HOME}/.kinako/userdata/providers/codex/work/shadow`, access: "read-write" },
+        ],
+      }),
+      access: [
+        [`${HOME}/.kinako/userdata/providers/codex/work/shadow/auth.json`, "read-write"],
+        [`${HOME}/.kinako/userdata/providers/codex/other`, "hidden"],
+        [`${HOME}/.kinako/userdata/statev2.sqlite`, "hidden"],
       ],
     },
     {

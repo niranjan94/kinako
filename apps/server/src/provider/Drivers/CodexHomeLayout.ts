@@ -15,7 +15,7 @@ export interface CodexHomeLayout {
   readonly continuationKey: string;
 }
 
-const KNOWN_SHARED_DIRECTORIES = [
+export const KNOWN_SHARED_DIRECTORIES = [
   "sessions",
   "archived_sessions",
   "sqlite",

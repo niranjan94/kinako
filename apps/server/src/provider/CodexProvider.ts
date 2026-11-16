@@ -148,12 +148,29 @@ const CODEX_DISCOVERY_MARGIN_MS = 250;
 // Keep a prerelease suffix so compatibility stays unknown for it, as it does for `initialize`.
 const CODEX_CLI_VERSION_PATTERN = /(?:^|\s)v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?=\s|$)/u;
 
-const CODEX_PRESENTATION = {
+const CODEX_RUNTIME_MODES = [
+  "approval-required",
+  "auto-accept-edits",
+  "auto",
+  "full-access",
+] as const;
+// Sandboxed full access needs the OS sandbox, which exists only on Linux and macOS.
+const CODEX_SANDBOXED_RUNTIME_MODES = [
+  "approval-required",
+  "auto-accept-edits",
+  "auto",
+  "sandboxed-full-access",
+  "full-access",
+] as const;
+const codexPresentation = (platform: NodeJS.Platform) => ({
   displayName: "Codex",
   showInteractionModeToggle: true,
   reportsContextWindow: true,
-  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
-} as const;
+  supportedRuntimeModes:
+    platform === "linux" || platform === "darwin"
+      ? CODEX_SANDBOXED_RUNTIME_MODES
+      : CODEX_RUNTIME_MODES,
+});
 
 export interface CodexAppServerProviderSnapshot {
   readonly account: CodexSchema.V2GetAccountResponse;
@@ -896,11 +913,12 @@ const makePendingCodexProvider = Effect.fn("CodexProvider.makePendingCodexProvid
   codexSettings: CodexSettings,
 ): Effect.fn.Return<ServerProviderDraft> {
   const checkedAt = yield* Effect.map(DateTime.now, DateTime.formatIso);
+  const presentation = codexPresentation(yield* HostProcess.Platform);
   const models = emptyCodexModelsFromSettings(codexSettings);
 
   if (!codexSettings.enabled) {
     return buildServerProvider({
-      presentation: CODEX_PRESENTATION,
+      presentation,
       enabled: false,
       checkedAt,
       models,
@@ -916,7 +934,7 @@ const makePendingCodexProvider = Effect.fn("CodexProvider.makePendingCodexProvid
   }
 
   return buildServerProvider({
-    presentation: CODEX_PRESENTATION,
+    presentation,
     enabled: true,
     checkedAt,
     models,
@@ -995,13 +1013,14 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   ServerSettingsError,
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > {
+  const presentation = codexPresentation(yield* HostProcess.Platform);
   const resolvedEnvironment = providerProbeEnvironment(environment ?? process.env);
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const emptyModels = emptyCodexModelsFromSettings(codexSettings);
 
   if (!codexSettings.enabled) {
     return buildServerProvider({
-      presentation: CODEX_PRESENTATION,
+      presentation,
       enabled: false,
       checkedAt,
       models: emptyModels,
@@ -1048,7 +1067,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         })
       : null;
     return buildServerProvider({
-      presentation: CODEX_PRESENTATION,
+      presentation,
       enabled: codexSettings.enabled,
       checkedAt,
       models: emptyModels,
@@ -1070,7 +1089,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
 
   if (Option.isNone(probeResult.success)) {
     return buildServerProvider({
-      presentation: CODEX_PRESENTATION,
+      presentation,
       enabled: codexSettings.enabled,
       checkedAt,
       models: emptyModels,
@@ -1113,7 +1132,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
           });
 
   return buildServerProvider({
-    presentation: CODEX_PRESENTATION,
+    presentation,
     enabled: codexSettings.enabled,
     checkedAt,
     models: pipe(

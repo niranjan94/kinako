@@ -6,6 +6,10 @@ import {
 } from "./ProviderTextDeltaCoalescer.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { externalSandboxPolicy, type SandboxRequest } from "../../sandbox/externalSandbox.ts";
+import * as Sandbox from "../../sandbox/Sandbox.ts";
+import { AgentScope } from "@t3tools/shared/AgentScope";
+import { knownProviderFailureMessage } from "@t3tools/provider-core/server/failure";
 import {
   CommandId,
   CheckpointId,
@@ -48,6 +52,7 @@ import { MCP_APP_OUTPUT_KEY, readMcpAppReference } from "@t3tools/shared/mcpApp"
 import { toolOutputImages } from "@t3tools/shared/toolOutput";
 import { resolveAttachmentPathById } from "../../attachmentStore.ts";
 import * as Fiber from "effect/Fiber";
+import * as Schedule from "effect/Schedule";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
@@ -155,6 +160,14 @@ describe("CodexAdapterV2 assistant message streaming", () => {
   );
 });
 
+const SANDBOX_REQUEST: SandboxRequest = {
+  settings: { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
+  baseDir: "/home/user/.kinako",
+  worktreesDir: "/home/user/.kinako/worktrees",
+  attachmentsDir: "/home/user/.kinako/userdata/attachments",
+  serverPaths: [],
+};
+
 describe("CodexAdapterV2 runtime policy", () => {
   it.effect.each([undefined, false, true])(
     "selects native collaboration modes without prompt overrides with hasT3Mcp=%s",
@@ -236,6 +249,38 @@ describe("CodexAdapterV2 runtime policy", () => {
       });
       assert.equal(fullAccess.approvalsReviewer, "user");
       assert.equal(fullAccess.sandboxPolicy?.type, "dangerFullAccess");
+
+      const sandboxedOn = (processSandboxed: boolean, sandboxPolicy?: unknown) =>
+        CodexAdapterV2.buildCodexTurnStartParams({
+          nativeThreadId: "native-sandboxed",
+          codexInput: [{ type: "text", text: "test" }],
+          runtimePolicy: CodexAdapterV2.codexRuntimePolicyForSession(
+            {
+              runtimeMode: "sandboxed-full-access",
+              interactionMode: "default",
+              cwd: null,
+              ...(sandboxPolicy === undefined ? {} : { sandboxPolicy }),
+            },
+            processSandboxed,
+          ),
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+        });
+      const request = externalSandboxPolicy(SANDBOX_REQUEST);
+      const wrapped = yield* sandboxedOn(true, request);
+      assert.deepEqual(wrapped.approvalPolicy, fullAccess.approvalPolicy);
+      assert.deepEqual(wrapped.sandboxPolicy, {
+        type: "externalSandbox",
+        networkAccess: "enabled",
+      });
+      // A sandboxed thread on an app-server outside the sandbox, or with no request, is Supervised.
+      for (const unwrapped of [
+        yield* sandboxedOn(false, request),
+        yield* sandboxedOn(true),
+        yield* sandboxedOn(true, { type: "externalSandbox" }),
+      ]) {
+        assert.equal(unwrapped.approvalPolicy, "untrusted");
+        assert.deepEqual(unwrapped.sandboxPolicy, { type: "readOnly" });
+      }
     }),
   );
 
@@ -1102,6 +1147,7 @@ describe("CodexAdapterV2 process exit", () => {
           ),
         ),
       ),
+      Layer.provide(NodeServices.layer),
     );
     return Effect.gen(function* () {
       const factory = yield* CodexAdapterV2.CodexAppServerClientFactory;
@@ -1120,6 +1166,135 @@ describe("CodexAdapterV2 process exit", () => {
       assert.equal(runningAgents, 0);
     }).pipe(Effect.provide(factoryLayer));
   });
+
+  const openSandboxed = (sandbox: Sandbox.SandboxShape | undefined) =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const root = yield* fileSystem.realPath(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "kinako-codex-sandbox-" }),
+      );
+      const home = `${root}/home`;
+      const cwd = `${root}/work`;
+      const executable = `${root}/bin/codex`;
+      yield* fileSystem.makeDirectory(home, { recursive: true });
+      yield* fileSystem.makeDirectory(cwd, { recursive: true });
+      yield* fileSystem.makeDirectory(`${root}/bin`, { recursive: true });
+      yield* fileSystem.writeFileString(executable, "#!/bin/sh\n");
+      yield* fileSystem.chmod(executable, 0o755);
+      const spawned: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }> = [];
+      const handle = (running: boolean) =>
+        ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(999_999_998),
+          exitCode: running ? Effect.never : Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+          isRunning: Effect.succeed(running),
+          kill: () => Effect.void,
+          unref: Effect.succeed(Effect.void),
+          stdin: Sink.drain,
+          stdout: running ? Stream.never : Stream.empty,
+          stderr: Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+        });
+      const factoryLayer = CodexAdapterV2.layerAppServerClientFactory.pipe(
+        Layer.provide(Layer.mock(PortScanner.PortDiscovery)({ trackAgent: () => () => {} })),
+        Layer.provide(
+          Layer.succeed(ProviderEventLoggers.ProviderEventLoggers, {
+            native: undefined,
+            canonical: undefined,
+          }),
+        ),
+        Layer.provide(
+          Layer.succeed(
+            ChildProcessSpawner.ChildProcessSpawner,
+            ChildProcessSpawner.make((command) => {
+              const { command: file, args } = command as unknown as {
+                readonly command: string;
+                readonly args: ReadonlyArray<string>;
+              };
+              spawned.push({ command: file, args });
+              // git and getconf answer at once; only the app-server stays running.
+              return Effect.succeed(handle(file === "/test/scope"));
+            }),
+          ),
+        ),
+        Layer.provide(
+          Layer.succeed(AgentScope, {
+            ...AgentScope.defaultValue(),
+            wrap: (input) =>
+              Effect.succeed({
+                command: "/test/scope",
+                args: [`--shared=${input.shared === true}`, "--", input.command, ...input.args],
+              }),
+          }),
+        ),
+        Layer.provide(Layer.succeed(HostProcess.HomeDirectory, home)),
+        Layer.provide(
+          sandbox === undefined ? Layer.empty : Layer.succeed(Sandbox.Sandbox, sandbox),
+        ),
+        Layer.provide(NodeServices.layer),
+      );
+      const opened = yield* Effect.gen(function* () {
+        const factory = yield* CodexAdapterV2.CodexAppServerClientFactory;
+        return yield* factory.open({
+          instanceId: CodexAdapterV2.CODEX_DEFAULT_INSTANCE_ID,
+          threadId: ThreadId.make("thread-codex-sandboxed"),
+          providerSessionId: ProviderSessionId.make("session-codex-sandboxed"),
+          runtimePolicy: {
+            runtimeMode: "sandboxed-full-access",
+            interactionMode: "default",
+            cwd,
+            sandboxPolicy: externalSandboxPolicy({
+              ...SANDBOX_REQUEST,
+              baseDir: `${root}/kinako`,
+              worktreesDir: `${root}/kinako/worktrees`,
+              attachmentsDir: `${root}/kinako/userdata/attachments`,
+            }),
+          },
+          settings: { ...DEFAULT_CODEX_SETTINGS, binaryPath: executable },
+          environment: { PATH: "/usr/bin:/bin" },
+        });
+      }).pipe(Effect.provide(factoryLayer), Effect.result);
+      return { opened, spawned, executable, cwd };
+    }).pipe(Effect.provide(NodeServices.layer));
+
+  it.effect("starts a sandboxed thread's app-server unshared, inside the sandbox", () =>
+    Effect.gen(function* () {
+      const { opened, spawned, executable } = yield* openSandboxed({
+        availability: Effect.succeed({ _tag: "Available", command: "/test/sandbox" }),
+        wrap: (input) =>
+          Effect.succeed({
+            command: "/test/sandbox",
+            args: ["--", input.command, ...input.args],
+            env: input.env,
+          }),
+      });
+      assert.equal(opened._tag, "Success");
+      const appServer = spawned.find((entry) => entry.command === "/test/scope");
+      assert.deepEqual(appServer?.args.slice(0, 5), [
+        "--shared=false",
+        "--",
+        "/test/sandbox",
+        "--",
+        executable,
+      ]);
+      assert.include(appServer?.args ?? [], "app-server");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("fails the open and starts no app-server when the sandbox cannot run", () =>
+    Effect.gen(function* () {
+      const { opened, spawned, executable } = yield* openSandboxed(undefined);
+      assert.equal(opened._tag, "Failure");
+      assert.isFalse(
+        spawned.some((entry) => entry.command === "/test/scope" || entry.command === executable),
+      );
+      assert.equal(
+        opened._tag === "Failure" ? knownProviderFailureMessage(opened.failure) : undefined,
+        "The filesystem sandbox is unavailable: The filesystem sandbox is not set up in this server.",
+      );
+    }).pipe(Effect.scoped),
+  );
 });
 
 describe("CodexAdapterV2 session initialize", () => {
@@ -4654,9 +4829,29 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     ),
   );
 
-  it.effect("reports a thread another Codex client is writing to as in use", () =>
+  it.effect.each([
+    { name: "waits out a writer lock another app-server releases", lockedAttempts: 3 },
+    { name: "reports a thread another Codex client keeps writing to as in use", lockedAttempts: 7 },
+  ])("$name", ({ lockedAttempts }) =>
     Effect.gen(function* () {
       const nativeThreadId = "thread-open-elsewhere";
+      const resumeFrame = (id: number) => ({
+        type: "expect_outbound" as const,
+        label: `thread/resume ${id}`,
+        frame: {
+          id,
+          method: "thread/resume",
+          params: {
+            threadId: nativeThreadId,
+            excludeTurns: true,
+            cwd: CODEX_TEST_RUNTIME_POLICY.cwd,
+            model: CODEX_TEST_MODEL_SELECTION.model,
+            config: CodexAdapterV2.CODEX_THREAD_CONFIG,
+          },
+        },
+      });
+      // One first attempt and six retries; a lock still held after them is surfaced.
+      const attempts = Math.min(lockedAttempts + 1, 7);
       const harness = yield* makeCodexReplayHarness(
         makeCodexReplayTranscript({
           scenario: "codex-resume-active-writer",
@@ -4666,47 +4861,50 @@ describe("CodexAdapterV2 post-settle continuation", () => {
               nativeTurnId: "unused-turn",
               prompt: "unused-prompt",
             }).slice(0, 5),
-            {
-              type: "expect_outbound",
-              label: "thread/resume",
-              frame: {
-                id: 3,
-                method: "thread/resume",
-                params: {
-                  threadId: nativeThreadId,
-                  excludeTurns: true,
-                  cwd: CODEX_TEST_RUNTIME_POLICY.cwd,
-                  model: CODEX_TEST_MODEL_SELECTION.model,
-                  config: CodexAdapterV2.CODEX_THREAD_CONFIG,
-                },
+            ...Array.from({ length: attempts }, (_, attempt) => [
+              resumeFrame(3 + attempt),
+              {
+                type: "emit_inbound" as const,
+                label: `thread/resume ${3 + attempt}`,
+                frame:
+                  attempt < lockedAttempts
+                    ? {
+                        id: 3 + attempt,
+                        error: {
+                          code: -32600,
+                          message: `thread ${nativeThreadId} already has an active writer`,
+                        },
+                      }
+                    : {
+                        id: 3 + attempt,
+                        result: { thread: { id: nativeThreadId, updatedAt: 1782622450 } },
+                      },
               },
-            },
-            {
-              type: "emit_inbound",
-              label: "active writer",
-              frame: {
-                id: 3,
-                error: {
-                  code: -32600,
-                  message: `thread ${nativeThreadId} already has an active writer`,
-                },
-              },
-            },
+            ]).flat(),
           ],
         }),
       );
 
-      const error = yield* Effect.flip(
-        harness.runtime.resumeThread({
+      const result = yield* harness.runtime
+        .resumeThread({
           providerThread: harness.providerThread,
           modelSelection: CODEX_TEST_MODEL_SELECTION,
           runtimePolicy: CODEX_TEST_RUNTIME_POLICY,
-        }),
-      );
+        })
+        .pipe(
+          Effect.provideService(CodexAdapterV2.CodexWriterReleaseSchedule, Schedule.forever),
+          Effect.result,
+        );
 
-      assert.equal(error._tag, "ProviderAdapterThreadInUseError");
+      if (lockedAttempts < 7) {
+        assert.equal(result._tag, "Success");
+        return;
+      }
+      assert.equal(result._tag, "Failure");
+      const error = result._tag === "Failure" ? result.failure : undefined;
+      assert.equal(error?._tag, "ProviderAdapterThreadInUseError");
       assert.nestedPropertyVal(error, "providerThreadId", harness.providerThread.id);
-      assert.include(error.message, "open in another Codex client");
+      assert.include(error?.message, "open in another Codex client");
       assert.nestedPropertyVal(
         error,
         "cause.errorMessage",

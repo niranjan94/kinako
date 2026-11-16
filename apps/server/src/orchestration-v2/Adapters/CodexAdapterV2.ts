@@ -47,6 +47,10 @@ import {
 import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as ProcessRunner from "../../processRunner.ts";
+import { sandboxCodexLaunch } from "../../provider/Drivers/CodexSandbox.ts";
+import { externalSandboxRequest } from "../../sandbox/externalSandbox.ts";
+import * as Sandbox from "../../sandbox/Sandbox.ts";
 import {
   COMPUTER_USE_TOOL_SOURCE,
   dynamicToolSurface,
@@ -101,6 +105,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -371,6 +376,13 @@ const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequest
 
 // Codex holds a per-thread writer lock for as long as a thread stays loaded in
 // any app-server sharing the same CODEX_HOME, and reports a conflict this way.
+// Six retries over about six seconds: long enough for an app-server to unload a thread or exit.
+const CODEX_WRITER_RELEASE_RETRIES = 6;
+export const CodexWriterReleaseSchedule = Context.Reference<Schedule.Schedule<unknown>>(
+  "t3/orchestration-v2/Adapters/CodexAdapterV2/CodexWriterReleaseSchedule",
+  { defaultValue: () => Schedule.exponential("100 millis") },
+);
+
 function isCodexActiveWriterError(error: unknown): boolean {
   return (
     isCodexAppServerRequestError(error) &&
@@ -910,12 +922,42 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
   },
 );
 
+/** A sandboxed app-server is fixed to one thread's workspace, so it serves that thread alone. */
+const CodexSandboxedSessionCapabilitiesV2 = {
+  ...CodexProviderCapabilitiesV2,
+  sessions: {
+    ...CodexProviderCapabilitiesV2.sessions,
+    supportsMultipleProviderThreadsPerSession: false,
+    supportsRuntimeModeSwitchInSession: false,
+  },
+};
+
+/**
+ * Sandboxed full access is Full access only for a session whose app-server runs inside the OS
+ * sandbox, with Codex told not to apply its own. Anywhere else it runs Supervised.
+ */
+export function codexRuntimePolicyForSession(
+  runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
+  processSandboxed: boolean,
+): ProviderAdapter.ProviderAdapterV2RuntimePolicy {
+  if (runtimePolicy.runtimeMode !== "sandboxed-full-access") return runtimePolicy;
+  const { sandboxPolicy: _claimed, ...rest } = runtimePolicy;
+  return processSandboxed && externalSandboxRequest(runtimePolicy) !== undefined
+    ? {
+        ...rest,
+        runtimeMode: "full-access",
+        sandboxPolicy: { type: "externalSandbox", networkAccess: "enabled" },
+      }
+    : { ...rest, runtimeMode: "approval-required" };
+}
+
 function providerSession(input: {
   readonly providerSessionId: OrchestrationV2ProviderSession["id"];
   readonly providerInstanceId: ProviderInstanceId;
   readonly cwd: string | null;
   readonly model: string;
   readonly now: DateTime.Utc;
+  readonly sandboxed: boolean;
 }): OrchestrationV2ProviderSession {
   return {
     id: input.providerSessionId,
@@ -924,7 +966,9 @@ function providerSession(input: {
     status: "ready",
     cwd: input.cwd ?? process.cwd(),
     model: input.model,
-    capabilities: CodexProviderCapabilitiesV2,
+    capabilities: input.sandboxed
+      ? CodexSandboxedSessionCapabilitiesV2
+      : CodexProviderCapabilitiesV2,
     createdAt: input.now,
     updatedAt: input.now,
     lastError: null,
@@ -1603,6 +1647,8 @@ export const makeCodexAppServerSpawnCommand = Effect.fn(
   readonly env?: NodeJS.ProcessEnv | undefined;
   readonly extendEnv?: boolean | undefined;
   readonly threadId?: string | undefined;
+  /** A sandboxed app-server serves one thread, so an OOM in it ends only that thread. */
+  readonly shared?: boolean | undefined;
 }) {
   const launch = yield* (yield* AgentScope).wrap({
     command: input.command,
@@ -1610,7 +1656,7 @@ export const makeCodexAppServerSpawnCommand = Effect.fn(
     name: "codex",
     threadId: input.threadId,
     env: input.env,
-    shared: true,
+    shared: input.shared ?? true,
   });
   const spawnCommand = yield* resolveSpawnCommand(launch.command, launch.args, {
     ...(input.env === undefined ? {} : { env: input.env }),
@@ -1777,6 +1823,8 @@ function isSensitiveCodexProtocolKey(key: string): boolean {
 export const layerAppServerClientFactory: Layer.Layer<
   CodexAppServerClientFactory,
   never,
+  | FileSystem.FileSystem
+  | Path.Path
   | ChildProcessSpawner.ChildProcessSpawner
   | PortScanner.PortDiscovery
   | ProviderEventLoggers.ProviderEventLoggers
@@ -1787,6 +1835,13 @@ export const layerAppServerClientFactory: Layer.Layer<
     const { native: nativeEventLogger } = yield* ProviderEventLoggers.ProviderEventLoggers;
     const agentScope = yield* AgentScope;
     const portDiscovery = yield* PortScanner.PortDiscovery;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const processRunner = yield* ProcessRunner.make();
+    const sandbox = yield* Sandbox.Sandbox;
+    const platform = yield* HostProcess.Platform;
+    const homeDirectory = yield* HostProcess.HomeDirectory;
+    const userId = yield* HostProcess.UserId;
 
     return CodexAppServerClientFactory.of({
       open: Effect.fn("CodexAdapterV2.open")(function* (input) {
@@ -1795,13 +1850,49 @@ export const layerAppServerClientFactory: Layer.Layer<
           ...codexAppServerEnvironment(input.environment),
           ...(input.settings.homePath ? { CODEX_HOME: input.settings.homePath } : {}),
         };
+        const executable = input.settings.binaryPath || "codex";
+        const args = codexAppServerArgs(
+          resolveCodexLaunchArgs(input.settings.launchArgs, input.environment),
+        );
+        const request = externalSandboxRequest(input.runtimePolicy);
+        // The sandbox goes inside the agent scope, so systemd still owns and reaps the tree.
+        const sandboxed =
+          request === undefined
+            ? undefined
+            : yield* sandboxCodexLaunch({
+                request,
+                cwd: input.runtimePolicy.cwd ?? ".",
+                additionalDirectories: input.runtimePolicy.additionalDirectories ?? [],
+                executable,
+                args,
+                env: environment,
+                managed: input.settings.setupMode === "managed",
+              }).pipe(
+                Effect.provideService(FileSystem.FileSystem, fileSystem),
+                Effect.provideService(Path.Path, path),
+                Effect.provideService(ProcessRunner.ProcessRunner, processRunner),
+                Effect.provideService(Sandbox.Sandbox, sandbox),
+                Effect.provideService(HostProcess.Platform, platform),
+                Effect.provideService(HostProcess.HomeDirectory, homeDirectory),
+                Effect.provideService(HostProcess.UserId, userId),
+                Effect.provideService(HostProcess.Environment, environment),
+                Effect.mapError(
+                  (cause) =>
+                    new ProviderAdapter.ProviderAdapterOpenSessionError({
+                      driver: CODEX_PROVIDER,
+                      providerSessionId: input.providerSessionId,
+                      cause,
+                    }),
+                ),
+              );
         const command = yield* makeCodexAppServerSpawnCommand({
-          command: input.settings.binaryPath || "codex",
-          args: codexAppServerArgs(
-            resolveCodexLaunchArgs(input.settings.launchArgs, input.environment),
-          ),
+          command: sandboxed?.command ?? executable,
+          args: sandboxed?.args ?? args,
           env: environment,
           threadId: input.threadId,
+          ...(sandboxed === undefined
+            ? {}
+            : { cwd: input.runtimePolicy.cwd ?? undefined, shared: false }),
         }).pipe(Effect.provideService(AgentScope, agentScope));
         const handle = yield* spawner.spawn(command).pipe(
           Effect.provideService(Scope.Scope, scope),
@@ -1933,6 +2024,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
   const readMcpSession = (threadId: ThreadId | null) =>
     threadId === null ? Effect.undefined : mcpSessions.read(threadId);
   const { clientFactory, digest, fileSystem, idAllocator, serverConfig } = adapterOptions;
+  const platform = yield* HostProcess.Platform;
   const continuationRequests = adapterOptions.continuationRequests;
 
   return ProviderAdapter.ProviderAdapterV2.of({
@@ -1941,6 +2033,9 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
     getCapabilities: Effect.fn("CodexAdapterV2.getCapabilities")(function () {
       return Effect.succeed(CodexProviderCapabilitiesV2);
     }),
+    ...(platform === "linux" || platform === "darwin"
+      ? { dedicatedSessionRuntimeModes: ["sandboxed-full-access"] as const }
+      : {}),
     planSelectionTransition: Effect.fn("CodexAdapterV2.planSelectionTransition")(function () {
       return Effect.succeed(turnScopedSelectionTransition());
     }),
@@ -1960,6 +2055,8 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     }),
                 ),
               );
+        // The factory wraps the app-server whenever the request is present, or fails the open.
+        const processSandboxed = externalSandboxRequest(input.runtimePolicy) !== undefined;
         const client = yield* clientFactory.open({
           instanceId: adapterOptions.instanceId,
           threadId: input.threadId,
@@ -2087,6 +2184,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           cwd: input.runtimePolicy.cwd,
           model: input.modelSelection.model,
           now,
+          sandboxed: processSandboxed,
         });
         // Drain final notifications before the session manager retires the dead process.
         // Queue.fail lets readers take items already buffered before they see the failure.
@@ -7541,6 +7639,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 return Effect.fail(cause);
               },
             }),
+            // A thread moving between app-servers stays locked until the other one lets it go.
+            Effect.retry({
+              times: CODEX_WRITER_RELEASE_RETRIES,
+              schedule: yield* CodexWriterReleaseSchedule,
+              while: isCodexActiveWriterError,
+            }),
           );
         });
 
@@ -7866,6 +7970,35 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           ),
         };
 
+        const startSessionTurn = (turnInput: ProviderAdapter.ProviderAdapterV2TurnInput) => {
+          const continuation =
+            turnInput.restartContinuationOfRunId !== undefined || turnInput.resume === true;
+          const goalCommand = !continuation ? parseGoalCommand(turnInput.message) : null;
+          if (goalCommand !== null) return runGoalCommand(turnInput, goalCommand);
+          const nativeThreadId = turnInput.providerThread.nativeThreadRef?.nativeId;
+          return Effect.gen(function* () {
+            if (
+              !continuation &&
+              nativeThreadId != null &&
+              goalsPausedForWake.has(nativeThreadId) &&
+              goalsByNativeThread.get(nativeThreadId)?.status === "paused"
+            ) {
+              return yield* activateGoal(turnInput, nativeThreadId, toCodexInput(turnInput));
+            }
+            yield* startNativeTurn(turnInput, !continuation ? yield* toCodexInput(turnInput) : []);
+          }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ProviderAdapter.ProviderAdapterTurnStartError({
+                  driver: CODEX_PROVIDER,
+                  threadId: turnInput.threadId,
+                  providerThreadId: turnInput.providerThread.id,
+                  runId: turnInput.runId,
+                  cause,
+                }),
+            ),
+          );
+        };
         const runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime = {
           instanceId: adapterOptions.instanceId,
           driver: CODEX_PROVIDER,
@@ -8068,38 +8201,14 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             ),
           ),
           resumeTurn: (input) => runtime.startTurn(ProviderAdapter.resumeTurnInput(input)),
-          startTurn: (turnInput) => {
-            const continuation =
-              turnInput.restartContinuationOfRunId !== undefined || turnInput.resume === true;
-            const goalCommand = !continuation ? parseGoalCommand(turnInput.message) : null;
-            if (goalCommand !== null) return runGoalCommand(turnInput, goalCommand);
-            const nativeThreadId = turnInput.providerThread.nativeThreadRef?.nativeId;
-            return Effect.gen(function* () {
-              if (
-                !continuation &&
-                nativeThreadId != null &&
-                goalsPausedForWake.has(nativeThreadId) &&
-                goalsByNativeThread.get(nativeThreadId)?.status === "paused"
-              ) {
-                return yield* activateGoal(turnInput, nativeThreadId, toCodexInput(turnInput));
-              }
-              yield* startNativeTurn(
-                turnInput,
-                !continuation ? yield* toCodexInput(turnInput) : [],
-              );
-            }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ProviderAdapter.ProviderAdapterTurnStartError({
-                    driver: CODEX_PROVIDER,
-                    threadId: turnInput.threadId,
-                    providerThreadId: turnInput.providerThread.id,
-                    runId: turnInput.runId,
-                    cause,
-                  }),
+          startTurn: (requestedTurnInput) =>
+            startSessionTurn({
+              ...requestedTurnInput,
+              runtimePolicy: codexRuntimePolicyForSession(
+                requestedTurnInput.runtimePolicy,
+                processSandboxed,
               ),
-            );
-          },
+            }),
           steerTurn: Effect.fn("CodexAdapterV2.steerTurn")(
             function* (turnInput) {
               const threadId = yield* getNativeThreadId(turnInput.providerThread);

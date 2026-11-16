@@ -1727,14 +1727,21 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       ),
     );
 
+  const usesDedicatedSession = (
+    adapter: ProviderAdapter.ProviderAdapterV2["Service"],
+    runtimeMode: RuntimeMode,
+  ) => adapter.dedicatedSessionRuntimeModes?.includes(runtimeMode) === true;
+
   const providerSessionIdFor = (input: {
     readonly adapter: ProviderAdapter.ProviderAdapterV2["Service"];
     readonly providerInstanceId: ProviderInstanceId;
     readonly threadId: ThreadId;
+    readonly runtimeMode: RuntimeMode;
   }) =>
     input.adapter.getCapabilities().pipe(
       Effect.flatMap((capabilities) =>
-        capabilities.sessions.supportsMultipleProviderThreadsPerSession
+        capabilities.sessions.supportsMultipleProviderThreadsPerSession &&
+        !usesDedicatedSession(input.adapter, input.runtimeMode)
           ? Effect.succeed(
               idAllocator.derive.providerSession({
                 providerInstanceId: input.providerInstanceId,
@@ -2988,6 +2995,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               adapter,
               providerInstanceId: queuedRun.providerInstanceId,
               threadId,
+              runtimeMode: projection.thread.runtimeMode,
             }),
           ),
           Effect.mapError(
@@ -4564,7 +4572,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             command.threadId,
             command.type === "thread.model-selection.set" || command.type === "provider.switch"
               ? command.modelSelection.instanceId
-              : undefined,
+              : command.type === "thread.runtime-mode.set"
+                ? thread.providerInstanceId
+                : undefined,
           )
           .pipe(mapDispatchError(command))
       : null;
@@ -4604,6 +4614,46 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
 
     // Archive and settle stop idle background work; serialized commands prevent starts racing detach.
     // Settlement rejects active or blocked runs.
+    // A mode that takes a dedicated session moves the thread to a session of the other class.
+    const sessionClassMoves: Array<OrchestrationV2ProviderThread> = [];
+    if (command.type === "thread.runtime-mode.set" && command.runtimeMode !== thread.runtimeMode) {
+      for (const providerThread of providerContext?.providerThreads ?? []) {
+        if (providerThread.providerSessionId === null) continue;
+        const adapter = yield* providerAdapters.get(providerThread.providerInstanceId).pipe(
+          Effect.mapError(
+            (cause) =>
+              new OrchestratorProviderAdapterError({
+                commandId: command.commandId,
+                providerInstanceId: providerThread.providerInstanceId,
+                cause,
+              }),
+          ),
+        );
+        if (
+          usesDedicatedSession(adapter, thread.runtimeMode) !==
+          usesDedicatedSession(adapter, command.runtimeMode)
+        ) {
+          sessionClassMoves.push(providerThread);
+        }
+      }
+    }
+    if (sessionClassMoves.length > 0) {
+      // Moving to another process would strand a running turn or its pending approvals.
+      const busy = yield* loadProjectionForCommand(command, ["runs", "runtimeRequests"], {
+        turnItemTypes: [],
+      });
+      if (
+        busy.runs.some(isActiveRun) ||
+        busy.runtimeRequests.some((request) => request.status === "pending")
+      ) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause:
+            "This mode runs in a separate process. Stop the running turn or answer its pending requests, then switch the mode again.",
+        });
+      }
+    }
     const detachSessionIds = new Set(
       command.type === "thread.archive" || command.type === "thread.settle"
         ? (providerContext?.providerSessions ?? []).map((session) => session.id)
@@ -4612,11 +4662,18 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             command.worktreePath !== thread.worktreePath
           ? (providerContext?.providerSessions ?? []).map((session) => session.id)
           : command.type === "thread.runtime-mode.set"
-            ? (providerContext?.providerSessions ?? [])
-                .filter(
-                  (session) => !session.capabilities.sessions.supportsRuntimeModeSwitchInSession,
-                )
-                .map((session) => session.id)
+            ? [
+                ...(providerContext?.providerSessions ?? [])
+                  .filter(
+                    (session) => !session.capabilities.sessions.supportsRuntimeModeSwitchInSession,
+                  )
+                  .map((session) => session.id),
+                ...sessionClassMoves.flatMap((providerThread) =>
+                  providerThread.providerSessionId === null
+                    ? []
+                    : [providerThread.providerSessionId],
+                ),
+              ]
             : (providerSwitchPlan?.releaseProviderSessionIds ?? []),
     );
     const liveSessions = (providerContext?.providerSessions ?? []).filter(
@@ -5677,6 +5734,26 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       );
     }
 
+    // The next turn derives a session of the new class and resumes the same native thread there.
+    for (const providerThread of sessionClassMoves) {
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "provider-thread.updated",
+        threadId: command.threadId,
+        driver: providerThread.driver,
+        providerInstanceId: providerThread.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          ...providerThread,
+          providerSessionId: null,
+          status: "not_loaded",
+          updatedAt: now,
+        },
+      });
+    }
+
     if (command.type === "thread.archive") {
       yield* Ref.update(effects, (existing) => [
         ...existing,
@@ -6579,6 +6656,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             adapter: targetAdapter,
             providerInstanceId: input.modelSelection.instanceId,
             threadId: input.command.threadId,
+            runtimeMode: input.projection.thread.runtimeMode,
           }),
         ));
       const targetProviderThreadBase: OrchestrationV2ProviderThread =
@@ -8171,6 +8249,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             adapter,
             providerInstanceId: modelSelection.instanceId,
             threadId: command.threadId,
+            runtimeMode: projection.thread.runtimeMode,
           }),
         ));
       const providerThreadId =
@@ -8612,6 +8691,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           adapter,
           providerInstanceId: modelSelection.instanceId,
           threadId: command.threadId,
+          runtimeMode: projection.thread.runtimeMode,
         }),
       ));
     const existingProviderSession = projection.providerSessions.find(
@@ -14785,6 +14865,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         adapter,
         providerInstanceId: providerThread.providerInstanceId,
         threadId: command.threadId,
+        runtimeMode: projection.thread.runtimeMode,
       }),
     );
     const summaryProviderThreadId = idAllocator.derive.providerThread({
@@ -15021,6 +15102,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               adapter,
               providerInstanceId: previous.providerInstanceId,
               threadId: command.threadId,
+              runtimeMode: projection.thread.runtimeMode,
             }),
           ),
           mapDispatchError(command),

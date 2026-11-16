@@ -819,6 +819,11 @@ export class ProviderAdapterV2 extends Context.Service<
       OrchestrationV2ProviderCapabilities,
       ProviderAdapterV2Error
     >;
+    /**
+     * Modes whose threads each get a session of their own even when the provider shares one
+     * session across threads, such as a mode whose process is sandboxed for one workspace.
+     */
+    readonly dedicatedSessionRuntimeModes?: ReadonlyArray<RuntimeMode>;
     readonly planSelectionTransition: (
       input: ProviderSelectionTransitionInput,
     ) => Effect.Effect<ProviderSelectionTransitionPlan, ProviderAdapterV2Error>;
