@@ -30,7 +30,7 @@ Neither sandbox can start another sandbox inside it. Tools that sandbox themselv
 
 ## bwrap starts with SIGTERM ignored
 
-bwrap does not forward signals and does not survive SIGTERM, and when it dies `--die-with-parent` SIGKILLs the provider, which loses its chance to shut down. So bwrap starts with SIGTERM ignored, `env --default-signal=TERM` restores it for the provider, and the server stops a sandboxed session by signalling its process group. That is why the Linux requirement includes a coreutils `env` with `--default-signal`.
+bwrap does not forward signals and does not survive SIGTERM, and when it dies `--die-with-parent` SIGKILLs the provider, which loses its chance to shut down. So bwrap starts with SIGTERM ignored, `env --default-signal=TERM` restores it for the provider, and the server stops a sandboxed session by signalling its process group. That is why the Linux requirement includes an `env` with `--default-signal`: GNU coreutils and uutils coreutils (the default `env` on recent Ubuntu) both restore SIGTERM this way, BusyBox's `env` has no such flag, and the availability probe runs `env --default-signal=TERM` inside bwrap so a missing flag shows as unavailable.
 
 ## Codex runs sandboxed threads in their own app-server
 

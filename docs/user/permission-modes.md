@@ -98,7 +98,7 @@ With Docker off on Linux, a system Docker socket that exists when the session st
 
 ### Requirements
 
-On Linux, install bubblewrap (`bwrap`) and use a GNU coreutils `env` that supports `--default-signal`. On macOS, nothing extra is needed. If a requirement is missing, the mode shows as unavailable with the reason.
+On Linux, install bubblewrap (`bwrap`) and have an `env` that supports `--default-signal`. GNU coreutils and uutils coreutils both provide one; BusyBox's `env` does not. On macOS, nothing extra is needed. If a requirement is missing, the mode shows as unavailable with the reason.
 
 ### Known limits
 
