@@ -97,12 +97,29 @@ function claudeProviderModels(
   );
 }
 
-const CLAUDE_PRESENTATION = {
+const CLAUDE_RUNTIME_MODES = [
+  "approval-required",
+  "auto-accept-edits",
+  "auto",
+  "full-access",
+] as const;
+// Sandboxed full access needs the OS sandbox, which exists only on Linux and macOS.
+const CLAUDE_SANDBOXED_RUNTIME_MODES = [
+  "approval-required",
+  "auto-accept-edits",
+  "auto",
+  "sandboxed-full-access",
+  "full-access",
+] as const;
+const claudePresentation = (platform: NodeJS.Platform) => ({
   displayName: "Claude",
   showInteractionModeToggle: true,
   reportsContextWindow: true,
-  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
-} as const;
+  supportedRuntimeModes:
+    platform === "linux" || platform === "darwin"
+      ? CLAUDE_SANDBOXED_RUNTIME_MODES
+      : CLAUDE_RUNTIME_MODES,
+});
 function toTitleCaseWords(value: string): string {
   const parts: Array<string> = [];
   for (const part of value.split(/[\s_-]+/g)) {
@@ -684,6 +701,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 > {
   const resolvedEnvironment = environment ?? process.env;
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
+  const presentation = claudePresentation(yield* HostProcess.Platform);
   const allModels = claudeProviderModels(
     modelCatalog.models.map((entry) => entry.model),
     claudeSettings.customModels,
@@ -691,7 +709,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   if (!claudeSettings.enabled) {
     return buildServerProvider({
-      presentation: CLAUDE_PRESENTATION,
+      presentation,
       enabled: false,
       checkedAt,
       models: allModels,
@@ -723,7 +741,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       errorTag: error._tag,
     });
     return buildServerProvider({
-      presentation: CLAUDE_PRESENTATION,
+      presentation,
       enabled: claudeSettings.enabled,
       checkedAt,
       models: allModels,
@@ -741,7 +759,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   if (Option.isNone(versionProbe.success)) {
     return buildServerProvider({
-      presentation: CLAUDE_PRESENTATION,
+      presentation,
       enabled: claudeSettings.enabled,
       checkedAt,
       models: allModels,
@@ -765,7 +783,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       stderrLength: version.stderr.length,
     });
     return buildServerProvider({
-      presentation: CLAUDE_PRESENTATION,
+      presentation,
       enabled: claudeSettings.enabled,
       checkedAt,
       models: allModels,
@@ -806,7 +824,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 
   if (!capabilities) {
     return buildServerProvider({
-      presentation: CLAUDE_PRESENTATION,
+      presentation,
       enabled: claudeSettings.enabled,
       checkedAt,
       models,
@@ -838,7 +856,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     const configDir = (yield* makeClaudeEnvironment(claudeSettings, resolvedEnvironment))
       .CLAUDE_CONFIG_DIR;
     return buildServerProvider({
-      presentation: CLAUDE_PRESENTATION,
+      presentation,
       enabled: claudeSettings.enabled,
       checkedAt,
       models,
@@ -889,7 +907,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       ? yield* resolveResetCredits(parsedVersion)
       : undefined;
   return buildServerProvider({
-    presentation: CLAUDE_PRESENTATION,
+    presentation,
     enabled: claudeSettings.enabled,
     checkedAt,
     models,
@@ -920,6 +938,7 @@ export const makePendingClaudeProvider = Effect.fn("ClaudeProvider.makePendingCl
     modelCatalog: ClaudeModelCatalog = BUNDLED_CLAUDE_MODEL_CATALOG,
   ): Effect.fn.Return<ServerProviderDraft> {
     const checkedAt = yield* nowIso;
+    const presentation = claudePresentation(yield* HostProcess.Platform);
     const models = claudeProviderModels(
       modelCatalog.models.map((entry) => entry.model),
       claudeSettings.customModels,
@@ -927,7 +946,7 @@ export const makePendingClaudeProvider = Effect.fn("ClaudeProvider.makePendingCl
 
     if (!claudeSettings.enabled) {
       return buildServerProvider({
-        presentation: CLAUDE_PRESENTATION,
+        presentation,
         enabled: false,
         checkedAt,
         models,
@@ -942,7 +961,7 @@ export const makePendingClaudeProvider = Effect.fn("ClaudeProvider.makePendingCl
     }
 
     return buildServerProvider({
-      presentation: CLAUDE_PRESENTATION,
+      presentation,
       enabled: true,
       checkedAt,
       models,

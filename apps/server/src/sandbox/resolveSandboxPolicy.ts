@@ -28,10 +28,11 @@ export interface ResolveSandboxPolicyInput extends Omit<
   SandboxPolicyInput,
   "gitCommonDirs" | "providerPaths" | "darwinUserCacheDir" | "gitExcludesFile"
 > {
-  /** Directories are created when missing; files that do not exist are left out. */
+  /** Read-write directories are created when missing; other missing paths are left out. */
   readonly providerPaths: ReadonlyArray<{
     readonly path: string;
     readonly kind: "directory" | "file";
+    readonly access: "read-write" | "read-only";
   }>;
 }
 
@@ -45,7 +46,7 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   const hostEnvironment = yield* HostProcess.Environment;
 
   for (const provider of input.providerPaths) {
-    if (provider.kind !== "directory") continue;
+    if (provider.kind !== "directory" || provider.access !== "read-write") continue;
     yield* fileSystem.makeDirectory(provider.path, { recursive: true }).pipe(
       Effect.mapError(
         (cause) =>
@@ -89,7 +90,7 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   const policyInput: SandboxPolicyInput = {
     ...input,
     gitCommonDirs,
-    providerPaths: input.providerPaths.map((provider) => provider.path),
+    providerPaths: input.providerPaths.map(({ path, access }) => ({ path, access })),
     ...(gitExcludesFile.length === 0
       ? {}
       : { gitExcludesFile: expandHomePath(gitExcludesFile, input.home) }),

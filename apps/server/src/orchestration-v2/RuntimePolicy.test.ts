@@ -16,6 +16,10 @@ import * as Stream from "effect/Stream";
 
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
 import { acpPermissionDisposition } from "@t3tools/provider-acp/server/clientPolicy";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as ServerConfig from "../config.ts";
+import { externalSandboxRequest } from "../sandbox/externalSandbox.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ProjectStore from "./ProjectStore.ts";
@@ -65,7 +69,9 @@ function makeThread(input: {
 
 const grokInstanceId = ProviderInstanceId.make("grok");
 const antigravityInstanceId = ProviderInstanceId.make("antigravity");
+const sandboxingInstanceId = ProviderInstanceId.make("sandboxing");
 const supportedRuntimeModesByInstance = new Map<ProviderInstanceId, ReadonlyArray<RuntimeMode>>([
+  [sandboxingInstanceId, ["approval-required", "sandboxed-full-access", "full-access"]],
   [grokInstanceId, ["approval-required", "auto", "full-access"]],
   [antigravityInstanceId, ["approval-required", "auto-accept-edits", "full-access"]],
 ]);
@@ -81,6 +87,12 @@ const providerInstanceFor = (instanceId: ProviderInstanceId) =>
 const layerWithPolicy = (policy?: ManagedPolicySummary) =>
   RuntimePolicy.layerFromProjectStore.pipe(
     Layer.provide(ServerSettings.layerTest({}, policy)),
+    Layer.provideMerge(
+      ServerConfig.layerTest("/project-root", { prefix: "kinako-runtime-policy-" }).pipe(
+        Layer.provide(NodeServices.layer),
+      ),
+    ),
+    Layer.provide(Layer.succeed(HostProcess.Platform, "linux")),
     Layer.provide(
       Layer.succeed(ProviderInstanceRegistry.ProviderInstanceRegistry, {
         getInstance: (instanceId) => Effect.succeed(providerInstanceFor(instanceId)),
@@ -179,6 +191,33 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
         yield* modeFor(providerInstanceId, "sandboxed-full-access"),
         "approval-required",
       );
+    }),
+  );
+
+  it.effect("carries an OS sandbox request only for a provider that runs sandboxed", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const { baseDir, attachmentsDir } = yield* ServerConfig.ServerConfig;
+      const now = yield* DateTime.now;
+      const resolve = (instanceId: ProviderInstanceId, runtimeMode: RuntimeMode) =>
+        policy.resolve({
+          thread: makeThread({ now, worktreePath: null, runtimeMode }),
+          modelSelection: { instanceId, model: "test-model" },
+        });
+
+      const sandboxed = yield* resolve(sandboxingInstanceId, "sandboxed-full-access");
+      const request = externalSandboxRequest(sandboxed);
+      assert.equal(request?.baseDir, baseDir);
+      assert.equal(request?.attachmentsDir, attachmentsDir);
+      assert.include(request?.settings.readWritePaths ?? [], "~/.cache");
+
+      for (const unsandboxed of [
+        yield* resolve(providerInstanceId, "sandboxed-full-access"),
+        yield* resolve(sandboxingInstanceId, "full-access"),
+      ]) {
+        assert.isUndefined(unsandboxed.sandboxPolicy);
+        assert.isUndefined(externalSandboxRequest(unsandboxed));
+      }
     }),
   );
 });

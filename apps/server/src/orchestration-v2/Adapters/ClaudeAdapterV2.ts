@@ -84,6 +84,9 @@ import {
 } from "@t3tools/shared/mcpApp";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as ProviderProcesses from "../../process/providerProcesses.ts";
+import { sandboxClaudeLaunch } from "../../provider/Drivers/ClaudeSandbox.ts";
+import { externalSandboxRequest, type SandboxRequest } from "../../sandbox/externalSandbox.ts";
+import * as Sandbox from "../../sandbox/Sandbox.ts";
 import * as SpawnWorker from "../../process/SpawnWorker.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { applyClaudePromptEffortPrefix } from "@t3tools/shared/model";
@@ -448,6 +451,7 @@ export function spawnClaudeProcessGroup(
   onStderr: (text: string) => void = () => {},
   onStderrClose: () => void = () => {},
   register?: (pid: number) => () => void,
+  signalGroup = false,
 ): ClaudeSpawnedProcess & Pick<NodeChildProcess.ChildProcess, "pid"> {
   // Relative to the server's cwd, as a native cwd is; the `./` keeps CDPATH out of it.
   const cwd = options.cwd ?? ".";
@@ -468,6 +472,18 @@ export function spawnClaudeProcessGroup(
       detached: true,
     },
   );
+  // A sandbox wrapper ignores SIGTERM, so the SDK's stop signals must reach the whole group.
+  if (signalGroup && child.pid !== undefined) {
+    const pid = child.pid;
+    child.kill = (signal?: NodeJS.Signals | number) => {
+      try {
+        signalProcessGroup(pid, typeof signal === "string" ? signal : "SIGTERM");
+        return true;
+      } catch {
+        return false;
+      }
+    };
+  }
   let forget: (() => void) | undefined;
   // Always drained, so a chatty CLI never blocks on a full stderr pipe.
   child.stderr?.setEncoding("utf8").on("data", onStderr).once("close", onStderrClose);
@@ -697,6 +713,8 @@ export interface ClaudeAgentSdkQueryOpenInput {
   readonly options: ClaudeAgentSdkQueryOptions;
   readonly threadId: ThreadId;
   readonly providerSessionId: OrchestrationV2ProviderSession["id"];
+  /** The CLI starts inside this sandbox, or the open fails. */
+  readonly osSandbox?: ClaudeOsSandbox & { readonly configDir?: string | undefined };
 }
 
 export interface ClaudeAgentSdkQuerySession {
@@ -1423,6 +1441,7 @@ export function withoutClaudeCanUseToolShadowedWarning<A>(run: () => A): A {
 export const layerQueryRunner: Layer.Layer<
   ClaudeAgentSdkQueryRunner,
   never,
+  | FileSystem.FileSystem
   | ChildProcessSpawner.ChildProcessSpawner
   | SecureRandom.SecureRandom
   | Path.Path
@@ -1442,6 +1461,26 @@ export const layerQueryRunner: Layer.Layer<
     const hostEnvironment = yield* HostProcess.Environment;
     const portDiscovery = yield* PortScanner.PortDiscovery;
     const processRunner = yield* ProcessRunner.make();
+    const fileSystem = yield* FileSystem.FileSystem;
+    const sandbox = yield* Sandbox.Sandbox;
+    const homeDirectory = yield* HostProcess.HomeDirectory;
+    const userId = yield* HostProcess.UserId;
+    const sandboxLaunch = (
+      osSandbox: NonNullable<ClaudeAgentSdkQueryOpenInput["osSandbox"]>,
+      executable: string,
+      env: NodeJS.ProcessEnv,
+    ) =>
+      sandboxClaudeLaunch({ ...osSandbox, executable, env }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+        Effect.provideService(ProcessRunner.ProcessRunner, processRunner),
+        Effect.provideService(Sandbox.Sandbox, sandbox),
+        Effect.provideService(HostProcess.Platform, platform),
+        Effect.provideService(HostProcess.HomeDirectory, homeDirectory),
+        Effect.provideService(HostProcess.UserId, userId),
+        Effect.provideService(HostProcess.Environment, env),
+        Effect.mapError((cause) => queryRunnerError(cause, "sandbox")),
+      );
     const readProcessTable = processRunner
       .run({ command: "ps", args: ["-A", "-o", "pid=,ppid=,pgid=,lstart="], timeout: "5 seconds" })
       .pipe(
@@ -1534,17 +1573,30 @@ export const layerQueryRunner: Layer.Layer<
           };
           // The SDK can prepend a scope wrapper to native binaries; script entries run through node.
           const binaryPath = queryOptions.pathToClaudeCodeExecutable;
-          const launch =
-            binaryPath === undefined ||
-            CLAUDE_SCRIPT_EXTENSIONS.some((ext) => binaryPath.endsWith(ext))
+          // The sandbox goes inside the agent scope, so systemd still owns and reaps the tree.
+          const sandboxed =
+            input.osSandbox === undefined
               ? undefined
-              : yield* agentScope.wrap({
-                  command: binaryPath,
-                  args: [],
+              : yield* sandboxLaunch(input.osSandbox, binaryPath ?? "claude", queryOptions.env);
+          const launch =
+            sandboxed !== undefined
+              ? yield* agentScope.wrap({
+                  command: sandboxed.command,
+                  args: sandboxed.args,
                   name: "claude",
                   threadId: input.threadId,
                   env: queryOptions.env,
-                });
+                })
+              : binaryPath === undefined ||
+                  CLAUDE_SCRIPT_EXTENSIONS.some((ext) => binaryPath.endsWith(ext))
+                ? undefined
+                : yield* agentScope.wrap({
+                    command: binaryPath,
+                    args: [],
+                    name: "claude",
+                    threadId: input.threadId,
+                    env: queryOptions.env,
+                  });
           const options =
             launch === undefined || launch.args.length === 0
               ? queryOptions
@@ -1580,6 +1632,7 @@ export const layerQueryRunner: Layer.Layer<
                   appendStderr,
                   stderrDone,
                   providerProcesses.register,
+                  sandboxed !== undefined,
                 );
                 if (unit === undefined && child.pid !== undefined) {
                   const tracker = trackDescendants(child.pid);
@@ -2216,6 +2269,8 @@ export function makeClaudeQueryOptions(input: {
   readonly appendSystemPromptFileText?: string;
   // Flag settings, because a user's settings.json env beats the process env in Claude Code.
   readonly toolSearchOverride?: "true";
+  /** Claude's own Bash sandbox cannot nest inside the OS sandbox the CLI already runs in. */
+  readonly disableNativeSandbox?: true;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection, input.modelCatalog);
   const {
@@ -2279,7 +2334,7 @@ export function makeClaudeQueryOptions(input: {
             compiledSelection.pinnedAlias,
         };
   // A settings file path cannot take extra keys, so it goes through unchanged.
-  const effectiveQuerySettings =
+  const unsandboxedQuerySettings =
     (input.toolSearchOverride === undefined &&
       aliasOverrideEnv === undefined &&
       autoCompactWindow === undefined) ||
@@ -2298,6 +2353,13 @@ export function makeClaudeQueryOptions(input: {
               ? {}
               : { ENABLE_TOOL_SEARCH: input.toolSearchOverride }),
           },
+        } as ClaudeSdkSettings);
+  const effectiveQuerySettings =
+    input.disableNativeSandbox === undefined || typeof unsandboxedQuerySettings === "string"
+      ? unsandboxedQuerySettings
+      : ({
+          ...unsandboxedQuerySettings,
+          sandbox: { ...unsandboxedQuerySettings?.sandbox, enabled: false },
         } as ClaudeSdkSettings);
   const deviceInstructions = input.mcpServers !== undefined && input.deviceToolsAvailable === true;
   const options: ClaudeAgentSdkQueryOptions = {
@@ -2339,6 +2401,10 @@ export function makeClaudeQueryOptions(input: {
       : effectiveQuerySettings === undefined
         ? {}
         : { settings: effectiveQuerySettings }),
+    // A settings file path takes no extra keys, so the SDK's own option carries it.
+    ...(input.disableNativeSandbox !== undefined && typeof effectiveQuerySettings === "string"
+      ? { sandbox: { enabled: false } }
+      : {}),
     ...(input.onUserDialog === undefined ? {} : { onUserDialog: input.onUserDialog }),
     ...(input.onElicitation === undefined ? {} : { onElicitation: input.onElicitation }),
     ...(input.supportedDialogKinds === undefined
@@ -3304,9 +3370,25 @@ function readOnlyPolicyAllowsGlobalReads(
   );
 }
 
-function permissionModeForClaudeRuntimePolicy(
+/**
+ * Sandboxed full access is Full access inside the OS sandbox its request describes. Without a
+ * request nothing wraps the process, so it runs Supervised and drops any sandbox claim.
+ */
+function claudeRuntimePolicyForPermissions(
   runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
+): ProviderAdapter.ProviderAdapterV2RuntimePolicy {
+  if (runtimePolicy.runtimeMode !== "sandboxed-full-access") return runtimePolicy;
+  if (externalSandboxRequest(runtimePolicy) !== undefined) {
+    return { ...runtimePolicy, runtimeMode: "full-access" };
+  }
+  const { sandboxPolicy: _unwrapped, ...supervised } = runtimePolicy;
+  return { ...supervised, runtimeMode: "approval-required" };
+}
+
+function permissionModeForClaudeRuntimePolicy(
+  requestedPolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
 ): PermissionMode {
+  const runtimePolicy = claudeRuntimePolicyForPermissions(requestedPolicy);
   const runtimeMode = unsandboxedRuntimeMode(runtimePolicy.runtimeMode);
   if (runtimePolicy.interactionMode === "plan") {
     return "plan";
@@ -3354,12 +3436,21 @@ function permissionModeForClaudeRuntimePolicy(
   }
 }
 
+/** The OS sandbox a query's process must start in, fixed for that process. */
+export interface ClaudeOsSandbox {
+  readonly request: SandboxRequest;
+  readonly cwd: string;
+  readonly additionalDirectories: ReadonlyArray<string>;
+}
+
 export interface ClaudeRuntimeQueryPolicy {
   readonly permissionMode: PermissionMode;
   readonly tools?: ClaudeAgentSdkQueryTools;
   readonly allowedTools?: ReadonlyArray<string>;
   readonly allowDangerouslySkipPermissions?: true;
   readonly installPermissionCallback: boolean;
+  /** Set whenever the thread runs Sandboxed full access; the runner must wrap or fail. */
+  readonly osSandbox?: ClaudeOsSandbox;
 }
 
 interface ClaudeBypassAvailability {
@@ -3373,9 +3464,19 @@ const CLAUDE_BYPASS_FULLY_AVAILABLE: ClaudeBypassAvailability = {
 };
 
 export function claudeRuntimeQueryPolicyForRuntimePolicy(
-  runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
+  requestedPolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
   availability: ClaudeBypassAvailability = CLAUDE_BYPASS_FULLY_AVAILABLE,
 ): ClaudeRuntimeQueryPolicy {
+  const runtimePolicy = claudeRuntimePolicyForPermissions(requestedPolicy);
+  const request = externalSandboxRequest(requestedPolicy);
+  const osSandbox: ClaudeOsSandbox | undefined =
+    request === undefined
+      ? undefined
+      : {
+          request,
+          cwd: requestedPolicy.cwd ?? ".",
+          additionalDirectories: requestedPolicy.additionalDirectories ?? [],
+        };
   const requestedMode = permissionModeForClaudeRuntimePolicy(runtimePolicy);
   const downgraded = requestedMode === "bypassPermissions" && availability.bypassDisabled;
   const permissionMode = downgraded
@@ -3395,7 +3496,7 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
   const installPermissionCallback =
     downgraded ||
     (runtimePolicy.approvalPolicy === undefined
-      ? unsandboxedRuntimeMode(runtimePolicy.runtimeMode) === "approval-required" ||
+      ? runtimePolicy.runtimeMode === "approval-required" ||
         runtimePolicy.runtimeMode === "auto-accept-edits"
       : runtimePolicy.approvalPolicy !== "never");
 
@@ -3406,6 +3507,7 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
       ...(allowedTools === undefined ? {} : { allowedTools }),
       // Claude routes Plan-mode writes to the callback even in Auto or Full access.
       installPermissionCallback: true,
+      ...(osSandbox === undefined ? {} : { osSandbox }),
     };
   }
 
@@ -3415,6 +3517,7 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
     ...(allowedTools === undefined ? {} : { allowedTools }),
     ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
     installPermissionCallback,
+    ...(osSandbox === undefined ? {} : { osSandbox }),
   };
 }
 
@@ -3524,6 +3627,7 @@ function claudeRuntimeQueryPolicyKey(policy: ClaudeRuntimeQueryPolicy): string {
     allowedTools: policy.allowedTools,
     allowDangerouslySkipPermissions: policy.allowDangerouslySkipPermissions,
     installPermissionCallback: policy.installPermissionCallback,
+    osSandbox: policy.osSandbox,
   });
 }
 
@@ -12889,6 +12993,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             supportedDialogKinds: ["resume_return"],
             ...(appendSystemPromptFileText === undefined ? {} : { appendSystemPromptFileText }),
             ...(toolSearchOverride === undefined ? {} : { toolSearchOverride }),
+            ...(queryPolicy.osSandbox === undefined ? {} : { disableNativeSandbox: true }),
           });
           const resolvedTurnCwd = yield* fileSystem
             .realPath(turnInput.runtimePolicy.cwd ?? ".")
@@ -12898,6 +13003,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             providerSessionId: input.providerSessionId,
             options: queryOptions,
             ...(turnInput.resume ? { resume: true } : {}),
+            ...(queryPolicy.osSandbox === undefined
+              ? {}
+              : {
+                  osSandbox: { ...queryPolicy.osSandbox, configDir: adapterOptions.configDir },
+                }),
           });
           // The SDK spawns the CLI per turn, so only the open waits for a provider update.
           const querySession = yield* (

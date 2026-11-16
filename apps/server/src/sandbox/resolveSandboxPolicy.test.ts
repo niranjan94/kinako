@@ -41,9 +41,10 @@ it.live("resolves a linked worktree against the real filesystem and git", () =>
       cwd: worktree,
       additionalDirectories: [],
       providerPaths: [
-        { path: path.join(home, ".provider"), kind: "directory" },
-        { path: path.join(home, ".provider.json"), kind: "file" },
+        { path: path.join(home, ".provider"), kind: "directory", access: "read-write" },
+        { path: path.join(home, ".provider.json"), kind: "file", access: "read-write" },
       ],
+      serverPaths: [],
       attachmentsDir: path.join(home, ".kinako", "userdata", "attachments"),
       baseDir: path.join(home, ".kinako"),
       worktreesDir: path.join(home, ".kinako", "worktrees"),

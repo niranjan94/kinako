@@ -41,6 +41,7 @@ import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderS
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as RuntimePolicy from "../RuntimePolicy.ts";
 import * as ServerSettings from "../../serverSettings.ts";
+import * as ServerConfig from "../../config.ts";
 import { acpPermissionDisposition } from "@t3tools/provider-acp/server/clientPolicy";
 import { acpCompletedTurnShouldTerminalizeTool } from "@t3tools/provider-acp/server/adapter";
 import {
@@ -342,6 +343,11 @@ describe("Grok launch permission mode", () => {
         Effect.provide(
           RuntimePolicy.layerFromProjectStore.pipe(
             Layer.provide(ServerSettings.layerTest()),
+            Layer.provide(
+              ServerConfig.layerTest("/workspace", { prefix: "kinako-grok-policy-" }).pipe(
+                Layer.provide(NodeServices.layer),
+              ),
+            ),
             Layer.provide(
               Layer.mock(ProjectStore.ProjectStoreV2)({
                 get: () => Effect.die("the thread has a worktree"),

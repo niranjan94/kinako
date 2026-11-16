@@ -16,7 +16,12 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
+import * as HostProcess from "@t3tools/shared/HostProcess";
+
+import * as ServerConfig from "../config.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import { externalSandboxPolicy, type SandboxRequest } from "../sandbox/externalSandbox.ts";
+import { effectiveSandboxSettings } from "../sandbox/sandboxPolicy.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectStore from "./ProjectStore.ts";
@@ -153,14 +158,51 @@ export const layerFromProjectStore: Layer.Layer<
   | ProjectStore.ProjectStoreV2
   | ProviderInstanceRegistry.ProviderInstanceRegistry
   | ServerSettings.ServerSettingsService
+  | ServerConfig.ServerConfig
 > = Layer.effect(
   RuntimePolicyV2,
   Effect.gen(function* () {
     const projects = yield* ProjectStore.ProjectStoreV2;
     const providerInstances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
+    const serverSettings = yield* ServerSettings.ServerSettingsService;
+    const serverConfig = yield* ServerConfig.ServerConfig;
+    const platform = yield* HostProcess.Platform;
+    const executablePath = yield* HostProcess.ExecutablePath;
     // The same ceiling the orchestrator enforces, fixed for the server's life.
-    const { managedPolicy } = yield* ServerSettings.ServerSettingsService;
+    const { managedPolicy } = serverSettings;
     const maxRuntimeMode = managedPolicy?.limits?.maxRuntimeMode;
+    const sandboxRequest = Effect.fn("RuntimePolicyV2.sandboxRequest")(function* (
+      thread: OrchestrationV2AppThread,
+      providerInstanceId: ProviderInstanceId,
+    ) {
+      if (platform !== "linux" && platform !== "darwin") return undefined;
+      const settings = yield* serverSettings.getSettings.pipe(
+        Effect.mapError(
+          (cause) =>
+            new RuntimePolicyResolveError({
+              projectId: thread.projectId,
+              providerInstanceId,
+              cause,
+            }),
+        ),
+      );
+      return {
+        settings: effectiveSandboxSettings(
+          settings.sandbox,
+          settings.projectSettingsOverrides[thread.projectId]?.sandbox,
+          platform,
+        ),
+        baseDir: serverConfig.baseDir,
+        worktreesDir: serverConfig.worktreesDir,
+        attachmentsDir: serverConfig.attachmentsDir,
+        serverPaths: [
+          `${serverConfig.stateDir}/device`,
+          `${serverConfig.baseDir}/tools`,
+          // Device launchers run the server's own runtime.
+          executablePath.slice(0, executablePath.lastIndexOf("/")) || "/",
+        ],
+      } satisfies SandboxRequest;
+    });
     return RuntimePolicyV2.of({
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
         yield* refuseAboveCeiling(managedPolicy, input.thread);
@@ -194,12 +236,18 @@ export const layerFromProjectStore: Layer.Layer<
               }),
             ),
           ));
+        const runtimeMode = providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes);
+        const request =
+          runtimeMode === "sandboxed-full-access"
+            ? yield* sandboxRequest(input.thread, input.modelSelection.instanceId)
+            : undefined;
         return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
-          runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
+          runtimeMode,
           interactionMode: input.thread.interactionMode,
           cwd,
           ...additionalDirectoriesOf(input.thread),
           ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
+          ...(request === undefined ? {} : { sandboxPolicy: externalSandboxPolicy(request) }),
         });
       }),
     });

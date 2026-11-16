@@ -123,6 +123,11 @@ import {
   ClaudeOrchestratorReplayHarness,
   unrecordedClaudeContextUsage,
 } from "./ClaudeAdapterV2.testkit.ts";
+import { externalSandboxPolicy, type SandboxRequest } from "../../sandbox/externalSandbox.ts";
+import * as Sandbox from "../../sandbox/Sandbox.ts";
+import { AgentScope } from "@t3tools/shared/AgentScope";
+import type { SandboxPolicy } from "../../sandbox/sandboxPolicy.ts";
+import { knownProviderFailureMessage } from "@t3tools/provider-core/server/failure";
 import { withInlineContext } from "../ContextHandoffDelivery.ts";
 import { provideDeterministicTestRuntime } from "../testkit/DeterministicRuntime.ts";
 import { runOrchestratorV2Scenario } from "../testkit/OrchestratorScenario.ts";
@@ -149,6 +154,13 @@ beforeEach(() => {
 });
 
 const DEFAULT_CLAUDE_SETTINGS = Schema.decodeSync(ClaudeSettings)({});
+const SANDBOX_REQUEST: SandboxRequest = {
+  settings: { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
+  baseDir: "/home/user/.kinako",
+  worktreesDir: "/home/user/.kinako/worktrees",
+  attachmentsDir: "/home/user/.kinako/userdata/attachments",
+  serverPaths: [],
+};
 const AUTO_COMPACT_CLAUDE_SETTINGS = Schema.decodeSync(ClaudeSettings)({
   autoCompactWindow: "300000",
 });
@@ -665,6 +677,37 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
       installPermissionCallback: true,
     });
   });
+
+  it("lifts approvals for Sandboxed full access only together with the sandbox to run in", () => {
+    const sandboxed = (overrides: Partial<ProviderAdapter.ProviderAdapterV2RuntimePolicy>) =>
+      ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(
+        ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+          runtimeMode: "sandboxed-full-access",
+          interactionMode: "default",
+          cwd: "/workspace",
+          ...overrides,
+        }),
+      );
+    const supervised = { permissionMode: "default", installPermissionCallback: true };
+
+    assert.deepEqual(sandboxed({ sandboxPolicy: externalSandboxPolicy(SANDBOX_REQUEST) }), {
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      installPermissionCallback: false,
+      osSandbox: { request: SANDBOX_REQUEST, cwd: "/workspace", additionalDirectories: [] },
+    });
+    // Without a request nothing would wrap the process, whatever else the policy claims.
+    assert.deepEqual(sandboxed({}), supervised);
+    assert.deepEqual(sandboxed({ sandboxPolicy: { type: "externalSandbox" } }), supervised);
+    assert.deepEqual(
+      sandboxed({ sandboxPolicy: { type: "externalSandbox" }, approvalPolicy: "never" }),
+      { permissionMode: "dontAsk", installPermissionCallback: false },
+    );
+    assert.deepEqual(
+      sandboxed({ sandboxPolicy: { type: "dangerFullAccess" }, approvalPolicy: "never" }),
+      { permissionMode: "dontAsk", installPermissionCallback: false },
+    );
+  });
 });
 
 describe("ClaudeAdapterV2 MCP query overrides", () => {
@@ -734,6 +777,39 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
       }),
     );
     assert.notEqual(rotatedKey, initialKey);
+  });
+
+  it("starts a new process when Sandboxed full access or its sandbox changes", () => {
+    const keyFor = (policy: Partial<ProviderAdapter.ProviderAdapterV2RuntimePolicy>) =>
+      ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(
+        ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(
+          ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            cwd: "/workspace",
+            ...policy,
+          }),
+        ),
+        {},
+      );
+    const sandboxed = {
+      runtimeMode: "sandboxed-full-access",
+      sandboxPolicy: externalSandboxPolicy(SANDBOX_REQUEST),
+    } as const;
+    const keys = [
+      keyFor({}),
+      keyFor(sandboxed),
+      keyFor({ ...sandboxed, cwd: "/other-worktree" }),
+      keyFor({ ...sandboxed, additionalDirectories: ["/docs"] }),
+      keyFor({
+        ...sandboxed,
+        sandboxPolicy: externalSandboxPolicy({
+          ...SANDBOX_REQUEST,
+          settings: { ...SANDBOX_REQUEST.settings, allowDocker: true },
+        }),
+      }),
+    ];
+    assert.equal(new Set(keys).size, keys.length);
   });
 
   it("matches the read-only allowlist to the orchestrator toolkit annotations", () => {
@@ -3075,6 +3151,130 @@ function makeFakeClaudeCli(answerSetServers = true) {
   const closed = () => stdins.length > 0 && stdins.every((stdin) => stdin.writableEnded);
   return { spawn, spawns, controlRequests, closed };
 }
+
+describe("ClaudeAdapterV2 OS sandbox launch", () => {
+  const openSandboxed = (sandbox: Sandbox.SandboxShape | undefined) =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const root = yield* fileSystem.realPath(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "kinako-claude-sandbox-" }),
+      );
+      const home = NodePath.join(root, "home");
+      const cwd = NodePath.join(root, "work");
+      const executable = NodePath.join(root, "bin", "claude");
+      yield* fileSystem.makeDirectory(home, { recursive: true });
+      yield* fileSystem.makeDirectory(cwd, { recursive: true });
+      yield* fileSystem.makeDirectory(NodePath.dirname(executable), { recursive: true });
+      yield* fileSystem.writeFileString(executable, "#!/bin/sh\n");
+      yield* fileSystem.chmod(executable, 0o755);
+      const cli = makeFakeClaudeCli();
+      const runnerLayer = ClaudeAdapterV2.layerQueryRunner.pipe(
+        Layer.provide(PortScanner.layerTest),
+        Layer.provide(Layer.succeed(HostProcess.HomeDirectory, home)),
+        Layer.provide(
+          sandbox === undefined ? Layer.empty : Layer.succeed(Sandbox.Sandbox, sandbox),
+        ),
+        Layer.provide(
+          Layer.succeed(AgentScope, {
+            ...AgentScope.defaultValue(),
+            wrap: (input) =>
+              Effect.succeed({
+                command: "/test/scope",
+                args: ["--", input.command, ...input.args],
+              }),
+          }),
+        ),
+      );
+      const opened = yield* Effect.gen(function* () {
+        const runner = yield* ClaudeAdapterV2.ClaudeAgentSdkQueryRunner;
+        return yield* runner.open({
+          threadId: ThreadId.make("thread-claude-os-sandbox"),
+          providerSessionId: ProviderSessionId.make("provider-session-claude-os-sandbox"),
+          options: {
+            ...ClaudeAdapterV2.makeClaudeQueryOptions({
+              modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+              nativeThreadId: "native-thread-claude-os-sandbox",
+              title: "Sandboxed",
+              resume: false,
+              cwd,
+              environment: { PATH: "/usr/bin:/bin" },
+              mcpServers: {
+                "t3-code": { type: "http", url: "http://127.0.0.1:43123/mcp", headers: {} },
+              },
+              disableNativeSandbox: true,
+            }),
+            pathToClaudeCodeExecutable: executable,
+            spawnClaudeCodeProcess: cli.spawn,
+          },
+          osSandbox: {
+            request: {
+              ...SANDBOX_REQUEST,
+              baseDir: NodePath.join(root, "kinako"),
+              worktreesDir: NodePath.join(root, "kinako", "worktrees"),
+              attachmentsDir: NodePath.join(root, "kinako", "userdata", "attachments"),
+            },
+            cwd,
+            additionalDirectories: [],
+          },
+        });
+      }).pipe(
+        Effect.provide(runnerLayer),
+        Effect.provideService(ProviderEventLoggers.ProviderEventLoggers, {
+          ...ProviderEventLoggers.NoOpProviderEventLoggers,
+        }),
+        Effect.result,
+      );
+      return { opened, cli, cwd, executable, home };
+    }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
+
+  it.effect("fails the open, spawning nothing, when the sandbox cannot run", () =>
+    Effect.gen(function* () {
+      const { opened, cli } = yield* openSandboxed(undefined);
+      assert.equal(opened._tag, "Failure");
+      assert.deepEqual(cli.spawns, []);
+      assert.equal(
+        opened._tag === "Failure" ? knownProviderFailureMessage(opened.failure) : undefined,
+        "The filesystem sandbox is unavailable: The filesystem sandbox is not set up in this server.",
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "spawns the CLI inside the sandbox inside the agent scope, with Claude's sandbox off",
+    () =>
+      Effect.gen(function* () {
+        const policies: Array<SandboxPolicy> = [];
+        const { opened, cli, cwd, executable, home } = yield* openSandboxed({
+          availability: Effect.succeed({ _tag: "Available", command: "/test/sandbox" }),
+          wrap: (input) =>
+            Effect.sync(() => {
+              policies.push(input.policy);
+              return {
+                command: "/test/sandbox",
+                args: ["--", input.command, ...input.args],
+                env: input.env,
+              };
+            }),
+        });
+        assert.equal(opened._tag, "Success");
+        if (opened._tag === "Success") yield* opened.success.close;
+        const [spawn] = cli.spawns;
+        assert.equal(spawn?.command, "/test/scope");
+        assert.deepEqual(spawn?.args.slice(0, 4), ["--", "/test/sandbox", "--", executable]);
+        assert.equal(policies[0]?.cwd, cwd);
+        assert.deepInclude(policies[0]?.entries ?? [], {
+          path: NodePath.join(home, ".claude"),
+          access: "read-write",
+          kind: "directory",
+          source: "provider",
+        });
+        const settingsIndex = spawn?.args.indexOf("--settings") ?? -1;
+        assert.deepInclude(JSON.parse(spawn?.args[settingsIndex + 1] ?? "{}"), {
+          sandbox: { enabled: false },
+        });
+      }).pipe(Effect.scoped),
+  );
+});
 
 describe("ClaudeAdapterV2 MCP credential channel", () => {
   const t3McpServer = {

@@ -52,6 +52,36 @@ export function bubblewrapArgs(policy: SandboxPolicy): ReadonlyArray<string> {
   ];
 }
 
+/**
+ * bwrap neither forwards signals nor survives SIGTERM, and when it dies `--die-with-parent`
+ * SIGKILLs the command. So bwrap starts with SIGTERM ignored, and `env --default-signal`
+ * restores it for the command, which then gets SIGTERM sent to the process group.
+ */
+const IGNORE_TERM_SCRIPT = `trap '' TERM; exec "$@"`;
+
+function sandboxedCommand(
+  tools: { readonly bwrap: string; readonly env: string },
+  policy: SandboxPolicy,
+  command: string,
+  args: ReadonlyArray<string>,
+): { readonly command: string; readonly args: ReadonlyArray<string> } {
+  return {
+    command: "/bin/sh",
+    args: [
+      "-c",
+      IGNORE_TERM_SCRIPT,
+      "kinako-sandbox",
+      tools.bwrap,
+      ...bubblewrapArgs(policy),
+      "--",
+      tools.env,
+      "--default-signal=TERM",
+      command,
+      ...args,
+    ],
+  };
+}
+
 const PROBE_POLICY: SandboxPolicy = {
   platform: "linux",
   cwd: "/",
@@ -64,7 +94,10 @@ export class Bubblewrap extends Context.Service<
   {
     /** Runs bwrap once per server; AppArmor can refuse it even when it is on PATH. */
     readonly availability: Effect.Effect<SandboxAvailability>;
-    /** The command that runs `input` inside `policy`. Fails rather than run it unsandboxed. */
+    /**
+     * The command that runs `input` inside `policy`. Fails rather than run it unsandboxed.
+     * Stop it by signalling its process group: SIGTERM to its pid alone is ignored.
+     */
     readonly wrap: (
       input: SandboxedCommand & { readonly policy: SandboxPolicy },
     ) => Effect.Effect<SandboxedCommand, SandboxUnavailableError>;
@@ -79,6 +112,7 @@ export const make = Effect.fn("Bubblewrap.make")(function* (options?: {
   const resolved = yield* resolveCommandPath(options?.command ?? "bwrap").pipe(
     Effect.orElseSucceed(() => null),
   );
+  const env = yield* resolveCommandPath("env").pipe(Effect.orElseSucceed(() => null));
 
   const probe = Effect.fn("Bubblewrap.probe")(function* () {
     if (platform !== "linux") {
@@ -87,10 +121,12 @@ export const make = Effect.fn("Bubblewrap.make")(function* (options?: {
     if (resolved === null) {
       return { _tag: "Unavailable", reason: "bwrap was not found on PATH." } as const;
     }
+    if (env === null) {
+      return { _tag: "Unavailable", reason: "env was not found on PATH." } as const;
+    }
     const result = yield* runner
       .run({
-        command: resolved,
-        args: [...bubblewrapArgs(PROBE_POLICY), "--", "true"],
+        ...sandboxedCommand({ bwrap: resolved, env }, PROBE_POLICY, "true", []),
         timeout: "10 seconds",
       })
       .pipe(Effect.result);
@@ -122,12 +158,18 @@ export const make = Effect.fn("Bubblewrap.make")(function* (options?: {
       });
     }
     const available = yield* availability;
-    if (available._tag === "Unavailable") {
-      return yield* new SandboxUnavailableError({ reason: available.reason });
+    if (available._tag === "Unavailable" || env === null) {
+      return yield* new SandboxUnavailableError({
+        reason: available._tag === "Unavailable" ? available.reason : "env was not found on PATH.",
+      });
     }
     return {
-      command: available.command,
-      args: [...bubblewrapArgs(input.policy), "--", input.command, ...input.args],
+      ...sandboxedCommand(
+        { bwrap: available.command, env },
+        input.policy,
+        input.command,
+        input.args,
+      ),
       env: input.env,
     };
   });

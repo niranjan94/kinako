@@ -12,30 +12,34 @@ import {
   SandboxUnavailableError,
 } from "./sandboxPolicy.ts";
 
-const UNSUPPORTED_REASON = "The filesystem sandbox only runs on Linux and macOS.";
+export interface SandboxShape {
+  readonly availability: Effect.Effect<SandboxAvailability>;
+  /**
+   * The command that runs `input` inside `policy`. Fails rather than run it unsandboxed.
+   * Stop it by signalling its process group; on Linux SIGTERM to its pid alone is ignored.
+   */
+  readonly wrap: (
+    input: SandboxedCommand & { readonly policy: SandboxPolicy },
+  ) => Effect.Effect<SandboxedCommand, SandboxUnavailableError>;
+}
+
+const refusing = (reason: string): SandboxShape => ({
+  availability: Effect.succeed({ _tag: "Unavailable", reason }),
+  wrap: Effect.fn("Sandbox.wrap")(function* () {
+    return yield* new SandboxUnavailableError({ reason });
+  }),
+});
 
 /** The OS sandbox for this host: bubblewrap on Linux, Seatbelt on macOS, none elsewhere. */
-export class Sandbox extends Context.Service<
-  Sandbox,
-  {
-    readonly availability: Effect.Effect<SandboxAvailability>;
-    /** The command that runs `input` inside `policy`. Fails rather than run it unsandboxed. */
-    readonly wrap: (
-      input: SandboxedCommand & { readonly policy: SandboxPolicy },
-    ) => Effect.Effect<SandboxedCommand, SandboxUnavailableError>;
-  }
->()("t3/sandbox/Sandbox") {}
+export const Sandbox = Context.Reference<SandboxShape>("t3/sandbox/Sandbox", {
+  defaultValue: () => refusing("The filesystem sandbox is not set up in this server."),
+});
 
 const make = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
-  if (platform === "linux") return Sandbox.of(yield* Bubblewrap.Bubblewrap);
-  if (platform === "darwin") return Sandbox.of(yield* Seatbelt.Seatbelt);
-  return Sandbox.of({
-    availability: Effect.succeed({ _tag: "Unavailable", reason: UNSUPPORTED_REASON }),
-    wrap: Effect.fn("Sandbox.wrap")(function* () {
-      return yield* new SandboxUnavailableError({ reason: UNSUPPORTED_REASON });
-    }),
-  });
+  if (platform === "linux") return yield* Bubblewrap.Bubblewrap;
+  if (platform === "darwin") return yield* Seatbelt.Seatbelt;
+  return refusing("The filesystem sandbox only runs on Linux and macOS.");
 });
 
 export const layer = Layer.effect(Sandbox, make).pipe(

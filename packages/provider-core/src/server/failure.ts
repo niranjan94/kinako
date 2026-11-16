@@ -128,6 +128,8 @@ function curatedCauseMessages(cause: unknown): {
         case "ProviderSetupError":
         case "ProviderAdapterThreadInUseError":
         case "ProviderCompactionUnsupportedError":
+        case "SandboxUnavailableError":
+        case "SandboxPolicyRefusedError":
           return { known: stringField(cause, "message"), category: categoryMessage() };
         case "CodexAppServerRequestError": {
           // Only Codex's fixed-shape goal validation and managed-requirements

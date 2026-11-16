@@ -50,7 +50,8 @@ export type SandboxEntrySource =
   | "runtime-dir"
   | "ssh-agent"
   | "docker"
-  | "git-config";
+  | "git-config"
+  | "server";
 
 export interface SandboxPolicyEntry {
   readonly path: string;
@@ -97,9 +98,14 @@ export interface SandboxPolicyInput {
     readonly path: string;
     readonly access: "read-write" | "read-only";
   }>;
-  /** Provider-owned state the agent writes, such as `~/.claude` and `~/.claude.json`. */
-  readonly providerPaths: ReadonlyArray<string>;
+  /** The provider's own state and install, such as `~/.claude` and `~/.claude.json`. */
+  readonly providerPaths: ReadonlyArray<{
+    readonly path: string;
+    readonly access: "read-write" | "read-only";
+  }>;
   readonly attachmentsDir: string;
+  /** What the server hands agents from under its base dir, such as device launchers; read-only. */
+  readonly serverPaths: ReadonlyArray<string>;
   readonly baseDir: string;
   readonly worktreesDir: string;
   readonly pathEnv: string | undefined;
@@ -193,7 +199,7 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
     ...(input.darwinUserCacheDir === undefined
       ? []
       : [candidate(input.darwinUserCacheDir, "read-write", "temp")]),
-    ...input.providerPaths.map((path) => candidate(path, "read-write", "provider")),
+    ...input.providerPaths.map((provider) => candidate(provider.path, provider.access, "provider")),
     ...input.settings.readWritePaths.map((path) =>
       candidate(userPath(path, input.home), "read-write", "user-read-write"),
     ),
@@ -202,6 +208,7 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
     ),
     ...homePathEntries.map((path) => candidate(path, "read-only", "path")),
     candidate(input.attachmentsDir, "read-only", "attachments"),
+    ...input.serverPaths.map((path) => candidate(path, "read-only", "server")),
     // git exits on EPERM (macOS hidden paths) for its global config, so it stays readable.
     ...[
       NodePath.posix.join(input.home, ".gitconfig"),
@@ -347,6 +354,11 @@ export function resolveSandboxPolicy(
         reject(`Inside ${hidden}, which always stays hidden.`);
         continue;
       }
+    }
+
+    if (candidate.source === "server" && isWithin(realHome, path)) {
+      reject("Exposes the whole home directory.");
+      continue;
     }
 
     if (WORKSPACE_SOURCES.has(candidate.source)) {
