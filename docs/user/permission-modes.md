@@ -76,7 +76,9 @@ By default, a sandboxed agent can:
 - Read and write package manager caches and similar folders, such as `~/.npm`, `~/.cache`, `~/.cargo/registry`, `~/go/pkg/mod`, and `~/.ssh/known_hosts`.
 - Read everything outside your home folder, plus home paths tools need, such as `~/.gitconfig`, `~/.ssh/config`, your public SSH keys, toolchains such as `~/.nvm`, `~/.cargo`, and `~/.rustup`, and folders on your `PATH`.
 
-The rest of your home folder, including your private SSH keys and the app's own data folder, is hidden.
+The rest of your home folder, including your private SSH keys and the app's own data folder, is hidden. Cargo's publishing tokens in `~/.cargo/credentials.toml` stay hidden too, unless you list that file; on Linux this covers a token file that exists when the session starts, and one created later, for example by `cargo login`, is readable until the session restarts.
+
+The network is open, so the sandbox keeps files outside the allowed paths from being changed but does not stop the agent sending anything it can read off the machine: SSH keys, cloud credentials such as `~/.aws`, and Cargo publishing tokens stay hidden, but files builds read, such as `~/.gradle/gradle.properties` and, on macOS, `~/.npmrc`, stay readable and can hold tokens.
 
 To change the lists, open **Settings → Threads → Sandboxed full access** and choose an environment. Each list shows that environment's defaults until you edit it; editing saves the whole list, and the reset button returns to the defaults. Paths are absolute or start with `~/`, and only the last part of a path may contain a `*`, such as `~/.ssh/*.pub`. A path the sandbox leaves out, such as one that would expose your whole home folder, is listed under its list with the reason. A path that does not exist yet, or that may expose credentials such as `~/.ssh` or `~/.aws`, is kept but shown with a warning.
 
