@@ -171,6 +171,7 @@ const RUNTIME_MODE_LABELS: Record<RuntimeMode, string> = {
   "approval-required": "Supervised",
   "auto-accept-edits": "Auto-accept edits",
   auto: "Auto",
+  "sandboxed-full-access": "Sandboxed full access",
   "full-access": "Full access",
 };
 

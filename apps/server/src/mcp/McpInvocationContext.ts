@@ -76,7 +76,8 @@ const runtimeModeRank: Record<RuntimeMode, number> = {
   "approval-required": 0,
   "auto-accept-edits": 1,
   auto: 2,
-  "full-access": 3,
+  "sandboxed-full-access": 3,
+  "full-access": 4,
 };
 const interactionModeRank: Record<ProviderInteractionMode, number> = { plan: 0, default: 1 };
 

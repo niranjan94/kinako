@@ -101,6 +101,7 @@ const CLAUDE_PRESENTATION = {
   displayName: "Claude",
   showInteractionModeToggle: true,
   reportsContextWindow: true,
+  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
 } as const;
 function toTitleCaseWords(value: string): string {
   const parts: Array<string> = [];

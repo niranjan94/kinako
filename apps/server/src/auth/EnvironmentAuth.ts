@@ -23,6 +23,7 @@ import {
   DpopFailureReason,
   type DpopFailureReason as DpopFailureReasonType,
   mcpClientScopes,
+  type RuntimeMode,
 } from "@t3tools/contracts";
 import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
@@ -1541,7 +1542,7 @@ export const make = Effect.gen(function* () {
               sessionId: session.sessionId,
               label: session.client.label ?? "MCP client",
               access: session.scopes.includes(AuthOrchestrationOperateScope)
-                ? (session.runtimeModeCeiling ?? "approval-required")
+                ? mcpClientAccessForCeiling(session.runtimeModeCeiling)
                 : "read-only",
               peerLink: session.peerLink === true,
             } satisfies McpClientSession)
@@ -1640,6 +1641,10 @@ export const make = Effect.gen(function* () {
 });
 
 const isMcpClientAccess = Schema.is(AuthMcpClientAccess);
+
+// No approval level grants sandboxed full access, so a token claiming it is treated as Supervised.
+const mcpClientAccessForCeiling = (ceiling: RuntimeMode | undefined): AuthMcpClientAccess =>
+  ceiling !== undefined && isMcpClientAccess(ceiling) ? ceiling : "approval-required";
 
 const normalizeVerificationCode = (code: string) => code.toUpperCase().replace(/[^0-9A-Z]/g, "");
 

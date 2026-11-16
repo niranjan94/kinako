@@ -136,6 +136,7 @@ import {
   type ThreadId,
   resolveIdleCompaction,
   isDelegatedAppThread,
+  unsandboxedRuntimeMode,
 } from "@t3tools/contracts";
 
 import { FILE_HEADERS_ONLY, formatPatch, structuredPatch } from "diff";
@@ -3306,6 +3307,7 @@ function readOnlyPolicyAllowsGlobalReads(
 function permissionModeForClaudeRuntimePolicy(
   runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
 ): PermissionMode {
+  const runtimeMode = unsandboxedRuntimeMode(runtimePolicy.runtimeMode);
   if (runtimePolicy.interactionMode === "plan") {
     return "plan";
   }
@@ -3318,9 +3320,9 @@ function permissionModeForClaudeRuntimePolicy(
         return "bypassPermissions";
       case "workspaceWrite":
       case undefined:
-        return runtimePolicy.runtimeMode === "approval-required"
+        return runtimeMode === "approval-required"
           ? "dontAsk"
-          : runtimePolicy.runtimeMode === "auto-accept-edits"
+          : runtimeMode === "auto-accept-edits"
             ? "acceptEdits"
             : "bypassPermissions";
     }
@@ -3333,14 +3335,14 @@ function permissionModeForClaudeRuntimePolicy(
     case "readOnly":
       return "dontAsk";
     case "dangerFullAccess":
-      return runtimePolicy.runtimeMode === "approval-required" ? "default" : "bypassPermissions";
+      return runtimeMode === "approval-required" ? "default" : "bypassPermissions";
     case "externalSandbox":
     case "workspaceWrite":
     case undefined:
       break;
   }
 
-  switch (runtimePolicy.runtimeMode) {
+  switch (runtimeMode) {
     case "approval-required":
       return "default";
     case "auto-accept-edits":
@@ -3393,7 +3395,7 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
   const installPermissionCallback =
     downgraded ||
     (runtimePolicy.approvalPolicy === undefined
-      ? runtimePolicy.runtimeMode === "approval-required" ||
+      ? unsandboxedRuntimeMode(runtimePolicy.runtimeMode) === "approval-required" ||
         runtimePolicy.runtimeMode === "auto-accept-edits"
       : runtimePolicy.approvalPolicy !== "never");
 

@@ -741,6 +741,7 @@ function codexRuntimeModeTurnDefaults(runtimeMode: RuntimeMode): {
 } {
   switch (runtimeMode) {
     case "approval-required":
+    case "sandboxed-full-access":
       return {
         approvalPolicy: "untrusted",
         approvalsReviewer: "user",

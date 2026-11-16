@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import type { RuntimeMode } from "@t3tools/contracts";
+import { type RuntimeMode, unsandboxedRuntimeMode } from "@t3tools/contracts";
 import type * as EffectAcpSchema from "effect-acp/compat";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
@@ -76,7 +76,7 @@ interface AcpPolicyOperation {
 
 function acpPolicyRequiresApproval(runtimePolicy: AcpRuntimePolicy): boolean {
   return runtimePolicy.approvalPolicy === undefined
-    ? runtimePolicy.runtimeMode === "approval-required"
+    ? unsandboxedRuntimeMode(runtimePolicy.runtimeMode) === "approval-required"
     : runtimePolicy.approvalPolicy !== "never";
 }
 
@@ -173,7 +173,7 @@ function acpOperationDisposition(
     case "externalSandbox":
       return "allow";
     case undefined:
-      if (runtimePolicy.runtimeMode === "approval-required") return "deny";
+      if (unsandboxedRuntimeMode(runtimePolicy.runtimeMode) === "approval-required") return "deny";
       if (
         runtimePolicy.runtimeMode === "auto-accept-edits" &&
         runtimePolicy.approvalPolicy === undefined &&

@@ -1,7 +1,7 @@
 import {
   type AuthMcpApprovalDecision,
   type AuthMcpApprovalDetails,
-  type AuthMcpClientAccess,
+  AuthMcpClientAccess,
   isRuntimeModeAbove,
   parseMcpApprovalCode,
 } from "@t3tools/contracts";
@@ -17,11 +17,13 @@ export function resolveMcpAccess(
   hasCode: boolean,
 ): AuthMcpClientAccess {
   const access = requested ?? (hasCode ? "auto" : "read-only");
-  return access !== "read-only" &&
-    ceiling !== undefined &&
-    isRuntimeModeAbove(access, ceiling.maxRuntimeMode)
-    ? ceiling.maxRuntimeMode
-    : access;
+  if (access === "read-only" || ceiling === undefined) return access;
+  if (!isRuntimeModeAbove(access, ceiling.maxRuntimeMode)) return access;
+  return (
+    AuthMcpClientAccess.literals.findLast(
+      (level) => level !== "read-only" && !isRuntimeModeAbove(level, ceiling.maxRuntimeMode),
+    ) ?? "read-only"
+  );
 }
 
 /**

@@ -30,6 +30,7 @@ import {
   type ServerProviderModel,
   type ServerProviderSkill,
   type ThreadId,
+  unsandboxedRuntimeMode,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -193,9 +194,10 @@ export function cursorRuntimeAgentPolicy(
     typeof runtimePolicy.sandboxPolicy.type === "string"
       ? runtimePolicy.sandboxPolicy.type
       : undefined;
+  const runtimeMode = unsandboxedRuntimeMode(runtimePolicy.runtimeMode);
   const autoReview =
     runtimePolicy.approvalPolicy === undefined
-      ? runtimePolicy.runtimeMode === "approval-required" || runtimePolicy.runtimeMode === "auto"
+      ? runtimeMode === "approval-required" || runtimeMode === "auto"
       : runtimePolicy.approvalPolicy !== "never";
   return {
     autoReview,
@@ -203,7 +205,7 @@ export function cursorRuntimeAgentPolicy(
     // Auto-review still gates execution. Explicit policies remain authoritative.
     sandboxEnabled:
       runtimePolicy.sandboxPolicy === undefined
-        ? runtimePolicy.runtimeMode !== "full-access" && !(platform === "win32" && autoReview)
+        ? runtimeMode !== "full-access" && !(platform === "win32" && autoReview)
         : sandboxPolicyType !== "dangerFullAccess",
   };
 }

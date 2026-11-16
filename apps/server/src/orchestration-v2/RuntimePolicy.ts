@@ -4,6 +4,7 @@ import {
   ModelSelection,
   OrchestrationV2AppThread,
   ProjectId,
+  providerSupportsRuntimeMode,
   ProviderInstanceId,
   resolveThreadAdditionalDirectoryPath,
   RuntimeMode,
@@ -103,9 +104,7 @@ function providerRuntimeMode(
   runtimeMode: RuntimeMode,
   supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined,
 ): RuntimeMode {
-  return supportedRuntimeModes === undefined ||
-    supportedRuntimeModes.length === 0 ||
-    supportedRuntimeModes.includes(runtimeMode)
+  return providerSupportsRuntimeMode(supportedRuntimeModes, runtimeMode)
     ? runtimeMode
     : "approval-required";
 }

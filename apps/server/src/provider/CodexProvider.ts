@@ -152,6 +152,7 @@ const CODEX_PRESENTATION = {
   displayName: "Codex",
   showInteractionModeToggle: true,
   reportsContextWindow: true,
+  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
 } as const;
 
 export interface CodexAppServerProviderSnapshot {

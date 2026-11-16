@@ -4,8 +4,9 @@ import {
   type RuntimeMode,
 } from "@t3tools/contracts";
 
+// Sandboxed full access stays out of pickers until providers run inside the sandbox.
 export const RUNTIME_MODE_CHOICES: ReadonlyArray<{
-  readonly mode: RuntimeMode;
+  readonly mode: Exclude<RuntimeMode, "sandboxed-full-access">;
   readonly label: string;
   readonly description: string;
 }> = [

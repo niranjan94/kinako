@@ -30,6 +30,7 @@ const CURSOR_PRESENTATION = {
   displayName: "Cursor",
   supportsConversationRollback: false,
   showInteractionModeToggle: true,
+  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],

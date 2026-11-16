@@ -26,6 +26,7 @@ export const RuntimeMode = Schema.Literals([
   "approval-required",
   "auto-accept-edits",
   "auto",
+  "sandboxed-full-access",
   "full-access",
 ]);
 export type RuntimeMode = typeof RuntimeMode.Type;
@@ -35,8 +36,27 @@ const RUNTIME_MODE_RANK: Record<RuntimeMode, number> = {
   "approval-required": 0,
   "auto-accept-edits": 1,
   auto: 2,
-  "full-access": 3,
+  "sandboxed-full-access": 3,
+  "full-access": 4,
 };
+
+/**
+ * Whether a provider advertising `supported` runs `mode`. An absent or empty list means every
+ * mode except sandboxed full access, which a provider must name because it needs the OS sandbox.
+ */
+export const providerSupportsRuntimeMode = (
+  supported: ReadonlyArray<RuntimeMode> | undefined,
+  mode: RuntimeMode,
+): boolean =>
+  supported === undefined || supported.length === 0
+    ? mode !== "sandboxed-full-access"
+    : supported.includes(mode);
+
+/** The mode a provider honours when no OS sandbox wraps its process: sandboxed full access runs supervised. */
+export const unsandboxedRuntimeMode = (
+  mode: RuntimeMode,
+): Exclude<RuntimeMode, "sandboxed-full-access"> =>
+  mode === "sandboxed-full-access" ? "approval-required" : mode;
 
 /** Whether `mode` grants the agent more than `ceiling`; no ceiling allows every mode. */
 export const isRuntimeModeAbove = (mode: RuntimeMode, ceiling: RuntimeMode | undefined): boolean =>

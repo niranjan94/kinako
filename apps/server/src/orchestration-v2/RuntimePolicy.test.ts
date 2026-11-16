@@ -174,6 +174,11 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
       assert.equal(yield* modeFor(grokInstanceId, "auto"), "auto");
       assert.equal(yield* modeFor(grokInstanceId, "full-access"), "full-access");
       assert.equal(yield* modeFor(providerInstanceId, "auto-accept-edits"), "auto-accept-edits");
+      assert.equal(yield* modeFor(grokInstanceId, "sandboxed-full-access"), "approval-required");
+      assert.equal(
+        yield* modeFor(providerInstanceId, "sandboxed-full-access"),
+        "approval-required",
+      );
     }),
   );
 });

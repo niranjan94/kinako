@@ -179,6 +179,7 @@ export function antigravityPermissionMode(runtimeMode: RuntimeMode): string {
       return "auto_edit";
     case "auto":
     case "approval-required":
+    case "sandboxed-full-access":
       return "default";
   }
 }

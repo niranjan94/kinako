@@ -4440,6 +4440,14 @@ describe("OrchestratorMcpService provider resolution", () => {
       Effect.gen(function* () {
         assert.equal(yield* resolveRuntimeMode("full-access", "inherit", muse), "full-access");
         assert.equal(yield* resolveRuntimeMode("auto", undefined, muse), "approval-required");
+        const undeclared = {
+          modelSelection: muse.modelSelection,
+          supportedRuntimeModes: undefined,
+        };
+        assert.equal(
+          yield* resolveRuntimeMode("sandboxed-full-access", "inherit", undeclared),
+          "auto",
+        );
       }),
     );
   });

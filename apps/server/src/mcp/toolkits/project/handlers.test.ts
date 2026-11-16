@@ -9,6 +9,7 @@ import {
   type ServerProvider,
   type Project as ProjectRecord,
   type ModelSelection,
+  type AuthMcpClientAccess,
   type RuntimeMode,
   type OrchestrationV2ThreadShell,
   ThreadId,
@@ -48,7 +49,7 @@ import * as ProjectHandlers from "./handlers.ts";
 import { ProjectToolkit } from "./tools.ts";
 
 const clientLaunchHarness = (input: {
-  readonly runtimeModeCeiling: RuntimeMode;
+  readonly runtimeModeCeiling: Exclude<AuthMcpClientAccess, "read-only">;
   readonly defaultRuntimeMode?: RuntimeMode;
   readonly newWorktreesStartFromOrigin?: boolean;
   readonly fallbackModel?: ModelSelection;
@@ -193,7 +194,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const launchWith = Effect.fn("test.launchWith")(function* (
-        runtimeModeCeiling: RuntimeMode,
+        runtimeModeCeiling: Exclude<AuthMcpClientAccess, "read-only">,
         defaultRuntimeMode: RuntimeMode,
         params: {
           readonly title: string;

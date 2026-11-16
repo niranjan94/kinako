@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { AuthMcpClientAccess, RuntimeMode } from "@t3tools/contracts";
+import { AuthMcpClientAccess, isRuntimeModeAbove, RuntimeMode } from "@t3tools/contracts";
 
 import {
   agentRedirectUrl,
@@ -10,7 +10,10 @@ import {
 it.each(RuntimeMode.literals)("keeps MCP access within the %s policy ceiling", (maxRuntimeMode) => {
   const ceiling = { organization: "Example", maxRuntimeMode };
   expect(resolveMcpAccess("auto", ceiling, false)).toBe(
-    maxRuntimeMode === "full-access" ? "auto" : maxRuntimeMode,
+    isRuntimeModeAbove("auto", maxRuntimeMode) ? maxRuntimeMode : "auto",
+  );
+  expect(resolveMcpAccess("full-access", ceiling, false)).toBe(
+    maxRuntimeMode === "sandboxed-full-access" ? "auto" : maxRuntimeMode,
   );
   expect(resolveMcpAccess("read-only", ceiling, false)).toBe("read-only");
   expect(resolveMcpAccess("approval-required", ceiling, false)).toBe("approval-required");

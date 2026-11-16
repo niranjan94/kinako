@@ -1,9 +1,11 @@
 import {
   managedRuntimeModeDenial,
   type ManagedPolicySummary,
+  providerSupportsRuntimeMode,
   type RuntimeMode,
 } from "@t3tools/contracts";
 import {
+  BoxIcon,
   type LucideIcon,
   LockIcon,
   PenLineIcon,
@@ -30,6 +32,11 @@ export const runtimeModeConfig: Record<
     description: "Supported providers approve routine actions; others still ask.",
     icon: ShieldCheckIcon,
   },
+  "sandboxed-full-access": {
+    label: "Sandboxed full access",
+    description: "Allow commands and edits without prompts, confined to a filesystem sandbox.",
+    icon: BoxIcon,
+  },
   "full-access": {
     label: "Full access",
     description: "Allow commands and edits without prompts.",
@@ -38,17 +45,19 @@ export const runtimeModeConfig: Record<
   },
 };
 
-export const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
+// Sandboxed full access stays out of pickers until providers run inside the sandbox.
+export const runtimeModeOptions: ReadonlyArray<RuntimeMode> = (
+  Object.keys(runtimeModeConfig) as RuntimeMode[]
+).filter((mode) => mode !== "sandboxed-full-access");
 
-/** The modes a provider supports (all when it reports none) and the mode a thread really runs in. */
+/** The modes a provider supports and the mode a thread really runs in. */
 export function resolveCompatibleRuntimeMode(
   runtimeMode: RuntimeMode,
   supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined,
 ) {
-  const modes =
-    supportedRuntimeModes && supportedRuntimeModes.length > 0
-      ? runtimeModeOptions.filter((mode) => supportedRuntimeModes.includes(mode))
-      : runtimeModeOptions;
+  const modes = runtimeModeOptions.filter((mode) =>
+    providerSupportsRuntimeMode(supportedRuntimeModes, mode),
+  );
   return { modes, mode: modes.includes(runtimeMode) ? runtimeMode : (modes[0] ?? runtimeMode) };
 }
 

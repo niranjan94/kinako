@@ -5,7 +5,8 @@ import {
   type OrchestratorMcpInteractionMode,
   type OrchestratorMcpRuntimeMode,
   type ProviderInteractionMode,
-  type RuntimeMode,
+  providerSupportsRuntimeMode,
+  RuntimeMode,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
@@ -18,8 +19,10 @@ export function runtimeModeRank(mode: RuntimeMode): number {
       return 1;
     case "auto":
       return 2;
-    case "full-access":
+    case "sandboxed-full-access":
       return 3;
+    case "full-access":
+      return 4;
   }
 }
 
@@ -51,20 +54,22 @@ export function resolveRuntimeMode(
       }),
     );
   }
-  const supported = target?.supportedRuntimeModes;
-  if (supported === undefined || supported.length === 0 || supported.includes(resolved)) {
+  if (target === undefined || providerSupportsRuntimeMode(target.supportedRuntimeModes, resolved)) {
     return Effect.succeed(resolved);
   }
+  const offered = RuntimeMode.literals.filter((mode) =>
+    providerSupportsRuntimeMode(target.supportedRuntimeModes, mode),
+  );
   if (!inherited) {
     return Effect.fail(
       new OrchestratorMcpFailure({
         code: "invalid_request",
-        message: `Provider ${target?.modelSelection.instanceId} does not offer runtime mode ${resolved}, so it would run as approval-required. Use one of: ${supported.join(", ")}.`,
+        message: `Provider ${target.modelSelection.instanceId} does not offer runtime mode ${resolved}, so it would run as approval-required. Use one of: ${offered.join(", ")}.`,
       }),
     );
   }
   return Effect.succeed(
-    supported
+    offered
       .filter((mode) => runtimeModeRank(mode) <= runtimeModeRank(resolved))
       .toSorted((left, right) => runtimeModeRank(right) - runtimeModeRank(left))[0] ??
       "approval-required",

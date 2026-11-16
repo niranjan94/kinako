@@ -1,3 +1,4 @@
+import type { RuntimeMode } from "@t3tools/contracts";
 import { tokenizeCliArgs } from "@t3tools/shared/cliArgs";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -250,6 +251,21 @@ export const materializePiT3McpExtension = Effect.fn("materializePiT3McpExtensio
   return dest;
 });
 
+// The extension treats an unknown mode as full access, so only send the modes it gates itself.
+function piExtensionRuntimeMode(
+  runtimeMode: RuntimeMode,
+): "approval-required" | "auto-accept-edits" | "full-access" {
+  switch (runtimeMode) {
+    case "auto-accept-edits":
+    case "full-access":
+      return runtimeMode;
+    case "approval-required":
+    case "auto":
+    case "sandboxed-full-access":
+      return "approval-required";
+  }
+}
+
 export function buildPiRpcLaunch(input: {
   readonly launchArgs: ReadonlyArray<string>;
   readonly environment: NodeJS.ProcessEnv;
@@ -262,7 +278,7 @@ export function buildPiRpcLaunch(input: {
   readonly shortLived?: boolean;
   readonly disableExtensions?: boolean;
   readonly disableTools?: boolean;
-  readonly runtimeMode?: "approval-required" | "auto-accept-edits" | "auto" | "full-access";
+  readonly runtimeMode?: RuntimeMode;
 }): {
   readonly args: ReadonlyArray<string>;
   readonly env: NodeJS.ProcessEnv;
@@ -311,8 +327,7 @@ export function buildPiRpcLaunch(input: {
         : {}),
       ...(hasT3Extension && input.runtimeMode !== undefined
         ? {
-            [T3_PI_RUNTIME_MODE_ENV]:
-              input.runtimeMode === "auto" ? "approval-required" : input.runtimeMode,
+            [T3_PI_RUNTIME_MODE_ENV]: piExtensionRuntimeMode(input.runtimeMode),
           }
         : {}),
       ...(hasT3Mcp && input.mcpSession !== undefined

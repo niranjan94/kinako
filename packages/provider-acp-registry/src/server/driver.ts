@@ -304,6 +304,7 @@ function baseSnapshot(
     ...(iconUrl ? { iconUrl } : {}),
     continuation: { groupKey: input.continuationKey },
     supportsTextGeneration: false,
+    supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
     enabled: input.settings.enabled,
     installed: input.installed,
     version: input.version,
