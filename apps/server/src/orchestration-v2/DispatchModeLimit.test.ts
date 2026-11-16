@@ -95,6 +95,24 @@ it.layer(layerTest)("DispatchModeLimit", (it) => {
         .dispatch(rename)
         .pipe(Effect.provideService(DispatchModeLimit, supervised));
       assert.equal((yield* projections.getThreadShell(threadId))?.title, "After");
+
+      yield* orchestrator.dispatch({
+        type: "thread.runtime-mode.set",
+        commandId: CommandId.make("raise-auto"),
+        threadId,
+        runtimeMode: "auto",
+      });
+      const fromSandbox = yield* orchestrator
+        .dispatch({ ...rename, commandId: CommandId.make("rename-from-sandbox"), title: "Sandbox" })
+        .pipe(
+          Effect.provideService(DispatchModeLimit, {
+            runtimeMode: "sandboxed-full-access",
+            interactionMode: "default",
+          }),
+          Effect.flip,
+        );
+      assert.equal(fromSandbox._tag, "OrchestratorThreadAboveModeLimitError");
+      assert.equal((yield* projections.getThreadShell(threadId))?.title, "After");
     }),
   );
 
@@ -267,6 +285,29 @@ it.layer(layerWithCeiling)("runtime mode ceiling", (it) => {
         .pipe(Effect.provideService(DispatchModeLimit, fullAccessCaller), Effect.flip);
       assert.equal(rename._tag, "OrchestratorThreadAboveModeLimitError");
       assert.equal((yield* projections.getThreadShell(raisedThreadId))?.title, "Before");
+
+      // The ceiling never narrows a sandboxed caller into an unsandboxed mode.
+      yield* orchestrator.dispatch({
+        type: "thread.runtime-mode.set",
+        commandId: CommandId.make("raise-to-ceiling:ceiling-mcp"),
+        threadId,
+        runtimeMode: "auto-accept-edits",
+      });
+      const fromSandbox = yield* orchestrator
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("rename-from-sandbox:ceiling-mcp"),
+          threadId,
+          title: "Sandbox",
+        })
+        .pipe(
+          Effect.provideService(DispatchModeLimit, {
+            runtimeMode: "sandboxed-full-access",
+            interactionMode: "default",
+          }),
+          Effect.flip,
+        );
+      assert.equal(fromSandbox._tag, "OrchestratorThreadAboveModeLimitError");
     }),
   );
 

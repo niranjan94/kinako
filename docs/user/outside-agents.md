@@ -78,7 +78,7 @@ policy. Approving without a code starts at **Read only**:
 - **Supervised** through **Full access** also let it start, message and stop
   threads in every project. A thread it starts or steers cannot run with more
   permissions than the mode you chose.
-- With **Sandboxed full access**, it can give a thread it starts extra folders only from inside the project and its additional directories.
+- With **Sandboxed full access**, the threads it starts, messages or steers must run in **Sandboxed full access** or **Supervised**, and it can give a thread it starts extra folders only from inside the project and its additional directories.
 
 ## What outside agents can call
 

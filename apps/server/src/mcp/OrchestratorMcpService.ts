@@ -2,6 +2,7 @@ import {
   CommandId,
   type RunId,
   isProviderAvailable,
+  isRuntimeModeWithinCallerLimit,
   MessageId,
   type ModelSelection,
   NodeId,
@@ -132,7 +133,6 @@ import {
   interactionModeRank,
   resolveInteractionMode,
   resolveRuntimeMode,
-  runtimeModeRank,
   taskPrompt,
 } from "./delegatedTaskModes.ts";
 import { assertTargetWithinLimits, isLiveCallerShell, threadNotFound } from "./threadAccess.ts";
@@ -2165,7 +2165,7 @@ const make = Effect.gen(function* () {
     },
     modes: { readonly runtimeMode: RuntimeMode; readonly interactionMode: ProviderInteractionMode },
   ) =>
-    runtimeModeRank(modes.runtimeMode) <= runtimeModeRank(limits.runtimeMode) &&
+    isRuntimeModeWithinCallerLimit(modes.runtimeMode, limits.runtimeMode) &&
     interactionModeRank(modes.interactionMode) <= interactionModeRank(limits.interactionMode);
 
   /**

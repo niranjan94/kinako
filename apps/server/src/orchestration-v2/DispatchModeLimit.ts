@@ -1,5 +1,7 @@
 import {
+  callerRuntimeModeUnderCeiling,
   isRuntimeModeAbove,
+  isRuntimeModeWithinCallerLimit,
   type OrchestrationV2DomainEvent,
   type ProviderInteractionMode,
   type RuntimeMode,
@@ -34,7 +36,7 @@ export const exceededDispatchModeLimit = (
   limit: DispatchModes,
   modes: DispatchModes,
 ): "runtime" | "interaction" | undefined =>
-  isRuntimeModeAbove(modes.runtimeMode, limit.runtimeMode)
+  !isRuntimeModeWithinCallerLimit(modes.runtimeMode, limit.runtimeMode)
     ? "runtime"
     : interactionModeRank[modes.interactionMode] > interactionModeRank[limit.interactionMode]
       ? "interaction"
@@ -51,11 +53,12 @@ export const narrowToCeiling = <Limit extends DispatchModes>(
   limit: Limit | undefined,
   ceiling: RuntimeModeCeiling | undefined,
 ): Limit | undefined =>
-  limit === undefined ||
-  ceiling === undefined ||
-  !isRuntimeModeAbove(limit.runtimeMode, ceiling.maxRuntimeMode)
+  limit === undefined || ceiling === undefined
     ? limit
-    : { ...limit, runtimeMode: ceiling.maxRuntimeMode };
+    : {
+        ...limit,
+        runtimeMode: callerRuntimeModeUnderCeiling(limit.runtimeMode, ceiling.maxRuntimeMode),
+      };
 
 export interface RuntimeModeCeilingRefusal {
   readonly threadId: ThreadId;

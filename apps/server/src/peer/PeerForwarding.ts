@@ -1,5 +1,6 @@
 import {
   type EnvironmentId,
+  isRuntimeModeWithinCallerLimit,
   OrchestratorMcpFailure,
   type OrchestratorMcpEnvironmentLinksResult,
   OrchestratorMcpThreadInterruptInput,
@@ -21,7 +22,6 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Tool from "effect/ai/Tool";
 
-import { runtimeModeRank } from "../mcp/delegatedTaskModes.ts";
 import { assertNotLinked } from "../mcp/linkOrigin.ts";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import { readCaller, unavailable } from "../mcp/threadAccess.ts";
@@ -140,7 +140,7 @@ const make = Effect.gen(function* () {
     if (Option.isNone(link)) return;
     if (DateTime.isLessThanOrEqualTo(link.value.expiresAt, yield* DateTime.now)) return;
     const { label, access } = link.value;
-    if (access === "read-only" || runtimeModeRank(requested) <= runtimeModeRank(access)) return;
+    if (access === "read-only" || isRuntimeModeWithinCallerLimit(requested, access)) return;
     return yield* new OrchestratorMcpFailure({
       code: "runtime_mode_escalation_denied",
       message: `Linked environment "${label}" was linked with ${access} access, so work there cannot run in ${requested}. Omit runtimeMode to run it at a mode up to ${access}, or link it again with broader access.`,

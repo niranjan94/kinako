@@ -4,6 +4,7 @@ import {
   McpCapabilityUnavailableError,
   PreviewAutomationUnavailableError,
   ProviderInstanceId,
+  type RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -76,7 +77,7 @@ it("acts at an administrator's ceiling for a client approved above it", () => {
     capabilities: new Set(["orchestration"]),
     issuedAt: 1,
   });
-  const modes = (invocation: McpInvocationContext.McpInvocationScope, ceiling?: "auto") =>
+  const modes = (invocation: McpInvocationContext.McpInvocationScope, ceiling?: RuntimeMode) =>
     McpInvocationContext.clientModeCeiling(
       McpInvocationContext.withRuntimeModeCeiling(invocation, ceiling).client,
     );
@@ -94,4 +95,11 @@ it("acts at an administrator's ceiling for a client approved above it", () => {
   ).toEqual({ runtimeMode: "approval-required", interactionMode: "plan" });
   expect(modes(scope("auto-accept-edits"), "auto").runtimeMode).toBe("auto-accept-edits");
   expect(modes(scope("full-access")).runtimeMode).toBe("full-access");
+  // Neither a ceiling nor the client's own request turns a sandboxed client into an unsandboxed one.
+  expect(modes(scope("sandboxed-full-access"), "auto").runtimeMode).toBe("approval-required");
+  expect(modes(scope("auto"), "sandboxed-full-access").runtimeMode).toBe("auto");
+  expect(
+    modes(scope("sandboxed-full-access", { runtimeMode: "auto", interactionMode: "default" }))
+      .runtimeMode,
+  ).toBe("approval-required");
 });

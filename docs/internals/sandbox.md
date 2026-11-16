@@ -20,6 +20,10 @@ The no-approval behaviour belongs only to a process spawned inside the wrapper. 
 
 A new provider joins by listing the mode, wrapping its process, and keeping that same shape.
 
+## Sandboxed callers
+
+A sandboxed thread's agent, or an MCP client approved for the mode, must not get work done outside a sandbox through T3 Code's own tools. Caller limits therefore compare with `isRuntimeModeWithinCallerLimit` in [`providerPolicy.ts`](../../packages/contracts/src/providerPolicy.ts), not with the rank order that managed ceilings use: `auto-accept-edits` and `auto` rank below sandboxed full access but run unsandboxed without asking, so a sandboxed caller reaches only sandboxed and Supervised threads.
+
 ## Nothing nests
 
 Neither sandbox can start another sandbox inside it. Tools that sandbox themselves fail inside, and so would the provider's own command sandbox, so adapters turn the provider's own sandbox off: Codex gets its `externalSandbox` policy and Claude gets `sandbox.enabled: false` in its settings ([`ClaudeAdapterV2.ts`](../../apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts)).

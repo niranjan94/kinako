@@ -4446,8 +4446,37 @@ describe("OrchestratorMcpService provider resolution", () => {
         };
         assert.equal(
           yield* resolveRuntimeMode("sandboxed-full-access", "inherit", undeclared),
-          "auto",
+          "approval-required",
         );
+        const withoutAuto = {
+          modelSelection: muse.modelSelection,
+          supportedRuntimeModes: ["approval-required", "auto-accept-edits", "full-access"] as const,
+        };
+        assert.equal(
+          yield* resolveRuntimeMode("sandboxed-full-access", undefined, withoutAuto),
+          "approval-required",
+        );
+      }),
+    );
+
+    it.effect("refuses a sandboxed caller the unsandboxed modes that skip approval", () =>
+      Effect.gen(function* () {
+        for (const requested of ["auto", "auto-accept-edits", "full-access"] as const) {
+          const error = yield* resolveRuntimeMode("sandboxed-full-access", requested).pipe(
+            Effect.flip,
+          );
+          assert.equal(error.code, "runtime_mode_escalation_denied");
+        }
+        assert.equal(
+          yield* resolveRuntimeMode("sandboxed-full-access", "approval-required"),
+          "approval-required",
+        );
+        assert.equal(
+          yield* resolveRuntimeMode("sandboxed-full-access", "sandboxed-full-access"),
+          "sandboxed-full-access",
+        );
+        const error = yield* resolveRuntimeMode("auto", "sandboxed-full-access").pipe(Effect.flip);
+        assert.equal(error.code, "runtime_mode_escalation_denied");
       }),
     );
   });

@@ -236,7 +236,7 @@ const escalationDenied = (refusal: DispatchModeRefusal) =>
       refusal.mode === "runtime"
         ? "runtime_mode_escalation_denied"
         : "interaction_mode_escalation_denied",
-    message: `Thread ${refusal.threadId} now runs in ${refusal.runtimeMode}/${refusal.interactionMode} mode, above this caller's. Its user changed it while this call ran.`,
+    message: `Thread ${refusal.threadId} now runs in ${refusal.runtimeMode}/${refusal.interactionMode} mode, outside this caller's limit. Its user changed it while this call ran.`,
   });
 
 export interface StartedModes {

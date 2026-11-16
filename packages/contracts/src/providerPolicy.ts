@@ -62,6 +62,33 @@ export const unsandboxedRuntimeMode = (
 export const isRuntimeModeAbove = (mode: RuntimeMode, ceiling: RuntimeMode | undefined): boolean =>
   ceiling !== undefined && RUNTIME_MODE_RANK[mode] > RUNTIME_MODE_RANK[ceiling];
 
+/**
+ * Whether a caller limited to `limit`, such as an agent's thread or an MCP client, may start or
+ * drive work in `mode`. Unlike a ceiling, a sandboxed caller reaches only sandboxed or supervised
+ * work: `auto-accept-edits` and `auto` rank below it but run outside any sandbox and skip approvals.
+ */
+export const isRuntimeModeWithinCallerLimit = (mode: RuntimeMode, limit: RuntimeMode): boolean =>
+  limit === "sandboxed-full-access"
+    ? mode === "sandboxed-full-access" || mode === "approval-required"
+    : !isRuntimeModeAbove(mode, limit);
+
+/** The broadest caller limit within both `left` and `right`. */
+export const narrowerCallerRuntimeMode = (left: RuntimeMode, right: RuntimeMode): RuntimeMode =>
+  isRuntimeModeWithinCallerLimit(left, right)
+    ? left
+    : isRuntimeModeWithinCallerLimit(right, left)
+      ? right
+      : "approval-required";
+
+/** A caller limit lowered to fit under `ceiling` when it is above it, and otherwise kept. */
+export const callerRuntimeModeUnderCeiling = (
+  limit: RuntimeMode,
+  ceiling: RuntimeMode | undefined,
+): RuntimeMode =>
+  ceiling === undefined || !isRuntimeModeAbove(limit, ceiling)
+    ? limit
+    : narrowerCallerRuntimeMode(limit, ceiling);
+
 export const ProviderInteractionMode = Schema.Literals(["default", "plan"]);
 export type ProviderInteractionMode = typeof ProviderInteractionMode.Type;
 export const DEFAULT_PROVIDER_INTERACTION_MODE: ProviderInteractionMode = "default";

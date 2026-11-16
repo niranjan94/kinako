@@ -1,7 +1,9 @@
 import {
   type AuthMcpClientAccess,
+  callerRuntimeModeUnderCeiling,
   type EnvironmentId,
   McpCapabilityUnavailableError,
+  narrowerCallerRuntimeMode,
   OrchestratorMcpFailure,
   PreviewAutomationUnavailableError,
   type ProviderInstanceId,
@@ -72,13 +74,6 @@ export interface ClientModes {
   readonly interactionMode: ProviderInteractionMode;
 }
 
-const runtimeModeRank: Record<RuntimeMode, number> = {
-  "approval-required": 0,
-  "auto-accept-edits": 1,
-  auto: 2,
-  "sandboxed-full-access": 3,
-  "full-access": 4,
-};
 const interactionModeRank: Record<ProviderInteractionMode, number> = { plan: 0, default: 1 };
 
 /**
@@ -96,10 +91,7 @@ export const clientModeCeiling = (client: McpClientCaller | undefined): ClientMo
   const asked = client?.narrowedTo;
   if (asked === undefined) return approved;
   return {
-    runtimeMode:
-      runtimeModeRank[asked.runtimeMode] < runtimeModeRank[approved.runtimeMode]
-        ? asked.runtimeMode
-        : approved.runtimeMode,
+    runtimeMode: narrowerCallerRuntimeMode(asked.runtimeMode, approved.runtimeMode),
     interactionMode:
       interactionModeRank[asked.interactionMode] < interactionModeRank[approved.interactionMode]
         ? asked.interactionMode
@@ -116,17 +108,14 @@ export const withRuntimeModeCeiling = (
   ceiling: RuntimeMode | undefined,
 ): McpInvocationScope => {
   if (ceiling === undefined || scope.client === undefined) return scope;
-  const asked = scope.client.narrowedTo;
+  const modes = clientModeCeiling(scope.client);
   return {
     ...scope,
     client: {
       ...scope.client,
       narrowedTo: {
-        runtimeMode:
-          asked !== undefined && runtimeModeRank[asked.runtimeMode] < runtimeModeRank[ceiling]
-            ? asked.runtimeMode
-            : ceiling,
-        interactionMode: asked?.interactionMode ?? "default",
+        ...modes,
+        runtimeMode: callerRuntimeModeUnderCeiling(modes.runtimeMode, ceiling),
       },
     },
   };

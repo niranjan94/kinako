@@ -153,7 +153,7 @@ export const assertTargetWithinLimits = (
       (error) =>
         new OrchestratorMcpFailure({
           code: error.code,
-          message: `Thread "${target.id}" runs in ${target.runtimeMode}/${target.interactionMode}, above this caller's ${limits.runtimeMode}/${limits.interactionMode} limit. For linked calls, this limit is also capped by the link's approved access. This call does not create an approval request. Have the user act directly in the target thread through an authorized client.`,
+          message: `Thread "${target.id}" runs in ${target.runtimeMode}/${target.interactionMode}, outside this caller's ${limits.runtimeMode}/${limits.interactionMode} limit. For linked calls, this limit is also capped by the link's approved access. This call does not create an approval request. Have the user act directly in the target thread through an authorized client.`,
         }),
     ),
   );

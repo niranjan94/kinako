@@ -1,4 +1,5 @@
 import {
+  isRuntimeModeWithinCallerLimit,
   type ModelSelection,
   OrchestratorMcpFailure,
   type OrchestratorMcpDelegateTaskInput,
@@ -10,31 +11,16 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-/** How much a runtime mode allows, narrowest first. */
-export function runtimeModeRank(mode: RuntimeMode): number {
-  switch (mode) {
-    case "approval-required":
-      return 0;
-    case "auto-accept-edits":
-      return 1;
-    case "auto":
-      return 2;
-    case "sandboxed-full-access":
-      return 3;
-    case "full-access":
-      return 4;
-  }
-}
-
 /** How much an interaction mode allows: plan, then default. */
 export function interactionModeRank(mode: ProviderInteractionMode): number {
   return mode === "plan" ? 0 : 1;
 }
 
 /**
- * The mode a child runs at: the one asked for, never broader than its parent's.
+ * The mode a child runs at: the one asked for, within its parent's limit.
  * An inherited mode the target provider does not offer steps down to the
- * broadest one it does; an explicitly requested one is refused instead.
+ * broadest one it does within that limit; an explicitly requested one is
+ * refused instead.
  */
 export function resolveRuntimeMode(
   parentMode: RuntimeMode,
@@ -46,11 +32,14 @@ export function resolveRuntimeMode(
 ): Effect.Effect<RuntimeMode, OrchestratorMcpFailure> {
   const inherited = requested === undefined || requested === "inherit";
   const resolved = inherited ? parentMode : requested;
-  if (runtimeModeRank(resolved) > runtimeModeRank(parentMode)) {
+  if (!isRuntimeModeWithinCallerLimit(resolved, parentMode)) {
     return Effect.fail(
       new OrchestratorMcpFailure({
         code: "runtime_mode_escalation_denied",
-        message: `Child runtime mode ${resolved} is broader than parent mode ${parentMode}.`,
+        message:
+          parentMode === "sandboxed-full-access"
+            ? `Child runtime mode ${resolved} runs outside the sandbox without approval, which parent mode ${parentMode} does not allow. Use sandboxed-full-access or approval-required.`
+            : `Child runtime mode ${resolved} is broader than parent mode ${parentMode}.`,
       }),
     );
   }
@@ -68,10 +57,9 @@ export function resolveRuntimeMode(
       }),
     );
   }
+  // RuntimeMode's literals run narrowest first, so the last one within the limit is the broadest.
   return Effect.succeed(
-    offered
-      .filter((mode) => runtimeModeRank(mode) <= runtimeModeRank(resolved))
-      .toSorted((left, right) => runtimeModeRank(right) - runtimeModeRank(left))[0] ??
+    offered.findLast((mode) => isRuntimeModeWithinCallerLimit(mode, resolved)) ??
       "approval-required",
   );
 }
