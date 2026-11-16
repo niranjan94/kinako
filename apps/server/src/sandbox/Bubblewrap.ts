@@ -1,0 +1,152 @@
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { resolveCommandPath } from "@t3tools/shared/shell";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import * as ProcessRunner from "../processRunner.ts";
+import type { SandboxPolicy } from "./sandboxPolicy.ts";
+
+const MAX_REASON_LENGTH = 2_000;
+
+/** bubblewrap cannot run here, with bwrap's own words when it ran and failed. */
+export class SandboxUnavailableError extends Schema.TaggedError<SandboxUnavailableError>()(
+  "SandboxUnavailableError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return `The filesystem sandbox is unavailable: ${this.reason}`;
+  }
+}
+
+export type BubblewrapAvailability =
+  | { readonly _tag: "Available"; readonly command: string }
+  | { readonly _tag: "Unavailable"; readonly reason: string };
+
+export interface SandboxedCommand {
+  readonly command: string;
+  readonly args: ReadonlyArray<string>;
+  readonly env?: NodeJS.ProcessEnv | undefined;
+}
+
+/**
+ * bwrap arguments that apply `policy`. Mount operations run in order, and the policy lists
+ * every entry after the entries containing it, so nested binds land inside their parents.
+ * Hidden directories become tmpfs mounts remounted read-only once everything inside them is
+ * bound, so stray writes fail instead of vanishing.
+ */
+export function bubblewrapArgs(policy: SandboxPolicy): ReadonlyArray<string> {
+  const mounts = policy.entries.flatMap((entry): ReadonlyArray<string> => {
+    switch (entry.access) {
+      case "read-write":
+        return ["--bind", entry.path, entry.path];
+      case "read-only":
+        return ["--ro-bind", entry.path, entry.path];
+      case "hidden":
+        return entry.kind === "directory"
+          ? ["--tmpfs", entry.path]
+          : ["--ro-bind", "/dev/null", entry.path];
+    }
+  });
+  const remounts = policy.entries.flatMap((entry) =>
+    entry.access === "hidden" && entry.kind === "directory" ? ["--remount-ro", entry.path] : [],
+  );
+  return [
+    "--die-with-parent",
+    "--unshare-pid",
+    "--ro-bind",
+    "/",
+    "/",
+    "--dev",
+    "/dev",
+    "--proc",
+    "/proc",
+    ...mounts,
+    ...remounts,
+    "--chdir",
+    policy.cwd,
+  ];
+}
+
+const PROBE_POLICY: SandboxPolicy = {
+  platform: "linux",
+  cwd: "/",
+  entries: [{ path: "/tmp", access: "hidden", kind: "directory", source: "temp" }],
+  rejected: [],
+};
+
+export class Bubblewrap extends Context.Service<
+  Bubblewrap,
+  {
+    /** Runs bwrap once per server; AppArmor can refuse it even when it is on PATH. */
+    readonly availability: Effect.Effect<BubblewrapAvailability>;
+    /** The command that runs `input` inside `policy`. Fails rather than run it unsandboxed. */
+    readonly wrap: (
+      input: SandboxedCommand & { readonly policy: SandboxPolicy },
+    ) => Effect.Effect<SandboxedCommand, SandboxUnavailableError>;
+  }
+>()("t3/sandbox/Bubblewrap") {}
+
+export const make = Effect.fn("Bubblewrap.make")(function* (options?: {
+  readonly command?: string;
+}) {
+  const platform = yield* HostProcess.Platform;
+  const runner = yield* ProcessRunner.ProcessRunner;
+  const resolved = yield* resolveCommandPath(options?.command ?? "bwrap").pipe(
+    Effect.orElseSucceed(() => null),
+  );
+
+  const probe = Effect.fn("Bubblewrap.probe")(function* () {
+    if (platform !== "linux") {
+      return { _tag: "Unavailable", reason: "bubblewrap only runs on Linux." } as const;
+    }
+    if (resolved === null) {
+      return { _tag: "Unavailable", reason: "bwrap was not found on PATH." } as const;
+    }
+    const result = yield* runner
+      .run({
+        command: resolved,
+        args: [...bubblewrapArgs(PROBE_POLICY), "--", "true"],
+        timeout: "10 seconds",
+      })
+      .pipe(Effect.result);
+    if (result._tag === "Failure") {
+      return {
+        _tag: "Unavailable",
+        reason: result.failure.message.slice(0, MAX_REASON_LENGTH),
+      } as const;
+    }
+    const { code, stderr } = result.success;
+    return code === 0
+      ? ({ _tag: "Available", command: resolved } as const)
+      : ({
+          _tag: "Unavailable",
+          reason: (stderr.trim() || `bwrap exited with code ${code}.`).slice(0, MAX_REASON_LENGTH),
+        } as const);
+  });
+  const availability = yield* Effect.cached(probe());
+
+  const wrap = Effect.fn("Bubblewrap.wrap")(function* (
+    input: SandboxedCommand & { readonly policy: SandboxPolicy },
+  ) {
+    if (input.policy.platform !== "linux") {
+      return yield* new SandboxUnavailableError({
+        reason: "This policy is not for a Linux sandbox.",
+      });
+    }
+    const available = yield* availability;
+    if (available._tag === "Unavailable") {
+      return yield* new SandboxUnavailableError({ reason: available.reason });
+    }
+    return {
+      command: available.command,
+      args: [...bubblewrapArgs(input.policy), "--", input.command, ...input.args],
+      env: input.env,
+    };
+  });
+
+  return Bubblewrap.of({ availability, wrap });
+});
+
+export const layer = Layer.effect(Bubblewrap, make());

@@ -15,7 +15,7 @@ import {
 
 export class SandboxPolicyRefusedError extends Schema.TaggedError<SandboxPolicyRefusedError>()(
   "SandboxPolicyRefusedError",
-  { reason: Schema.String },
+  { reason: Schema.String, cause: Schema.optional(Schema.Defect()) },
 ) {
   override get message(): string {
     return `The sandbox cannot be built: ${this.reason}`;
@@ -47,7 +47,8 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
       Effect.mapError(
         (cause) =>
           new SandboxPolicyRefusedError({
-            reason: `Could not create ${provider.path}: ${cause.message}`,
+            reason: `Could not create the provider directory ${provider.path}.`,
+            cause,
           }),
       ),
     );
