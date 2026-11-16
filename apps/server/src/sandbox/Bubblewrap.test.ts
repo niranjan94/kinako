@@ -8,7 +8,12 @@ import * as Path from "effect/Path";
 
 import * as ProcessRunner from "../processRunner.ts";
 import * as Bubblewrap from "./Bubblewrap.ts";
-import type { SandboxPolicy, SandboxPolicyEntry } from "./sandboxPolicy.ts";
+import { resolveSandboxPolicy } from "./resolveSandboxPolicy.ts";
+import {
+  effectiveSandboxSettings,
+  type SandboxPolicy,
+  type SandboxPolicyEntry,
+} from "./sandboxPolicy.ts";
 
 const services = ProcessRunner.layer.pipe(Layer.provideMerge(NodeServices.layer));
 
@@ -97,6 +102,37 @@ describe("bubblewrapArgs", () => {
         "/run/user/1000",
       ],
     },
+    {
+      name: "a symlink recreated in the hidden home after the binds",
+      entries: [
+        { path: "/home/user", access: "hidden", kind: "directory", source: "home" },
+        {
+          path: "/home/user/.config/git",
+          access: "read-only",
+          kind: "symlink",
+          source: "user-read-only",
+          linkTarget: "../dotfiles/git",
+        },
+        {
+          path: "/home/user/dotfiles/git",
+          access: "read-only",
+          kind: "directory",
+          source: "user-read-only",
+        },
+      ],
+      mounts: [
+        "--tmpfs",
+        "/home/user",
+        "--ro-bind",
+        "/home/user/dotfiles/git",
+        "/home/user/dotfiles/git",
+        "--symlink",
+        "../dotfiles/git",
+        "/home/user/.config/git",
+        "--remount-ro",
+        "/home/user",
+      ],
+    },
   ])("$name", ({ entries, mounts }) => {
     expect(Bubblewrap.bubblewrapArgs(policyWith(entries))).toEqual([
       ...BASE,
@@ -127,6 +163,82 @@ describe("Bubblewrap", () => {
       ),
       Effect.provideService(HostProcess.Platform, "linux"),
     ),
+  );
+
+  it.live("resolves a symlinked PATH entry and an intermediate link inside a real sandbox", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const runner = yield* ProcessRunner.ProcessRunner;
+      const bubblewrap = yield* Bubblewrap.Bubblewrap;
+      const root = yield* fileSystem.realPath(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "kinako-bwrap-links-" }),
+      );
+      const home = path.join(root, "home");
+      const project = path.join(root, "project");
+      const installBin = path.join(home, ".fnm", "node-versions", "v24", "bin");
+      yield* fileSystem.makeDirectory(installBin, { recursive: true });
+      yield* fileSystem.makeDirectory(path.join(home, ".fnm", "aliases"));
+      yield* fileSystem.makeDirectory(path.join(home, "dotfiles", "git"), { recursive: true });
+      yield* fileSystem.makeDirectory(path.join(home, ".config"));
+      yield* fileSystem.makeDirectory(project);
+      yield* fileSystem.writeFileString(path.join(installBin, "tool"), "#!/bin/sh\necho tool=ok\n");
+      yield* fileSystem.chmod(path.join(installBin, "tool"), 0o755);
+      yield* fileSystem.writeFileString(path.join(home, "dotfiles", "git", "config"), "cfg\n");
+      yield* fileSystem.symlink(
+        "../node-versions/v24",
+        path.join(home, ".fnm", "aliases", "default"),
+      );
+      yield* fileSystem.symlink("../dotfiles/git", path.join(home, ".config", "git"));
+      const aliasBin = path.join(home, ".fnm", "aliases", "default", "bin");
+
+      const policy = yield* resolveSandboxPolicy({
+        platform: "linux",
+        home,
+        uid: 1000,
+        cwd: project,
+        gitCheckouts: [],
+        additionalDirectories: [],
+        providerPaths: [],
+        serverPaths: [],
+        attachmentsDir: path.join(home, ".kinako", "userdata", "attachments"),
+        baseDir: path.join(home, ".kinako"),
+        worktreesDir: path.join(home, ".kinako", "worktrees"),
+        pathEnv: aliasBin,
+        tmpDir: undefined,
+        sshAuthSock: undefined,
+        settings: effectiveSandboxSettings(
+          { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
+          undefined,
+          "linux",
+        ),
+      });
+      const script = [
+        `PATH=${aliasBin}:/usr/bin:/bin tool`,
+        `cat ${home}/.config/git/config 2>/dev/null && echo git=ok || echo git=fail`,
+        `ls ${home}/dotfiles 2>/dev/null | grep -q . && echo dotfiles=listed || echo dotfiles=hidden`,
+      ].join("\n");
+      const availability = yield* bubblewrap.availability;
+      const wrapped = bubblewrap.wrap({ command: "/bin/sh", args: ["-c", script], policy });
+      if (availability._tag === "Unavailable") {
+        assert.equal((yield* Effect.flip(wrapped)).reason, availability.reason);
+        return;
+      }
+      const command = yield* wrapped;
+      const result = yield* runner.run({
+        command: command.command,
+        args: command.args,
+        timeout: "30 seconds",
+      });
+      assert.equal(result.code, 0, result.stderr);
+      // ~/.config/git is not listed here: git config is always readable, and its link must work.
+      assert.deepEqual(result.stdout.trim().split("\n"), [
+        "tool=ok",
+        "cfg",
+        "git=ok",
+        "dotfiles=listed",
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
   );
 
   // Hosts without a working bwrap still check the other half of the contract: wrap refuses.

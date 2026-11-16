@@ -33,6 +33,23 @@ function fakeFacts(tree: Record<string, FakeEntry>) {
         .filter((path) => path.startsWith(`${directory}/`))
         .map((path) => path.slice(directory.length + 1))
         .filter((name) => !name.includes("/")),
+    links: (path: string) => {
+      const found: Array<{ readonly path: string; readonly target: string }> = [];
+      const pending = path.split("/").filter(Boolean);
+      let resolved = "";
+      for (let part = pending.shift(); part !== undefined; part = pending.shift()) {
+        const next = `${resolved}/${part}`;
+        const entry = tree[next];
+        if (typeof entry !== "object") {
+          resolved = next;
+          continue;
+        }
+        found.push({ path: next, target: entry.link });
+        pending.unshift(...entry.link.split("/").filter(Boolean));
+        resolved = "";
+      }
+      return found;
+    },
   };
 }
 
@@ -73,6 +90,10 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.docker`]: "directory",
   "/tmp": "directory",
   "/tmp/tmux-1000": "directory",
+  [`${HOME}/.fnm/aliases/default`]: { link: `${HOME}/.fnm/node-versions/v24` },
+  [`${HOME}/.fnm/node-versions/v24/bin`]: "directory",
+  [`${HOME}/.tools/bin`]: { link: "/opt/tools/bin" },
+  "/opt/tools/bin": "directory",
   "/tmp/user-tmp": "directory",
   "/run/screen/S-user": "directory",
   [`${HOME}/.agent-dir`]: "directory",
@@ -222,6 +243,21 @@ describe("resolveSandboxPolicy", () => {
       ],
     },
     {
+      name: "symlinked allowlist entries, a symlinked leaf and an intermediate link",
+      input: linuxInput({
+        pathEnv: [`${HOME}/.fnm/aliases/default/bin`, `${HOME}/.tools/bin`].join(":"),
+        settings: { ...linuxInput().settings, readOnlyPaths: ["~/.config/git"] },
+      }),
+      access: [
+        [`${HOME}/.config/git`, "read-only"],
+        [`${HOME}/dotfiles/git/config`, "read-only"],
+        [`${HOME}/.fnm/aliases/default`, "read-only"],
+        [`${HOME}/.fnm/node-versions/v24/bin/node`, "read-only"],
+        [`${HOME}/.fnm/node-versions/v24/lib`, "hidden"],
+        [`${HOME}/.tools/bin`, "read-only"],
+      ],
+    },
+    {
       name: "the user's tmux and screen sockets",
       input: linuxInput({ userName: "user" }),
       access: [
@@ -317,6 +353,24 @@ describe("resolveSandboxPolicy", () => {
         "TMPDIR is not a directory in a temp location; only the default temp dirs apply.",
       ],
       [`${HOME}/.agent-dir`, "Not a socket, so it is not exposed."],
+    ]);
+  });
+
+  it("recreates the symlinks a listed path goes through, only inside hidden directories", () => {
+    const policy = resolved(
+      linuxInput({
+        pathEnv: [`${HOME}/.fnm/aliases/default/bin`, `${HOME}/.tools/bin`, "/usr/bin"].join(":"),
+        settings: { ...linuxInput().settings, readOnlyPaths: ["~/.config/git"] },
+      }),
+    );
+    expect(
+      policy.entries
+        .filter((entry) => entry.kind === "symlink")
+        .map(({ path, linkTarget }) => [path, linkTarget]),
+    ).toEqual([
+      [`${HOME}/.config/git`, `${HOME}/dotfiles/git`],
+      [`${HOME}/.tools/bin`, "/opt/tools/bin"],
+      [`${HOME}/.fnm/aliases/default`, `${HOME}/.fnm/node-versions/v24`],
     ]);
   });
 

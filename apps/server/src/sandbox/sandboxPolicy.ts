@@ -33,7 +33,7 @@ export interface SandboxedCommand {
 }
 
 export type SandboxAccess = "read-write" | "read-only" | "hidden";
-export type SandboxPathKind = "directory" | "file" | "socket";
+export type SandboxPathKind = "directory" | "file" | "socket" | "symlink";
 
 export type SandboxEntrySource =
   | "cwd"
@@ -59,6 +59,8 @@ export interface SandboxPolicyEntry {
   readonly access: SandboxAccess;
   readonly kind: SandboxPathKind;
   readonly source: SandboxEntrySource;
+  /** For a symlink entry, its target as written, so the link resolves as it does outside. */
+  readonly linkTarget?: string;
 }
 
 export interface SandboxRejectedEntry {
@@ -132,6 +134,10 @@ export interface SandboxPathFact {
 export interface SandboxPathFacts {
   readonly stat: (path: string) => SandboxPathFact | undefined;
   readonly list: (directory: string) => ReadonlyArray<string>;
+  /** Every symlink resolving `path` passes through, at its real location, with its raw target. */
+  readonly links?: (
+    path: string,
+  ) => ReadonlyArray<{ readonly path: string; readonly target: string }>;
 }
 
 interface Candidate {
@@ -344,6 +350,19 @@ export function resolveSandboxPolicy(
 
   const rejected: Array<SandboxRejectedEntry> = [];
   const byPath = new Map<string, SandboxPolicyEntry>();
+  // A listed path reached through a symlink must resolve inside as it does outside.
+  const links = new Map<string, SandboxPolicyEntry>();
+  const keepLinks = (candidate: Candidate) => {
+    for (const link of facts.links?.(candidate.path) ?? []) {
+      links.set(link.path, {
+        path: link.path,
+        access: "read-only",
+        kind: "symlink",
+        source: candidate.source,
+        linkTarget: link.target,
+      });
+    }
+  };
 
   const expanded = sandboxCandidates(input).flatMap((candidate): ReadonlyArray<Candidate> => {
     if (!NodePath.posix.isAbsolute(candidate.path)) {
@@ -410,7 +429,10 @@ export function resolveSandboxPolicy(
     }
 
     if (USER_SOURCES.has(candidate.source)) {
-      if (candidate.source === "path" && !isWithin(path, realHome)) continue;
+      if (candidate.source === "path" && !isWithin(path, realHome)) {
+        keepLinks(candidate);
+        continue;
+      }
       if (isWithin(realHome, path)) {
         reject("Exposes the whole home directory.");
         continue;
@@ -457,6 +479,7 @@ export function resolveSandboxPolicy(
       kind: fact.kind,
       source: candidate.source,
     };
+    if (candidate.access !== "hidden") keepLinks(candidate);
     const existing = byPath.get(path);
     if (
       existing === undefined ||
@@ -466,7 +489,7 @@ export function resolveSandboxPolicy(
     }
   }
 
-  const sorted = [...byPath.values()].toSorted(
+  const sorted = [...byPath.values(), ...links.values()].toSorted(
     (left, right) =>
       depth(left.path) - depth(right.path) ||
       (left.path < right.path ? -1 : left.path > right.path ? 1 : 0),
@@ -478,12 +501,15 @@ export function resolveSandboxPolicy(
       .at(-1);
     // The root is bound read-only, so it is the outermost ancestor of every entry.
     const parentAccess = parent?.access ?? "read-only";
+    // A link outside a hidden directory is already there as it is outside the sandbox.
     const redundant =
-      entry.access === "hidden"
-        ? parentAccess === "hidden"
-        : entry.access === "read-write"
-          ? parentAccess === "read-write"
-          : parentAccess !== "hidden";
+      entry.kind === "symlink"
+        ? parentAccess !== "hidden"
+        : entry.access === "hidden"
+          ? parentAccess === "hidden"
+          : entry.access === "read-write"
+            ? parentAccess === "read-write"
+            : parentAccess !== "hidden";
     if (!redundant) kept.push(entry);
   }
 

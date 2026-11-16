@@ -21,6 +21,7 @@ import {
  */
 export function bubblewrapArgs(policy: SandboxPolicy): ReadonlyArray<string> {
   const mounts = policy.entries.flatMap((entry): ReadonlyArray<string> => {
+    if (entry.kind === "symlink") return [];
     switch (entry.access) {
       case "read-write":
         return ["--bind", entry.path, entry.path];
@@ -32,6 +33,12 @@ export function bubblewrapArgs(policy: SandboxPolicy): ReadonlyArray<string> {
           : ["--ro-bind", "/dev/null", entry.path];
     }
   });
+  // Links go in after the binds, so a link never shadows a directory a bind still needs.
+  const links = policy.entries.flatMap((entry) =>
+    entry.kind === "symlink" && entry.linkTarget !== undefined
+      ? ["--symlink", entry.linkTarget, entry.path]
+      : [],
+  );
   const remounts = policy.entries.flatMap((entry) =>
     entry.access === "hidden" && entry.kind === "directory" ? ["--remount-ro", entry.path] : [],
   );
@@ -46,6 +53,7 @@ export function bubblewrapArgs(policy: SandboxPolicy): ReadonlyArray<string> {
     "--proc",
     "/proc",
     ...mounts,
+    ...links,
     ...remounts,
     "--chdir",
     policy.cwd,

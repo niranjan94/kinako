@@ -159,9 +159,43 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
     if (fact._tag === "Some") facts.set(candidatePath, fact.value);
   }
 
+  // Walks a path as the kernel does, noting each symlink at its real location.
+  const linkChain = Effect.fnUntraced(function* (target: string) {
+    const found: Array<{ readonly path: string; readonly target: string }> = [];
+    const pending = target.split("/").filter((part) => part.length > 0);
+    let resolved = "/";
+    for (let part = pending.shift(); part !== undefined; part = pending.shift()) {
+      const next = path.join(resolved, part);
+      const raw = yield* fileSystem.readLink(next).pipe(Effect.option);
+      if (raw._tag === "None") {
+        resolved = next;
+        continue;
+      }
+      // The kernel gives up after 40 links; a loop here would too.
+      if (found.length >= 40) break;
+      found.push({ path: next, target: raw.value });
+      pending.unshift(
+        ...path
+          .resolve(resolved, raw.value)
+          .split("/")
+          .filter((segment) => segment.length > 0),
+      );
+      resolved = "/";
+    }
+    return found;
+  });
+  const links = new Map<
+    string,
+    ReadonlyArray<{ readonly path: string; readonly target: string }>
+  >();
+  for (const candidatePath of facts.keys()) {
+    links.set(candidatePath, yield* linkChain(candidatePath));
+  }
+
   const resolution = resolveFromFacts(policyInput, {
     stat: (candidatePath) => facts.get(candidatePath),
     list: (directory) => listings.get(directory) ?? [],
+    links: (candidatePath) => links.get(candidatePath) ?? [],
   });
   return resolution._tag === "Resolved"
     ? { ...resolution.policy, rejected: [...droppedGitDirs, ...resolution.policy.rejected] }
