@@ -108,7 +108,9 @@ On Linux, install bubblewrap (`bwrap`) and have an `env` that supports `--defaul
 
 - Tools that start a sandbox of their own do not work inside, such as Chromium or Playwright without `--no-sandbox`, rootless Podman, and the provider's own command sandbox.
 - On macOS, setuid tools other than `ps` do not run.
-- zellij does not run inside. tmux and screen do, with sessions of their own that your terminal's sessions cannot see.
+- zellij does not run inside. tmux and screen do, in sessions separate from yours.
+- The agent can change what is inside a folder it may write, but not remove, rename or replace the folder itself, so `rm -rf ~/.npm` leaves an empty `~/.npm` behind.
+- A folder the sandbox reaches through a symbolic link inside a folder the agent can write, such as an additional directory that is a link inside the project, must point inside that folder, or the session does not start. Add the folder the link points to instead. A listed path reached that way is left out with the reason.
 - On Linux, Claude does not save its `~/.claude.json` bookkeeping from sandboxed sessions.
 - Changing a thread to or from this mode, or changing what the sandbox allows, applies from the thread's next turn.
 - Older app versions cannot show threads in this mode. Update every client, including mobile, before you use it.
