@@ -42,3 +42,20 @@ export function externalSandboxRequest(
     ? policy.sandboxPolicy.request
     : undefined;
 }
+
+/** The sandbox a session's process is wrapped in at spawn, as a comparable key, or null. */
+export function sandboxFingerprint(
+  policy: Pick<
+    ProviderAdapter.ProviderAdapterV2RuntimePolicy,
+    "runtimeMode" | "sandboxPolicy" | "cwd" | "additionalDirectories"
+  >,
+): string | null {
+  const request = externalSandboxRequest(policy);
+  return request === undefined
+    ? null
+    : JSON.stringify({
+        request,
+        cwd: policy.cwd,
+        additionalDirectories: policy.additionalDirectories,
+      });
+}

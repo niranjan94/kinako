@@ -110,7 +110,7 @@ On Linux, install bubblewrap (`bwrap`) and have an `env` that supports `--defaul
 - On macOS, setuid tools other than `ps` do not run.
 - zellij does not run inside. tmux and screen do, with sessions of their own that your terminal's sessions cannot see.
 - On Linux, Claude does not save its `~/.claude.json` bookkeeping from sandboxed sessions.
-- Changing a thread to or from this mode applies from its next turn.
+- Changing a thread to or from this mode, or changing what the sandbox allows, applies from the thread's next turn.
 - Older app versions cannot show threads in this mode. Update every client, including mobile, before you use it.
 
 ### Commit signing

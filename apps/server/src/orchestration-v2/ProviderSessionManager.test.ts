@@ -44,6 +44,7 @@ import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import { externalSandboxPolicy } from "../sandbox/externalSandbox.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
   CodexProviderCapabilitiesV2,
@@ -1194,6 +1195,52 @@ it.effect("ProviderSessionManagerV2 opens provider sessions inside the installat
             }),
           ),
         }),
+      ),
+    );
+  }),
+);
+
+it.effect("ProviderSessionManagerV2 reopens an exclusive session whose OS sandbox changed", () =>
+  Effect.gen(function* () {
+    const state = yield* Ref.make(emptyState);
+    const sandboxed = (readWritePaths: ReadonlyArray<string>) =>
+      ({
+        ...runtimePolicy,
+        runtimeMode: "sandboxed-full-access",
+        sandboxPolicy: externalSandboxPolicy({
+          settings: { readWritePaths, readOnlyPaths: [], allowDocker: false, allowSshAgent: true },
+          baseDir: "/home/user/.kinako",
+          worktreesDir: "/home/user/.kinako/worktrees",
+          attachmentsDir: "/home/user/.kinako/userdata/attachments",
+          serverPaths: [],
+          gitCheckouts: [],
+        }),
+      }) satisfies ProviderAdapter.ProviderAdapterV2RuntimePolicy;
+    yield* Effect.gen(function* () {
+      const eventSink = yield* EventSink.EventSinkV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("thread-provider-session-manager-sandbox-change");
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      yield* eventSink.write({
+        events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+      });
+      const open = (policy: ProviderAdapter.ProviderAdapterV2RuntimePolicy) =>
+        manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy: policy });
+
+      const first = yield* open(sandboxed([]));
+      assert.strictEqual(yield* open(sandboxed([])), first);
+      assert.equal((yield* Ref.get(state)).openCount, 1);
+      // The app-server was wrapped at spawn, so new sandbox settings need a new process.
+      assert.notStrictEqual(yield* open(sandboxed(["~/.npm"])), first);
+      assert.equal((yield* Ref.get(state)).openCount, 2);
+    }).pipe(
+      Effect.provide(
+        layerTest({ state, idleTimeoutMs: 60_000, capabilities: ExclusiveCapabilities }),
       ),
     );
   }),

@@ -51,6 +51,7 @@ import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ProviderInstallationGate from "../provider/ProviderInstallationGate.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import { sandboxFingerprint } from "../sandbox/externalSandbox.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as EventSink from "./EventSink.ts";
@@ -295,6 +296,8 @@ interface LiveSessionEntry {
   readonly loadedProviderThreadKeyByThread: ReadonlyMap<ThreadId, string>;
   /** null marks an unknown catalog; undefined means MCP refresh is not configured. */
   readonly openedWithLinkedEnvironments: boolean | null | undefined;
+  /** The OS sandbox the runtime's process was wrapped in at open, which it keeps until it exits. */
+  readonly openedWithSandbox: string | null;
   readonly linkedEnvironmentsByThread: ReadonlyMap<ThreadId, boolean | null>;
   /** Scope revocation to recorded credential ids so superseded sessions cannot revoke replacements opened before detach. */
   readonly mcpCredentialIdByThread: ReadonlyMap<ThreadId, string>;
@@ -2172,25 +2175,16 @@ export const layerWithOptions = (
         );
       });
 
-      /** An exclusive runtime configures MCP at open, so it reopens once nothing would be lost. */
-      const releaseForLinkedEnvironments = Effect.fn(
-        "ProviderSessionManager.releaseForLinkedEnvironments",
-      )(function* (entry: LiveSessionEntry) {
-        if (
-          entry.supportsMultipleProviderThreads ||
-          entry.runtime.canResumeAfterRestart === false ||
-          entry.openedWithLinkedEnvironments === undefined ||
-          entry.busyTurns.size > 0
-        ) {
-          return;
-        }
-        const linkedEnvironments = yield* readLinkedEnvironments;
-        if (
-          typeof linkedEnvironments !== "boolean" ||
-          linkedEnvironments === entry.openedWithLinkedEnvironments
-        ) {
-          return;
-        }
+      const reopenable = (entry: LiveSessionEntry) =>
+        !entry.supportsMultipleProviderThreads &&
+        entry.runtime.canResumeAfterRestart !== false &&
+        entry.busyTurns.size === 0;
+
+      /** Releases an exclusive runtime so its next open applies new settings, if nothing is lost. */
+      const releaseToReopen = Effect.fn("ProviderSessionManager.releaseToReopen")(function* (
+        entry: LiveSessionEntry,
+        detail: string,
+      ) {
         const providerSessionId = entry.runtime.providerSessionId;
         // Any activity during these reads bumps the generation and keeps the runtime.
         const generation = entry.idleGeneration;
@@ -2227,10 +2221,39 @@ export const layerWithOptions = (
         yield* releaseEntry({
           providerSessionId,
           reason: "idle_timeout",
-          detail: "Linked environments changed; reopening the provider session.",
+          detail,
           onlyIfIdleGeneration: generation,
           keepIf: hasUnfinishedRecords,
         }).pipe(logReleaseFailure(providerSessionId));
+      });
+
+      /** An exclusive runtime configures MCP at open, so it reopens once nothing would be lost. */
+      const releaseForLinkedEnvironments = Effect.fn(
+        "ProviderSessionManager.releaseForLinkedEnvironments",
+      )(function* (entry: LiveSessionEntry) {
+        if (!reopenable(entry) || entry.openedWithLinkedEnvironments === undefined) return;
+        const linkedEnvironments = yield* readLinkedEnvironments;
+        if (
+          typeof linkedEnvironments !== "boolean" ||
+          linkedEnvironments === entry.openedWithLinkedEnvironments
+        ) {
+          return;
+        }
+        yield* releaseToReopen(
+          entry,
+          "Linked environments changed; reopening the provider session.",
+        );
+      });
+
+      /** An exclusive runtime is wrapped in its OS sandbox at open, so it reopens when that changes. */
+      const releaseForSandbox = Effect.fn("ProviderSessionManager.releaseForSandbox")(function* (
+        entry: LiveSessionEntry,
+        runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
+      ) {
+        if (!reopenable(entry) || sandboxFingerprint(runtimePolicy) === entry.openedWithSandbox) {
+          return;
+        }
+        yield* releaseToReopen(entry, "Sandbox settings changed; reopening the provider session.");
       });
 
       const observeActivity = (
@@ -2970,6 +2993,8 @@ export const layerWithOptions = (
               const key = sessionKey(input.providerSessionId);
               const live = (yield* Ref.get(sessions)).get(key);
               if (live !== undefined) yield* releaseForLinkedEnvironments(live);
+              const kept = (yield* Ref.get(sessions)).get(key);
+              if (kept !== undefined) yield* releaseForSandbox(kept, input.runtimePolicy);
               const existing = (yield* Ref.get(sessions)).get(key);
               if (existing !== undefined) {
                 const attached = existing.attachedThreadIds.has(input.threadId);
@@ -3077,6 +3102,7 @@ export const layerWithOptions = (
                 attachedThreadIds: new Set([input.threadId]),
                 loadedProviderThreadKeyByThread: new Map(),
                 openedWithLinkedEnvironments,
+                openedWithSandbox: sandboxFingerprint(input.runtimePolicy),
                 linkedEnvironmentsByThread: new Map(),
                 mcpCredentialIdByThread:
                   mcpCredentialId === undefined
