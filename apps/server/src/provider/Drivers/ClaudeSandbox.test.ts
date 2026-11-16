@@ -86,6 +86,7 @@ it.live("stops a sandboxed CLI with the SDK's SIGTERM and leaves no process behi
         cwd,
         entries: [{ path: cwd, access: "read-write", kind: "directory", source: "cwd" }],
         rejected: [],
+        warnings: [],
       },
     });
     const availability = yield* bubblewrap.availability;

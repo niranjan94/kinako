@@ -20,6 +20,7 @@ const policyWith = (entries: ReadonlyArray<SandboxPolicyEntry>): SandboxPolicy =
   cwd: `${HOME}/code/app`,
   entries,
   rejected: [],
+  warnings: [],
 });
 
 const HEADER = [
@@ -244,6 +245,7 @@ describe("Sandbox", () => {
           { path: project, access: "read-write", kind: "directory", source: "cwd" },
         ],
         rejected: [],
+        warnings: [],
       };
       const script = [
         `cd ${project}`,

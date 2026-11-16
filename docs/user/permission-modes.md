@@ -78,7 +78,7 @@ By default, a sandboxed agent can:
 
 The rest of your home folder, including your private SSH keys and the app's own data folder, is hidden.
 
-To change the lists, open **Settings → Threads → Sandboxed full access** and choose an environment. Each list shows that environment's defaults until you edit it; editing saves the whole list, and the reset button returns to the defaults. Paths are absolute or start with `~/`, and only the last part of a path may contain a `*`, such as `~/.ssh/*.pub`. A path the sandbox leaves out, such as one that would expose your whole home folder, is listed under its list with the reason.
+To change the lists, open **Settings → Threads → Sandboxed full access** and choose an environment. Each list shows that environment's defaults until you edit it; editing saves the whole list, and the reset button returns to the defaults. Paths are absolute or start with `~/`, and only the last part of a path may contain a `*`, such as `~/.ssh/*.pub`. A path the sandbox leaves out, such as one that would expose your whole home folder, is listed under its list with the reason. A path that does not exist yet, or that may expose credentials such as `~/.ssh` or `~/.aws`, is kept but shown with a warning.
 
 To add paths for one project, choose that project in the settings scope. A project can add paths to either list but cannot remove the environment's.
 

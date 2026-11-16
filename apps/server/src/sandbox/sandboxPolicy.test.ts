@@ -444,6 +444,38 @@ describe("resolveSandboxPolicy", () => {
     expect(accessOf(policy, `${HOME}/.kinako/userdata/settings.json`)).toBe("hidden");
   });
 
+  it("warns about listed paths that are missing or expose credentials, and keeps them", () => {
+    const tree: Record<string, FakeEntry> = {
+      ...LINUX_TREE,
+      [`${HOME}/.config`]: "directory",
+      [`${HOME}/.config/gh`]: "directory",
+      [`${HOME}/.config/gcloud`]: "directory",
+      [`${HOME}/.aws-sam`]: "directory",
+    };
+    const policy = resolved(
+      linuxInput({
+        settings: {
+          ...linuxInput().settings,
+          readWritePaths: ["~/.ssh", "~/missing", "~/.aws-sam", "~/.docker"],
+          readOnlyPaths: ["~/.ssh/*", "~/.config", "~/nothing*"],
+        },
+      }),
+      tree,
+    );
+    expect(policy.warnings.map(({ path, reason }) => [path, reason])).toEqual([
+      [`${HOME}/nothing*`, "Matches nothing yet, so it is skipped."],
+      [`${HOME}/.ssh`, "May expose credentials kept in ~/.ssh."],
+      [`${HOME}/missing`, "Does not exist yet, so it is skipped."],
+      [`${HOME}/.docker`, "May expose credentials kept in ~/.docker."],
+      [`${HOME}/.ssh/id_ed25519`, "May expose credentials kept in ~/.ssh."],
+      [`${HOME}/.config`, "May expose credentials kept in ~/.config/gcloud and ~/.config/gh."],
+    ]);
+    expect(accessOf(policy, `${HOME}/.ssh/id_ed25519`)).toBe("read-write");
+    expect(
+      resolved(linuxInput(), tree).warnings.filter(({ reason }) => reason.startsWith("May")),
+    ).toEqual([]);
+  });
+
   it.each<readonly [string, Partial<SandboxPolicyInput>, string]>([
     ["the home directory", { cwd: HOME, gitCommonDirs: [] }, "contains the whole home directory"],
     [

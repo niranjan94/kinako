@@ -112,7 +112,12 @@ export const SandboxRejectedPath = Schema.Struct({
 });
 export type SandboxRejectedPath = typeof SandboxRejectedPath.Type;
 
+/** A listed path the sandbox keeps that needs attention, such as one that does not exist. */
+export const SandboxPathWarning = SandboxRejectedPath;
+export type SandboxPathWarning = typeof SandboxPathWarning.Type;
+
 export const SandboxPathCheckResult = Schema.Struct({
   rejected: Schema.Array(SandboxRejectedPath),
+  warnings: Schema.Array(SandboxPathWarning).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type SandboxPathCheckResult = typeof SandboxPathCheckResult.Type;

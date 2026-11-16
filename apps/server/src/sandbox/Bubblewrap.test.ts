@@ -22,6 +22,7 @@ const policyWith = (entries: ReadonlyArray<SandboxPolicyEntry>): SandboxPolicy =
   cwd: "/home/user/code/app",
   entries,
   rejected: [],
+  warnings: [],
 });
 
 describe("bubblewrapArgs", () => {
@@ -266,6 +267,7 @@ describe("Bubblewrap", () => {
           { path: project, access: "read-write", kind: "directory", source: "cwd" },
         ],
         rejected: [],
+        warnings: [],
       };
       const script = [
         "touch inside && echo inside=ok || echo inside=fail",

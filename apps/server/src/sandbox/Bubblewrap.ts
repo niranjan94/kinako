@@ -95,6 +95,7 @@ const PROBE_POLICY: SandboxPolicy = {
   cwd: "/",
   entries: [{ path: "/tmp", access: "hidden", kind: "directory", source: "temp" }],
   rejected: [],
+  warnings: [],
 };
 
 export class Bubblewrap extends Context.Service<

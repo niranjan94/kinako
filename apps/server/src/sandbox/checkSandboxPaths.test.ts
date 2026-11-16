@@ -15,7 +15,7 @@ const layer = Layer.mergeAll(
   ServerConfig.layerTest(process.cwd(), { prefix: "kinako-sandbox-check-" }),
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
-it.live("reports the listed paths the sandbox leaves out, with the list each came from", () =>
+it.live("reports the listed paths the sandbox leaves out or warns about, with their lists", () =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -24,11 +24,12 @@ it.live("reports the listed paths the sandbox leaves out, with the list each cam
       yield* fileSystem.makeTempDirectoryScoped({ prefix: "kinako-sandbox-check-home-" }),
     );
     yield* fileSystem.makeDirectory(path.join(home, "cache"), { recursive: true });
+    yield* fileSystem.makeDirectory(path.join(home, ".ssh"), { recursive: true });
     yield* fileSystem.makeDirectory(path.join(config.baseDir, "secrets"), { recursive: true });
 
     const result = yield* checkSandboxPaths({
-      readWritePaths: ["relative/cache", "~", "~/cache", "~/missing"],
-      readOnlyPaths: ["~/a*/b", path.join(config.baseDir, "secrets")],
+      readWritePaths: ["relative/cache", "~", "~/cache", "~/missing", "~/.gradle"],
+      readOnlyPaths: ["~/a*/b", path.join(config.baseDir, "secrets"), "~/.ssh"],
     }).pipe(
       Effect.provideService(HostProcess.Platform, "linux"),
       Effect.provideService(HostProcess.HomeDirectory, home),
@@ -56,5 +57,18 @@ it.live("reports the listed paths the sandbox leaves out, with the list each cam
         },
       ],
     );
+    // A missing default such as ~/.gradle is expected, so only ~/missing warns.
+    assert.deepEqual(result.warnings, [
+      {
+        path: path.join(home, "missing"),
+        list: "read-write",
+        reason: "Does not exist yet, so it is skipped.",
+      },
+      {
+        path: path.join(home, ".ssh"),
+        list: "read-only",
+        reason: "May expose credentials kept in ~/.ssh.",
+      },
+    ]);
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );

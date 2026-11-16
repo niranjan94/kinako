@@ -78,6 +78,8 @@ export interface SandboxPolicy {
   readonly cwd: string;
   readonly entries: ReadonlyArray<SandboxPolicyEntry>;
   readonly rejected: ReadonlyArray<SandboxRejectedEntry>;
+  /** Listed paths that are skipped because they do not exist, or that expose credentials. */
+  readonly warnings: ReadonlyArray<SandboxRejectedEntry>;
 }
 
 export type SandboxPolicyResolution =
@@ -227,6 +229,28 @@ function dockerSocketDirs(input: SandboxPolicyInput): ReadonlyArray<string> {
 
 const userPath = (raw: string, home: string) => expandHomePath(raw.trim(), home);
 
+/** Home paths that can hold credentials; the home directory hides them unless a list exposes one. */
+const CREDENTIAL_PATHS = [
+  ".ssh",
+  ".aws",
+  ".azure",
+  ".config/gcloud",
+  ".config/gh",
+  ".docker",
+  ".git-credentials",
+  ".gnupg",
+  ".kube",
+  ".netrc",
+  ".password-store",
+  ".local/share/keyrings",
+  "Library/Keychains",
+];
+// The `~/.ssh` files the defaults list hold no secrets.
+const PUBLIC_SSH_FILE = /^(config|known_hosts|.*\.pub)$/;
+
+export const sandboxCredentialPaths = (home: string): ReadonlyArray<string> =>
+  CREDENTIAL_PATHS.map((path) => NodePath.posix.join(home, path));
+
 /** Every path the policy may name, before the filesystem is consulted. */
 export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Candidate> {
   const candidate = (
@@ -370,6 +394,24 @@ export function resolveSandboxPolicy(
   const mandatoryHidden = [realBase, ...(runtimeDir === undefined ? [] : [real(runtimeDir)])];
 
   const rejected: Array<SandboxRejectedEntry> = [];
+  const warnings: Array<SandboxRejectedEntry> = [];
+  const isListed = (candidate: Candidate) =>
+    candidate.source === "user-read-write" || candidate.source === "user-read-only";
+  const credentials = CREDENTIAL_PATHS.flatMap((relative) => {
+    const fact = facts.stat(NodePath.posix.join(input.home, relative));
+    return fact === undefined ? [] : [{ shown: `~/${relative}`, path: fact.realPath }];
+  });
+  const exposedCredentials = (path: string) =>
+    credentials.filter(
+      (credential) =>
+        isWithin(credential.path, path) ||
+        (isWithin(path, credential.path) &&
+          !(
+            credential.shown === "~/.ssh" &&
+            NodePath.posix.dirname(path) === credential.path &&
+            PUBLIC_SSH_FILE.test(NodePath.posix.basename(path))
+          )),
+    );
   const byPath = new Map<string, SandboxPolicyEntry>();
   // A listed path reached through a symlink must resolve inside as it does outside.
   const links = new Map<string, SandboxPolicyEntry>();
@@ -406,13 +448,21 @@ export function resolveSandboxPolicy(
       }
       return [candidate];
     }
-    return facts
+    const matches = facts
       .list(wildcard.directory)
       .filter((name) => wildcard.pattern.test(name))
       .map((name) => ({
         ...candidate,
         path: NodePath.posix.join(wildcard.directory, name),
       }));
+    if (matches.length === 0 && isListed(candidate)) {
+      warnings.push({
+        path: candidate.path,
+        source: candidate.source,
+        reason: "Matches nothing yet, so it is skipped.",
+      });
+    }
+    return matches;
   });
 
   for (const candidate of expanded) {
@@ -420,6 +470,13 @@ export function resolveSandboxPolicy(
     if (fact === undefined) {
       if (candidate.required)
         return refuse(`${candidate.source} ${candidate.path} does not exist.`);
+      if (isListed(candidate)) {
+        warnings.push({
+          path: candidate.path,
+          source: candidate.source,
+          reason: "Does not exist yet, so it is skipped.",
+        });
+      }
       // Seatbelt can deny a path before it exists, so a Docker socket or multiplexer socket dir
       // created after launch stays masked. bwrap cannot mask a missing path.
       if (
@@ -472,6 +529,17 @@ export function resolveSandboxPolicy(
       if (hidden !== undefined) {
         reject(`Inside ${hidden}, which always stays hidden.`);
         continue;
+      }
+    }
+
+    if (isListed(candidate)) {
+      const exposed = exposedCredentials(path);
+      if (exposed.length > 0) {
+        warnings.push({
+          path,
+          source: candidate.source,
+          reason: `May expose credentials kept in ${new Intl.ListFormat("en").format(exposed.map(({ shown }) => shown))}.`,
+        });
       }
     }
 
@@ -541,6 +609,6 @@ export function resolveSandboxPolicy(
 
   return {
     _tag: "Resolved",
-    policy: { platform: input.platform, cwd: real(input.cwd), entries: kept, rejected },
+    policy: { platform: input.platform, cwd: real(input.cwd), entries: kept, rejected, warnings },
   };
 }

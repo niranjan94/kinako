@@ -3,6 +3,7 @@ import type {
   EnvironmentId,
   ProjectId,
   ProjectSandboxOverride,
+  SandboxPathCheckResult,
   SandboxPathList,
   SandboxRejectedPath,
   SandboxSettingsPatch,
@@ -105,7 +106,7 @@ function EnvironmentSandboxForm(props: {
   const platform = sandboxPlatform(config);
   const readWrite = effectiveSandboxPathList(saved.readWritePaths, "readWritePaths", platform);
   const readOnly = effectiveSandboxPathList(saved.readOnlyPaths, "readOnlyPaths", platform);
-  const rejected = useRejectedSandboxPaths(environmentId, readWrite.paths, readOnly.paths);
+  const check = useSandboxPathCheck(environmentId, readWrite.paths, readOnly.paths);
   const unavailable = sandboxUnavailableReason(config.sandbox);
 
   return (
@@ -126,9 +127,8 @@ function EnvironmentSandboxForm(props: {
                 : LIST_COPY[key].description
             }
             paths={list.paths}
-            rejected={rejected.filter(
-              (entry) => entry.list === (key === "readWritePaths" ? "read-write" : "read-only"),
-            )}
+            rejected={forList(check.rejected, key)}
+            warnings={forList(check.warnings, key)}
             disabled={!canWrite}
             onChange={(paths) => save({ [key]: paths })}
             resetAction={
@@ -208,7 +208,7 @@ function ProjectSandboxForm(props: {
     });
   const readWritePaths = additions.readWritePaths ?? [];
   const readOnlyPaths = additions.readOnlyPaths ?? [];
-  const rejected = useRejectedSandboxPaths(environmentId, readWritePaths, readOnlyPaths);
+  const check = useSandboxPathCheck(environmentId, readWritePaths, readOnlyPaths);
 
   return (
     <SettingsSection id="sandbox" title="Sandboxed full access">
@@ -219,9 +219,8 @@ function ProjectSandboxForm(props: {
           title={LIST_COPY[key].title}
           description="Added to the environment's list for threads in this project."
           paths={key === "readWritePaths" ? readWritePaths : readOnlyPaths}
-          rejected={rejected.filter(
-            (entry) => entry.list === (key === "readWritePaths" ? "read-write" : "read-only"),
-          )}
+          rejected={forList(check.rejected, key)}
+          warnings={forList(check.warnings, key)}
           disabled={!canWrite}
           onChange={(paths) => save({ readWritePaths, readOnlyPaths, [key]: paths })}
           resetAction={null}
@@ -237,6 +236,7 @@ function SandboxPathListRow(props: {
   description: string;
   paths: SandboxPathList;
   rejected: ReadonlyArray<SandboxRejectedPath>;
+  warnings: ReadonlyArray<SandboxRejectedPath>;
   disabled: boolean;
   resetAction: ReactNode;
   onChange: (paths: SandboxPathList) => void;
@@ -310,36 +310,45 @@ function SandboxPathListRow(props: {
             Left out: <code className="font-mono">{entry.path}</code>. {entry.reason}
           </p>
         ))}
+        {props.warnings.map((entry) => (
+          <p key={`${entry.path}:${entry.reason}`} className="text-warning-foreground text-xs">
+            <code className="font-mono">{entry.path}</code>: {entry.reason}
+          </p>
+        ))}
       </div>
     </SettingsRow>
   );
 }
 
-/** The listed paths the environment's sandbox would leave out, checked by its server. */
-function useRejectedSandboxPaths(
+const forList = (entries: ReadonlyArray<SandboxRejectedPath>, key: SandboxListKey) =>
+  entries.filter((entry) => entry.list === (key === "readWritePaths" ? "read-write" : "read-only"));
+
+const NO_CHECK: SandboxPathCheckResult = { rejected: [], warnings: [] };
+
+/** The listed paths the environment's sandbox would leave out or warn about, checked by its server. */
+function useSandboxPathCheck(
   environmentId: EnvironmentId,
   readWritePaths: SandboxPathList,
   readOnlyPaths: SandboxPathList,
-): ReadonlyArray<SandboxRejectedPath> {
+): SandboxPathCheckResult {
   const canCheck = useAtomValue(serverEnvironment.checkSandboxPaths.permissionAtom(environmentId));
   const checkSandboxPaths = useAtomCommand(serverEnvironment.checkSandboxPaths);
   const key = JSON.stringify([environmentId, readWritePaths, readOnlyPaths]);
   const [result, setResult] = useState<{
     readonly key: string;
-    readonly rejected: ReadonlyArray<SandboxRejectedPath>;
+    readonly check: SandboxPathCheckResult;
   } | null>(null);
   const requestCheck = useEffectEvent(async (requested: string) => {
     const response = await checkSandboxPaths({
       environmentId,
       input: { readWritePaths, readOnlyPaths },
     });
-    if (response._tag === "Success")
-      setResult({ key: requested, rejected: response.value.rejected });
+    if (response._tag === "Success") setResult({ key: requested, check: response.value });
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- asks the environment's server which listed paths its sandbox leaves out
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- State changes only after the response arrives.
     if (canCheck) void requestCheck(key);
   }, [key, canCheck]);
-  return result?.key === key ? result.rejected : [];
+  return result?.key === key ? result.check : NO_CHECK;
 }

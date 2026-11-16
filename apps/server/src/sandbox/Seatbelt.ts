@@ -125,6 +125,7 @@ const PROBE_POLICY: SandboxPolicy = {
   cwd: "/",
   entries: [{ path: "/private/tmp", access: "hidden", kind: "directory", source: "temp" }],
   rejected: [],
+  warnings: [],
 };
 
 export class Seatbelt extends Context.Service<

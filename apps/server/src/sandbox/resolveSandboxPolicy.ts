@@ -9,6 +9,7 @@ import * as ProcessRunner from "../processRunner.ts";
 import {
   resolveSandboxPolicy as resolveFromFacts,
   sandboxCandidates,
+  sandboxCredentialPaths,
   sandboxWildcardDirectories,
   type SandboxPathFact,
   type SandboxRejectedEntry,
@@ -141,6 +142,7 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   const statPaths = new Set<string>([
     input.worktreesDir,
     ...candidates.map((candidate) => candidate.path),
+    ...sandboxCredentialPaths(input.home),
     ...[...listings].flatMap(([directory, names]) =>
       names.map((name) => path.join(directory, name)),
     ),
