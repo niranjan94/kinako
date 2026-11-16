@@ -129,6 +129,30 @@ describe("seatbeltProfile", () => {
       ],
     },
     {
+      name: "a token file denied after its read-only directory",
+      entries: [
+        { path: HOME, access: "hidden", kind: "directory", source: "home" },
+        {
+          path: `${HOME}/.cargo`,
+          access: "read-only",
+          kind: "directory",
+          source: "user-read-only",
+        },
+        {
+          path: `${HOME}/.cargo/credentials.toml`,
+          access: "hidden",
+          kind: "file",
+          source: "credential",
+        },
+      ],
+      rules: [
+        `(deny file-read* file-test-existence file-write* (subpath "${HOME}"))`,
+        `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/.cargo"))`,
+        `(allow file-read* file-test-existence (subpath "${HOME}/.cargo"))`,
+        `(deny file-read* file-test-existence file-write* (literal "${HOME}/.cargo/credentials.toml"))`,
+      ],
+    },
+    {
       name: "a symlink inside the hidden home readable with its ancestors and the paths through it",
       entries: [
         { path: HOME, access: "hidden", kind: "directory", source: "home" },

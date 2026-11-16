@@ -79,6 +79,7 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.cargo`]: "directory",
   [`${HOME}/.cargo/bin`]: "directory",
   [`${HOME}/.cargo/registry`]: "directory",
+  [`${HOME}/.cargo/credentials.toml`]: "file",
   [`${HOME}/.gitconfig`]: "file",
   [`${HOME}/.config/git`]: { link: `${HOME}/dotfiles/git` },
   [`${HOME}/dotfiles/git`]: "directory",
@@ -187,6 +188,7 @@ describe("resolveSandboxPolicy", () => {
         [`${HOME}/.kinako/bin`, "hidden"],
         [`${HOME}/.cargo/bin/cargo`, "read-only"],
         [`${HOME}/.cargo/registry/index`, "read-write"],
+        [`${HOME}/.cargo/credentials.toml`, "hidden"],
         [`${HOME}/.local/share/pnpm/bin/pnpm`, "read-write"],
         ["/usr/bin/git", "read-only"],
         ["/tmp/build", "read-write"],
@@ -278,6 +280,16 @@ describe("resolveSandboxPolicy", () => {
         [`${HOME}/.docker/desktop/docker.sock`, "hidden"],
         [`${HOME}/.docker/run/docker.sock`, "hidden"],
       ],
+    },
+    {
+      name: "a Cargo token file a list names",
+      input: linuxInput({
+        settings: {
+          ...linuxInput().settings,
+          readOnlyPaths: [...linuxInput().settings.readOnlyPaths, "~/.cargo/credentials.toml"],
+        },
+      }),
+      access: [[`${HOME}/.cargo/credentials.toml`, "read-only"]],
     },
     {
       name: "Docker socket directories left alone when Docker is allowed",
@@ -457,7 +469,7 @@ describe("resolveSandboxPolicy", () => {
         settings: {
           ...linuxInput().settings,
           readWritePaths: ["~/.ssh", "~/missing", "~/.aws-sam", "~/.docker"],
-          readOnlyPaths: ["~/.ssh/*", "~/.config", "~/nothing*"],
+          readOnlyPaths: ["~/.ssh/*", "~/.config", "~/nothing*", "~/.cargo/credentials.toml"],
         },
       }),
       tree,
@@ -469,6 +481,10 @@ describe("resolveSandboxPolicy", () => {
       [`${HOME}/.docker`, "May expose credentials kept in ~/.docker."],
       [`${HOME}/.ssh/id_ed25519`, "May expose credentials kept in ~/.ssh."],
       [`${HOME}/.config`, "May expose credentials kept in ~/.config/gcloud and ~/.config/gh."],
+      [
+        `${HOME}/.cargo/credentials.toml`,
+        "May expose credentials kept in ~/.cargo/credentials.toml.",
+      ],
     ]);
     expect(accessOf(policy, `${HOME}/.ssh/id_ed25519`)).toBe("read-write");
     expect(
@@ -615,6 +631,25 @@ describe("effectiveSandboxSettings", () => {
     );
     expect(accessOf(policy, `${keychains}/metadata.keychain-db`)).toBe("read-only");
     expect(accessOf(policy, `${keychains}/login.keychain-db`)).toBe("read-write");
+  });
+
+  it("masks Cargo token files under ~/.cargo whether or not they exist yet", () => {
+    const tree: Record<string, FakeEntry> = {
+      "/Users/user": "directory",
+      "/Users/user/code/app": "directory",
+      "/Users/user/.cargo": "directory",
+      "/Users/user/.cargo/credentials.toml": "file",
+    };
+    const policy = resolved(darwinInput(), tree);
+    expect(
+      policy.entries
+        .filter(({ path }) => path.startsWith("/Users/user/.cargo"))
+        .map(({ path, access, kind }) => [path, access, kind]),
+    ).toEqual([
+      ["/Users/user/.cargo", "read-only", "directory"],
+      ["/Users/user/.cargo/credentials", "hidden", "file"],
+      ["/Users/user/.cargo/credentials.toml", "hidden", "file"],
+    ]);
   });
 
   it("masks a Docker socket that appears later inside a symlinked ~/.docker", () => {

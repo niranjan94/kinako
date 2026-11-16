@@ -166,7 +166,7 @@ describe("Bubblewrap", () => {
     ),
   );
 
-  it.live("resolves a symlinked PATH entry and an intermediate link inside a real sandbox", () =>
+  it.live("resolves links and masks a Cargo token in a policy built from real paths", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -182,10 +182,13 @@ describe("Bubblewrap", () => {
       yield* fileSystem.makeDirectory(path.join(home, ".fnm", "aliases"));
       yield* fileSystem.makeDirectory(path.join(home, "dotfiles", "git"), { recursive: true });
       yield* fileSystem.makeDirectory(path.join(home, ".config"));
+      yield* fileSystem.makeDirectory(path.join(home, ".cargo"));
       yield* fileSystem.makeDirectory(project);
       yield* fileSystem.writeFileString(path.join(installBin, "tool"), "#!/bin/sh\necho tool=ok\n");
       yield* fileSystem.chmod(path.join(installBin, "tool"), 0o755);
       yield* fileSystem.writeFileString(path.join(home, "dotfiles", "git", "config"), "cfg\n");
+      yield* fileSystem.writeFileString(path.join(home, ".cargo", "config.toml"), "[build]\n");
+      yield* fileSystem.writeFileString(path.join(home, ".cargo", "credentials.toml"), "token\n");
       yield* fileSystem.symlink(
         "../node-versions/v24",
         path.join(home, ".fnm", "aliases", "default"),
@@ -209,7 +212,12 @@ describe("Bubblewrap", () => {
         tmpDir: undefined,
         sshAuthSock: undefined,
         settings: effectiveSandboxSettings(
-          { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
+          {
+            readWritePaths: [],
+            readOnlyPaths: ["~/.cargo"],
+            allowDocker: false,
+            allowSshAgent: false,
+          },
           undefined,
           "linux",
         ),
@@ -218,6 +226,8 @@ describe("Bubblewrap", () => {
         `PATH=${aliasBin}:/usr/bin:/bin tool`,
         `cat ${home}/.config/git/config 2>/dev/null && echo git=ok || echo git=fail`,
         `ls ${home}/dotfiles 2>/dev/null | grep -q . && echo dotfiles=listed || echo dotfiles=hidden`,
+        `cat ${home}/.cargo/config.toml`,
+        `grep -q token ${home}/.cargo/credentials.toml 2>/dev/null && echo token=read || echo token=hidden`,
       ].join("\n");
       const availability = yield* bubblewrap.availability;
       const wrapped = bubblewrap.wrap({ command: "/bin/sh", args: ["-c", script], policy });
@@ -238,6 +248,8 @@ describe("Bubblewrap", () => {
         "cfg",
         "git=ok",
         "dotfiles=listed",
+        "[build]",
+        "token=hidden",
       ]);
     }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
   );

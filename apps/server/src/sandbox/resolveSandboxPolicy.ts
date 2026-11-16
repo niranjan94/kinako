@@ -9,6 +9,7 @@ import * as ProcessRunner from "../processRunner.ts";
 import {
   resolveSandboxPolicy as resolveFromFacts,
   sandboxCandidates,
+  missingPathMaskKind,
   sandboxCredentialPaths,
   sandboxWildcardDirectories,
   type SandboxPathFact,
@@ -146,9 +147,9 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
     ...[...listings].flatMap(([directory, names]) =>
       names.map((name) => path.join(directory, name)),
     ),
-    // A socket path missing at launch is masked at its real location, found from its parents.
+    // A path missing at launch is masked at its real location, found from its parents.
     ...candidates.flatMap((candidate) => {
-      if (candidate.source !== "docker" && candidate.source !== "multiplexer") return [];
+      if (missingPathMaskKind(candidate.source) === undefined) return [];
       const parents: Array<string> = [];
       for (let parent = path.dirname(candidate.path); parent !== "/";) {
         parents.push(parent);

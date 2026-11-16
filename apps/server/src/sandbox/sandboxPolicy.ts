@@ -50,6 +50,7 @@ export type SandboxEntrySource =
   | "runtime-dir"
   | "ssh-agent"
   | "docker"
+  | "credential"
   | "git-config"
   | "server"
   | "multiplexer";
@@ -245,11 +246,27 @@ const CREDENTIAL_PATHS = [
   ".local/share/keyrings",
   "Library/Keychains",
 ];
+/** Token files inside directories the defaults expose; masked unless a list names them. */
+const MASKED_CREDENTIAL_FILES = [".cargo/credentials", ".cargo/credentials.toml"];
 // The `~/.ssh` files the defaults list hold no secrets.
 const PUBLIC_SSH_FILE = /^(config|known_hosts|.*\.pub)$/;
 
 export const sandboxCredentialPaths = (home: string): ReadonlyArray<string> =>
   CREDENTIAL_PATHS.map((path) => NodePath.posix.join(home, path));
+
+/** The kind a hidden candidate is masked as on macOS when it is missing at launch, if any. */
+export function missingPathMaskKind(source: SandboxEntrySource): SandboxPathKind | undefined {
+  switch (source) {
+    case "docker":
+      return "socket";
+    case "multiplexer":
+      return "directory";
+    case "credential":
+      return "file";
+    default:
+      return undefined;
+  }
+}
 
 /** Every path the policy may name, before the filesystem is consulted. */
 export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Candidate> {
@@ -318,6 +335,10 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
     ...(input.settings.allowDocker
       ? [candidate(NodePath.posix.join(input.home, ".docker"), "read-write", "docker")]
       : []),
+    // After the listed paths, so a list naming one of these files keeps it readable.
+    ...MASKED_CREDENTIAL_FILES.map((path) =>
+      candidate(NodePath.posix.join(input.home, path), "hidden", "credential"),
+    ),
   ];
 }
 
@@ -395,16 +416,19 @@ export function resolveSandboxPolicy(
 
   const rejected: Array<SandboxRejectedEntry> = [];
   const warnings: Array<SandboxRejectedEntry> = [];
-  const isListed = (candidate: Candidate) =>
-    candidate.source === "user-read-write" || candidate.source === "user-read-only";
-  const credentials = CREDENTIAL_PATHS.flatMap((relative) => {
+  const isListed = (item: { readonly source: SandboxEntrySource }) =>
+    item.source === "user-read-write" || item.source === "user-read-only";
+  const credentials = [
+    ...CREDENTIAL_PATHS.map((relative) => ({ relative, masked: false })),
+    ...MASKED_CREDENTIAL_FILES.map((relative) => ({ relative, masked: true })),
+  ].flatMap(({ relative, masked }) => {
     const fact = facts.stat(NodePath.posix.join(input.home, relative));
-    return fact === undefined ? [] : [{ shown: `~/${relative}`, path: fact.realPath }];
+    return fact === undefined ? [] : [{ shown: `~/${relative}`, path: fact.realPath, masked }];
   });
   const exposedCredentials = (path: string) =>
     credentials.filter(
       (credential) =>
-        isWithin(credential.path, path) ||
+        (!credential.masked && isWithin(credential.path, path)) ||
         (isWithin(path, credential.path) &&
           !(
             credential.shown === "~/.ssh" &&
@@ -477,27 +501,23 @@ export function resolveSandboxPolicy(
           reason: "Does not exist yet, so it is skipped.",
         });
       }
-      // Seatbelt can deny a path before it exists, so a Docker socket or multiplexer socket dir
-      // created after launch stays masked. bwrap cannot mask a missing path.
-      if (
-        input.platform === "darwin" &&
-        (candidate.source === "docker" || candidate.source === "multiplexer") &&
-        candidate.access === "hidden"
-      ) {
+      // Seatbelt can deny a path before it exists, so a Docker socket, multiplexer socket dir
+      // or token file created after launch stays masked. bwrap cannot mask a missing path.
+      const maskKind = missingPathMaskKind(candidate.source);
+      if (input.platform === "darwin" && maskKind !== undefined && candidate.access === "hidden") {
         const path = realMissingPath(candidate.path, facts);
         if (path !== undefined && !byPath.has(path)) {
-          byPath.set(path, {
-            path,
-            access: "hidden",
-            kind: candidate.source === "docker" ? "socket" : "directory",
-            source: candidate.source,
-          });
+          byPath.set(path, { path, access: "hidden", kind: maskKind, source: candidate.source });
         }
       }
       continue;
     }
     const path = fact.realPath;
     const reject = (reason: string) => rejected.push({ path, source: candidate.source, reason });
+    const listedHere = byPath.get(path);
+    if (candidate.source === "credential" && listedHere !== undefined && isListed(listedHere)) {
+      continue;
+    }
 
     if (candidate.socket === true && candidate.access !== "hidden" && fact.kind !== "socket") {
       reject("Not a socket, so it is not exposed.");
