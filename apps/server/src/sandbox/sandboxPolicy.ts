@@ -254,7 +254,12 @@ const CREDENTIAL_PATHS = [
   "Library/Keychains",
 ];
 /** Token files inside directories the defaults expose; masked unless a list names them. */
-const MASKED_CREDENTIAL_FILES = [".cargo/credentials", ".cargo/credentials.toml"];
+const MASKED_CREDENTIAL_FILES = [
+  ".cargo/credentials",
+  ".cargo/credentials.toml",
+  // git-credential-store's XDG location, inside the always-readable git config dir.
+  ".config/git/credentials",
+];
 // The `~/.ssh` files the defaults list hold no secrets.
 const PUBLIC_SSH_FILE = /^(config|known_hosts|.*\.pub)$/;
 

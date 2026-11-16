@@ -166,7 +166,7 @@ describe("Bubblewrap", () => {
     ),
   );
 
-  it.live("resolves links and masks a Cargo token in a policy built from real paths", () =>
+  it.live("resolves links and masks Cargo and git tokens in a policy built from real paths", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -187,6 +187,10 @@ describe("Bubblewrap", () => {
       yield* fileSystem.writeFileString(path.join(installBin, "tool"), "#!/bin/sh\necho tool=ok\n");
       yield* fileSystem.chmod(path.join(installBin, "tool"), 0o755);
       yield* fileSystem.writeFileString(path.join(home, "dotfiles", "git", "config"), "cfg\n");
+      yield* fileSystem.writeFileString(
+        path.join(home, "dotfiles", "git", "credentials"),
+        "https://user:token@example.com\n",
+      );
       yield* fileSystem.writeFileString(path.join(home, ".cargo", "config.toml"), "[build]\n");
       yield* fileSystem.writeFileString(path.join(home, ".cargo", "credentials.toml"), "token\n");
       yield* fileSystem.symlink(
@@ -228,6 +232,7 @@ describe("Bubblewrap", () => {
         `ls ${home}/dotfiles 2>/dev/null | grep -q . && echo dotfiles=listed || echo dotfiles=hidden`,
         `cat ${home}/.cargo/config.toml`,
         `grep -q token ${home}/.cargo/credentials.toml 2>/dev/null && echo token=read || echo token=hidden`,
+        `grep -q token ${home}/.config/git/credentials 2>/dev/null && echo git-token=read || echo git-token=hidden`,
       ].join("\n");
       const availability = yield* bubblewrap.availability;
       const wrapped = bubblewrap.wrap({ command: "/bin/sh", args: ["-c", script], policy });
@@ -250,6 +255,7 @@ describe("Bubblewrap", () => {
         "dotfiles=listed",
         "[build]",
         "token=hidden",
+        "git-token=hidden",
       ]);
     }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
   );

@@ -85,6 +85,7 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.gitconfig`]: "file",
   [`${HOME}/.config/git`]: { link: `${HOME}/dotfiles/git` },
   [`${HOME}/dotfiles/git`]: "directory",
+  [`${HOME}/dotfiles/git/credentials`]: "file",
   [`${HOME}/.ssh`]: "directory",
   [`${HOME}/.ssh/config`]: "file",
   [`${HOME}/.ssh/known_hosts`]: "file",
@@ -180,6 +181,7 @@ describe("resolveSandboxPolicy", () => {
         [`${HOME}/.ssh/known_hosts`, "read-write"],
         [`${HOME}/.gitconfig`, "read-only"],
         [`${HOME}/dotfiles/git/config`, "read-only"],
+        [`${HOME}/dotfiles/git/credentials`, "hidden"],
         [`${HOME}/.claude/settings.json`, "read-write"],
         [`${HOME}/.claude.json`, "read-write"],
         [`${HOME}/.kinako/userdata/settings.json`, "hidden"],
@@ -487,7 +489,13 @@ describe("resolveSandboxPolicy", () => {
         settings: {
           ...linuxInput().settings,
           readWritePaths: ["~/.ssh", "~/missing", "~/.aws-sam", "~/.docker"],
-          readOnlyPaths: ["~/.ssh/*", "~/.config", "~/nothing*", "~/.cargo/credentials.toml"],
+          readOnlyPaths: [
+            "~/.ssh/*",
+            "~/.config",
+            "~/nothing*",
+            "~/.cargo/credentials.toml",
+            "~/.config/git/credentials",
+          ],
         },
       }),
       tree,
@@ -502,6 +510,10 @@ describe("resolveSandboxPolicy", () => {
       [
         `${HOME}/.cargo/credentials.toml`,
         "May expose credentials kept in ~/.cargo/credentials.toml.",
+      ],
+      [
+        `${HOME}/dotfiles/git/credentials`,
+        "May expose credentials kept in ~/.config/git/credentials.",
       ],
     ]);
     expect(accessOf(policy, `${HOME}/.ssh/id_ed25519`)).toBe("read-write");
