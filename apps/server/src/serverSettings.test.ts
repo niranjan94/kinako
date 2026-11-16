@@ -2572,6 +2572,75 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))(
         assert.isTrue(stored.enableAgentDeviceAccess);
       }).pipe(Effect.provide(layerServerSettings(policy))),
     );
+    it.effect("keeps a locked sandbox from being widened by a project's additions", () =>
+      Effect.gen(function* () {
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const projectId = ProjectId.make("project-sandbox");
+        yield* fs.writeFileString(
+          config.settingsPath,
+          JSON.stringify({
+            sandbox: { allowDocker: true },
+            projectSettingsOverrides: {
+              [projectId]: { defaultAutoPull: true, sandbox: { readOnlyPaths: ["~/secrets"] } },
+            },
+          }),
+        );
+
+        const settings = yield* service.getSettings;
+        assert.deepEqual(settings.sandbox, {
+          readWritePaths: ["~/work"],
+          readOnlyPaths: null,
+          allowDocker: false,
+          allowSshAgent: true,
+        });
+        assert.deepEqual(settings.projectSettingsOverrides[projectId], { defaultAutoPull: true });
+
+        const projectRejected = yield* service
+          .updateSettings({
+            projectSettingsOverrides: {
+              [projectId]: { defaultAutoPull: true, sandbox: { readWritePaths: ["/"] } },
+            },
+          })
+          .pipe(Effect.flip);
+        assert.equal(projectRejected.managedSetting, "sandbox");
+        const rejected = yield* service
+          .updateSettings({ sandbox: { allowDocker: true } })
+          .pipe(Effect.flip);
+        assert.equal(rejected.managedSetting, "sandbox");
+
+        // Saving the project as shown keeps the additions it was not shown for after the policy.
+        yield* service.updateSettings({
+          projectSettingsOverrides: { [projectId]: { defaultAutoPull: false } },
+        });
+        const stored = JSON.parse(yield* fs.readFileString(config.settingsPath));
+        assert.deepEqual(stored.projectSettingsOverrides[projectId], {
+          defaultAutoPull: false,
+          sandbox: { readOnlyPaths: ["~/secrets"] },
+        });
+        assert.deepEqual(stored.sandbox, { allowDocker: true });
+      }).pipe(
+        Effect.provide(
+          layerServerSettings({
+            schemaVersion: 1,
+            organization: "Example Corp",
+            settings: {
+              sandbox: {
+                value: {
+                  readWritePaths: ["~/work"],
+                  readOnlyPaths: null,
+                  allowDocker: false,
+                  allowSshAgent: true,
+                },
+                locked: true,
+              },
+            },
+          }),
+        ),
+      ),
+    );
+
     it.effect("accepts a project override that brings the locked value inside a new setting", () =>
       Effect.gen(function* () {
         const service = yield* ServerSettingsModule.ServerSettingsService;

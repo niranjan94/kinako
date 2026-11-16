@@ -20,6 +20,11 @@ const decodeSettingsExit = Schema.decodeUnknownExit(ServerSettings);
 const PROJECT_OVERRIDE_KEYS: ReadonlySet<string> = new Set(
   Object.keys(ProjectSettingsOverrides.fields),
 );
+/**
+ * A project's override of these adds to the top-level value rather than replacing it, so under a
+ * lock it is dropped: the locked value is all a project gets.
+ */
+const ADDITIVE_PROJECT_OVERRIDE_KEYS: ReadonlySet<string> = new Set(["sandbox"]);
 /** Per-project stores; admins lock the top-level key and the lock reaches every project. */
 const UNMANAGEABLE_KEYS: ReadonlySet<string> = new Set([
   "projectSettingsOverrides",
@@ -119,6 +124,20 @@ const matchesLock = (value: unknown, lock: unknown): boolean =>
         ([key, child]) => child === undefined || matchesLock(child, lock[key]),
       )
     : jsonEqual(value, lock);
+
+const isAdditiveProjectTarget = (target: Segments): boolean =>
+  target[0] === "projectSettingsOverrides" && ADDITIVE_PROJECT_OVERRIDE_KEYS.has(target[2] ?? "");
+
+/** Whether an additive override is absent or holds only empty lists. */
+const addsNothing = (value: unknown): boolean =>
+  value === undefined ||
+  (Array.isArray(value)
+    ? value.length === 0
+    : isRecord(value) && Object.values(value).every(addsNothing));
+
+/** Whether `value`, stored at `target`, agrees with a lock whose value is `lock`. */
+const keepsLock = (target: Segments, value: unknown, lock: unknown): boolean =>
+  isAdditiveProjectTarget(target) ? addsNothing(value) : matchesLock(value, lock);
 
 /** Whether `value` holds a key `existing` does not, at any depth. */
 const addsKeys = (existing: unknown, value: unknown): boolean =>
@@ -397,7 +416,12 @@ export function makeManagedSettings(
             locks.reduce<unknown>(
               (tree, entry) =>
                 lockTargets(tree, entry).reduce<unknown>(
-                  (next, target) => setPath(next, target, entry.value),
+                  (next, target) =>
+                    setPath(
+                      next,
+                      target,
+                      isAdditiveProjectTarget(target) ? undefined : entry.value,
+                    ),
                   tree,
                 ),
               encodeSettings(current),
@@ -420,7 +444,7 @@ export function makeManagedSettings(
         // an attempt to change what the user sees.
         lockTargets(patch, entry).some((target) => {
           const value = getPath(patch, target);
-          return value !== undefined && !matchesLock(value, entry.decodedValue);
+          return value !== undefined && !keepsLock(target, value, entry.decodedValue);
         }) ||
         lockTargets(after, entry).some((target) => {
           const value = getPath(after, target);
@@ -428,14 +452,22 @@ export function makeManagedSettings(
           return (
             value !== undefined &&
             !jsonEqual(value, getPath(before, target)) &&
-            !matchesLock(value, entry.value)
+            !keepsLock(target, value, entry.value)
           );
         }),
     );
     if (changed !== undefined) return { _tag: "Locked", path: changed.path };
     const kept = locks.reduce<unknown>(
       (tree, entry) =>
-        lockTargets(tree, entry).reduce<unknown>((result, target) => {
+        [
+          ...lockTargets(tree, entry),
+          // Clients are never shown a project's additive override under a lock, so a project they
+          // save without it still keeps it.
+          ...lockTargets(before, entry).filter(
+            (target) =>
+              isAdditiveProjectTarget(target) && getPath(tree, target.slice(0, 2)) !== undefined,
+          ),
+        ].reduce<unknown>((result, target) => {
           // A parent the write adds holds the locked value already; removing only the locked key
           // inside it would leave a partial object.
           const added = target

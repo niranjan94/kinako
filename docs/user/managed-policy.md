@@ -192,7 +192,7 @@ that users start, agents start, and scheduled tasks start. A thread already abov
 run another turn until someone lowers its mode; its queued messages send once that happens. New
 threads start at the limit when the user's default is above it.
 
-Under `sandboxed-full-access`, users still choose which folders the sandbox opens and can turn on Docker in it, which amounts to full access. See [Sandboxed full access](./permission-modes.md#sandboxed-full-access).
+Under `sandboxed-full-access`, users choose which folders the sandbox opens and can turn on Docker in it, which amounts to full access, unless you also lock `sandbox`. With `sandbox` locked, a sandboxed thread reaches its own project and thread folders plus only the paths in your lists (T3 Code's defaults where a list is `null`), Docker stays as you set it, and projects cannot add paths. See [Sandboxed full access](./permission-modes.md#sandboxed-full-access).
 
 With `maxRuntimeMode` set, you own each provider's launch settings: binary path, launch arguments,
 config home, and the environment variables set on each provider. They come from

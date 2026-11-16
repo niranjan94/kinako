@@ -1,12 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
-import type {
-  EnvironmentId,
-  ProjectId,
-  ProjectSandboxOverride,
-  SandboxPathCheckResult,
-  SandboxPathList,
-  SandboxRejectedPath,
-  SandboxSettingsPatch,
+import {
+  type EnvironmentId,
+  isManagedSettingPath,
+  type ProjectId,
+  type ProjectSandboxOverride,
+  type SandboxPathCheckResult,
+  type SandboxPathList,
+  type SandboxRejectedPath,
+  type SandboxSettingsPatch,
 } from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { sandboxUnavailableReason } from "@t3tools/client-runtime/runtime-modes";
@@ -93,6 +94,12 @@ export function SandboxSettings() {
 const sandboxPlatform = (config: EnvironmentServerConfig) =>
   config.environment.platform.os === "darwin" ? "darwin" : "linux";
 
+/** The organization whose policy locks `key`'s list, which also drops every project's additions to it. */
+const listManagedBy = (config: EnvironmentServerConfig, key: SandboxListKey) =>
+  isManagedSettingPath(config.managedPolicy, `sandbox.${key}`)
+    ? config.managedPolicy?.organization
+    : undefined;
+
 function EnvironmentSandboxForm(props: {
   environmentId: EnvironmentId;
   config: EnvironmentServerConfig;
@@ -116,6 +123,7 @@ function EnvironmentSandboxForm(props: {
       ) : null}
       {(["readWritePaths", "readOnlyPaths"] as const).map((key) => {
         const list = key === "readWritePaths" ? readWrite : readOnly;
+        const managedBy = listManagedBy(config, key);
         return (
           <SandboxPathListRow
             key={key}
@@ -130,9 +138,10 @@ function EnvironmentSandboxForm(props: {
             rejected={forList(check.rejected, key)}
             warnings={forList(check.warnings, key)}
             disabled={!canWrite}
+            managedBy={managedBy}
             onChange={(paths) => save({ [key]: paths })}
             resetAction={
-              list.usesDefaults || !canWrite ? null : (
+              list.usesDefaults || !canWrite || managedBy !== undefined ? null : (
                 <SettingResetButton
                   label={`${LIST_COPY[key].title.toLowerCase()} paths`}
                   onClick={() => save({ [key]: null })}
@@ -222,6 +231,7 @@ function ProjectSandboxForm(props: {
           rejected={forList(check.rejected, key)}
           warnings={forList(check.warnings, key)}
           disabled={!canWrite}
+          managedBy={listManagedBy(config, key)}
           onChange={(paths) => save({ readWritePaths, readOnlyPaths, [key]: paths })}
           resetAction={null}
         />
@@ -238,11 +248,13 @@ function SandboxPathListRow(props: {
   rejected: ReadonlyArray<SandboxRejectedPath>;
   warnings: ReadonlyArray<SandboxRejectedPath>;
   disabled: boolean;
+  managedBy: string | undefined;
   resetAction: ReactNode;
   onChange: (paths: SandboxPathList) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const disabled = props.disabled || props.managedBy !== undefined;
   const add = () => {
     const result = addSandboxPath(props.paths, draft);
     if ("error" in result) {
@@ -257,7 +269,11 @@ function SandboxPathListRow(props: {
     <SettingsRow
       {...(props.id === undefined ? {} : { id: props.id })}
       title={props.title}
-      description={props.description}
+      description={
+        props.managedBy === undefined
+          ? props.description
+          : `${props.description} Managed by ${props.managedBy}.`
+      }
       resetAction={props.resetAction}
     >
       <div className="mt-3 grid max-w-2xl gap-1.5 pb-3.5">
@@ -271,7 +287,7 @@ function SandboxPathListRow(props: {
                 <Button
                   size="xs"
                   variant="ghost-muted"
-                  disabled={props.disabled}
+                  disabled={disabled}
                   aria-label={`Remove ${path}`}
                   onClick={() => props.onChange(props.paths.filter((entry) => entry !== path))}
                 >
@@ -293,14 +309,14 @@ function SandboxPathListRow(props: {
               size="sm"
               font="mono"
               spellCheck={false}
-              disabled={props.disabled}
+              disabled={disabled}
               aria-label={`Add a ${props.title.toLowerCase()} path`}
               placeholder="~/path or /absolute/path"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />
           </div>
-          <Button type="submit" size="sm" variant="outline" disabled={props.disabled}>
+          <Button type="submit" size="sm" variant="outline" disabled={disabled}>
             Add
           </Button>
         </form>
