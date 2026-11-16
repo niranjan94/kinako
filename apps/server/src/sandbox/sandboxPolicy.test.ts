@@ -423,35 +423,68 @@ describe("effectiveSandboxSettings", () => {
     expect(settings.readOnlyPaths.at(-1)).toBe("~/.m2");
   });
 
-  it("exposes macOS caches but has no runtime dir to hide", () => {
+  const darwinInput = (overrides: Partial<SandboxPolicyInput> = {}): SandboxPolicyInput => ({
+    ...linuxInput(),
+    platform: "darwin",
+    home: "/Users/user",
+    cwd: "/Users/user/code/app",
+    gitCommonDirs: [],
+    providerPaths: [],
+    serverPaths: [],
+    baseDir: "/Users/user/.kinako",
+    worktreesDir: "/Users/user/.kinako/worktrees",
+    attachmentsDir: "/Users/user/.kinako/userdata/attachments",
+    pathEnv: undefined,
+    settings: effectiveSandboxSettings(defaults, undefined, "darwin"),
+    ...overrides,
+  });
+
+  it("exposes macOS caches, masks Docker sockets, and has no runtime dir to hide", () => {
     const tree: Record<string, FakeEntry> = {
       "/Users/user": "directory",
       "/Users/user/code/app": "directory",
       "/Users/user/Library/Caches": "directory",
       "/private/tmp": "directory",
       "/tmp": { link: "/private/tmp" },
+      "/private/var/run": "directory",
+      "/var/run": { link: "/private/var/run" },
     };
-    const policy = resolved(
-      {
-        ...linuxInput(),
-        platform: "darwin",
-        home: "/Users/user",
-        cwd: "/Users/user/code/app",
-        gitCommonDirs: [],
-        providerPaths: [],
-        baseDir: "/Users/user/.kinako",
-        worktreesDir: "/Users/user/.kinako/worktrees",
-        attachmentsDir: "/Users/user/.kinako/userdata/attachments",
-        pathEnv: undefined,
-        settings: effectiveSandboxSettings(defaults, undefined, "darwin"),
-      },
-      tree,
-    );
+    const policy = resolved(darwinInput(), tree);
     expect(policy.entries.map(({ path, access }) => [path, access])).toEqual([
       ["/Users/user", "hidden"],
       ["/private/tmp", "read-write"],
       ["/Users/user/Library/Caches", "read-write"],
       ["/Users/user/code/app", "read-write"],
+      // Not there yet; Seatbelt denies it before Docker creates it.
+      ["/private/var/run/docker.sock", "hidden"],
+    ]);
+  });
+
+  it("masks a Docker socket that appears later inside a symlinked ~/.docker", () => {
+    const tree: Record<string, FakeEntry> = {
+      "/Users/user": "directory",
+      "/Users/user/code/app": "directory",
+      "/Users/user/.docker": { link: "/Users/user/dotfiles/docker" },
+      "/Users/user/dotfiles/docker": "directory",
+      "/private/tmp": "directory",
+      "/tmp": { link: "/private/tmp" },
+    };
+    const policy = resolved(
+      darwinInput({
+        settings: {
+          ...effectiveSandboxSettings(defaults, undefined, "darwin"),
+          readWritePaths: ["~/.docker"],
+        },
+      }),
+      tree,
+    );
+    expect(
+      policy.entries
+        .filter(({ path }) => path.startsWith("/Users/user/dotfiles"))
+        .map(({ path, access, kind }) => [path, access, kind]),
+    ).toEqual([
+      ["/Users/user/dotfiles/docker", "read-write", "directory"],
+      ["/Users/user/dotfiles/docker/run/docker.sock", "hidden", "socket"],
     ]);
   });
 });

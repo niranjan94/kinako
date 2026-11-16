@@ -120,6 +120,7 @@ describe("seatbeltProfile", () => {
         `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/.docker"))`,
         `(allow file-read* file-test-existence file-write* (subpath "${HOME}/.docker"))`,
         `(deny file-read* file-test-existence file-write* (literal "${HOME}/.docker/run/docker.sock"))`,
+        `(deny network-outbound (remote unix-socket (path-literal "${HOME}/.docker/run/docker.sock")))`,
       ],
     },
     {

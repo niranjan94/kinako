@@ -141,6 +141,16 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
     ...[...listings].flatMap(([directory, names]) =>
       names.map((name) => path.join(directory, name)),
     ),
+    // A Docker socket missing at launch is masked at its real location, found from its parents.
+    ...candidates.flatMap((candidate) => {
+      if (candidate.source !== "docker") return [];
+      const parents: Array<string> = [];
+      for (let parent = path.dirname(candidate.path); parent !== "/";) {
+        parents.push(parent);
+        parent = path.dirname(parent);
+      }
+      return parents;
+    }),
   ]);
   const facts = new Map<string, SandboxPathFact>();
   for (const candidatePath of statPaths) {

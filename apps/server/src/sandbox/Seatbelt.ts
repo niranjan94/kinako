@@ -77,6 +77,12 @@ export function seatbeltProfile(policy: SandboxPolicy): SeatbeltProfile {
     }
     if (entry.access === "hidden") {
       rules.push(`(deny file-read* file-test-existence file-write* ${filter})`);
+      // connect(2) on a unix socket checks network-outbound as well as the path lookup.
+      if (entry.kind === "socket") {
+        rules.push(
+          `(deny network-outbound (remote unix-socket (path-literal ${sbplString(entry.path)})))`,
+        );
+      }
       continue;
     }
     const underHidden = policy.entries

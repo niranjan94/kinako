@@ -289,6 +289,16 @@ function wildcardParts(path: string): { directory: string; pattern: RegExp } | u
   };
 }
 
+/** `path` re-rooted at the real path of its deepest known ancestor, if any ancestor is known. */
+function realMissingPath(path: string, facts: SandboxPathFacts): string | undefined {
+  for (let parent = NodePath.posix.dirname(path); parent !== "/";) {
+    const fact = facts.stat(parent);
+    if (fact !== undefined) return fact.realPath + path.slice(parent.length);
+    parent = NodePath.posix.dirname(parent);
+  }
+  return undefined;
+}
+
 const isWithin = (path: string, root: string) =>
   path === root || root === "/" || path.startsWith(`${root}/`);
 
@@ -370,6 +380,18 @@ export function resolveSandboxPolicy(
     if (fact === undefined) {
       if (candidate.required)
         return refuse(`${candidate.source} ${candidate.path} does not exist.`);
+      // Seatbelt can deny a path before it exists, so a Docker socket created after launch
+      // inside a listed directory such as ~/.docker stays masked. bwrap cannot mask a missing path.
+      if (
+        input.platform === "darwin" &&
+        candidate.source === "docker" &&
+        candidate.access === "hidden"
+      ) {
+        const path = realMissingPath(candidate.path, facts);
+        if (path !== undefined && !byPath.has(path)) {
+          byPath.set(path, { path, access: "hidden", kind: "socket", source: "docker" });
+        }
+      }
       continue;
     }
     const path = fact.realPath;
