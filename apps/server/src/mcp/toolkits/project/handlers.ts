@@ -266,7 +266,10 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
             )?.supportedRuntimeModes,
           });
         }
-        yield* assertWithinCallerSandbox(caller, input.additionalDirectories);
+        yield* assertWithinCallerSandbox(
+          caller ?? { runtimeMode: context.limits.runtimeMode, projectId },
+          input.additionalDirectories,
+        );
         const result = yield* ThreadMessageIntake.launchThread({
           commandId,
           threadId,
