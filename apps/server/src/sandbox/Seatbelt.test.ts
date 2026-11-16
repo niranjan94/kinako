@@ -158,6 +158,33 @@ describe("seatbeltProfile", () => {
       ],
     },
     {
+      name: "a read-only folder inside a writable one denied writes after the allow",
+      entries: [
+        { path: HOME, access: "hidden", kind: "directory", source: "home" },
+        {
+          path: `${HOME}/Library/pnpm`,
+          access: "read-write",
+          kind: "directory",
+          source: "user-read-write",
+        },
+        {
+          path: `${HOME}/Library/pnpm/bin`,
+          access: "read-only",
+          kind: "directory",
+          source: "path",
+        },
+      ],
+      rules: [
+        `(deny file-read* file-test-existence file-write* (subpath "${HOME}"))`,
+        `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/Library/pnpm"))`,
+        `(allow file-read* file-test-existence file-write* (subpath "${HOME}/Library/pnpm"))`,
+        `(deny file-write-unlink file-write-create (literal "${HOME}/Library/pnpm"))`,
+        `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/Library/pnpm/bin"))`,
+        `(allow file-read* file-test-existence (subpath "${HOME}/Library/pnpm/bin"))`,
+        `(deny file-write* (subpath "${HOME}/Library/pnpm/bin"))`,
+      ],
+    },
+    {
       name: "a symlink inside the hidden home readable with its ancestors and the paths through it",
       entries: [
         { path: HOME, access: "hidden", kind: "directory", source: "home" },

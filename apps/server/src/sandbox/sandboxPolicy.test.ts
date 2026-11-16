@@ -106,6 +106,9 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.tools/bin`]: { link: "/opt/tools/bin" },
   "/opt/tools/bin": "directory",
   "/tmp/user-tmp": "directory",
+  "/tmp/tools/bin": "directory",
+  [`${HOME}/code/app/node_modules/.bin`]: "directory",
+  [`${HOME}/.cache/tool`]: "directory",
   "/run/screen/S-user": "directory",
   [`${HOME}/.agent-dir`]: "directory",
   [`${HOME}/scratch`]: "directory",
@@ -198,7 +201,9 @@ describe("resolveSandboxPolicy", () => {
         [`${HOME}/.cargo/bin/cargo`, "read-only"],
         [`${HOME}/.cargo/registry/index`, "read-write"],
         [`${HOME}/.cargo/credentials.toml`, "hidden"],
-        [`${HOME}/.local/share/pnpm/bin/pnpm`, "read-write"],
+        [`${HOME}/.local/share/pnpm/bin/pnpm`, "read-only"],
+        [`${HOME}/.cache/tool/bin/tool`, "read-only"],
+        [`${HOME}/.cache/tool/data`, "read-write"],
         ["/usr/bin/git", "read-only"],
         ["/tmp/build", "read-write"],
         ["/run/user/1000/bus", "hidden"],
@@ -268,6 +273,26 @@ describe("resolveSandboxPolicy", () => {
         [`${HOME}/.fnm/node-versions/v24/bin/node`, "read-only"],
         [`${HOME}/.fnm/node-versions/v24/lib`, "hidden"],
         [`${HOME}/.tools/bin`, "read-only"],
+      ],
+    },
+    {
+      name: "PATH folders at or under writable folders, outside home, and in the workspace",
+      input: linuxInput({
+        pathEnv: [
+          `${HOME}/.local/share/pnpm`,
+          "/tmp/tools/bin",
+          `${HOME}/code/app/node_modules/.bin`,
+        ].join(":"),
+        settings: { ...linuxInput().settings, readOnlyPaths: ["~/.cache/tool"] },
+      }),
+      access: [
+        [`${HOME}/.local/share/pnpm/git`, "read-only"],
+        [`${HOME}/.local/share/pnpm/bin/pnpm`, "read-only"],
+        ["/tmp/tools/bin/git", "read-only"],
+        ["/tmp/build", "read-write"],
+        [`${HOME}/code/app/node_modules/.bin/tsc`, "read-write"],
+        [`${HOME}/.cache/tool/data`, "read-only"],
+        [`${HOME}/.cache/other`, "read-write"],
       ],
     },
     {
@@ -388,8 +413,6 @@ describe("resolveSandboxPolicy", () => {
       expect(later.some((other) => entry.path.startsWith(`${other.path}/`))).toBe(false);
     });
     // Covered by a read-write parent, or by the read-only root.
-    expect(paths).not.toContain(`${HOME}/.cache/tool/bin`);
-    expect(paths).not.toContain(`${HOME}/.local/share/pnpm/bin`);
     expect(paths).not.toContain(`${HOME}/code/app/.git`);
     expect(paths).not.toContain(`${HOME}/.kinako`);
     expect(paths).not.toContain("/usr/bin");
@@ -522,7 +545,8 @@ describe("resolveSandboxPolicy", () => {
         "May expose credentials kept in ~/.config/git/credentials.",
       ],
     ]);
-    expect(accessOf(policy, `${HOME}/.ssh/id_ed25519`)).toBe("read-write");
+    // Kept, through the deeper read-only listing.
+    expect(accessOf(policy, `${HOME}/.ssh/id_ed25519`)).toBe("read-only");
     expect(
       resolved(linuxInput(), tree).warnings.filter(({ reason }) => reason.startsWith("May")),
     ).toEqual([]);

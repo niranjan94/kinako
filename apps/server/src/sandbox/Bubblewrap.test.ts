@@ -166,7 +166,7 @@ describe("Bubblewrap", () => {
     ),
   );
 
-  it.live("resolves links and masks Cargo and git tokens in a policy built from real paths", () =>
+  it.live("resolves links, masks tokens and keeps PATH read-only in a real policy", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -183,6 +183,7 @@ describe("Bubblewrap", () => {
       yield* fileSystem.makeDirectory(path.join(home, "dotfiles", "git"), { recursive: true });
       yield* fileSystem.makeDirectory(path.join(home, ".config"));
       yield* fileSystem.makeDirectory(path.join(home, ".cargo"));
+      yield* fileSystem.makeDirectory(path.join(home, ".pnpm", "bin"), { recursive: true });
       yield* fileSystem.makeDirectory(project);
       yield* fileSystem.writeFileString(path.join(installBin, "tool"), "#!/bin/sh\necho tool=ok\n");
       yield* fileSystem.chmod(path.join(installBin, "tool"), 0o755);
@@ -212,12 +213,12 @@ describe("Bubblewrap", () => {
         attachmentsDir: path.join(home, ".kinako", "userdata", "attachments"),
         baseDir: path.join(home, ".kinako"),
         worktreesDir: path.join(home, ".kinako", "worktrees"),
-        pathEnv: aliasBin,
+        pathEnv: `${aliasBin}:${home}/.pnpm/bin`,
         tmpDir: undefined,
         sshAuthSock: undefined,
         settings: effectiveSandboxSettings(
           {
-            readWritePaths: [],
+            readWritePaths: ["~/.pnpm"],
             readOnlyPaths: ["~/.cargo"],
             allowDocker: false,
             allowSshAgent: false,
@@ -233,6 +234,9 @@ describe("Bubblewrap", () => {
         `cat ${home}/.cargo/config.toml`,
         `grep -q token ${home}/.cargo/credentials.toml 2>/dev/null && echo token=read || echo token=hidden`,
         `grep -q token ${home}/.config/git/credentials 2>/dev/null && echo git-token=read || echo git-token=hidden`,
+        `touch ${home}/.pnpm/store && echo pnpm-home=writable || echo pnpm-home=read-only`,
+        `touch ${home}/.pnpm/bin/git 2>/dev/null && echo path-bin=writable || echo path-bin=read-only`,
+        `mv ${home}/.pnpm/bin ${home}/.pnpm/moved 2>/dev/null && echo path-bin=moved || echo path-bin=kept`,
       ].join("\n");
       const availability = yield* bubblewrap.availability;
       const wrapped = bubblewrap.wrap({ command: "/bin/sh", args: ["-c", script], policy });
@@ -256,6 +260,9 @@ describe("Bubblewrap", () => {
         "[build]",
         "token=hidden",
         "git-token=hidden",
+        "pnpm-home=writable",
+        "path-bin=read-only",
+        "path-bin=kept",
       ]);
     }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
   );

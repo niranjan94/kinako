@@ -89,14 +89,10 @@ export function seatbeltProfile(policy: SandboxPolicy): SeatbeltProfile {
       }
       continue;
     }
-    const underHidden = policy.entries
+    const ancestors = policy.entries
       .slice(0, index)
-      .some(
-        (parent) =>
-          parent.access === "hidden" &&
-          parent.kind === "directory" &&
-          isWithin(entry.path, parent.path),
-      );
+      .filter((parent) => parent.kind === "directory" && isWithin(entry.path, parent.path));
+    const underHidden = ancestors.some((parent) => parent.access === "hidden");
     // realpath(3) needs to stat every ancestor, including the hidden ones.
     if (underHidden) {
       rules.push(
@@ -108,6 +104,10 @@ export function seatbeltProfile(policy: SandboxPolicy): SeatbeltProfile {
         ? `(allow file-read* file-test-existence file-write* ${filter})`
         : `(allow file-read* file-test-existence ${filter})`,
     );
+    // Otherwise the writable parent's allow still matches inside it.
+    if (entry.access === "read-only" && ancestors.at(-1)?.access === "read-write") {
+      rules.push(`(deny file-write* ${filter})`);
+    }
     // The folder itself stays put: swapped for a symlink, it would point the next spawn's grant
     // anywhere. Renaming or removing it is file-write-unlink, putting a link there is -create.
     if (entry.access === "read-write" && entry.kind === "directory") {

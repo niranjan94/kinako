@@ -425,11 +425,18 @@ const namedWithin = (path: string, roots: ReadonlyArray<string>) =>
 
 const depth = (path: string) => (path === "/" ? 0 : path.split("/").length - 1);
 
-const ACCESS_PRECEDENCE: Record<SandboxAccess, number> = {
-  hidden: 2,
-  "read-write": 1,
-  "read-only": 0,
-};
+/**
+ * Which of two entries for one path wins. A PATH folder outranks a read-write grant: the host
+ * runs what is in it outside the sandbox.
+ */
+const precedence = (entry: SandboxPolicyEntry) =>
+  entry.access === "hidden"
+    ? 3
+    : entry.source === "path"
+      ? 2
+      : entry.access === "read-write"
+        ? 1
+        : 0;
 
 const USER_SOURCES: ReadonlySet<SandboxEntrySource> = new Set([
   "user-read-write",
@@ -561,16 +568,23 @@ export function resolveSandboxPolicy(
     ((isWithin(path, realWorktrees) &&
       namedWithin(candidate.path, [input.worktreesDir, realWorktrees])) ||
       (candidate.source === "provider" && namedWithin(candidate.path, [input.baseDir, realBase])));
-  const writable = expanded.flatMap((candidate) => {
-    const fact = candidate.access === "read-write" ? facts.stat(candidate.path) : undefined;
-    if (fact?.kind !== "directory" || isWithin(realHome, fact.realPath)) return [];
-    const path = fact.realPath;
-    return mandatoryHidden.every(
-      (root) => !isWithin(path, root) || carvedOut(candidate, path, root),
-    )
-      ? [path]
-      : [];
-  });
+  const writableFrom = (candidates: ReadonlyArray<Candidate>) =>
+    candidates.flatMap((candidate) => {
+      const fact = candidate.access === "read-write" ? facts.stat(candidate.path) : undefined;
+      if (fact?.kind !== "directory" || isWithin(realHome, fact.realPath)) return [];
+      const path = fact.realPath;
+      return mandatoryHidden.every(
+        (root) => !isWithin(path, root) || carvedOut(candidate, path, root),
+      )
+        ? [path]
+        : [];
+    });
+  const writable = writableFrom(expanded);
+  const workspace = writableFrom(
+    expanded.filter(
+      (candidate) => WORKSPACE_SOURCES.has(candidate.source) && candidate.source !== "provider",
+    ),
+  );
   const plantable = [
     ...writable,
     ...(input.sharedWritableRoots ?? []).flatMap((root) => {
@@ -672,7 +686,13 @@ export function resolveSandboxPolicy(
     }
 
     if (USER_SOURCES.has(candidate.source)) {
-      if (candidate.source === "path" && !isWithin(path, realHome)) {
+      // Outside home the read-only root already covers a PATH folder, unless a grant reopens it.
+      // The thread's own workspace stays writable even where PATH names part of it.
+      if (
+        candidate.source === "path" &&
+        (workspace.some((root) => isWithin(path, root)) ||
+          (!isWithin(path, realHome) && !writable.some((root) => isWithin(path, root))))
+      ) {
         keepLinks(candidate);
         continue;
       }
@@ -743,10 +763,7 @@ export function resolveSandboxPolicy(
     };
     if (candidate.access !== "hidden") keepLinks(candidate);
     const existing = byPath.get(path);
-    if (
-      existing === undefined ||
-      ACCESS_PRECEDENCE[entry.access] > ACCESS_PRECEDENCE[existing.access]
-    ) {
+    if (existing === undefined || precedence(entry) > precedence(existing)) {
       byPath.set(path, entry);
     }
   }
@@ -771,7 +788,7 @@ export function resolveSandboxPolicy(
           ? parentAccess === "hidden"
           : entry.access === "read-write"
             ? parentAccess === "read-write"
-            : parentAccess !== "hidden";
+            : parentAccess === "read-only";
     if (!redundant) kept.push(entry);
   }
 
