@@ -30,7 +30,11 @@ import { resolveRuntimeMode } from "../../delegatedTaskModes.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as OrchestrationMcp from "../../OrchestratorMcpService.ts";
-import { assertWithinCallerSandbox } from "../../sandboxedCaller.ts";
+import {
+  assertCallerCheckout,
+  assertCallerProject,
+  assertWithinCallerSandbox,
+} from "../../sandboxedCaller.ts";
 import { newCommandId, readCaller, resolveProjectId, unavailable } from "../../threadAccess.ts";
 import { ProjectToolkit } from "./tools.ts";
 
@@ -139,6 +143,11 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
             message:
               "scratch:true picks its own project and folder; omit projectId and workspaceStrategy.",
           });
+        if (caller !== undefined)
+          yield* assertCallerProject(
+            caller,
+            input.scratch === true ? "scratch" : (input.projectId ?? caller.projectId),
+          );
         const projectId =
           input.scratch === true
             ? (yield* ManagedProjectFolders.ManagedProjectFolders.pipe(
@@ -180,6 +189,12 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
                 }),
               ),
             );
+        if (project !== undefined)
+          yield* assertCallerCheckout(caller, {
+            projectId,
+            workspaceRoot: project.workspaceRoot,
+            workspaceStrategy: input.workspaceStrategy,
+          });
         if (project !== undefined && input.workspaceStrategy?.type === "existing_worktree")
           yield* assertProjectWorktree(project.workspaceRoot, input.workspaceStrategy.worktreePath);
         if (!replaying && input.modelSelection !== undefined) {

@@ -3424,6 +3424,7 @@ describe("OrchestratorMcpService provider resolution", () => {
       boundThread: OrchestrationV2ThreadShell | null,
       upserted: Ref.Ref<number>,
       saved: ScheduledTask = tasks[0]!,
+      caller?: OrchestrationV2ThreadShell,
     ) =>
       OrchestratorMcpService.layer.pipe(
         Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),
@@ -3440,7 +3441,18 @@ describe("OrchestratorMcpService provider resolution", () => {
             NodeCrypto.layer,
             Layer.mock(ThreadManagementService.ThreadManagementService)({
               getThreadShell: (threadId) =>
-                Effect.succeed(threadId === boundThreadId ? boundThread : null),
+                Effect.succeed(
+                  threadId === boundThreadId
+                    ? boundThread
+                    : threadId === caller?.id
+                      ? caller
+                      : null,
+                ),
+              getThreadRecords: () =>
+                Effect.succeed({
+                  thread: caller,
+                  runs: [],
+                } as unknown as OrchestrationV2ThreadProjection),
             }),
             ServerSettings.layerTest(),
             Layer.mock(ProviderRegistry.ProviderRegistry)({ getProviders: Effect.succeed([]) }),
@@ -3530,6 +3542,35 @@ describe("OrchestratorMcpService provider resolution", () => {
           Effect.provide(service([timer], null, upserted, hook)),
         );
         assert.equal(converted.webhookUrl, undefined);
+      }),
+    );
+
+    it.effect("keeps a sandboxed thread's new tasks in its own project", () =>
+      Effect.gen(function* () {
+        const upserted = yield* Ref.make(0);
+        const caller = liveThreadShell(ThreadId.make("thread:scheduled-sandboxed"), {
+          runtimeMode: "sandboxed-full-access",
+        });
+        const scope: McpInvocationScope = {
+          ...supervisedClient,
+          thread: {
+            threadId: caller.id,
+            providerSessionId: "session:sandboxed",
+            providerInstanceId: caller.providerInstanceId,
+          },
+          client: undefined,
+        };
+        const mcp = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+          Effect.provide(service([task({})], null, upserted, task({}), caller)),
+        );
+        const schedule = { type: "interval", everyMs: 3_600_000 } as const;
+        const error = yield* mcp
+          .scheduleTask(scope, { projectId, prompt: "Check the build", schedule })
+          .pipe(Effect.flip);
+        assert.equal(error.code, "invalid_request");
+        assert.equal(yield* Ref.get(upserted), 0);
+        yield* mcp.scheduleTask(scope, { prompt: "Check the build", schedule });
+        assert.equal(yield* Ref.get(upserted), 1);
       }),
     );
 

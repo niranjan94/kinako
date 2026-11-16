@@ -135,6 +135,7 @@ import {
   resolveRuntimeMode,
   taskPrompt,
 } from "./delegatedTaskModes.ts";
+import { assertCallerProject } from "./sandboxedCaller.ts";
 import { assertTargetWithinLimits, isLiveCallerShell, threadNotFound } from "./threadAccess.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as PeerForwarding from "../peer/PeerForwarding.ts";
@@ -2232,6 +2233,7 @@ const make = Effect.gen(function* () {
     scheduleTask: Effect.fn("OrchestratorMcpService.scheduleTask")(function* (scope, input) {
       const { parent, limits } = yield* loadCaller(scope, ["runs"]);
       const projectId = yield* resolveProjectTarget(parent, input.projectId);
+      yield* assertCallerProject(parent?.thread, projectId);
       yield* assertLiveCallerForOtherProject(scope, parent, projectId);
       const project = yield* requireProject(projectId);
       const bindToCurrentThread =

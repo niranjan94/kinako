@@ -24,6 +24,8 @@ A new provider joins by listing the mode, wrapping its process, and keeping that
 
 A sandboxed thread's agent, or an MCP client approved for the mode, must not get work done outside a sandbox through T3 Code's own tools. Caller limits therefore compare with `isRuntimeModeWithinCallerLimit` in [`providerPolicy.ts`](../../packages/contracts/src/providerPolicy.ts), not with the rank order that managed ceilings use: `auto-accept-edits` and `auto` rank below sandboxed full access but run unsandboxed without asking, so a sandboxed caller reaches only sandboxed and Supervised threads.
 
+A child's sandbox is built from its own project and checkout, so a sandboxed thread could also widen its reach by launching into another project, or into the main checkout from a worktree. [`sandboxedCaller.ts`](../../apps/server/src/mcp/sandboxedCaller.ts) keeps its launches in its own project, in its own checkout or a folder the launch creates, and keeps extra folders to ones its own sandbox grants. A client outside a thread has no sandbox of its own, so it may pick any project, but extra folders still come only from inside that project.
+
 ## Nothing nests
 
 Neither sandbox can start another sandbox inside it. Tools that sandbox themselves fail inside, and so would the provider's own command sandbox, so adapters turn the provider's own sandbox off: Codex gets its `externalSandbox` policy and Claude gets `sandbox.enabled: false` in its settings ([`ClaudeAdapterV2.ts`](../../apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts)).

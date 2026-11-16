@@ -68,7 +68,7 @@ See the [provider guides](./install.md#providers) for setup and provider-specifi
 
 Claude and Codex support it when the thread's machine runs Linux or macOS. Other providers run a thread in this mode as **Supervised**, and the composer says so. When the machine cannot start the sandbox, the mode shows as unavailable with the reason.
 
-An agent in this mode can start, message and steer only threads in **Sandboxed full access** or **Supervised**. **Auto-accept edits** and **Auto** skip approvals outside any sandbox, so they stay out of its reach, and a thread it starts with a provider that lacks this mode runs as **Supervised**.
+An agent in this mode can start, message and steer only threads in **Sandboxed full access** or **Supervised**. **Auto-accept edits** and **Auto** skip approvals outside any sandbox, so they stay out of its reach, and a thread it starts with a provider that lacks this mode runs as **Supervised**. The threads and scheduled tasks it starts stay in its own project, and a new thread works in the agent's own checkout or a new worktree.
 
 ### What the agent can read and write
 

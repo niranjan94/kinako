@@ -62,8 +62,14 @@ const clientLaunchHarness = (input: {
   readonly hostedAppUrl?: string;
   /** The orchestrator refuses the new thread's mode, as under a managed ceiling. */
   readonly refusedByCeiling?: true;
+  /** Calls from this live thread in the project instead of from an outside client. */
+  readonly caller?: {
+    readonly runtimeMode: RuntimeMode;
+    readonly worktreePath: string | null;
+  };
 }) => {
   const projectId = ProjectId.make("project:client-target");
+  const callerThreadId = ThreadId.make("thread:caller");
   const modelSelection = {
     instanceId: ProviderInstanceId.make("claudeAgent"),
     model: "claude-opus",
@@ -96,19 +102,42 @@ const clientLaunchHarness = (input: {
     Layer.succeed(McpInvocationContext.McpInvocationContext, {
       environmentId: EnvironmentId.make("environment"),
       requestNamespace: "client:session-1",
-      thread: undefined,
-      client: {
-        sessionId: "session-1",
-        label: "Claude Code",
-        access: input.runtimeModeCeiling,
-        hostedAppUrl: input.hostedAppUrl,
-      },
+      thread:
+        input.caller === undefined
+          ? undefined
+          : {
+              threadId: callerThreadId,
+              providerSessionId: "session-1",
+              providerInstanceId: modelSelection.instanceId,
+            },
+      client:
+        input.caller === undefined
+          ? {
+              sessionId: "session-1",
+              label: "Claude Code",
+              access: input.runtimeModeCeiling,
+              hostedAppUrl: input.hostedAppUrl,
+            }
+          : undefined,
       issuedAt: 0,
       capabilities: new Set(["orchestration" as const]),
     }),
     Layer.mock(ThreadManagement.ThreadManagementService)({
       // A thread exists once a launch started it.
       getThreadShell: (threadId) => {
+        if (input.caller !== undefined && threadId === callerThreadId) {
+          return Effect.succeed({
+            ...input.caller,
+            id: callerThreadId,
+            projectId,
+            modelSelection,
+            providerInstanceId: modelSelection.instanceId,
+            interactionMode: "default",
+            activeRunId: "run:caller",
+            archivedAt: null,
+            deletedAt: null,
+          } as unknown as OrchestrationV2ThreadShell);
+        }
         const launch = input.launched.find((candidate) => candidate.threadId === threadId);
         return Effect.succeed(
           launch === undefined
@@ -345,6 +374,73 @@ it.effect("a launch steps an inherited mode down to the provider's, and refuses 
     const offered = yield* launchPi("approval-required");
     expect(offered.launched[0]?.runtimeMode).toBe("approval-required");
   }),
+);
+
+it.effect("a sandboxed thread launches only in its own project and checkout", () =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const root = yield* fileSystem.realPath(
+      yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-sandboxed-launch-" }),
+    );
+    const workspaceRoot = `${root}/repo`;
+    const worktree = `${root}/worktree`;
+    yield* fileSystem.makeDirectory(workspaceRoot);
+    yield* fileSystem.makeDirectory(worktree);
+    const launchFrom = Effect.fn("test.launchFrom")(function* (
+      caller: { readonly runtimeMode: RuntimeMode; readonly worktreePath: string | null },
+      params: Record<string, unknown>,
+    ) {
+      const launched: Array<ThreadLaunch.ThreadLaunchInput> = [];
+      const { dependencies } = clientLaunchHarness({
+        runtimeModeCeiling: "full-access",
+        launched,
+        workspaceRoot,
+        caller,
+      });
+      const toolkit = yield* ProjectToolkit.pipe(
+        Effect.provide(
+          McpToolAccess.HandlersLayer.layer(ProjectHandlers.layer).pipe(
+            Layer.provide(dependencies),
+          ),
+        ),
+      );
+      const result = yield* toolkit
+        .handle("t3_thread_launch", { title: "Fix", ...params } as never)
+        .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(dependencies));
+      return { result: result.at(-1)?.result, launched };
+    });
+    const sandboxedInWorktree = {
+      runtimeMode: "sandboxed-full-access",
+      worktreePath: worktree,
+    } as const;
+    const refused = [
+      {},
+      { workspaceStrategy: { type: "root" } },
+      { workspaceStrategy: { type: "existing_worktree", worktreePath: workspaceRoot } },
+      { projectId: ProjectId.make("project:other") },
+      { scratch: true },
+    ];
+    for (const params of refused) {
+      const outcome = yield* launchFrom(sandboxedInWorktree, params);
+      expect(outcome.result).toMatchObject({ code: "invalid_request" });
+      expect(outcome.launched).toHaveLength(0);
+    }
+
+    const newWorktree = yield* launchFrom(sandboxedInWorktree, {
+      workspaceStrategy: { type: "worktree", baseRef: "main" },
+    });
+    expect(newWorktree.launched).toHaveLength(1);
+    const atRoot = yield* launchFrom(
+      { runtimeMode: "sandboxed-full-access", worktreePath: null },
+      {},
+    );
+    expect(atRoot.launched).toHaveLength(1);
+    const unsandboxed = yield* launchFrom(
+      { runtimeMode: "full-access", worktreePath: worktree },
+      {},
+    );
+    expect(unsandboxed.launched).toHaveLength(1);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
 it.effect("a launch with a model its provider does not advertise creates no thread", () =>
