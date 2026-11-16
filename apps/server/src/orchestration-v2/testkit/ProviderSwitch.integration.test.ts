@@ -2048,6 +2048,9 @@ describe("orchestration v2 provider switching", () => {
       const key = "dedicated-sessions";
       const cwd = yield* checkpointWorkspace(key);
       const capturedTurns = yield* Ref.make<ReadonlyArray<CapturedTurn>>([]);
+      const started = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const closedSessions = yield* Ref.make<ReadonlyArray<string>>([]);
       const layerRegistry = ProviderAdapterRegistry.layerFromAdapters([
         makeTestAdapter({
           instanceId: CODEX_MODEL_SELECTION.instanceId,
@@ -2057,6 +2060,11 @@ describe("orchestration v2 provider switching", () => {
           responseByRunOrdinal: {},
           capturedTurns,
           dedicatedSessionRuntimeModes: ["sandboxed-full-access"],
+          // Only the full-access thread's second run reaches ordinal 2: it is held mid-turn.
+          holdRunOrdinal: 2,
+          holdFirstTurn: started,
+          releaseFirstTurn: release,
+          closedSessions,
         }),
       ]);
       yield* Effect.gen(function* () {
@@ -2122,7 +2130,29 @@ describe("orchestration v2 provider switching", () => {
               runtimeMode,
             })
             .pipe(Effect.andThen(worker.drain()));
+        // Requested mid-turn: recorded now, and the running turn finishes where it started.
+        ordinal += 1;
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          createdBy: "user",
+          creationSource: "web",
+          commandId: CommandId.make(`command:${key}:message:${ordinal}`),
+          threadId: fullA,
+          messageId: MessageId.make(`message:${key}:${ordinal}`),
+          text: `Turn ${ordinal}`,
+          attachments: [],
+          modelSelection: CODEX_MODEL_SELECTION,
+          dispatchMode: { type: "start_immediately" },
+        });
+        yield* Deferred.await(started);
         yield* setMode("sandboxed-full-access");
+        const during = yield* orchestrator.getThreadProjection(fullA);
+        assert.equal(during.thread.runtimeMode, "sandboxed-full-access");
+        assert.equal(during.runs.at(-1)?.status, "running");
+        assert.deepEqual(yield* Ref.get(closedSessions), []);
+        yield* Deferred.succeed(release, undefined);
+        const settled = yield* waitForIdle(fullA);
+        assert.equal(settled.runs.at(-1)?.status, "completed");
         const moved = yield* send(fullA);
         assert.notEqual(moved.providerSessionId, first.providerSessionId);
         assert.notEqual(moved.providerSessionId, isolated.providerSessionId);

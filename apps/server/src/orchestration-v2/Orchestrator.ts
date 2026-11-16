@@ -1732,26 +1732,46 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     runtimeMode: RuntimeMode,
   ) => adapter.dedicatedSessionRuntimeModes?.includes(runtimeMode) === true;
 
+  /**
+   * The session a thread's next turn runs on. `existing` is kept unless the thread's mode moved it
+   * across a provider's shared and dedicated sessions, decided here at the turn boundary because
+   * a turn still running keeps its own session.
+   */
   const providerSessionIdFor = (input: {
     readonly adapter: ProviderAdapter.ProviderAdapterV2["Service"];
     readonly providerInstanceId: ProviderInstanceId;
     readonly threadId: ThreadId;
     readonly runtimeMode: RuntimeMode;
+    readonly existing?: ProviderSessionId | null | undefined;
   }) =>
     input.adapter.getCapabilities().pipe(
-      Effect.flatMap((capabilities) =>
-        capabilities.sessions.supportsMultipleProviderThreadsPerSession &&
-        !usesDedicatedSession(input.adapter, input.runtimeMode)
-          ? Effect.succeed(
-              idAllocator.derive.providerSession({
-                providerInstanceId: input.providerInstanceId,
-              }),
-            )
+      Effect.flatMap((capabilities) => {
+        const shared = idAllocator.derive.providerSession({
+          providerInstanceId: input.providerInstanceId,
+        });
+        const dedicated = idAllocator.derive.dedicatedProviderSession({
+          providerInstanceId: input.providerInstanceId,
+          threadId: input.threadId,
+        });
+        const sharesSessions =
+          capabilities.sessions.supportsMultipleProviderThreadsPerSession &&
+          input.adapter.dedicatedSessionRuntimeModes !== undefined;
+        const wantsDedicated = usesDedicatedSession(input.adapter, input.runtimeMode);
+        if (
+          input.existing !== null &&
+          input.existing !== undefined &&
+          !(sharesSessions && input.existing === (wantsDedicated ? shared : dedicated))
+        ) {
+          return Effect.succeed(input.existing);
+        }
+        if (sharesSessions && wantsDedicated) return Effect.succeed(dedicated);
+        return capabilities.sessions.supportsMultipleProviderThreadsPerSession
+          ? Effect.succeed(shared)
           : idAllocator.allocate.providerSession({
               providerInstanceId: input.providerInstanceId,
               threadId: input.threadId,
-            }),
-      ),
+            });
+      }),
     );
 
   const makeEvent =
@@ -2983,30 +3003,32 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 }),
             ),
           ));
-      const providerSessionId =
-        (!canResumeAcrossInstances &&
-        queuedProviderThread.providerSessionId !== null &&
-        !switchPlan?.releaseProviderSessionIds.includes(queuedProviderThread.providerSessionId)
-          ? queuedProviderThread.providerSessionId
-          : null) ??
-        (yield* providerAdapters.get(queuedRun.providerInstanceId).pipe(
-          Effect.flatMap((adapter) =>
-            providerSessionIdFor({
-              adapter,
-              providerInstanceId: queuedRun.providerInstanceId,
-              threadId,
-              runtimeMode: projection.thread.runtimeMode,
+      const providerSessionId = yield* providerAdapters.get(queuedRun.providerInstanceId).pipe(
+        Effect.flatMap((adapter) =>
+          providerSessionIdFor({
+            adapter,
+            providerInstanceId: queuedRun.providerInstanceId,
+            threadId,
+            runtimeMode: projection.thread.runtimeMode,
+            existing:
+              !canResumeAcrossInstances &&
+              queuedProviderThread.providerSessionId !== null &&
+              !switchPlan?.releaseProviderSessionIds.includes(
+                queuedProviderThread.providerSessionId,
+              )
+                ? queuedProviderThread.providerSessionId
+                : null,
+          }),
+        ),
+        Effect.mapError(
+          (cause) =>
+            new OrchestratorDispatchError({
+              commandId,
+              commandType: "message.dispatch",
+              cause,
             }),
-          ),
-          Effect.mapError(
-            (cause) =>
-              new OrchestratorDispatchError({
-                commandId,
-                commandType: "message.dispatch",
-                cause,
-              }),
-          ),
-        ));
+        ),
+      );
       const providerThread: OrchestrationV2ProviderThread = {
         ...deliveryProviderThread,
         providerSessionId,
@@ -4614,7 +4636,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
 
     // Archive and settle stop idle background work; serialized commands prevent starts racing detach.
     // Settlement rejects active or blocked runs.
-    // A mode that takes a dedicated session moves the thread to a session of the other class.
+    // A mode that takes a dedicated session moves the thread to a session of the other class:
+    // the old one detaches once its running turn ends, and the next turn picks the new class.
     const sessionClassMoves: Array<OrchestrationV2ProviderThread> = [];
     if (command.type === "thread.runtime-mode.set" && command.runtimeMode !== thread.runtimeMode) {
       for (const providerThread of providerContext?.providerThreads ?? []) {
@@ -4635,23 +4658,6 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         ) {
           sessionClassMoves.push(providerThread);
         }
-      }
-    }
-    if (sessionClassMoves.length > 0) {
-      // Moving to another process would strand a running turn or its pending approvals.
-      const busy = yield* loadProjectionForCommand(command, ["runs", "runtimeRequests"], {
-        turnItemTypes: [],
-      });
-      if (
-        busy.runs.some(isActiveRun) ||
-        busy.runtimeRequests.some((request) => request.status === "pending")
-      ) {
-        return yield* new OrchestratorDispatchError({
-          commandId: command.commandId,
-          commandType: command.type,
-          cause:
-            "This mode runs in a separate process. Stop the running turn or answer its pending requests, then switch the mode again.",
-        });
       }
     }
     const detachSessionIds = new Set(
@@ -5732,26 +5738,6 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           }),
         { concurrency: 1, discard: true },
       );
-    }
-
-    // The next turn derives a session of the new class and resumes the same native thread there.
-    for (const providerThread of sessionClassMoves) {
-      yield* emit(
-        events,
-        command,
-      )({
-        type: "provider-thread.updated",
-        threadId: command.threadId,
-        driver: providerThread.driver,
-        providerInstanceId: providerThread.providerInstanceId,
-        occurredAt: now,
-        payload: {
-          ...providerThread,
-          providerSessionId: null,
-          status: "not_loaded",
-          updatedAt: now,
-        },
-      });
     }
 
     if (command.type === "thread.archive") {
@@ -8242,16 +8228,15 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             }),
         ),
       );
-      const providerSessionId =
-        reusableProviderThread?.providerSessionId ??
-        (yield* mapDispatchError(command)(
-          providerSessionIdFor({
-            adapter,
-            providerInstanceId: modelSelection.instanceId,
-            threadId: command.threadId,
-            runtimeMode: projection.thread.runtimeMode,
-          }),
-        ));
+      const providerSessionId = yield* mapDispatchError(command)(
+        providerSessionIdFor({
+          adapter,
+          providerInstanceId: modelSelection.instanceId,
+          threadId: command.threadId,
+          runtimeMode: projection.thread.runtimeMode,
+          existing: reusableProviderThread?.providerSessionId,
+        }),
+      );
       const providerThreadId =
         reusableProviderThread?.id ??
         idAllocator.derive.providerThread({
@@ -8684,16 +8669,15 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       isProviderSwitch && !canResumeAcrossInstances
         ? rootProviderThreadsForProvider(projection, modelSelection.instanceId)[0]
         : activeProviderThread;
-    const providerSessionId =
-      (canResumeAcrossInstances ? undefined : targetProviderThread?.providerSessionId) ??
-      (yield* mapDispatchError(command)(
-        providerSessionIdFor({
-          adapter,
-          providerInstanceId: modelSelection.instanceId,
-          threadId: command.threadId,
-          runtimeMode: projection.thread.runtimeMode,
-        }),
-      ));
+    const providerSessionId = yield* mapDispatchError(command)(
+      providerSessionIdFor({
+        adapter,
+        providerInstanceId: modelSelection.instanceId,
+        threadId: command.threadId,
+        runtimeMode: projection.thread.runtimeMode,
+        existing: canResumeAcrossInstances ? undefined : targetProviderThread?.providerSessionId,
+      }),
+    );
     const existingProviderSession = projection.providerSessions.find(
       (candidate) => candidate.id === providerSessionId,
     );
