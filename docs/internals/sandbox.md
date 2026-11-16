@@ -4,7 +4,9 @@ Sandboxed full access runs a provider with no approval prompts and wraps the who
 
 ## One policy, two hand-built backends
 
-[`sandboxPolicy.ts`](../../apps/server/src/sandbox/sandboxPolicy.ts) is the only place that decides what a thread can reach. It turns settings and the thread's paths into an ordered list of real paths, each read-write, read-only or hidden, where every entry follows the entries that contain it. [`Bubblewrap.ts`](../../apps/server/src/sandbox/Bubblewrap.ts) and [`Seatbelt.ts`](../../apps/server/src/sandbox/Seatbelt.ts) only translate that list, so both platforms enforce the same decision and tests can assert the exact bwrap arguments and profile text. Both backends rely on the ordering: bwrap applies mounts in argument order, so a nested bind lands inside its parent, and Seatbelt lets the last matching rule win, so a deeper entry overrides its parents.
+[`sandboxPolicy.ts`](../../apps/server/src/sandbox/sandboxPolicy.ts) is the only place that decides what a thread can reach. It turns settings and the thread's paths into an ordered list of real paths, each read-write, read-only or hidden, where every entry follows the entries that contain it. [`Bubblewrap.ts`](../../apps/server/src/sandbox/Bubblewrap.ts) and [`Seatbelt.ts`](../../apps/server/src/sandbox/Seatbelt.ts) only translate that list, so both platforms enforce the same decision and tests can assert the exact bwrap arguments and profile text. Both backends rely on the ordering: bwrap applies mounts in argument order, so a nested bind lands inside its parent, and Seatbelt lets the last matching rule win, so a deeper entry overrides its parents. That holds for a read-only entry inside a read-write one too, which Seatbelt needs as an explicit write deny after the parent's allow.
+
+Folders on `PATH` are read-only even at or under a read-write grant, unless they are inside the thread's workspace: the server, its providers and the user's shells resolve commands through `PATH` outside any sandbox.
 
 The Seatbelt profile stays small on purpose. `sandbox-exec` compiles it on every launch, which takes about 0.3 s at 64 KiB and fails near 1 MB, so do not add per-file rules where a directory rule works.
 
@@ -26,6 +28,13 @@ A sandboxed thread's agent, or an MCP client approved for the mode, must not get
 
 A child's sandbox is built from its own project and checkout, so a sandboxed thread could also widen its reach by launching into another project, or into the main checkout from a worktree. [`sandboxedCaller.ts`](../../apps/server/src/mcp/sandboxedCaller.ts) keeps its launches in its own project, in its own checkout or a folder the launch creates, and keeps extra folders to ones its own sandbox grants. A client outside a thread has no sandbox of its own, so it may pick any project, but extra folders still come only from inside that project.
 
+## What the host runs later
+
+The sandbox stops the agent changing files outside its grants, not the host running what it changed inside them. Two places narrow that:
+
+- The server's own git commands run with `core.fsmonitor=false` and `core.hooksPath=/dev/null` (`repositoryCommandsOffEnv` in [`VcsProcess.ts`](../../apps/server/src/vcs/VcsProcess.ts)), because a sandboxed agent writes the repository's config and hooks, and status polls and checkpoints would otherwise run them with no user action. A commit, push, pull, checkout or worktree creation passes `usesRepositoryHooks` and runs them as git in a terminal would. Filters named in `.gitattributes`, and the transport settings the background status fetch reads, such as `core.sshCommand`, have legitimate per-repository uses and stay on.
+- Provider manifests keep the provider's own installation read-only inside its writable home, such as Codex's `packages` folder, because unsandboxed threads and the user's terminal run the same binary.
+
 ## Nothing nests
 
 Neither sandbox can start another sandbox inside it. Tools that sandbox themselves fail inside, and so would the provider's own command sandbox, so adapters turn the provider's own sandbox off: Codex gets its `externalSandbox` policy and Claude gets `sandbox.enabled: false` in its settings ([`ClaudeAdapterV2.ts`](../../apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts)).
@@ -33,6 +42,8 @@ Neither sandbox can start another sandbox inside it. Tools that sandbox themselv
 ## Shared `/tmp`
 
 `/tmp` inside the sandbox is the host's `/tmp`, not a private tmpfs. The server prepares per-thread directories there before the sandbox starts, such as the private tmux and screen socket directory in `sandboxLaunch.ts`, and files the agent leaves in `/tmp` stay visible to the user's own tools. The cost is that same-user sockets in `/tmp` are reachable. tmux, screen and zellij socket directories are hidden because a multiplexer server runs commands outside the sandbox, and every thread's private socket directory shares one parent that each sandbox hides except for its own. So is the desktop app's control socket directory, whose `open-workspace` request adds any folder as a project. bwrap cannot hide a path that does not exist yet, so `sandboxLaunch.ts` creates these directories before the policy is built, as the tools would; the multiplexer ones only on Linux, since Seatbelt can deny a path before it exists. A multiplexer server at a path the server's environment does not name stays reachable, as does screen's when the system keeps `/run/screen` closed to the user.
+
+On Linux `/tmp/.X11-unix` is hidden and the provider does not inherit `DISPLAY` or `XAUTHORITY`, but X servers also listen on an abstract socket, which no filesystem rule reaches while the sandbox shares the host's network namespace.
 
 ## bwrap starts with SIGTERM ignored
 

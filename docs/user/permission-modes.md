@@ -74,9 +74,11 @@ An agent in this mode can start, message and steer only threads in **Sandboxed f
 
 By default, a sandboxed agent can:
 
-- Read and write the thread's project folder or worktree, the git folder of the repository a worktree came from, the thread's additional directories, temp folders, and the provider's own folder, such as `~/.claude` or `~/.codex`.
-- Read and write package manager caches and similar folders, such as `~/.npm`, `~/.cache`, `~/.cargo/registry`, `~/go/pkg/mod`, and `~/.ssh/known_hosts`.
-- Read everything outside your home folder, plus home paths tools need, such as `~/.gitconfig`, `~/.ssh/config`, your public SSH keys, toolchains such as `~/.nvm`, `~/.cargo`, and `~/.rustup`, and folders on your `PATH`.
+- Read and write the thread's project folder or worktree, the git folder of the repository a worktree came from, the thread's additional directories, temp folders, and the provider's own folder, such as `~/.claude` or `~/.codex`, apart from the provider's own installation inside it.
+- Read and write package manager caches and similar folders, such as `~/.npm`, `~/.cache`, pnpm's store, Gradle's caches, `~/.cargo/registry`, `~/go/pkg/mod`, and `~/.ssh/known_hosts`.
+- Read everything outside your home folder, plus home paths tools need, such as `~/.gitconfig`, `~/.ssh/config`, your public SSH keys, `~/.gradle`, pnpm's home folder, toolchains such as `~/.nvm`, `~/.cargo`, and `~/.rustup`, and folders on your `PATH`.
+
+Folders on your `PATH` stay read-only even inside a folder the agent may write, unless they are inside the thread's project, so the agent cannot put a program there that you or T3 Code later run.
 
 The rest of your home folder, including your private SSH keys and the app's own data folder, is hidden. Cargo's publishing tokens in `~/.cargo/credentials.toml` and git's stored passwords in `~/.config/git/credentials` stay hidden too, unless you list that file; on Linux this covers a token file that exists when the session starts, and one created later, for example by `cargo login`, is readable until the session restarts.
 
@@ -95,10 +97,17 @@ With Docker off on Linux, a system Docker socket that exists when the session st
 
 ### What stays reachable
 
+The sandbox limits what the agent can change, not what runs later from what it changed. These still run outside the sandbox and can carry the agent's changes:
+
+- **Your project.** Its scripts, build files, git hooks and `.git/config` take effect when you build, test or use git. T3 Code's own git work, such as status and checkpoints, skips the repository's hooks and `core.fsmonitor`. Commits, pushes, pulls, branch switches and new worktrees run its hooks, as git does in a terminal, including a worktree the agent asks T3 Code to create. A filter that `.gitattributes` names runs whenever git reads or writes those files, and the background fetch that keeps branch status current uses the repository's own `core.sshCommand` and credential helpers.
+- **Caches that tools reuse**, such as `~/.npm` (including the packages `npx` keeps), `~/.cache`, pnpm's store, Gradle's caches, `~/.cargo/registry` and `~/go/pkg/mod`. A tool that trusts what it cached uses it in your next build.
+- **The provider's own folder**, such as `~/.claude` or `~/.codex`, whose settings, hooks and MCP servers the provider reads when it runs outside the sandbox.
+
+The sandbox also leaves open:
+
 - The network, without restrictions.
-- Sockets your user owns in temp folders, other than tmux, screen and zellij sessions in their default locations and the desktop app's control socket.
-- The repository's git hooks and config, which the agent can change and which run outside the sandbox the next time you use git.
-- The provider's own folder, which the provider reads when it runs outside the sandbox.
+- Sockets your user owns in temp folders, other than tmux, screen and zellij sessions in their default locations, the desktop app's control socket, and on Linux the X display's socket folder.
+- On Linux, the X display through its abstract socket. Sandboxed tools do not get `DISPLAY`, but a program that sets it can reach your desktop where the X server trusts your user, as it does on GNOME.
 
 ### Requirements
 
@@ -110,6 +119,7 @@ On Linux, install bubblewrap (`bwrap`) and have an `env` that supports `--defaul
 - On macOS, setuid tools other than `ps` do not run.
 - zellij does not run inside. tmux and screen do, in sessions separate from yours.
 - The agent can change what is inside a folder it may write, but not remove, rename or replace the folder itself, so `rm -rf ~/.npm` leaves an empty `~/.npm` behind.
+- Tools cannot install or update themselves from inside, such as `pnpm add -g`, pnpm fetching the version a project pins, or a provider updating itself. Run those outside the sandbox.
 - A folder the sandbox reaches through a symbolic link inside a folder the agent can write, such as an additional directory that is a link inside the project, must point inside that folder, or the session does not start. Add the folder the link points to instead. A listed path reached that way is left out with the reason.
 - On Linux, Claude does not save its `~/.claude.json` bookkeeping from sandboxed sessions.
 - Changing a thread to or from this mode, or changing what the sandbox allows, applies from the thread's next turn.
