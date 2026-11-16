@@ -125,10 +125,13 @@ export interface SandboxPolicyInput {
   /** git's `core.excludesfile`, already home-expanded. */
   readonly gitExcludesFile?: string | undefined;
   readonly sshAuthSock: string | undefined;
-  /** The user's name and tmux and screen socket settings, whose sockets stay hidden. */
+  /** The user's name and multiplexer socket settings, whose sockets stay hidden. */
   readonly userName?: string | undefined;
   readonly tmuxTmpDir?: string | undefined;
   readonly screenDir?: string | undefined;
+  readonly zellijSocketDir?: string | undefined;
+  /** This thread's private multiplexer socket dir; its siblings, other threads', stay hidden. */
+  readonly multiplexerDir?: string | undefined;
   /**
    * Folders other sandboxes write that this one need not, such as the project root and the
    * worktrees dir. A symlink inside one may have been put there by an agent.
@@ -167,12 +170,25 @@ interface Candidate {
 const TEMP_ROOTS = ["/tmp", "/var/tmp", "/private/tmp", "/private/var/tmp", "/private/var/folders"];
 
 /**
- * A process that reaches a tmux or screen server runs commands outside the sandbox, and
+ * A process that reaches a tmux, screen or zellij server runs commands outside the sandbox, and
  * `connect()` works through a read-only bind, so their default socket dirs stay hidden.
  */
-function multiplexerSocketDirs(input: SandboxPolicyInput): ReadonlyArray<string> {
+export function multiplexerSocketDirs(
+  input: Pick<
+    SandboxPolicyInput,
+    | "platform"
+    | "uid"
+    | "userName"
+    | "tmuxTmpDir"
+    | "screenDir"
+    | "zellijSocketDir"
+    | "tmpDir"
+    | "darwinUserTempDir"
+  >,
+): ReadonlyArray<string> {
   const tmpRoot = input.platform === "darwin" ? "/private/tmp" : "/tmp";
   const user = input.userName;
+  const userTemp = input.platform === "darwin" ? input.darwinUserTempDir : input.tmpDir;
   return [
     NodePath.posix.join(input.tmuxTmpDir ?? tmpRoot, `tmux-${input.uid}`),
     ...(input.screenDir === undefined ? [] : [input.screenDir]),
@@ -184,6 +200,10 @@ function multiplexerSocketDirs(input: SandboxPolicyInput): ReadonlyArray<string>
     ...(input.platform === "darwin" && input.darwinUserTempDir !== undefined
       ? [NodePath.posix.join(input.darwinUserTempDir, ".screen")]
       : []),
+    // zellij uses the runtime dir when there is one, else a temp dir that differs by version.
+    `${tmpRoot}/zellij-${input.uid}`,
+    ...(userTemp === undefined ? [] : [NodePath.posix.join(userTemp, `zellij-${input.uid}`)]),
+    ...(input.zellijSocketDir === undefined ? [] : [input.zellijSocketDir]),
   ];
 }
 
@@ -351,6 +371,12 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
       userId: input.uid,
       joinPath: NodePath.posix.join,
     }).map((path) => candidate(path, "hidden", "app-control")),
+    ...(input.multiplexerDir === undefined
+      ? []
+      : [
+          candidate(NodePath.posix.dirname(input.multiplexerDir), "hidden", "multiplexer"),
+          candidate(input.multiplexerDir, "read-write", "multiplexer"),
+        ]),
     ...(input.settings.allowDocker
       ? [candidate(NodePath.posix.join(input.home, ".docker"), "read-write", "docker")]
       : []),

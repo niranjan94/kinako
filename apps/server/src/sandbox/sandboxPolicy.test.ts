@@ -97,6 +97,10 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   "/tmp": "directory",
   "/tmp/tmux-1000": "directory",
   "/tmp/t3code-1000": "directory",
+  "/tmp/zellij-1000": "directory",
+  "/tmp/kinako-mux-1000": "directory",
+  "/tmp/kinako-mux-1000/abc": "directory",
+  "/tmp/kinako-mux-1000/def": "directory",
   [`${HOME}/.fnm/aliases/default`]: { link: `${HOME}/.fnm/node-versions/v24` },
   [`${HOME}/.fnm/node-versions/v24/bin`]: "directory",
   [`${HOME}/.tools/bin`]: { link: "/opt/tools/bin" },
@@ -274,12 +278,14 @@ describe("resolveSandboxPolicy", () => {
       access: [[`${HOME}/code/app/sub/file`, "read-write"]],
     },
     {
-      name: "the user's tmux and screen sockets",
-      input: linuxInput({ userName: "user" }),
+      name: "the user's multiplexer sockets and other threads' private ones",
+      input: linuxInput({ userName: "user", multiplexerDir: "/tmp/kinako-mux-1000/abc" }),
       access: [
         ["/tmp/tmux-1000/default", "hidden"],
         ["/run/screen/S-user/1234.pts-0", "hidden"],
-        ["/tmp/kinako-mux-1000-abc/default", "read-write"],
+        ["/tmp/zellij-1000/0.43.1/session", "hidden"],
+        ["/tmp/kinako-mux-1000/abc/default", "read-write"],
+        ["/tmp/kinako-mux-1000/def/default", "hidden"],
       ],
     },
     {
@@ -688,6 +694,7 @@ describe("effectiveSandboxSettings", () => {
       ["/private/tmp", "read-write"],
       ["/private/tmp/t3code-1000", "hidden"],
       ["/private/tmp/tmux-1000", "hidden"],
+      ["/private/tmp/zellij-1000", "hidden"],
       ["/Users/user/Library/Caches", "read-write"],
       ["/Users/user/code/app", "read-write"],
       // Not there yet; Seatbelt denies it before Docker creates it.

@@ -14,12 +14,16 @@ import {
   SandboxPolicyRefusedError,
 } from "./resolveSandboxPolicy.ts";
 import * as Sandbox from "./Sandbox.ts";
+import { multiplexerSocketDirs } from "./sandboxPolicy.ts";
 
 const SCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs", ".tsx", ".ts", ".jsx"];
 
-/** The private tmux and screen socket dir for sandboxed sessions whose real cwd is `cwd`. */
+/**
+ * The private tmux and screen socket dir for sandboxed sessions whose real cwd is `cwd`. They
+ * share one parent, so each sandbox can hide the others' wholesale.
+ */
 export const multiplexerDirFor = (uid: number, cwd: string) =>
-  `/tmp/kinako-mux-${uid}-${(Hash.string(cwd) >>> 0).toString(16)}`;
+  `/tmp/kinako-mux-${uid}/${(Hash.string(cwd) >>> 0).toString(16)}`;
 
 /**
  * The command that starts a provider's executable inside a thread's sandbox. Fails, so the
@@ -80,10 +84,47 @@ export const sandboxProviderLaunch = Effect.fn("SandboxLaunch.provider")(functio
   })) {
     yield* fileSystem.makeDirectory(directory, { mode: 0o700 }).pipe(Effect.ignore);
   }
-  const policy = yield* resolveSandboxPolicy({
+  const multiplexers = {
     platform,
-    home,
     uid,
+    userName: (yield* HostProcess.Username) ?? undefined,
+    tmuxTmpDir: input.env.TMUX_TMPDIR,
+    screenDir: input.env.SCREENDIR,
+    zellijSocketDir: input.env.ZELLIJ_SOCKET_DIR,
+    tmpDir: input.env.TMPDIR,
+  };
+  // bwrap can only mask a path that exists, so the user's socket dirs are made now: a
+  // multiplexer server started after launch then lands under the mask.
+  if (platform === "linux") {
+    for (const directory of multiplexerSocketDirs(multiplexers)) {
+      yield* fileSystem
+        .makeDirectory(directory, { mode: 0o700 })
+        .pipe(Effect.andThen(fileSystem.chmod(directory, 0o700)), Effect.ignore);
+    }
+  }
+  // The user's multiplexer sockets are hidden, so the agent's own run from a private dir.
+  const realCwd = yield* fileSystem
+    .realPath(input.cwd)
+    .pipe(Effect.orElseSucceed(() => path.resolve(input.cwd)));
+  const multiplexerDir = multiplexerDirFor(uid, realCwd);
+  yield* fileSystem.makeDirectory(path.join(multiplexerDir, "screen"), { recursive: true }).pipe(
+    Effect.andThen(
+      Effect.forEach(
+        [path.dirname(multiplexerDir), multiplexerDir, path.join(multiplexerDir, "screen")],
+        (directory) => fileSystem.chmod(directory, 0o700),
+      ),
+    ),
+    Effect.mapError(
+      (cause) =>
+        new SandboxPolicyRefusedError({
+          reason: `Could not create the private terminal multiplexer dir ${multiplexerDir}.`,
+          cause,
+        }),
+    ),
+  );
+  const policy = yield* resolveSandboxPolicy({
+    ...multiplexers,
+    home,
     cwd: input.cwd,
     additionalDirectories: input.additionalDirectories.map((directory) => ({
       path: path.resolve(input.cwd, directory),
@@ -94,23 +135,8 @@ export const sandboxProviderLaunch = Effect.fn("SandboxLaunch.provider")(functio
     pathEnv: input.env.PATH,
     tmpDir: input.env.TMPDIR,
     sshAuthSock: input.env.SSH_AUTH_SOCK,
-    userName: (yield* HostProcess.Username) ?? undefined,
-    tmuxTmpDir: input.env.TMUX_TMPDIR,
-    screenDir: input.env.SCREENDIR,
+    multiplexerDir,
   });
-  // The user's tmux and screen sockets are hidden, so the agent's own run from a private dir.
-  const multiplexerDir = multiplexerDirFor(uid, policy.cwd);
-  yield* fileSystem.makeDirectory(path.join(multiplexerDir, "screen"), { recursive: true }).pipe(
-    Effect.andThen(fileSystem.chmod(multiplexerDir, 0o700)),
-    Effect.andThen(fileSystem.chmod(path.join(multiplexerDir, "screen"), 0o700)),
-    Effect.mapError(
-      (cause) =>
-        new SandboxPolicyRefusedError({
-          reason: `Could not create the private terminal multiplexer dir ${multiplexerDir}.`,
-          cause,
-        }),
-    ),
-  );
   const sandbox = yield* Sandbox.Sandbox;
   return yield* sandbox.wrap({
     command: executable,

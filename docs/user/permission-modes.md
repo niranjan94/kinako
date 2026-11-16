@@ -96,7 +96,7 @@ With Docker off on Linux, a system Docker socket that exists when the session st
 ### What stays reachable
 
 - The network, without restrictions.
-- Sockets your user owns in temp folders, other than tmux and screen sessions and the desktop app's control socket.
+- Sockets your user owns in temp folders, other than tmux, screen and zellij sessions in their default locations and the desktop app's control socket.
 - The repository's git hooks and config, which the agent can change and which run outside the sandbox the next time you use git.
 - The provider's own folder, which the provider reads when it runs outside the sandbox.
 
@@ -108,6 +108,7 @@ On Linux, install bubblewrap (`bwrap`) and have an `env` that supports `--defaul
 
 - Tools that start a sandbox of their own do not work inside, such as Chromium or Playwright without `--no-sandbox`, rootless Podman, and the provider's own command sandbox.
 - On macOS, setuid tools other than `ps` do not run.
+- zellij does not run inside. tmux and screen do, with sessions of their own that your terminal's sessions cannot see.
 - On Linux, Claude does not save its `~/.claude.json` bookkeeping from sandboxed sessions.
 - Changing a thread to or from this mode applies from its next turn.
 - Older app versions cannot show threads in this mode. Update every client, including mobile, before you use it.

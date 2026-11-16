@@ -321,6 +321,70 @@ describe("Bubblewrap", () => {
     }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
   );
 
+  it.live("keeps the user's and other threads' multiplexer sockets out of reach", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const runner = yield* ProcessRunner.ProcessRunner;
+      const bubblewrap = yield* Bubblewrap.Bubblewrap;
+      const root = yield* fileSystem.realPath(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "kinako-bwrap-mux-" }),
+      );
+      const home = path.join(root, "home");
+      const project = path.join(root, "project");
+      const own = path.join(root, "mux", "own");
+      const other = path.join(root, "mux", "other");
+      const tmux = path.join(root, "tmux-1000");
+      for (const directory of [home, project, own, other, tmux]) {
+        yield* fileSystem.makeDirectory(directory, { recursive: true });
+      }
+      yield* fileSystem.writeFileString(path.join(other, "default"), "");
+      const policy = yield* resolveSandboxPolicy({
+        platform: "linux",
+        home,
+        uid: 1000,
+        cwd: project,
+        gitCheckouts: [],
+        additionalDirectories: [],
+        providerPaths: [],
+        serverPaths: [],
+        attachmentsDir: path.join(home, ".kinako", "userdata", "attachments"),
+        baseDir: path.join(home, ".kinako"),
+        worktreesDir: path.join(home, ".kinako", "worktrees"),
+        pathEnv: undefined,
+        tmpDir: undefined,
+        sshAuthSock: undefined,
+        tmuxTmpDir: root,
+        multiplexerDir: own,
+        settings: effectiveSandboxSettings(
+          { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
+          undefined,
+          "linux",
+        ),
+      });
+      const script = [
+        `touch ${own}/default && echo own=ok || echo own=fail`,
+        `test -e ${other}/default && echo other=reachable || echo other=hidden`,
+        // A tmpfs over the dir: a tmux server the user starts later stays out of view.
+        `grep -q " ${tmux} " /proc/self/mountinfo && echo tmux=masked || echo tmux=open`,
+      ].join("\n");
+      const availability = yield* bubblewrap.availability;
+      const wrapped = bubblewrap.wrap({ command: "/bin/sh", args: ["-c", script], policy });
+      if (availability._tag === "Unavailable") {
+        assert.equal((yield* Effect.flip(wrapped)).reason, availability.reason);
+        return;
+      }
+      const command = yield* wrapped;
+      const result = yield* runner.run({
+        command: command.command,
+        args: command.args,
+        timeout: "30 seconds",
+      });
+      assert.equal(result.code, 0, result.stderr);
+      assert.deepEqual(result.stdout.trim().split("\n"), ["own=ok", "other=hidden", "tmux=masked"]);
+    }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
+  );
+
   // Hosts without a working bwrap still check the other half of the contract: wrap refuses.
   it.live("confines a real child to its policy, or refuses to wrap where bwrap cannot run", () =>
     Effect.gen(function* () {

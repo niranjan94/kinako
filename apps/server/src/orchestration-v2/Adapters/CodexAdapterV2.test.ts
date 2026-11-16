@@ -1242,7 +1242,7 @@ describe("CodexAdapterV2 process exit", () => {
       readonly root: string;
       readonly home: string;
     }) => Effect.Effect<
-      { readonly sharedHomePath?: string },
+      { readonly sharedHomePath?: string; readonly environment?: NodeJS.ProcessEnv },
       PlatformError.PlatformError,
       FileSystem.FileSystem
     >,
@@ -1265,7 +1265,7 @@ describe("CodexAdapterV2 process exit", () => {
       yield* fileSystem.makeDirectory(`${root}/tmp`, { recursive: true });
       yield* fileSystem.writeFileString(executable, "#!/bin/sh\n");
       yield* fileSystem.chmod(executable, 0o755);
-      const { sharedHomePath } =
+      const { sharedHomePath, environment } =
         setup === undefined ? {} : yield* Effect.orDie(setup({ root, home }));
       const spawned: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }> = [];
       const handle = (running: boolean) =>
@@ -1338,7 +1338,7 @@ describe("CodexAdapterV2 process exit", () => {
             }),
           },
           settings: { ...DEFAULT_CODEX_SETTINGS, binaryPath: executable },
-          environment: { PATH: "/usr/bin:/bin", TMPDIR: `${root}/tmp` },
+          environment: { PATH: "/usr/bin:/bin", TMPDIR: `${root}/tmp`, ...environment },
           sharedHomePath,
         });
       }).pipe(Effect.provide(factoryLayer), Effect.result);
@@ -1403,6 +1403,24 @@ describe("CodexAdapterV2 process exit", () => {
         .map((entry) => [entry.path, entry.access]);
       assert.isFalse(granted.some(([path]) => path?.startsWith(`${home}/.ssh`)));
       assert.deepInclude(granted, [`${root}/shared`, "read-write"]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("hides the user's tmux socket dir even before any tmux server made it", () =>
+    Effect.gen(function* () {
+      const policies: Array<SandboxPolicy> = [];
+      const uid = (yield* HostProcess.UserId) ?? -1;
+      const { opened, root } = yield* openSandboxed(capturingSandbox(policies), ({ root }) =>
+        FileSystem.FileSystem.pipe(
+          Effect.flatMap((fileSystem) => fileSystem.makeDirectory(`${root}/sockets`)),
+          Effect.as({ environment: { TMUX_TMPDIR: `${root}/sockets` } }),
+        ),
+      );
+      assert.equal(opened._tag, "Success");
+      assert.deepInclude(
+        (policies[0]?.entries ?? []).map((entry) => [entry.path, entry.access]),
+        [`${root}/sockets/tmux-${uid}`, "hidden"],
+      );
     }).pipe(Effect.scoped),
   );
 
