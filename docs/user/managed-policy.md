@@ -192,6 +192,8 @@ that users start, agents start, and scheduled tasks start. A thread already abov
 run another turn until someone lowers its mode; its queued messages send once that happens. New
 threads start at the limit when the user's default is above it.
 
+Under `sandboxed-full-access`, users still choose which folders the sandbox opens and can turn on Docker in it, which amounts to full access. See [Sandboxed full access](./permission-modes.md#sandboxed-full-access).
+
 With `maxRuntimeMode` set, you own each provider's launch settings: binary path, launch arguments,
 config home, and the environment variables set on each provider. They come from
 [`providers.instances`](#providers) or T3 Code's defaults, and users cannot change them, because a
