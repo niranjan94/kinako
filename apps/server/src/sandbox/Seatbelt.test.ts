@@ -28,7 +28,11 @@ const HEADER = [
   '(deny file-write* (subpath "/"))',
   '(allow file-write-data file-ioctl (literal "/dev/null") (literal "/dev/zero") (literal "/dev/dtracehelper") (subpath "/dev/fd") (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$") (literal "/dev/ptmx"))',
 ];
-const FOOTER = ["(deny signal)", "(allow signal (target same-sandbox))"];
+const FOOTER = [
+  "(deny signal)",
+  "(allow signal (target same-sandbox))",
+  '(allow process-exec (literal "/bin/ps") (with no-sandbox))',
+];
 
 const profileOf = (entries: ReadonlyArray<SandboxPolicyEntry>) => {
   const built = Seatbelt.seatbeltProfile(policyWith(entries));
@@ -228,6 +232,7 @@ describe("Sandbox", () => {
         "touch inside && echo inside=ok || echo inside=fail",
         `touch ${outside}/escape 2>/dev/null && echo outside=ok || echo outside=fail`,
         `cat ${home}/secret/key 2>/dev/null && echo secret=ok || echo secret=fail`,
+        "ps -p $$ >/dev/null 2>&1 && echo ps=ok || echo ps=fail",
       ].join("\n");
 
       const availability = yield* seatbelt.availability;
@@ -249,6 +254,7 @@ describe("Sandbox", () => {
         "inside=ok",
         "outside=fail",
         "secret=fail",
+        "ps=ok",
       ]);
       assert.isFalse(yield* fileSystem.exists(path.join(outside, "escape")));
     }).pipe(Effect.scoped, Effect.provide(Seatbelt.layer.pipe(Layer.provideMerge(services)))),

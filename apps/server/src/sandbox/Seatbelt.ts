@@ -15,14 +15,14 @@ import {
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 
-/** sandbox-exec refuses compiled profiles over 64 KiB; the source length is the bound we check. */
+/**
+ * sandbox-exec compiles the profile on every launch: about 0.3 s at 64 KiB and seconds beyond,
+ * and it fails outright near 1 MB, where a compiled data object passes 65,535 bytes.
+ */
 const SEATBELT_PROFILE_LIMIT_BYTES = 65_535;
 
-/**
- * Setuid binaries such as `ps` cannot be exec'd under a non-trivial profile. This exempts
- * `/bin/ps` with SBPL's `no-sandbox` exec modifier. Unverified on a Mac, so it stays off.
- */
-const EXEMPT_PS_FROM_SANDBOX = false;
+/** Setuid binaries such as `ps` cannot be exec'd under the profile, so `/bin/ps` runs outside it. */
+const PS_EXEMPTION = '(allow process-exec (literal "/bin/ps") (with no-sandbox))';
 
 const DEVICE_WRITES = [
   '(literal "/dev/null")',
@@ -105,10 +105,7 @@ export function seatbeltProfile(policy: SandboxPolicy): SeatbeltProfile {
         : `(allow file-read* file-test-existence ${filter})`,
     );
   }
-  rules.push("(deny signal)", "(allow signal (target same-sandbox))");
-  if (EXEMPT_PS_FROM_SANDBOX) {
-    rules.push('(allow process-exec (literal "/bin/ps") (with no-sandbox))');
-  }
+  rules.push("(deny signal)", "(allow signal (target same-sandbox))", PS_EXEMPTION);
   const profile = rules.join("\n");
   const bytes = new TextEncoder().encode(profile).length;
   return bytes > SEATBELT_PROFILE_LIMIT_BYTES
