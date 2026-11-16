@@ -5,12 +5,6 @@ import * as Path from "effect/Path";
 import type { SandboxRequest } from "../../sandbox/externalSandbox.ts";
 import { sandboxProviderLaunch } from "../../sandbox/sandboxLaunch.ts";
 
-/**
- * Whether a Keychain login can refresh its token with read-only access to `~/Library/Keychains`
- * is unverified, so the Keychain stays read-only until a Mac shows it needs more.
- */
-const CLAUDE_MACOS_KEYCHAIN_ACCESS: "read-only" | "read-write" = "read-only";
-
 export interface ClaudeSandboxPath {
   readonly path: string;
   readonly kind: "directory" | "file";
@@ -45,7 +39,13 @@ export function claudeSandboxPaths(input: {
           {
             path: inHome("Library/Keychains"),
             kind: "directory" as const,
-            access: CLAUDE_MACOS_KEYCHAIN_ACCESS,
+            access: "read-only" as const,
+          },
+          // `security add-generic-password -U` saves refreshed credentials by replacing this file.
+          {
+            path: inHome("Library/Keychains/login.keychain-db"),
+            kind: "file" as const,
+            access: "read-write" as const,
           },
           {
             path: inHome("Library/Preferences/com.apple.security.plist"),

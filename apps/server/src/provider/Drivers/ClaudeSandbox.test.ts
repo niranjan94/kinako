@@ -40,6 +40,7 @@ describe("claudeSandboxPaths", () => {
         ["/Users/user/.config/anthropic", "read-only"],
         ["/opt/homebrew/bin", "read-only"],
         ["/Users/user/Library/Keychains", "read-only"],
+        ["/Users/user/Library/Keychains/login.keychain-db", "read-write"],
         ["/Users/user/Library/Preferences/com.apple.security.plist", "read-only"],
       ],
     },

@@ -460,6 +460,27 @@ describe("effectiveSandboxSettings", () => {
     ]);
   });
 
+  it("keeps one writable file inside a read-only provider directory", () => {
+    const keychains = "/Users/user/Library/Keychains";
+    const tree: Record<string, FakeEntry> = {
+      "/Users/user": "directory",
+      "/Users/user/code/app": "directory",
+      [keychains]: "directory",
+      [`${keychains}/login.keychain-db`]: "file",
+    };
+    const policy = resolved(
+      darwinInput({
+        providerPaths: [
+          { path: keychains, access: "read-only" },
+          { path: `${keychains}/login.keychain-db`, access: "read-write" },
+        ],
+      }),
+      tree,
+    );
+    expect(accessOf(policy, `${keychains}/metadata.keychain-db`)).toBe("read-only");
+    expect(accessOf(policy, `${keychains}/login.keychain-db`)).toBe("read-write");
+  });
+
   it("masks a Docker socket that appears later inside a symlinked ~/.docker", () => {
     const tree: Record<string, FakeEntry> = {
       "/Users/user": "directory",
