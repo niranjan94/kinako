@@ -207,6 +207,19 @@ function dockerSocketPaths(input: SandboxPolicyInput): ReadonlyArray<string> {
       ];
 }
 
+/**
+ * On Linux a Docker socket created or recreated after launch is reachable at its path, so the
+ * directories Docker Desktop and similar tools keep sockets in are hidden whole when they exist.
+ */
+function dockerSocketDirs(input: SandboxPolicyInput): ReadonlyArray<string> {
+  return input.platform === "linux"
+    ? [
+        NodePath.posix.join(input.home, ".docker/run"),
+        NodePath.posix.join(input.home, ".docker/desktop"),
+      ]
+    : [];
+}
+
 const userPath = (raw: string, home: string) => expandHomePath(raw.trim(), home);
 
 /** Every path the policy may name, before the filesystem is consulted. */
@@ -269,6 +282,9 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
       ...candidate(path, input.settings.allowDocker ? "read-write" : "hidden", "docker"),
       socket: true as const,
     })),
+    ...(input.settings.allowDocker
+      ? []
+      : dockerSocketDirs(input).map((path) => candidate(path, "hidden", "docker"))),
     ...multiplexerSocketDirs(input).map((path) => candidate(path, "hidden", "multiplexer")),
     ...(input.settings.allowDocker
       ? [candidate(NodePath.posix.join(input.home, ".docker"), "read-write", "docker")]

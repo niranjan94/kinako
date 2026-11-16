@@ -88,6 +88,8 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.ssh/id_ed25519`]: "file",
   [`${HOME}/.ssh/id_ed25519.pub`]: "file",
   [`${HOME}/.docker`]: "directory",
+  [`${HOME}/.docker/desktop`]: "directory",
+  [`${HOME}/.docker/run`]: "directory",
   "/tmp": "directory",
   "/tmp/tmux-1000": "directory",
   [`${HOME}/.fnm/aliases/default`]: { link: `${HOME}/.fnm/node-versions/v24` },
@@ -265,6 +267,24 @@ describe("resolveSandboxPolicy", () => {
         ["/run/screen/S-user/1234.pts-0", "hidden"],
         ["/tmp/kinako-mux-1000-abc/default", "read-write"],
       ],
+    },
+    {
+      name: "Docker socket directories hidden inside a listed ~/.docker",
+      input: linuxInput({
+        settings: { ...linuxInput().settings, readWritePaths: ["~/.docker"] },
+      }),
+      access: [
+        [`${HOME}/.docker/config.json`, "read-write"],
+        [`${HOME}/.docker/desktop/docker.sock`, "hidden"],
+        [`${HOME}/.docker/run/docker.sock`, "hidden"],
+      ],
+    },
+    {
+      name: "Docker socket directories left alone when Docker is allowed",
+      input: linuxInput({
+        settings: { ...linuxInput().settings, readWritePaths: ["~/.docker"], allowDocker: true },
+      }),
+      access: [[`${HOME}/.docker/desktop/docker.sock`, "read-write"]],
     },
     {
       name: "a socket path that is a directory, and a TMPDIR outside temp",
