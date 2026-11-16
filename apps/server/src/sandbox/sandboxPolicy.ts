@@ -383,6 +383,10 @@ function realMissingPath(path: string, facts: SandboxPathFacts): string | undefi
 const isWithin = (path: string, root: string) =>
   path === root || root === "/" || path.startsWith(`${root}/`);
 
+/** Whether `path` as written, before any link resolves, lies inside one of `roots`. */
+const namedWithin = (path: string, roots: ReadonlyArray<string>) =>
+  roots.some((root) => isWithin(NodePath.posix.normalize(path), NodePath.posix.normalize(root)));
+
 const depth = (path: string) => (path === "/" ? 0 : path.split("/").length - 1);
 
 const ACCESS_PRECEDENCE: Record<SandboxAccess, number> = {
@@ -585,9 +589,13 @@ export function resolveSandboxPolicy(
         if (isWithin(root, path)) {
           return refuse(`${candidate.source} ${path} contains ${root}, which always stays hidden.`);
         }
-        // A provider's own state may live in the server's state dir, such as a managed home.
+        // A provider's own state may live in the server's state dir, such as a managed home,
+        // when the server names it there; a link from elsewhere into the base dir does not count.
         const carvedOut =
-          root === realBase && (isWithin(path, realWorktrees) || candidate.source === "provider");
+          root === realBase &&
+          (isWithin(path, realWorktrees) ||
+            (candidate.source === "provider" &&
+              namedWithin(candidate.path, [input.baseDir, realBase])));
         if (isWithin(path, root) && !carvedOut) {
           return refuse(
             `${candidate.source} ${path} is inside ${root}, which always stays hidden.`,

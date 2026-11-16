@@ -1224,7 +1224,29 @@ describe("CodexAdapterV2 process exit", () => {
     ),
   );
 
-  const openSandboxed = (sandbox: Sandbox.SandboxShape | undefined) =>
+  const capturingSandbox = (policies: Array<SandboxPolicy>): Sandbox.SandboxShape => ({
+    availability: Effect.succeed({ _tag: "Available", command: "/test/sandbox" }),
+    wrap: (input) =>
+      Effect.sync(() => policies.push(input.policy)).pipe(
+        Effect.as({
+          command: "/test/sandbox",
+          args: ["--", input.command, ...input.args],
+          env: input.env,
+        }),
+      ),
+  });
+
+  const openSandboxed = (
+    sandbox: Sandbox.SandboxShape | undefined,
+    setup?: (paths: {
+      readonly root: string;
+      readonly home: string;
+    }) => Effect.Effect<
+      { readonly sharedHomePath?: string },
+      PlatformError.PlatformError,
+      FileSystem.FileSystem
+    >,
+  ) =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const root = yield* fileSystem.realPath(
@@ -1243,6 +1265,8 @@ describe("CodexAdapterV2 process exit", () => {
       yield* fileSystem.makeDirectory(`${root}/tmp`, { recursive: true });
       yield* fileSystem.writeFileString(executable, "#!/bin/sh\n");
       yield* fileSystem.chmod(executable, 0o755);
+      const { sharedHomePath } =
+        setup === undefined ? {} : yield* Effect.orDie(setup({ root, home }));
       const spawned: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }> = [];
       const handle = (running: boolean) =>
         ChildProcessSpawner.makeHandle({
@@ -1315,9 +1339,10 @@ describe("CodexAdapterV2 process exit", () => {
           },
           settings: { ...DEFAULT_CODEX_SETTINGS, binaryPath: executable },
           environment: { PATH: "/usr/bin:/bin", TMPDIR: `${root}/tmp` },
+          sharedHomePath,
         });
       }).pipe(Effect.provide(factoryLayer), Effect.result);
-      return { opened, spawned, executable, root, uid };
+      return { opened, spawned, executable, cwd, root, home, uid };
     }).pipe(Effect.provide(NodeServices.layer));
 
   it.effect("starts a sandboxed thread's app-server unshared, inside the sandbox", () =>
@@ -1352,6 +1377,32 @@ describe("CodexAdapterV2 process exit", () => {
         executable,
       ]);
       assert.include(appServer?.args ?? [], "app-server");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("grants the configured shared home, never what a link inside CODEX_HOME names", () =>
+    Effect.gen(function* () {
+      const policies: Array<SandboxPolicy> = [];
+      const { opened, root, home } = yield* openSandboxed(
+        capturingSandbox(policies),
+        ({ root, home }) =>
+          Effect.gen(function* () {
+            const fileSystem = yield* FileSystem.FileSystem;
+            yield* fileSystem.makeDirectory(`${home}/.codex`, { recursive: true });
+            yield* fileSystem.makeDirectory(`${home}/.ssh`, { recursive: true });
+            yield* fileSystem.makeDirectory(`${root}/shared`, { recursive: true });
+            yield* fileSystem.writeFileString(`${home}/.ssh/id_ed25519`, "key");
+            // An agent can rewrite its own CODEX_HOME between turns.
+            yield* fileSystem.symlink(`${home}/.ssh/id_ed25519`, `${home}/.codex/logs`);
+            return { sharedHomePath: `${root}/shared` };
+          }),
+      );
+      assert.equal(opened._tag, "Success");
+      const granted = (policies[0]?.entries ?? [])
+        .filter((entry) => entry.access !== "hidden")
+        .map((entry) => [entry.path, entry.access]);
+      assert.isFalse(granted.some(([path]) => path?.startsWith(`${home}/.ssh`)));
+      assert.deepInclude(granted, [`${root}/shared`, "read-write"]);
     }).pipe(Effect.scoped),
   );
 

@@ -1,10 +1,6 @@
-import { assert, describe, expect, it } from "@effect/vitest";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { describe, expect, it } from "@effect/vitest";
 
-import { codexHomes, codexSandboxPaths } from "./CodexSandbox.ts";
+import { codexSandboxPaths } from "./CodexSandbox.ts";
 
 describe("codexSandboxPaths", () => {
   it.each([
@@ -39,22 +35,3 @@ describe("codexSandboxPaths", () => {
     ).toEqual(expected);
   });
 });
-
-it.effect("finds the shared home a shadow home links its shared directories into", () =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const root = yield* fileSystem.realPath(
-      yield* fileSystem.makeTempDirectoryScoped({ prefix: "kinako-codex-homes-" }),
-    );
-    const shared = path.join(root, "shared");
-    const shadow = path.join(root, "shadow");
-    yield* fileSystem.makeDirectory(path.join(shared, "sessions"), { recursive: true });
-    yield* fileSystem.makeDirectory(shadow);
-    yield* fileSystem.symlink(path.join(shared, "sessions"), path.join(shadow, "sessions"));
-    yield* fileSystem.writeFileString(path.join(shadow, "auth.json"), "{}");
-
-    assert.deepEqual(yield* codexHomes(shadow), [shadow, shared]);
-    assert.deepEqual(yield* codexHomes(shared), [shared]);
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-);

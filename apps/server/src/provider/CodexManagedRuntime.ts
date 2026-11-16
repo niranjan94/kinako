@@ -17,6 +17,8 @@ export interface CodexEffectiveRuntime {
   readonly config: CodexSettings;
   readonly environment: NodeJS.ProcessEnv;
   readonly revision: string;
+  /** The shared home a shadow CODEX_HOME links its shared directories into. */
+  readonly sharedHomePath?: string | undefined;
 }
 const decodeSettings = Schema.decodeSync(CodexSettings);
 const managedCodexLaunchArgs = (command: string, args: ReadonlyArray<string>) =>
@@ -132,6 +134,7 @@ export const makeCodexManagedRuntime = Effect.fn("makeCodexManagedRuntime")(func
       }),
       environment,
       revision: profileKey,
+      ...(homeLayout.mode === "authOverlay" ? { sharedHomePath: homeLayout.sharedHomePath } : {}),
     } satisfies CodexEffectiveRuntime;
   });
   return { auth, resolve, installation, homePath, homeLayout };

@@ -6,7 +6,6 @@ import * as Path from "effect/Path";
 
 import type { SandboxRequest } from "../../sandbox/externalSandbox.ts";
 import { sandboxProviderLaunch } from "../../sandbox/sandboxLaunch.ts";
-import { KNOWN_SHARED_DIRECTORIES } from "./CodexHomeLayout.ts";
 
 export interface CodexSandboxPath {
   readonly path: string;
@@ -46,25 +45,6 @@ export function codexSandboxPaths(input: {
   ];
 }
 
-/** A shadow home links its shared directories into the shared home, which must be reachable too. */
-export const codexHomes = Effect.fn("CodexSandbox.homes")(function* (effectiveHome: string) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const realHome = yield* fileSystem
-    .realPath(effectiveHome)
-    .pipe(Effect.orElseSucceed(() => effectiveHome));
-  const homes = new Set([effectiveHome]);
-  for (const name of KNOWN_SHARED_DIRECTORIES) {
-    const target = yield* fileSystem
-      .realPath(path.join(effectiveHome, name))
-      .pipe(Effect.orElseSucceed(() => undefined));
-    if (target !== undefined && path.dirname(target) !== realHome) {
-      homes.add(path.dirname(target));
-    }
-  }
-  return [...homes];
-});
-
 /**
  * The checkout or install whose entrypoint a managed Codex runs for tokens: the outermost
  * ancestor below home holding `node_modules`, since a workspace links packages from there.
@@ -100,6 +80,8 @@ export const sandboxCodexLaunch = Effect.fn("CodexSandbox.launch")(function* (in
   readonly executable: string;
   readonly args: ReadonlyArray<string>;
   readonly env: NodeJS.ProcessEnv;
+  /** The configured shared home a shadow CODEX_HOME links into, never read from those links. */
+  readonly sharedHomePath?: string | undefined;
   readonly managed: boolean;
 }) {
   const path = yield* Path.Path;
@@ -112,8 +94,14 @@ export const sandboxCodexLaunch = Effect.fn("CodexSandbox.launch")(function* (in
     args: input.args,
     env: input.env,
     providerPaths: Effect.fn("CodexSandbox.providerPaths")(function* ({ home, executable }) {
+      const codexHome = input.env.CODEX_HOME ?? path.join(home, ".codex");
       return codexSandboxPaths({
-        homes: yield* codexHomes(input.env.CODEX_HOME ?? path.join(home, ".codex")),
+        homes: [
+          codexHome,
+          ...(input.sharedHomePath === undefined || input.sharedHomePath === codexHome
+            ? []
+            : [input.sharedHomePath]),
+        ],
         executable,
         selfInvocationRoot: input.managed ? yield* selfInvocationRoot() : undefined,
       });

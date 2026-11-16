@@ -518,8 +518,18 @@ describe("resolveSandboxPolicy", () => {
       "contains /srv/kinako",
     ],
     ["a missing cwd", { cwd: `${HOME}/code/missing` }, "does not exist"],
+    [
+      "a provider path a link points into the base dir",
+      { providerPaths: [{ path: `${HOME}/.codex/sessions`, access: "read-write" }] },
+      `is inside ${HOME}/.kinako`,
+    ],
   ])("refuses a workspace at %s", (_name, overrides, reason) => {
-    const tree = { ...LINUX_TREE, "/srv": "directory" as const };
+    const tree: Record<string, FakeEntry> = {
+      ...LINUX_TREE,
+      "/srv": "directory",
+      [`${HOME}/.codex`]: "directory",
+      [`${HOME}/.codex/sessions`]: { link: `${HOME}/.kinako/userdata` },
+    };
     const resolution = resolveSandboxPolicy(linuxInput(overrides), fakeFacts(tree));
     expect(resolution._tag === "Refused" ? resolution.reason : "resolved").toContain(reason);
   });

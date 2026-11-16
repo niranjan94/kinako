@@ -1540,6 +1540,8 @@ export interface CodexAppServerClientFactoryShape {
     readonly runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
     readonly settings: CodexSettings;
     readonly environment: NodeJS.ProcessEnv;
+    /** The shared home a shadow CODEX_HOME links its shared directories into. */
+    readonly sharedHomePath?: string | undefined;
   }) => Effect.Effect<
     CodexClient.CodexAppServerClient["Service"],
     ProviderAdapter.ProviderAdapterOpenSessionError,
@@ -1866,6 +1868,7 @@ export const layerAppServerClientFactory: Layer.Layer<
                 executable,
                 args,
                 env: environment,
+                sharedHomePath: input.sharedHomePath,
                 managed: input.settings.setupMode === "managed",
               }).pipe(
                 Effect.provideService(FileSystem.FileSystem, fileSystem),
@@ -1979,6 +1982,7 @@ export const createCodexAdapterV2 = Effect.fn("CodexAdapterV2.createCodexAdapter
   return yield* makeCodexAdapterV2({
     instanceId,
     settings,
+    ...(homeLayout.mode === "authOverlay" ? { sharedHomePath: homeLayout.sharedHomePath } : {}),
     environment: yield* mergeProviderInstanceEnvironment(environment, hostEnvironment),
     clientFactory,
     digest,
@@ -1994,6 +1998,8 @@ export const createCodexAdapterV2 = Effect.fn("CodexAdapterV2.createCodexAdapter
 export interface CodexAdapterV2Options {
   readonly instanceId: ProviderInstanceId;
   readonly settings: CodexSettings;
+  /** The shared home a shadow CODEX_HOME links its shared directories into. */
+  readonly sharedHomePath?: string | undefined;
   readonly environment: NodeJS.ProcessEnv;
   readonly clientFactory: CodexAppServerClientFactoryShape;
   readonly onUsageLimits?: ManagedServerProvider["applyUsageLimits"];
@@ -2067,6 +2073,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           runtimePolicy: input.runtimePolicy,
           settings: resolvedRuntime?.config ?? adapterOptions.settings,
           environment: resolvedRuntime?.environment ?? adapterOptions.environment,
+          sharedHomePath:
+            resolvedRuntime === undefined
+              ? adapterOptions.sharedHomePath
+              : resolvedRuntime.sharedHomePath,
         });
         const codexZone = codexTimeZone(resolvedRuntime?.environment ?? adapterOptions.environment);
         const additionalContextByThread = yield* Ref.make(
