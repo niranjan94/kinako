@@ -187,7 +187,7 @@ A few settings need care:
 ### Permission modes
 
 `maxRuntimeMode` is the broadest [permission mode](./permission-modes.md) any thread may use:
-`approval-required` (Supervised), `auto-accept-edits`, `auto`, or `full-access`. It covers threads
+`approval-required` (Supervised), `auto-accept-edits`, `auto`, `sandboxed-full-access`, or `full-access`, from narrowest to broadest. It covers threads
 that users start, agents start, and scheduled tasks start. A thread already above the limit cannot
 run another turn until someone lowers its mode; its queued messages send once that happens. New
 threads start at the limit when the user's default is above it.
