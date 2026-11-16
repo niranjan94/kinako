@@ -43,7 +43,14 @@ export type SandboxPlatform = "linux" | "darwin";
 const SHARED_READ_WRITE_PATHS = [
   "~/.local/state/pnpm",
   "~/.npm",
-  "~/.gradle",
+  // Not ~/.gradle itself: its init scripts and gradle.properties apply to every build.
+  "~/.gradle/caches",
+  "~/.gradle/wrapper",
+  "~/.gradle/daemon",
+  "~/.gradle/native",
+  "~/.gradle/jdks",
+  "~/.gradle/notifications",
+  "~/.gradle/.tmp",
   "~/.aws-sam",
   "~/.ssh/known_hosts",
   "~/.cargo/registry",
@@ -53,6 +60,7 @@ const SHARED_READ_WRITE_PATHS = [
 ];
 
 const SHARED_READ_ONLY_PATHS = [
+  "~/.gradle",
   "~/.gitconfig",
   "~/.config/git",
   "~/.ssh/config",
@@ -80,14 +88,15 @@ export function defaultSandboxPaths(platform: SandboxPlatform): {
   readonly readOnlyPaths: SandboxPathList;
 } {
   return {
+    // pnpm's home holds its global bin dir and the pnpm versions it runs; only the store is written.
     readWritePaths:
       platform === "darwin"
-        ? ["~/Library/pnpm", "~/Library/Caches", ...SHARED_READ_WRITE_PATHS]
-        : ["~/.local/share/pnpm", "~/.cache", ...SHARED_READ_WRITE_PATHS],
+        ? ["~/Library/pnpm/store", "~/Library/Caches", ...SHARED_READ_WRITE_PATHS]
+        : ["~/.local/share/pnpm/store", "~/.cache", ...SHARED_READ_WRITE_PATHS],
     readOnlyPaths:
       platform === "darwin"
-        ? ["~/Library/Preferences/pnpm", "~/.npmrc", ...SHARED_READ_ONLY_PATHS]
-        : SHARED_READ_ONLY_PATHS,
+        ? ["~/Library/pnpm", "~/Library/Preferences/pnpm", "~/.npmrc", ...SHARED_READ_ONLY_PATHS]
+        : ["~/.local/share/pnpm", ...SHARED_READ_ONLY_PATHS],
   };
 }
 
