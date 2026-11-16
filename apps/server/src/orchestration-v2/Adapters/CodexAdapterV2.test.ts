@@ -9,6 +9,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { externalSandboxPolicy, type SandboxRequest } from "../../sandbox/externalSandbox.ts";
 import * as Sandbox from "../../sandbox/Sandbox.ts";
 import { multiplexerDirFor } from "../../sandbox/sandboxLaunch.ts";
+import type { SandboxPolicy } from "../../sandbox/sandboxPolicy.ts";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import { knownProviderFailureMessage } from "@t3tools/provider-core/server/failure";
 import {
@@ -1239,6 +1240,7 @@ describe("CodexAdapterV2 process exit", () => {
       yield* fileSystem.makeDirectory(home, { recursive: true });
       yield* fileSystem.makeDirectory(cwd, { recursive: true });
       yield* fileSystem.makeDirectory(`${root}/bin`, { recursive: true });
+      yield* fileSystem.makeDirectory(`${root}/tmp`, { recursive: true });
       yield* fileSystem.writeFileString(executable, "#!/bin/sh\n");
       yield* fileSystem.chmod(executable, 0o755);
       const spawned: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }> = [];
@@ -1312,24 +1314,35 @@ describe("CodexAdapterV2 process exit", () => {
             }),
           },
           settings: { ...DEFAULT_CODEX_SETTINGS, binaryPath: executable },
-          environment: { PATH: "/usr/bin:/bin" },
+          environment: { PATH: "/usr/bin:/bin", TMPDIR: `${root}/tmp` },
         });
       }).pipe(Effect.provide(factoryLayer), Effect.result);
-      return { opened, spawned, executable, cwd };
+      return { opened, spawned, executable, root, uid };
     }).pipe(Effect.provide(NodeServices.layer));
 
   it.effect("starts a sandboxed thread's app-server unshared, inside the sandbox", () =>
     Effect.gen(function* () {
-      const { opened, spawned, executable } = yield* openSandboxed({
+      const policies: Array<SandboxPolicy> = [];
+      const { opened, spawned, executable, root, uid } = yield* openSandboxed({
         availability: Effect.succeed({ _tag: "Available", command: "/test/sandbox" }),
         wrap: (input) =>
-          Effect.succeed({
-            command: "/test/sandbox",
-            args: ["--", input.command, ...input.args],
-            env: input.env,
+          Effect.sync(() => {
+            policies.push(input.policy);
+            return {
+              command: "/test/sandbox",
+              args: ["--", input.command, ...input.args],
+              env: input.env,
+            };
           }),
       });
       assert.equal(opened._tag, "Success");
+      // Made before the policy, so bwrap hides it even before the desktop app starts.
+      assert.deepInclude(policies[0]?.entries ?? [], {
+        path: `${root}/tmp/t3code-${uid}`,
+        access: "hidden",
+        kind: "directory",
+        source: "app-control",
+      });
       const appServer = spawned.find((entry) => entry.command === "/test/scope");
       assert.deepEqual(appServer?.args.slice(0, 5), [
         "--shared=false",

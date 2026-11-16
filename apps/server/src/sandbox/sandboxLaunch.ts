@@ -1,4 +1,5 @@
 import type { SandboxPlatform } from "@t3tools/contracts";
+import { desktopAppControlDirectories } from "@t3tools/shared/desktopAppControl";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveCommandPath } from "@t3tools/shared/shell";
 import * as Effect from "effect/Effect";
@@ -69,6 +70,15 @@ export const sandboxProviderLaunch = Effect.fn("SandboxLaunch.provider")(functio
     return yield* new SandboxPolicyRefusedError({
       reason: `${input.providerName}'s executable ${executable} is a script; the sandbox needs the native executable.`,
     });
+  }
+  // bwrap cannot hide a path that does not exist yet, so the desktop app's control socket dir
+  // is made now, as the app makes it, for the policy to hide. Never recursive: TMPDIR may be bogus.
+  for (const directory of desktopAppControlDirectories({
+    tempDirs: input.env.TMPDIR === undefined ? [] : [input.env.TMPDIR],
+    userId: uid,
+    joinPath: path.join,
+  })) {
+    yield* fileSystem.makeDirectory(directory, { mode: 0o700 }).pipe(Effect.ignore);
   }
   const policy = yield* resolveSandboxPolicy({
     platform,

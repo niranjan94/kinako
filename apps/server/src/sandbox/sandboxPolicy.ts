@@ -8,6 +8,7 @@ import {
   type SandboxSettings,
 } from "@t3tools/contracts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { desktopAppControlDirectories } from "@t3tools/shared/desktopAppControl";
 import * as Schema from "effect/Schema";
 
 export const MAX_SANDBOX_REASON_LENGTH = 2_000;
@@ -53,7 +54,8 @@ export type SandboxEntrySource =
   | "credential"
   | "git-config"
   | "server"
-  | "multiplexer";
+  | "multiplexer"
+  | "app-control";
 
 export interface SandboxPolicyEntry {
   readonly path: string;
@@ -260,6 +262,7 @@ export function missingPathMaskKind(source: SandboxEntrySource): SandboxPathKind
     case "docker":
       return "socket";
     case "multiplexer":
+    case "app-control":
       return "directory";
     case "credential":
       return "file";
@@ -332,6 +335,12 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
       ? []
       : dockerSocketDirs(input).map((path) => candidate(path, "hidden", "docker"))),
     ...multiplexerSocketDirs(input).map((path) => candidate(path, "hidden", "multiplexer")),
+    // The desktop app's control socket opens any folder as a project, outside the sandbox.
+    ...desktopAppControlDirectories({
+      tempDirs: [input.tmpDir, input.darwinUserTempDir].filter((dir) => dir !== undefined),
+      userId: input.uid,
+      joinPath: NodePath.posix.join,
+    }).map((path) => candidate(path, "hidden", "app-control")),
     ...(input.settings.allowDocker
       ? [candidate(NodePath.posix.join(input.home, ".docker"), "read-write", "docker")]
       : []),

@@ -32,7 +32,7 @@ Neither sandbox can start another sandbox inside it. Tools that sandbox themselv
 
 ## Shared `/tmp`
 
-`/tmp` inside the sandbox is the host's `/tmp`, not a private tmpfs. The server prepares per-thread directories there before the sandbox starts, such as the private tmux and screen socket directory in `sandboxLaunch.ts`, and files the agent leaves in `/tmp` stay visible to the user's own tools. The cost is that same-user sockets in `/tmp` are reachable. tmux and screen socket directories are hidden because a multiplexer server runs commands outside the sandbox.
+`/tmp` inside the sandbox is the host's `/tmp`, not a private tmpfs. The server prepares per-thread directories there before the sandbox starts, such as the private tmux and screen socket directory in `sandboxLaunch.ts`, and files the agent leaves in `/tmp` stay visible to the user's own tools. The cost is that same-user sockets in `/tmp` are reachable. tmux and screen socket directories are hidden because a multiplexer server runs commands outside the sandbox, and so is the desktop app's control socket directory, whose `open-workspace` request adds any folder as a project. bwrap cannot hide a path that does not exist yet, so `sandboxLaunch.ts` creates that directory before the policy is built, as the desktop app would.
 
 ## bwrap starts with SIGTERM ignored
 

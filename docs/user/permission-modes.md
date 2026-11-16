@@ -96,7 +96,7 @@ With Docker off on Linux, a system Docker socket that exists when the session st
 ### What stays reachable
 
 - The network, without restrictions.
-- Sockets your user owns in temp folders, other than tmux and screen sessions.
+- Sockets your user owns in temp folders, other than tmux and screen sessions and the desktop app's control socket.
 - The repository's git hooks and config, which the agent can change and which run outside the sandbox the next time you use git.
 - The provider's own folder, which the provider reads when it runs outside the sandbox.
 

@@ -93,6 +93,7 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.docker/run`]: "directory",
   "/tmp": "directory",
   "/tmp/tmux-1000": "directory",
+  "/tmp/t3code-1000": "directory",
   [`${HOME}/.fnm/aliases/default`]: { link: `${HOME}/.fnm/node-versions/v24` },
   [`${HOME}/.fnm/node-versions/v24/bin`]: "directory",
   [`${HOME}/.tools/bin`]: { link: "/opt/tools/bin" },
@@ -268,6 +269,14 @@ describe("resolveSandboxPolicy", () => {
         ["/tmp/tmux-1000/default", "hidden"],
         ["/run/screen/S-user/1234.pts-0", "hidden"],
         ["/tmp/kinako-mux-1000-abc/default", "read-write"],
+      ],
+    },
+    {
+      name: "the desktop app's control socket",
+      input: linuxInput(),
+      access: [
+        ["/tmp/t3code-1000/0123456789abcdef01234567.sock", "hidden"],
+        ["/tmp/t3code-1001/0123456789abcdef01234567.sock", "read-write"],
       ],
     },
     {
@@ -575,6 +584,7 @@ describe("effectiveSandboxSettings", () => {
     expect(policy.entries.map(({ path, access }) => [path, access])).toEqual([
       ["/Users/user", "hidden"],
       ["/private/tmp", "read-write"],
+      ["/private/tmp/t3code-1000", "hidden"],
       ["/private/tmp/tmux-1000", "hidden"],
       ["/Users/user/Library/Caches", "read-write"],
       ["/Users/user/code/app", "read-write"],
@@ -586,7 +596,7 @@ describe("effectiveSandboxSettings", () => {
   it.each([
     ["exist", true],
     ["do not exist yet", false],
-  ])("hides the user's screen and tmux socket dirs when they %s", (_, present) => {
+  ])("hides the user's screen, tmux and desktop app socket dirs when they %s", (_, present) => {
     const temp = "/private/var/folders/xy/T";
     const tree: Record<string, FakeEntry> = {
       "/Users/user": "directory",
@@ -596,7 +606,11 @@ describe("effectiveSandboxSettings", () => {
       "/var": { link: "/private/var" },
       [temp]: "directory",
       ...(present
-        ? { [`${temp}/.screen`]: "directory", "/private/tmp/tmux-1000": "directory" }
+        ? {
+            [`${temp}/.screen`]: "directory",
+            [`${temp}/t3code-1000`]: "directory",
+            "/private/tmp/tmux-1000": "directory",
+          }
         : {}),
     };
     const policy = resolved(
@@ -610,6 +624,8 @@ describe("effectiveSandboxSettings", () => {
     expect(accessOf(policy, `${temp}/scratch`)).toBe("read-write");
     expect(accessOf(policy, `${temp}/.screen/123.session`)).toBe("hidden");
     expect(accessOf(policy, "/private/tmp/tmux-1000/default")).toBe("hidden");
+    expect(accessOf(policy, `${temp}/t3code-1000/app.sock`)).toBe("hidden");
+    expect(accessOf(policy, "/private/tmp/t3code-1000/app.sock")).toBe("hidden");
   });
 
   it("keeps one writable file inside a read-only provider directory", () => {
