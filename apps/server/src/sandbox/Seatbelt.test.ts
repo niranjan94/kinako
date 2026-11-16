@@ -128,7 +128,7 @@ describe("seatbeltProfile", () => {
       ],
     },
     {
-      name: "a symlink inside the hidden home readable with its ancestors",
+      name: "a symlink inside the hidden home readable with its ancestors and the paths through it",
       entries: [
         { path: HOME, access: "hidden", kind: "directory", source: "home" },
         {
@@ -142,7 +142,7 @@ describe("seatbeltProfile", () => {
       rules: [
         `(deny file-read* file-test-existence file-write* (subpath "${HOME}"))`,
         `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/.config/git"))`,
-        `(allow file-read* file-test-existence (literal "${HOME}/.config/git"))`,
+        `(allow file-read* file-test-existence (subpath "${HOME}/.config/git"))`,
       ],
     },
     {

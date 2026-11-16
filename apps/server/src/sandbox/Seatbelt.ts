@@ -43,7 +43,11 @@ export type SeatbeltProfile =
   | { readonly _tag: "Refused"; readonly reason: string };
 
 function entryFilter(entry: SandboxPolicyEntry): string | undefined {
-  if (entry.kind === "directory") return `(subpath ${sbplString(entry.path)})`;
+  // A lookup through a link is also checked at the path spelled through it, so a path under a
+  // link needs the grant; reads are still checked at the resolved path.
+  if (entry.kind === "directory" || entry.kind === "symlink") {
+    return `(subpath ${sbplString(entry.path)})`;
+  }
   if (entry.kind === "socket" || entry.access !== "read-write") {
     return `(literal ${sbplString(entry.path)})`;
   }
