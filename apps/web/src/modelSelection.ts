@@ -16,6 +16,7 @@ import {
   normalizeCustomModelSlug,
   readCustomModelEntries,
   resolveSelectableModel,
+  withModelEffortDefault,
 } from "@t3tools/shared/model";
 import { getComposerProviderState } from "./components/chat/composerProviderState";
 import { type ClientSettings, UnifiedSettings } from "@t3tools/contracts/settings";
@@ -315,7 +316,15 @@ export function resolveEffectiveDefaultModelSelection(
     selection.model,
     { preserveUnavailableSelection: true },
   );
-  return model === null || model === selection.model ? selection : { ...selection, model };
+  const resolved =
+    model === null || model === selection.model ? selection : { ...selection, model };
+  return withModelEffortDefault(
+    resolved,
+    settings.providerModelPreferences,
+    providers
+      .find((provider) => provider.instanceId === resolved.instanceId)
+      ?.models.find((model) => model.slug === resolved.model)?.capabilities ?? null,
+  );
 }
 
 export function defaultModelSelectionsAreMixed(
@@ -454,7 +463,11 @@ export function resolveAppModelSelectionState(
       includePlanAgent: selectsPlanAgent(selection.options),
     });
 
-    return createModelSelection(entry.instanceId, model, modelOptionsForDispatch);
+    return withModelEffortDefault(
+      createModelSelection(entry.instanceId, model, modelOptionsForDispatch),
+      settings.providerModelPreferences,
+      entry.models.find((candidate) => candidate.slug === model)?.capabilities ?? null,
+    );
   }
 
   return NO_PROVIDER_MODEL_SELECTION;

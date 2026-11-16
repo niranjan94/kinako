@@ -378,11 +378,16 @@ export const ModelFavorite = Schema.Struct({
   model: TrimmedNonEmptyString,
 });
 export const ModelFavorites = Schema.Array(ModelFavorite);
+const ModelEffortDefault = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  value: TrimmedNonEmptyString,
+});
 export const ProviderModelPreferences = Schema.Record(
   ProviderInstanceId,
   Schema.Struct({
     hiddenModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
     modelOrder: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+    defaultEfforts: Schema.optionalKey(Schema.Record(TrimmedNonEmptyString, ModelEffortDefault)),
   }),
 );
 export type ModelPreferences = {
@@ -1843,6 +1848,11 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   setProviderModelOrder: Schema.optionalKey(
     Schema.Struct({ provider: ProviderInstanceId, modelOrder: Schema.Array(TrimmedString) }),
+  ),
+  setModelEffortDefaults: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({ ...ModelFavorite.fields, effort: Schema.NullOr(ModelEffortDefault) }),
+    ),
   ),
   // Replaces only config.customModels, so a write from another environment keeps this host's paths and env.
   setProviderCustomModels: Schema.optionalKey(

@@ -1,5 +1,5 @@
 import { ProviderDriverKind, ProviderInstanceId } from "@t3tools/contracts";
-import type { ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
@@ -34,6 +34,50 @@ it("lists a favorite the provider no longer reports so it can be unstarred", asy
   );
   await screen.getByRole("button", { name: "Remove retired-model from favorites" }).click();
   expect(onToggleFavorite).toHaveBeenCalledWith("retired-model");
+});
+
+it("selects and resets a model's default effort through its popup", async () => {
+  function EffortSettings() {
+    const [effort, setEffort] = useState<{ id: string; value: string } | null>(null);
+    return section({
+      models: [
+        {
+          slug: "opus",
+          name: "Opus",
+          isCustom: false,
+          capabilities: {
+            optionDescriptors: [
+              {
+                id: "effort",
+                type: "select",
+                label: "Reasoning",
+                options: [
+                  { id: "high", label: "High" },
+                  { id: "xhigh", label: "Extra High" },
+                  { id: "ultrathink", label: "Ultrathink" },
+                ],
+                promptInjectedValues: ["ultrathink"],
+              },
+            ],
+          },
+        },
+      ],
+      defaultEfforts: effort ? { opus: effort } : {},
+      onDefaultEffortChange: (_, next) => setEffort(next),
+    });
+  }
+  await using screen = await render(<EffortSettings />);
+  const trigger = screen.getByRole("combobox", { name: "Default effort for Opus" });
+  await expect.element(trigger).toHaveTextContent("Provider default");
+  await trigger.click();
+  await expect
+    .element(screen.getByRole("option", { name: "Ultrathink", exact: true }))
+    .not.toBeInTheDocument();
+  await screen.getByRole("option", { name: "Extra High", exact: true }).click();
+  await expect.element(trigger).toHaveTextContent("Extra High");
+  await trigger.click();
+  await screen.getByRole("option", { name: "Provider default", exact: true }).click();
+  await expect.element(trigger).toHaveTextContent("Provider default");
 });
 
 it("keeps custom model drafts until they save, so a failed save can be retried", async () => {

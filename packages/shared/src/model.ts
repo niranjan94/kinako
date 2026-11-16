@@ -3,6 +3,7 @@ import {
   MODEL_SLUG_ALIASES_BY_PROVIDER,
   ModelCapabilities,
   type ModelSelection,
+  type ModelPreferences,
   ProviderDriverKind,
   ProviderInstanceId,
   type ProviderOptionDescriptor,
@@ -547,6 +548,34 @@ export function pickModelSelection(
   return current?.instanceId === instanceId && current.model === model
     ? current
     : createModelSelection(instanceId, model);
+}
+
+export function withModelEffortDefault(
+  selection: ModelSelection,
+  preferences: ModelPreferences["providerModelPreferences"] | null | undefined,
+  caps?: ModelCapabilities | null,
+): ModelSelection {
+  const instance =
+    preferences && Object.hasOwn(preferences, selection.instanceId)
+      ? preferences[selection.instanceId]
+      : undefined;
+  const defaults = instance?.defaultEfforts;
+  const effort =
+    defaults && Object.hasOwn(defaults, selection.model) ? defaults[selection.model] : undefined;
+  if (!effort || selection.options?.some(({ id }) => id === effort.id)) return selection;
+  if (caps !== undefined) {
+    const descriptor = caps?.optionDescriptors?.find(({ id }) => id === effort.id);
+    if (
+      descriptor?.type !== "select" ||
+      descriptor.promptInjectedValues?.includes(effort.value) ||
+      !descriptor.options.some(({ id }) => id === effort.value)
+    )
+      return selection;
+  }
+  return createModelSelection(selection.instanceId, selection.model, [
+    ...(selection.options ?? []),
+    effort,
+  ]);
 }
 
 export function resolvePromptInjectedEffort(

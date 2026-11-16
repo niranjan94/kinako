@@ -880,6 +880,8 @@ export function useComposerSend(input: ComposerSendInput) {
       selections: multipleModelSelections ?? [],
       providerInstanceEntries,
       messageText: messageTextForSend,
+      modelPreferences: appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)
+        ?.settings.providerModelPreferences,
     })) {
       if ("error" in resolved) {
         setThreadError(threadIdForSend, resolved.error);

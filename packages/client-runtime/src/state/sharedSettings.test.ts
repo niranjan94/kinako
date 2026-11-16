@@ -120,6 +120,10 @@ describe("planModelSettingsSync", () => {
         { provider: personal, model: "sol", favorite: true },
       ],
       setModelsHidden: [{ provider: work, model: "luna", hidden: true }],
+      setModelEffortDefaults: [
+        { provider: work, model: "sol", effort: { id: "reasoningEffort", value: "high" } },
+        { provider: codexDefault, model: "sol", effort: { id: "reasoningEffort", value: "xhigh" } },
+      ],
       setProviderModelOrder: { provider: codexDefault, modelOrder: ["sol"] },
       setProviderCustomModels: [{ provider: work, driver: codex, customModels: [model] }],
     };
@@ -134,6 +138,13 @@ describe("planModelSettingsSync", () => {
       {
         setModelFavorites: [{ provider: codexDefault, model: "sol", favorite: true }],
         setProviderModelOrder: { provider: codexDefault, modelOrder: ["sol"] },
+        setModelEffortDefaults: [
+          {
+            provider: codexDefault,
+            model: "sol",
+            effort: { id: "reasoningEffort", value: "xhigh" },
+          },
+        ],
       },
     ]);
   });

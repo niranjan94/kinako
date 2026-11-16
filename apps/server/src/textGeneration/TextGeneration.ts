@@ -10,6 +10,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import { exhaustedUsageWindow } from "@t3tools/shared/usageLimits";
 import { fallbackTextGenerationModelSelection } from "@t3tools/shared/serverSettings";
+import { withModelEffortDefault } from "@t3tools/shared/model";
 import * as ServerSettings from "../serverSettings.ts";
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
 import { TextGenerationError } from "@t3tools/contracts";
@@ -115,17 +116,17 @@ export const make = Effect.gen(function* () {
             ?.supportsTextGeneration === false ||
           (selected.status === "error" &&
             (!selected.installed || selected.auth.status === "unauthenticated"))));
+    const settings = yield* serverSettings.getSettings.pipe(
+      Effect.mapError(
+        (cause) =>
+          new TextGenerationError({
+            operation,
+            detail: "Could not read model settings.",
+            cause,
+          }),
+      ),
+    );
     if (unusable || exhaustedUsageWindow(selected, now, selection.model)) {
-      const settings = yield* serverSettings.getSettings.pipe(
-        Effect.mapError(
-          (cause) =>
-            new TextGenerationError({
-              operation,
-              detail: "Could not read fallback model settings.",
-              cause,
-            }),
-        ),
-      );
       selection =
         fallbackTextGenerationModelSelection(
           settings.providerInstances,
@@ -154,6 +155,13 @@ export const make = Effect.gen(function* () {
           "Review guides need a coding agent that can read the checkout. None is ready. Pick Codex or Claude as the review guide model in Settings → Source control.",
       });
     }
+    selection = withModelEffortDefault(
+      selection,
+      settings.providerModelPreferences,
+      snapshots
+        .find((provider) => provider.instanceId === selection.instanceId)
+        ?.models.find((model) => model.slug === selection.model)?.capabilities ?? null,
+    );
     return yield* installationGate.execute(
       selection.instanceId,
       resolveInstance(registry, operation, selection.instanceId).pipe(

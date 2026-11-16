@@ -30,6 +30,7 @@ import {
   type SecretReference,
   type ServerProvider,
   type ServerProviderModel,
+  type ModelPreferences,
 } from "@t3tools/contracts";
 
 import {
@@ -690,6 +691,11 @@ interface ProviderInstanceCardProps {
   readonly hiddenModels: ReadonlyArray<string>;
   readonly favoriteModels: ReadonlyArray<string>;
   readonly modelOrder: ReadonlyArray<string>;
+  readonly defaultEfforts?: ModelPreferences["providerModelPreferences"][ProviderInstanceId]["defaultEfforts"];
+  readonly onDefaultEffortChange?: (
+    model: string,
+    effort: { readonly id: string; readonly value: string } | null,
+  ) => void;
   readonly onHiddenModelsChange: (
     next: ReadonlyArray<string>,
     affectedModels: ReadonlyArray<string>,
@@ -764,6 +770,8 @@ export function ProviderInstanceCard({
   hiddenModels,
   favoriteModels,
   modelOrder,
+  defaultEfforts,
+  onDefaultEffortChange,
   onHiddenModelsChange,
   onFavoriteModelsChange,
   onToggleFavorite,
@@ -1450,6 +1458,8 @@ export function ProviderInstanceCard({
               hiddenModels={hiddenModels}
               favoriteModels={favoriteModels}
               modelOrder={modelOrder}
+              defaultEfforts={defaultEfforts}
+              onDefaultEffortChange={onDefaultEffortChange}
               onChange={updateCustomModels}
               onHiddenModelsChange={onHiddenModelsChange}
               onFavoriteModelsChange={onFavoriteModelsChange}
