@@ -11,6 +11,7 @@ import {
   sandboxCandidates,
   sandboxWildcardDirectories,
   type SandboxPathFact,
+  type SandboxRejectedEntry,
   type SandboxPolicy,
   type SandboxPolicyInput,
 } from "./sandboxPolicy.ts";
@@ -28,6 +29,8 @@ export interface ResolveSandboxPolicyInput extends Omit<
   SandboxPolicyInput,
   "gitCommonDirs" | "providerPaths" | "darwinUserCacheDir" | "gitExcludesFile"
 > {
+  /** Checkouts paired with the repositories the server knows they come from. */
+  readonly gitCheckouts: ReadonlyArray<{ readonly checkout: string; readonly repository: string }>;
   /** Read-write directories are created when missing; other missing paths are left out. */
   readonly providerPaths: ReadonlyArray<{
     readonly path: string;
@@ -71,8 +74,6 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
         Effect.map((result) => (result.code === 0 ? result.stdout.trim() : "")),
         Effect.orElseSucceed(() => ""),
       );
-  const gitCommonDir = (directory: string) =>
-    output("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], directory);
   const gitExcludesFile = yield* output("git", [
     "config",
     "--global",
@@ -81,11 +82,32 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   ]);
   const darwinUserCacheDir =
     input.platform === "darwin" ? yield* output("getconf", ["DARWIN_USER_CACHE_DIR"]) : "";
-  const gitCommonDirs = (yield* Effect.forEach(
-    [input.cwd, ...input.additionalDirectories.map((directory) => directory.path)],
-    gitCommonDir,
-    { concurrency: 4 },
-  )).filter((directory) => directory.length > 0);
+  // The agent can rewrite a checkout's `.git` file, so it only says whether the checkout is a
+  // linked worktree; the git dir granted is always the server-known repository's own.
+  const gitCommonDirs: Array<string> = [];
+  const droppedGitDirs: Array<SandboxRejectedEntry> = [];
+  for (const { checkout, repository } of input.gitCheckouts) {
+    if (path.resolve(checkout) === path.resolve(repository)) continue;
+    const checkoutGit = yield* fileSystem
+      .stat(path.join(checkout, ".git"))
+      .pipe(Effect.orElseSucceed(() => undefined));
+    if (checkoutGit?.type !== "File") continue;
+    const gitDir = path.join(repository, ".git");
+    const isLink = yield* fileSystem.readLink(gitDir).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+    const info = yield* fileSystem.stat(gitDir).pipe(Effect.orElseSucceed(() => undefined));
+    if (isLink || info?.type !== "Directory") {
+      droppedGitDirs.push({
+        path: gitDir,
+        source: "git-common-dir",
+        reason: "The repository's git dir is not a plain directory, so it is not granted.",
+      });
+      continue;
+    }
+    gitCommonDirs.push(gitDir);
+  }
 
   const policyInput: SandboxPolicyInput = {
     ...input,
@@ -132,7 +154,7 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
     list: (directory) => listings.get(directory) ?? [],
   });
   return resolution._tag === "Resolved"
-    ? resolution.policy
+    ? { ...resolution.policy, rejected: [...droppedGitDirs, ...resolution.policy.rejected] }
     : yield* new SandboxPolicyRefusedError({ reason: resolution.reason });
 }) satisfies (
   input: ResolveSandboxPolicyInput,

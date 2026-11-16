@@ -1888,7 +1888,7 @@ export const layerAppServerClientFactory: Layer.Layer<
         const command = yield* makeCodexAppServerSpawnCommand({
           command: sandboxed?.command ?? executable,
           args: sandboxed?.args ?? args,
-          env: environment,
+          env: sandboxed?.env ?? environment,
           threadId: input.threadId,
           ...(sandboxed === undefined
             ? {}
@@ -2034,7 +2034,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
       return Effect.succeed(CodexProviderCapabilitiesV2);
     }),
     ...(platform === "linux" || platform === "darwin"
-      ? { dedicatedSessionRuntimeModes: ["sandboxed-full-access"] as const }
+      ? {
+          dedicatedSessionRuntimeModes: ["sandboxed-full-access"] as const,
+          wrapsProcessInOsSandbox: true as const,
+        }
       : {}),
     planSelectionTransition: Effect.fn("CodexAdapterV2.planSelectionTransition")(function () {
       return Effect.succeed(turnScopedSelectionTransition());

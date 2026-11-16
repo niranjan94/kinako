@@ -1585,7 +1585,7 @@ export const layerQueryRunner: Layer.Layer<
                   args: sandboxed.args,
                   name: "claude",
                   threadId: input.threadId,
-                  env: queryOptions.env,
+                  env: sandboxed.env ?? queryOptions.env,
                 })
               : binaryPath === undefined ||
                   CLAUDE_SCRIPT_EXTENSIONS.some((ext) => binaryPath.endsWith(ext))
@@ -1597,14 +1597,22 @@ export const layerQueryRunner: Layer.Layer<
                     threadId: input.threadId,
                     env: queryOptions.env,
                   });
+          // A sandboxed CLI always starts through its wrapper, whatever arguments the wrapper has.
           const options =
-            launch === undefined || launch.args.length === 0
-              ? queryOptions
-              : {
+            sandboxed !== undefined && launch !== undefined
+              ? {
                   ...queryOptions,
+                  env: sandboxed.env ?? queryOptions.env,
                   pathToClaudeCodeExecutable: launch.command,
                   executableArgs: [...launch.args, ...(queryOptions.executableArgs ?? [])],
-                };
+                }
+              : launch === undefined || launch.args.length === 0
+                ? queryOptions
+                : {
+                    ...queryOptions,
+                    pathToClaudeCodeExecutable: launch.command,
+                    executableArgs: [...launch.args, ...(queryOptions.executableArgs ?? [])],
+                  };
           const unit = launch?.unit;
           const stopScope =
             unit === undefined ? undefined : () => void runFork(agentScope.stop(unit));
@@ -5941,6 +5949,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
     getCapabilities: Effect.fn("ClaudeAdapterV2.getCapabilities")(function () {
       return Effect.succeed(ClaudeProviderCapabilitiesV2);
     }),
+    wrapsProcessInOsSandbox: true,
     planSelectionTransition: Effect.fn("ClaudeAdapterV2.planSelectionTransition")(function () {
       return Effect.succeed(turnScopedSelectionTransition());
     }),

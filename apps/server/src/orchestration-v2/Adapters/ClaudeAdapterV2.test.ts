@@ -160,6 +160,7 @@ const SANDBOX_REQUEST: SandboxRequest = {
   worktreesDir: "/home/user/.kinako/worktrees",
   attachmentsDir: "/home/user/.kinako/userdata/attachments",
   serverPaths: [],
+  gitCheckouts: [],
 };
 const AUTO_COMPACT_CLAUDE_SETTINGS = Schema.decodeSync(ClaudeSettings)({
   autoCompactWindow: "300000",
@@ -3368,6 +3369,7 @@ describe("ClaudeAdapterV2 native session identity", () => {
     nativeThreadHasTurns?: boolean,
     configDirTranscript?: "present" | "absent",
     importedNativeThreadId?: string,
+    runtimePolicy?: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
   ) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -3493,17 +3495,18 @@ describe("ClaudeAdapterV2 native session identity", () => {
                   updatedAt: now,
                 },
               });
+        const turnInput = makeClaudeTestTurnInput({
+          threadId,
+          providerThread,
+          now,
+          attemptId: RunAttemptId.make("run-attempt-claude-session-identity"),
+          text: "Respond with identity ok",
+          attachments: [],
+          providerTurnOrdinal,
+          ...(nativeThreadHasTurns === undefined ? {} : { nativeThreadHasTurns }),
+        });
         yield* runtime.startTurn(
-          makeClaudeTestTurnInput({
-            threadId,
-            providerThread,
-            now,
-            attemptId: RunAttemptId.make("run-attempt-claude-session-identity"),
-            text: "Respond with identity ok",
-            attachments: [],
-            providerTurnOrdinal,
-            ...(nativeThreadHasTurns === undefined ? {} : { nativeThreadHasTurns }),
-          }),
+          runtimePolicy === undefined ? turnInput : { ...turnInput, runtimePolicy },
         );
         return openedQueries;
       }).pipe(
@@ -3527,6 +3530,27 @@ describe("ClaudeAdapterV2 native session identity", () => {
         assert.equal(openedQueries[0]?.options.resume, "native-session-identity");
         assert.equal(openedQueries[0]?.options.sessionId, undefined);
         assert.equal(openedQueries[0]?.options.title, "Claude attachment test");
+      }),
+  );
+
+  it.effect(
+    "hands the runner the sandbox whenever it lifts approvals for Sandboxed full access",
+    () =>
+      Effect.gen(function* () {
+        const [sandboxed] = yield* openTurnWithOrdinal(1, false, undefined, undefined, {
+          ...CLAUDE_TEST_RUNTIME_POLICY,
+          runtimeMode: "sandboxed-full-access",
+          sandboxPolicy: externalSandboxPolicy(SANDBOX_REQUEST),
+        });
+        assert.equal(sandboxed?.options.permissionMode, "bypassPermissions");
+        assert.deepEqual(sandboxed?.osSandbox?.request, SANDBOX_REQUEST);
+
+        const [fullAccess] = yield* openTurnWithOrdinal(1, false, undefined, undefined, {
+          ...CLAUDE_TEST_RUNTIME_POLICY,
+          runtimeMode: "full-access",
+        });
+        assert.equal(fullAccess?.options.permissionMode, "bypassPermissions");
+        assert.isUndefined(fullAccess?.osSandbox);
       }),
   );
 

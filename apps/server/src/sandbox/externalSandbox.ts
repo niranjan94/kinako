@@ -13,6 +13,11 @@ export const SandboxRequest = Schema.Struct({
   worktreesDir: Schema.String,
   attachmentsDir: Schema.String,
   serverPaths: Schema.Array(Schema.String),
+  /**
+   * Each checkout the thread works in, with the repository the server created it from. A linked
+   * worktree needs its repository's git dir, which is granted from this, never from the checkout.
+   */
+  gitCheckouts: Schema.Array(Schema.Struct({ checkout: Schema.String, repository: Schema.String })),
 });
 export type SandboxRequest = typeof SandboxRequest.Type;
 

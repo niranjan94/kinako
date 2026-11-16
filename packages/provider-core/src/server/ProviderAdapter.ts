@@ -824,6 +824,11 @@ export class ProviderAdapterV2 extends Context.Service<
      * session across threads, such as a mode whose process is sandboxed for one workspace.
      */
     readonly dedicatedSessionRuntimeModes?: ReadonlyArray<RuntimeMode>;
+    /**
+     * The adapter starts its provider process inside the OS sandbox an `externalSandbox`
+     * request describes. Without it, Sandboxed full access is never granted to the provider.
+     */
+    readonly wrapsProcessInOsSandbox?: true;
     readonly planSelectionTransition: (
       input: ProviderSelectionTransitionInput,
     ) => Effect.Effect<ProviderSelectionTransitionPlan, ProviderAdapterV2Error>;

@@ -51,7 +51,8 @@ export type SandboxEntrySource =
   | "ssh-agent"
   | "docker"
   | "git-config"
-  | "server";
+  | "server"
+  | "multiplexer";
 
 export interface SandboxPolicyEntry {
   readonly path: string;
@@ -115,6 +116,10 @@ export interface SandboxPolicyInput {
   /** git's `core.excludesfile`, already home-expanded. */
   readonly gitExcludesFile?: string | undefined;
   readonly sshAuthSock: string | undefined;
+  /** The user's name and tmux and screen socket settings, whose sockets stay hidden. */
+  readonly userName?: string | undefined;
+  readonly tmuxTmpDir?: string | undefined;
+  readonly screenDir?: string | undefined;
   readonly settings: EffectiveSandboxSettings;
 }
 
@@ -134,6 +139,31 @@ interface Candidate {
   readonly access: SandboxAccess;
   readonly source: SandboxEntrySource;
   readonly required: boolean;
+  /** Exposed only when it still resolves to a socket. */
+  readonly socket?: true;
+  /** Exposed only when it resolves to a directory in a temp location. */
+  readonly tmpDir?: true;
+}
+
+// A swapped TMPDIR must not turn into a grant elsewhere.
+const TEMP_ROOTS = ["/tmp", "/var/tmp", "/private/tmp", "/private/var/tmp", "/private/var/folders"];
+
+/**
+ * A process that reaches a tmux or screen server runs commands outside the sandbox, and
+ * `connect()` works through a read-only bind, so their default socket dirs stay hidden.
+ */
+function multiplexerSocketDirs(input: SandboxPolicyInput): ReadonlyArray<string> {
+  const tmpRoot = input.platform === "darwin" ? "/private/tmp" : "/tmp";
+  const user = input.userName;
+  return [
+    NodePath.posix.join(input.tmuxTmpDir ?? tmpRoot, `tmux-${input.uid}`),
+    ...(input.screenDir === undefined ? [] : [input.screenDir]),
+    ...(user === undefined
+      ? []
+      : input.platform === "linux"
+        ? [`/run/screen/S-${user}`, `/var/run/screen/S-${user}`]
+        : [`${tmpRoot}/.screen`, `${tmpRoot}/screens/S-${user}`]),
+  ];
 }
 
 /** The environment's lists, or the platform defaults for null ones, plus what the project adds. */
@@ -195,7 +225,9 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
       candidate(directory.path, directory.access, "additional-directory"),
     ),
     candidate("/tmp", "read-write", "temp"),
-    ...(input.tmpDir === undefined ? [] : [candidate(input.tmpDir, "read-write", "temp")]),
+    ...(input.tmpDir === undefined
+      ? []
+      : [{ ...candidate(input.tmpDir, "read-write", "temp"), tmpDir: true as const }]),
     ...(input.darwinUserCacheDir === undefined
       ? []
       : [candidate(input.darwinUserCacheDir, "read-write", "temp")]),
@@ -218,15 +250,20 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
     ...(input.sshAuthSock === undefined || input.sshAuthSock.length === 0
       ? []
       : [
-          candidate(
-            input.sshAuthSock,
-            input.settings.allowSshAgent ? "read-write" : "hidden",
-            "ssh-agent",
-          ),
+          {
+            ...candidate(
+              input.sshAuthSock,
+              input.settings.allowSshAgent ? "read-write" : "hidden",
+              "ssh-agent",
+            ),
+            socket: true as const,
+          },
         ]),
-    ...dockerSocketPaths(input).map((path) =>
-      candidate(path, input.settings.allowDocker ? "read-write" : "hidden", "docker"),
-    ),
+    ...dockerSocketPaths(input).map((path) => ({
+      ...candidate(path, input.settings.allowDocker ? "read-write" : "hidden", "docker"),
+      socket: true as const,
+    })),
+    ...multiplexerSocketDirs(input).map((path) => candidate(path, "hidden", "multiplexer")),
     ...(input.settings.allowDocker
       ? [candidate(NodePath.posix.join(input.home, ".docker"), "read-write", "docker")]
       : []),
@@ -337,6 +374,18 @@ export function resolveSandboxPolicy(
     }
     const path = fact.realPath;
     const reject = (reason: string) => rejected.push({ path, source: candidate.source, reason });
+
+    if (candidate.socket === true && candidate.access !== "hidden" && fact.kind !== "socket") {
+      reject("Not a socket, so it is not exposed.");
+      continue;
+    }
+    if (
+      candidate.tmpDir === true &&
+      (fact.kind !== "directory" || !TEMP_ROOTS.some((root) => isWithin(path, root)))
+    ) {
+      reject("TMPDIR is not a directory in a temp location; only the default temp dirs apply.");
+      continue;
+    }
 
     if (USER_SOURCES.has(candidate.source)) {
       if (candidate.source === "path" && !isWithin(path, realHome)) continue;

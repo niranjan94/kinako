@@ -34,41 +34,64 @@ it.live("resolves a linked worktree against the real filesystem and git", () =>
     yield* git(main, "commit", "-q", "--allow-empty", "-m", "base");
     yield* git(main, "worktree", "add", "-q", worktree);
 
-    const policy = yield* resolveSandboxPolicy({
-      platform: "linux",
-      home,
-      uid: 1000,
-      cwd: worktree,
-      additionalDirectories: [],
-      providerPaths: [
-        { path: path.join(home, ".provider"), kind: "directory", access: "read-write" },
-        { path: path.join(home, ".provider.json"), kind: "file", access: "read-write" },
-      ],
-      serverPaths: [],
-      attachmentsDir: path.join(home, ".kinako", "userdata", "attachments"),
-      baseDir: path.join(home, ".kinako"),
-      worktreesDir: path.join(home, ".kinako", "worktrees"),
-      pathEnv: undefined,
-      tmpDir: undefined,
-      sshAuthSock: undefined,
-      settings: effectiveSandboxSettings(
-        { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
-        undefined,
-        "linux",
-      ),
-    });
+    const resolveIn = (cwd: string) =>
+      resolveSandboxPolicy({
+        platform: "linux",
+        home,
+        uid: 1000,
+        cwd,
+        gitCheckouts: [{ checkout: cwd, repository: main }],
+        additionalDirectories: [],
+        providerPaths: [
+          { path: path.join(home, ".provider"), kind: "directory", access: "read-write" },
+          { path: path.join(home, ".provider.json"), kind: "file", access: "read-write" },
+        ],
+        serverPaths: [],
+        attachmentsDir: path.join(home, ".kinako", "userdata", "attachments"),
+        baseDir: path.join(home, ".kinako"),
+        worktreesDir: path.join(home, ".kinako", "worktrees"),
+        pathEnv: undefined,
+        tmpDir: undefined,
+        sshAuthSock: undefined,
+        settings: effectiveSandboxSettings(
+          { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
+          undefined,
+          "linux",
+        ),
+      });
+    const accessIn = (policy: Effect.Success<ReturnType<typeof resolveIn>>) =>
+      Object.fromEntries(
+        policy.entries
+          .filter((entry) => entry.path.startsWith(root))
+          .map((entry) => [entry.path, entry.access]),
+      );
+    const policy = yield* resolveIn(worktree);
 
     assert.isTrue(yield* fileSystem.exists(path.join(home, ".provider")));
-    const access = Object.fromEntries(
-      policy.entries
-        .filter((entry) => entry.path.startsWith(root))
-        .map((entry) => [entry.path, entry.access]),
-    );
-    assert.deepEqual(access, {
+    assert.deepEqual(accessIn(policy), {
       [home]: "hidden",
       [path.join(home, ".provider")]: "read-write",
       [path.join(main, ".git")]: "read-write",
       [worktree]: "read-write",
     });
+
+    // A plain checkout needs no grant beyond itself.
+    assert.deepEqual(accessIn(yield* resolveIn(main)), {
+      [home]: "hidden",
+      [path.join(home, ".provider")]: "read-write",
+      [main]: "read-write",
+    });
+
+    // The agent can point its checkout at another repository; the grant stays its own.
+    const other = path.join(home, "code", "other");
+    yield* fileSystem.makeDirectory(other, { recursive: true });
+    yield* git(other, "init", "-q");
+    yield* fileSystem.writeFileString(
+      path.join(worktree, ".git"),
+      `gitdir: ${path.join(other, ".git")}\n`,
+    );
+    const redirected = accessIn(yield* resolveIn(worktree));
+    assert.equal(redirected[path.join(main, ".git")], "read-write");
+    assert.isUndefined(redirected[path.join(other, ".git")]);
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );

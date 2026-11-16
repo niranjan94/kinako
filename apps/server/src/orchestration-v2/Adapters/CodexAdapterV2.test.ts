@@ -166,6 +166,7 @@ const SANDBOX_REQUEST: SandboxRequest = {
   worktreesDir: "/home/user/.kinako/worktrees",
   attachmentsDir: "/home/user/.kinako/userdata/attachments",
   serverPaths: [],
+  gitCheckouts: [],
 };
 
 describe("CodexAdapterV2 runtime policy", () => {
@@ -1166,6 +1167,60 @@ describe("CodexAdapterV2 process exit", () => {
       assert.equal(runningAgents, 0);
     }).pipe(Effect.provide(factoryLayer));
   });
+
+  it.effect("hands the app-server factory the sandbox a sandboxed thread must run in", () =>
+    Effect.gen(function* () {
+      const opened: Array<ProviderAdapter.ProviderAdapterV2RuntimePolicy> = [];
+      const adapter = yield* CodexAdapterV2.makeCodexAdapterV2({
+        instanceId: CodexAdapterV2.CODEX_DEFAULT_INSTANCE_ID,
+        settings: DEFAULT_CODEX_SETTINGS,
+        environment: {},
+        clientFactory: {
+          open: (openInput) =>
+            Effect.sync(() => opened.push(openInput.runtimePolicy)).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new ProviderAdapter.ProviderAdapterOpenSessionError({
+                    driver: CodexAdapterV2.CODEX_DRIVER_KIND,
+                    providerSessionId: openInput.providerSessionId,
+                  }),
+                ),
+              ),
+            ),
+        },
+        digest: yield* Digest.Digest,
+        fileSystem: yield* FileSystem.FileSystem,
+        idAllocator: yield* IdAllocator.IdAllocatorV2,
+        serverConfig: yield* ProviderReplayHarness.makeReplayServerConfig(
+          "codex-sandbox-seam",
+        ).pipe(Effect.orDie),
+      });
+      const runtimePolicy = {
+        ...CODEX_TEST_RUNTIME_POLICY,
+        runtimeMode: "sandboxed-full-access" as const,
+        sandboxPolicy: externalSandboxPolicy(SANDBOX_REQUEST),
+      };
+      yield* adapter
+        .openSession({
+          threadId: ThreadId.make("thread-codex-sandbox-seam"),
+          providerSessionId: ProviderSessionId.make("session-codex-sandbox-seam"),
+          modelSelection: CODEX_TEST_MODEL_SELECTION,
+          runtimePolicy,
+        })
+        .pipe(Effect.flip);
+      assert.deepEqual(opened, [runtimePolicy]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          NodeServices.layer,
+          NodeCrypto.layer,
+        ),
+      ),
+    ),
+  );
 
   const openSandboxed = (sandbox: Sandbox.SandboxShape | undefined) =>
     Effect.gen(function* () {

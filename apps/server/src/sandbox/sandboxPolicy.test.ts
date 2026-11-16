@@ -72,6 +72,11 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.ssh/id_ed25519.pub`]: "file",
   [`${HOME}/.docker`]: "directory",
   "/tmp": "directory",
+  "/tmp/tmux-1000": "directory",
+  "/tmp/user-tmp": "directory",
+  "/run/screen/S-user": "directory",
+  [`${HOME}/.agent-dir`]: "directory",
+  [`${HOME}/scratch`]: "directory",
   "/run/user/1000": "directory",
   "/run/user/1000/bus": "file",
   "/run/user/1000/keyring/ssh": "socket",
@@ -217,6 +222,28 @@ describe("resolveSandboxPolicy", () => {
       ],
     },
     {
+      name: "the user's tmux and screen sockets",
+      input: linuxInput({ userName: "user" }),
+      access: [
+        ["/tmp/tmux-1000/default", "hidden"],
+        ["/run/screen/S-user/1234.pts-0", "hidden"],
+        ["/tmp/kinako-mux-1000-abc/default", "read-write"],
+      ],
+    },
+    {
+      name: "a socket path that is a directory, and a TMPDIR outside temp",
+      input: linuxInput({ sshAuthSock: `${HOME}/.agent-dir`, tmpDir: `${HOME}/scratch` }),
+      access: [
+        [`${HOME}/.agent-dir/key`, "hidden"],
+        [`${HOME}/scratch/file`, "hidden"],
+      ],
+    },
+    {
+      name: "a TMPDIR inside the temp dir",
+      input: linuxInput({ tmpDir: "/tmp/user-tmp" }),
+      access: [["/tmp/user-tmp/file", "read-write"]],
+    },
+    {
       name: "a managed provider home inside the base dir",
       input: linuxInput({
         providerPaths: [
@@ -274,6 +301,23 @@ describe("resolveSandboxPolicy", () => {
     expect(paths).not.toContain("/usr/bin");
     // Missing optional defaults are dropped.
     expect(paths).not.toContain(`${HOME}/.nvm`);
+  });
+
+  it("reports a socket that is no longer a socket and a TMPDIR outside temp", () => {
+    const policy = resolved(
+      linuxInput({ sshAuthSock: `${HOME}/.agent-dir`, tmpDir: `${HOME}/scratch` }),
+    );
+    expect(
+      policy.rejected
+        .filter(({ source }) => source === "temp" || source === "ssh-agent")
+        .map(({ path, reason }) => [path, reason]),
+    ).toEqual([
+      [
+        `${HOME}/scratch`,
+        "TMPDIR is not a directory in a temp location; only the default temp dirs apply.",
+      ],
+      [`${HOME}/.agent-dir`, "Not a socket, so it is not exposed."],
+    ]);
   });
 
   it("keeps read-write when a path is listed both ways", () => {

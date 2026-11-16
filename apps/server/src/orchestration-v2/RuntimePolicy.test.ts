@@ -70,8 +70,10 @@ function makeThread(input: {
 const grokInstanceId = ProviderInstanceId.make("grok");
 const antigravityInstanceId = ProviderInstanceId.make("antigravity");
 const sandboxingInstanceId = ProviderInstanceId.make("sandboxing");
+const listingOnlyInstanceId = ProviderInstanceId.make("listing-only");
 const supportedRuntimeModesByInstance = new Map<ProviderInstanceId, ReadonlyArray<RuntimeMode>>([
   [sandboxingInstanceId, ["approval-required", "sandboxed-full-access", "full-access"]],
+  [listingOnlyInstanceId, ["approval-required", "sandboxed-full-access", "full-access"]],
   [grokInstanceId, ["approval-required", "auto", "full-access"]],
   [antigravityInstanceId, ["approval-required", "auto-accept-edits", "full-access"]],
 ]);
@@ -82,6 +84,8 @@ const providerInstanceFor = (instanceId: ProviderInstanceId) =>
         supportedRuntimeModes: supportedRuntimeModesByInstance.get(instanceId),
       } as ServerProvider),
     },
+    orchestrationAdapter:
+      instanceId === sandboxingInstanceId ? { wrapsProcessInOsSandbox: true } : {},
   }) as ProviderInstance;
 
 const layerWithPolicy = (policy?: ManagedPolicySummary) =>
@@ -211,9 +215,12 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
       assert.equal(request?.attachmentsDir, attachmentsDir);
       assert.include(request?.settings.readWritePaths ?? [], "~/.cache");
 
+      const listingOnly = yield* resolve(listingOnlyInstanceId, "sandboxed-full-access");
+      assert.equal(listingOnly.runtimeMode, "approval-required");
       for (const unsandboxed of [
         yield* resolve(providerInstanceId, "sandboxed-full-access"),
         yield* resolve(sandboxingInstanceId, "full-access"),
+        listingOnly,
       ]) {
         assert.isUndefined(unsandboxed.sandboxPolicy);
         assert.isUndefined(externalSandboxRequest(unsandboxed));

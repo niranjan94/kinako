@@ -174,8 +174,20 @@ export const layerFromProjectStore: Layer.Layer<
     const sandboxRequest = Effect.fn("RuntimePolicyV2.sandboxRequest")(function* (
       thread: OrchestrationV2AppThread,
       providerInstanceId: ProviderInstanceId,
+      cwd: string,
     ) {
       if (platform !== "linux" && platform !== "darwin") return undefined;
+      const project = yield* projects.get(thread.projectId).pipe(
+        Effect.map(Option.getOrUndefined),
+        Effect.mapError(
+          (cause) =>
+            new RuntimePolicyResolveError({
+              projectId: thread.projectId,
+              providerInstanceId,
+              cause,
+            }),
+        ),
+      );
       const settings = yield* serverSettings.getSettings.pipe(
         Effect.mapError(
           (cause) =>
@@ -200,6 +212,13 @@ export const layerFromProjectStore: Layer.Layer<
           `${serverConfig.baseDir}/tools`,
           // Device launchers run the server's own runtime.
           executablePath.slice(0, executablePath.lastIndexOf("/")) || "/",
+        ],
+        gitCheckouts: [
+          ...(project === undefined ? [] : [{ checkout: cwd, repository: project.workspaceRoot }]),
+          ...(thread.additionalDirectories ?? []).map((directory) => ({
+            checkout: resolveThreadAdditionalDirectoryPath(directory),
+            repository: directory.path,
+          })),
         ],
       } satisfies SandboxRequest;
     });
@@ -236,10 +255,16 @@ export const layerFromProjectStore: Layer.Layer<
               }),
             ),
           ));
-        const runtimeMode = providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes);
+        const listedMode = providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes);
+        // Listing the mode is not enough: only an adapter that wraps its process may run it.
+        const runtimeMode =
+          listedMode === "sandboxed-full-access" &&
+          instance?.orchestrationAdapter.wrapsProcessInOsSandbox !== true
+            ? "approval-required"
+            : listedMode;
         const request =
           runtimeMode === "sandboxed-full-access"
-            ? yield* sandboxRequest(input.thread, input.modelSelection.instanceId)
+            ? yield* sandboxRequest(input.thread, input.modelSelection.instanceId, cwd)
             : undefined;
         return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
           runtimeMode,
