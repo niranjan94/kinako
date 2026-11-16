@@ -12,9 +12,7 @@ it.each(RuntimeMode.literals)("keeps MCP access within the %s policy ceiling", (
   expect(resolveMcpAccess("auto", ceiling, false)).toBe(
     isRuntimeModeAbove("auto", maxRuntimeMode) ? maxRuntimeMode : "auto",
   );
-  expect(resolveMcpAccess("full-access", ceiling, false)).toBe(
-    maxRuntimeMode === "sandboxed-full-access" ? "auto" : maxRuntimeMode,
-  );
+  expect(resolveMcpAccess("full-access", ceiling, false)).toBe(maxRuntimeMode);
   expect(resolveMcpAccess("read-only", ceiling, false)).toBe("read-only");
   expect(resolveMcpAccess("approval-required", ceiling, false)).toBe("approval-required");
 });

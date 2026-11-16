@@ -260,6 +260,7 @@ export const AuthMcpClientAccess = Schema.Literals([
   "approval-required",
   "auto-accept-edits",
   "auto",
+  "sandboxed-full-access",
   "full-access",
 ]);
 export type AuthMcpClientAccess = typeof AuthMcpClientAccess.Type;
@@ -286,6 +287,7 @@ const MCP_APPROVAL_CODE_PREFIXES = {
   "approval-required": "SUPERVISED",
   "auto-accept-edits": "EDITS",
   auto: "AUTO",
+  "sandboxed-full-access": "SANDBOXED",
   "full-access": "FULL",
 } as const satisfies Record<AuthMcpClientAccess, string>;
 

@@ -43,7 +43,7 @@ import { Button } from "../../components/ui/Button";
 import { Sheet } from "../../components/ui/Sheet";
 import { RUNTIME_MODE_CHOICES } from "./thread-settings-options";
 
-/** The same five levels as web's access picker: read-only, then the runtime modes. */
+/** The same levels as web's access picker: read-only, then the runtime modes. */
 const ACCESS_CHOICES: ReadonlyArray<{
   readonly access: AuthMcpClientAccess;
   readonly label: string;
@@ -54,9 +54,7 @@ const ACCESS_CHOICES: ReadonlyArray<{
     label: "Read only",
     description: "Read projects and threads. Cannot start, message or change anything.",
   },
-  ...RUNTIME_MODE_CHOICES.flatMap(({ mode, ...choice }) =>
-    mode === "sandboxed-full-access" ? [] : [{ ...choice, access: mode }],
-  ),
+  ...RUNTIME_MODE_CHOICES.map(({ mode, ...choice }) => ({ ...choice, access: mode })),
 ];
 const accessLabel = (access: AuthMcpClientAccess) =>
   ACCESS_CHOICES.find((choice) => choice.access === access)?.label ?? access;

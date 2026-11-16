@@ -617,10 +617,11 @@ it.live(
     ),
 );
 
-it.live("a code minted with an access level's scopes approves that access", () =>
+it.live("a code minted with an access level's scopes signs the client in at that access", () =>
   withRoutes((handler, auth) =>
     Effect.gen(function* () {
-      const params = authorizeParams(yield* registeredClientId(handler));
+      const clientId = yield* registeredClientId(handler);
+      const params = authorizeParams(clientId);
       for (const access of AuthMcpClientAccess.literals) {
         const code = yield* auth.issuePairingCredential({ scopes: [...mcpClientScopes(access)] });
         const approval = yield* decide(handler, params, {
@@ -629,6 +630,24 @@ it.live("a code minted with an access level's scopes approves that access", () =
           code: code.credential,
         });
         expect(approval.status, access).toBe(200);
+        const token = yield* handler(
+          at(
+            "/oauth/mcp/token",
+            form({
+              grant_type: "authorization_code",
+              code: new URL(approval.redirectTo!).searchParams.get("code")!,
+              redirect_uri: params.redirect_uri,
+              client_id: clientId,
+              code_verifier: verifier,
+            }),
+          ),
+        ).pipe(Effect.flatMap(json<{ access_token: string }>));
+        const signedIn = yield* auth.authenticateMcpClient(
+          HttpServerRequest.fromWeb(
+            at("/mcp", { headers: { authorization: `Bearer ${token.access_token}` } }),
+          ),
+        );
+        expect(signedIn.access, access).toBe(access);
       }
     }),
   ),
@@ -791,6 +810,7 @@ it.live("one-click approves only access the browser session holds the scopes for
         "approval-required",
         "auto-accept-edits",
         "auto",
+        "sandboxed-full-access",
         "full-access",
       ]);
       const oneClick = yield* decide(

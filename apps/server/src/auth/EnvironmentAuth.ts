@@ -1642,9 +1642,8 @@ export const make = Effect.gen(function* () {
 
 const isMcpClientAccess = Schema.is(AuthMcpClientAccess);
 
-// No approval level grants sandboxed full access, so a token claiming it is treated as Supervised.
 const mcpClientAccessForCeiling = (ceiling: RuntimeMode | undefined): AuthMcpClientAccess =>
-  ceiling !== undefined && isMcpClientAccess(ceiling) ? ceiling : "approval-required";
+  ceiling ?? "approval-required";
 
 const normalizeVerificationCode = (code: string) => code.toUpperCase().replace(/[^0-9A-Z]/g, "");
 
