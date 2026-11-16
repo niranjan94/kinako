@@ -8,6 +8,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { externalSandboxPolicy, type SandboxRequest } from "../../sandbox/externalSandbox.ts";
 import * as Sandbox from "../../sandbox/Sandbox.ts";
+import { multiplexerDirFor } from "../../sandbox/sandboxLaunch.ts";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import { knownProviderFailureMessage } from "@t3tools/provider-core/server/failure";
 import {
@@ -1231,6 +1232,10 @@ describe("CodexAdapterV2 process exit", () => {
       const home = `${root}/home`;
       const cwd = `${root}/work`;
       const executable = `${root}/bin/codex`;
+      const uid = (yield* HostProcess.UserId) ?? -1;
+      yield* Effect.addFinalizer(() =>
+        fileSystem.remove(multiplexerDirFor(uid, cwd), { recursive: true }).pipe(Effect.ignore),
+      );
       yield* fileSystem.makeDirectory(home, { recursive: true });
       yield* fileSystem.makeDirectory(cwd, { recursive: true });
       yield* fileSystem.makeDirectory(`${root}/bin`, { recursive: true });

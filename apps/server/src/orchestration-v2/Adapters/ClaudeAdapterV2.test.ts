@@ -125,6 +125,7 @@ import {
 } from "./ClaudeAdapterV2.testkit.ts";
 import { externalSandboxPolicy, type SandboxRequest } from "../../sandbox/externalSandbox.ts";
 import * as Sandbox from "../../sandbox/Sandbox.ts";
+import { multiplexerDirFor } from "../../sandbox/sandboxLaunch.ts";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import type { SandboxPolicy } from "../../sandbox/sandboxPolicy.ts";
 import { knownProviderFailureMessage } from "@t3tools/provider-core/server/failure";
@@ -3163,6 +3164,10 @@ describe("ClaudeAdapterV2 OS sandbox launch", () => {
       const home = NodePath.join(root, "home");
       const cwd = NodePath.join(root, "work");
       const executable = NodePath.join(root, "bin", "claude");
+      const uid = (yield* HostProcess.UserId) ?? -1;
+      yield* Effect.addFinalizer(() =>
+        fileSystem.remove(multiplexerDirFor(uid, cwd), { recursive: true }).pipe(Effect.ignore),
+      );
       yield* fileSystem.makeDirectory(home, { recursive: true });
       yield* fileSystem.makeDirectory(cwd, { recursive: true });
       yield* fileSystem.makeDirectory(NodePath.dirname(executable), { recursive: true });

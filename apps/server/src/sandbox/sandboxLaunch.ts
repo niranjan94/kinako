@@ -16,6 +16,10 @@ import * as Sandbox from "./Sandbox.ts";
 
 const SCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs", ".tsx", ".ts", ".jsx"];
 
+/** The private tmux and screen socket dir for sandboxed sessions whose real cwd is `cwd`. */
+export const multiplexerDirFor = (uid: number, cwd: string) =>
+  `/tmp/kinako-mux-${uid}-${(Hash.string(cwd) >>> 0).toString(16)}`;
+
 /**
  * The command that starts a provider's executable inside a thread's sandbox. Fails, so the
  * session fails, whenever the sandbox cannot be built or applied.
@@ -85,10 +89,7 @@ export const sandboxProviderLaunch = Effect.fn("SandboxLaunch.provider")(functio
     screenDir: input.env.SCREENDIR,
   });
   // The user's tmux and screen sockets are hidden, so the agent's own run from a private dir.
-  const multiplexerDir = path.join(
-    "/tmp",
-    `kinako-mux-${uid}-${(Hash.string(policy.cwd) >>> 0).toString(16)}`,
-  );
+  const multiplexerDir = multiplexerDirFor(uid, policy.cwd);
   yield* fileSystem.makeDirectory(path.join(multiplexerDir, "screen"), { recursive: true }).pipe(
     Effect.andThen(fileSystem.chmod(multiplexerDir, 0o700)),
     Effect.andThen(fileSystem.chmod(path.join(multiplexerDir, "screen"), 0o700)),
