@@ -129,6 +129,11 @@ export interface SandboxPolicyInput {
   readonly userName?: string | undefined;
   readonly tmuxTmpDir?: string | undefined;
   readonly screenDir?: string | undefined;
+  /**
+   * Folders other sandboxes write that this one need not, such as the project root and the
+   * worktrees dir. A symlink inside one may have been put there by an agent.
+   */
+  readonly sharedWritableRoots?: ReadonlyArray<string> | undefined;
   readonly settings: EffectiveSandboxSettings;
 }
 
@@ -431,24 +436,40 @@ export function resolveSandboxPolicy(
   const warnings: Array<SandboxRejectedEntry> = [];
   const isListed = (item: { readonly source: SandboxEntrySource }) =>
     item.source === "user-read-write" || item.source === "user-read-only";
-  const credentials = [
+  const namedCredentials = [
     ...CREDENTIAL_PATHS.map((relative) => ({ relative, masked: false })),
     ...MASKED_CREDENTIAL_FILES.map((relative) => ({ relative, masked: true })),
-  ].flatMap(({ relative, masked }) => {
-    const fact = facts.stat(NodePath.posix.join(input.home, relative));
-    return fact === undefined ? [] : [{ shown: `~/${relative}`, path: fact.realPath, masked }];
+  ].map(({ relative, masked }) => ({
+    shown: `~/${relative}`,
+    path: NodePath.posix.join(input.home, relative),
+    masked,
+  }));
+  const credentials = namedCredentials.flatMap((credential) => {
+    const fact = facts.stat(credential.path);
+    return fact === undefined ? [] : [{ ...credential, path: fact.realPath }];
   });
-  const exposedCredentials = (path: string) =>
-    credentials.filter(
-      (credential) =>
-        (!credential.masked && isWithin(credential.path, path)) ||
-        (isWithin(path, credential.path) &&
-          !(
-            credential.shown === "~/.ssh" &&
-            NodePath.posix.dirname(path) === credential.path &&
-            PUBLIC_SSH_FILE.test(NodePath.posix.basename(path))
-          )),
-    );
+  const exposedIn =
+    (
+      list: ReadonlyArray<{
+        readonly shown: string;
+        readonly path: string;
+        readonly masked: boolean;
+      }>,
+    ) =>
+    (path: string) =>
+      list.filter(
+        (credential) =>
+          (!credential.masked && isWithin(credential.path, path)) ||
+          (isWithin(path, credential.path) &&
+            !(
+              credential.shown === "~/.ssh" &&
+              NodePath.posix.dirname(path) === credential.path &&
+              PUBLIC_SSH_FILE.test(NodePath.posix.basename(path))
+            )),
+      );
+  const exposedCredentials = exposedIn(credentials);
+  const listCredentials = (exposed: ReadonlyArray<{ readonly shown: string }>) =>
+    new Intl.ListFormat("en").format(exposed.map(({ shown }) => shown));
   const byPath = new Map<string, SandboxPolicyEntry>();
   // A listed path reached through a symlink must resolve inside as it does outside.
   const links = new Map<string, SandboxPolicyEntry>();
@@ -501,6 +522,81 @@ export function resolveSandboxPolicy(
     }
     return matches;
   });
+
+  // The server names worktrees and a provider's own state inside its base dir; a link from
+  // elsewhere into the base dir does not count.
+  const carvedOut = (candidate: Candidate, path: string, root: string) =>
+    root === realBase &&
+    ((isWithin(path, realWorktrees) &&
+      namedWithin(candidate.path, [input.worktreesDir, realWorktrees])) ||
+      (candidate.source === "provider" && namedWithin(candidate.path, [input.baseDir, realBase])));
+  const writable = expanded.flatMap((candidate) => {
+    const fact = candidate.access === "read-write" ? facts.stat(candidate.path) : undefined;
+    if (fact?.kind !== "directory" || isWithin(realHome, fact.realPath)) return [];
+    const path = fact.realPath;
+    return mandatoryHidden.every(
+      (root) => !isWithin(path, root) || carvedOut(candidate, path, root),
+    )
+      ? [path]
+      : [];
+  });
+  const plantable = [
+    ...writable,
+    ...(input.sharedWritableRoots ?? []).flatMap((root) => {
+      const fact = facts.stat(root);
+      return fact === undefined ? [] : [fact.realPath];
+    }),
+  ];
+  const isOwnLink = (
+    candidate: Candidate,
+    chain: ReadonlyArray<{ readonly path: string }>,
+  ): boolean => {
+    const parent = facts.stat(NodePath.posix.dirname(candidate.path));
+    const own =
+      parent === undefined
+        ? undefined
+        : NodePath.posix.join(parent.realPath, NodePath.posix.basename(candidate.path));
+    return chain.some((link) => link.path === own);
+  };
+  /**
+   * Why a grant reached through symlinks is unsafe, if it is. Each spawn resolves links afresh,
+   * so a link an agent put in a folder it writes must not lead the next spawn anywhere new.
+   */
+  const linkProblem = (candidate: Candidate, fact: SandboxPathFact): string | undefined => {
+    const chain = facts.links?.(candidate.path) ?? [];
+    if (chain.length === 0) return undefined;
+    const path = fact.realPath;
+    // PATH comes from the server's environment, and tools such as fnm keep its links in caches.
+    if (
+      candidate.source !== "path" &&
+      chain.some(
+        (link) =>
+          plantable.some((root) => isWithin(link.path, root)) &&
+          !writable.some((root) => isWithin(link.path, root) && isWithin(path, root)),
+      )
+    ) {
+      return `resolves through a symbolic link the sandbox can rewrite, to ${path}, outside the folders it can write`;
+    }
+    const named = new Set(
+      exposedIn(namedCredentials)(NodePath.posix.normalize(candidate.path)).map(
+        ({ shown }) => shown,
+      ),
+    );
+    const reached = exposedCredentials(path).filter(({ shown }) => !named.has(shown));
+    if (reached.length > 0) {
+      return `resolves through a symbolic link to credentials kept in ${listCredentials(reached)}`;
+    }
+    // Seatbelt lets the sandbox replace a writable file, so a link there may be the agent's.
+    if (
+      input.platform === "darwin" &&
+      candidate.access === "read-write" &&
+      fact.kind === "file" &&
+      isOwnLink(candidate, chain)
+    ) {
+      return "is a symbolic link the sandbox could have put in place of the file; name the file it points to instead";
+    }
+    return undefined;
+  };
 
   for (const candidate of expanded) {
     const fact = facts.stat(candidate.path);
@@ -565,17 +661,6 @@ export function resolveSandboxPolicy(
       }
     }
 
-    if (isListed(candidate)) {
-      const exposed = exposedCredentials(path);
-      if (exposed.length > 0) {
-        warnings.push({
-          path,
-          source: candidate.source,
-          reason: `May expose credentials kept in ${new Intl.ListFormat("en").format(exposed.map(({ shown }) => shown))}.`,
-        });
-      }
-    }
-
     if (candidate.source === "server" && isWithin(realHome, path)) {
       reject("Exposes the whole home directory.");
       continue;
@@ -589,18 +674,33 @@ export function resolveSandboxPolicy(
         if (isWithin(root, path)) {
           return refuse(`${candidate.source} ${path} contains ${root}, which always stays hidden.`);
         }
-        // A provider's own state may live in the server's state dir, such as a managed home,
-        // when the server names it there; a link from elsewhere into the base dir does not count.
-        const carvedOut =
-          root === realBase &&
-          (isWithin(path, realWorktrees) ||
-            (candidate.source === "provider" &&
-              namedWithin(candidate.path, [input.baseDir, realBase])));
-        if (isWithin(path, root) && !carvedOut) {
+        if (isWithin(path, root) && !carvedOut(candidate, path, root)) {
           return refuse(
             `${candidate.source} ${path} is inside ${root}, which always stays hidden.`,
           );
         }
+      }
+    }
+
+    if (candidate.access !== "hidden") {
+      const problem = linkProblem(candidate, fact);
+      if (problem !== undefined) {
+        if (WORKSPACE_SOURCES.has(candidate.source)) {
+          return refuse(`${candidate.source} ${candidate.path} ${problem}.`);
+        }
+        reject(`${problem.charAt(0).toUpperCase()}${problem.slice(1)}.`);
+        continue;
+      }
+    }
+
+    if (isListed(candidate)) {
+      const exposed = exposedCredentials(path);
+      if (exposed.length > 0) {
+        warnings.push({
+          path,
+          source: candidate.source,
+          reason: `May expose credentials kept in ${listCredentials(exposed)}.`,
+        });
       }
     }
 

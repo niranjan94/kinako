@@ -108,6 +108,11 @@ export function seatbeltProfile(policy: SandboxPolicy): SeatbeltProfile {
         ? `(allow file-read* file-test-existence file-write* ${filter})`
         : `(allow file-read* file-test-existence ${filter})`,
     );
+    // The folder itself stays put: swapped for a symlink, it would point the next spawn's grant
+    // anywhere. Renaming or removing it is file-write-unlink, putting a link there is -create.
+    if (entry.access === "read-write" && entry.kind === "directory") {
+      rules.push(`(deny file-write-unlink file-write-create (literal ${sbplString(entry.path)}))`);
+    }
   }
   rules.push("(deny signal)", "(allow signal (target same-sandbox))", PS_EXEMPTION);
   const profile = rules.join("\n");

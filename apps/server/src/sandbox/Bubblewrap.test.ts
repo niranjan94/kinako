@@ -254,6 +254,67 @@ describe("Bubblewrap", () => {
     }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
   );
 
+  it.live("refuses the next spawn after the agent swaps a folder it was given for a link", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const runner = yield* ProcessRunner.ProcessRunner;
+      const bubblewrap = yield* Bubblewrap.Bubblewrap;
+      const root = yield* fileSystem.realPath(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "kinako-bwrap-swap-" }),
+      );
+      const home = path.join(root, "home");
+      const project = path.join(root, "project");
+      const given = path.join(project, "given");
+      yield* fileSystem.makeDirectory(path.join(home, "private"), { recursive: true });
+      yield* fileSystem.makeDirectory(given, { recursive: true });
+      const policyFor = () =>
+        resolveSandboxPolicy({
+          platform: "linux",
+          home,
+          uid: 1000,
+          cwd: project,
+          gitCheckouts: [],
+          additionalDirectories: [{ path: given, access: "read-write" }],
+          providerPaths: [],
+          serverPaths: [],
+          attachmentsDir: path.join(home, ".kinako", "userdata", "attachments"),
+          baseDir: path.join(home, ".kinako"),
+          worktreesDir: path.join(home, ".kinako", "worktrees"),
+          pathEnv: undefined,
+          tmpDir: undefined,
+          sshAuthSock: undefined,
+          settings: effectiveSandboxSettings(
+            { readWritePaths: [], readOnlyPaths: [], allowDocker: false, allowSshAgent: false },
+            undefined,
+            "linux",
+          ),
+        });
+      const availability = yield* bubblewrap.availability;
+      if (availability._tag === "Available") {
+        // The folder sits inside the workspace, so it is no mount point and the agent can swap it.
+        const command = yield* bubblewrap.wrap({
+          command: "/bin/sh",
+          args: ["-c", `rmdir ${given} && ln -s ${home}/private ${given} && echo swapped`],
+          policy: yield* policyFor(),
+        });
+        const result = yield* runner.run({
+          command: command.command,
+          args: command.args,
+          timeout: "30 seconds",
+        });
+        assert.equal(result.stdout.trim(), "swapped", result.stderr);
+      } else {
+        yield* fileSystem.remove(given);
+        yield* fileSystem.symlink(path.join(home, "private"), given);
+      }
+      const refused = yield* Effect.flip(policyFor());
+      expect(refused.reason).toContain(
+        `resolves through a symbolic link the sandbox can rewrite, to ${home}/private`,
+      );
+    }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
+  );
+
   // Hosts without a working bwrap still check the other half of the contract: wrap refuses.
   it.live("confines a real child to its policy, or refuses to wrap where bwrap cannot run", () =>
     Effect.gen(function* () {

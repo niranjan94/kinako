@@ -59,6 +59,8 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   [`${HOME}/.kinako/bin`]: "directory",
   [`${HOME}/code/app`]: "directory",
   [`${HOME}/code/app/.git`]: "directory",
+  [`${HOME}/code/app/sub`]: "directory",
+  [`${HOME}/code/app/linked-sub`]: { link: `${HOME}/code/app/sub` },
   [`${HOME}/code/app-wt`]: "directory",
   [`${HOME}/code/other`]: "directory",
   [`${HOME}/.kinako`]: "directory",
@@ -261,6 +263,13 @@ describe("resolveSandboxPolicy", () => {
         [`${HOME}/.fnm/node-versions/v24/lib`, "hidden"],
         [`${HOME}/.tools/bin`, "read-only"],
       ],
+    },
+    {
+      name: "an additional directory linked to another folder of the workspace",
+      input: linuxInput({
+        additionalDirectories: [{ path: `${HOME}/code/app/linked-sub`, access: "read-write" }],
+      }),
+      access: [[`${HOME}/code/app/sub/file`, "read-write"]],
     },
     {
       name: "the user's tmux and screen sockets",
@@ -501,6 +510,42 @@ describe("resolveSandboxPolicy", () => {
     ).toEqual([]);
   });
 
+  it("leaves out listed paths that a link turns into credentials or a path outside what it may write", () => {
+    const tree: Record<string, FakeEntry> = {
+      ...LINUX_TREE,
+      [`${HOME}/.ssh/known_hosts`]: { link: `${HOME}/.ssh/id_ed25519` },
+      [`${HOME}/keys`]: { link: `${HOME}/.ssh` },
+      [`${HOME}/.cache/tool/conf`]: { link: `${HOME}/code/other` },
+    };
+    const policy = resolved(
+      linuxInput({
+        settings: {
+          ...linuxInput().settings,
+          readWritePaths: [...linuxInput().settings.readWritePaths, "~/keys"],
+          readOnlyPaths: [...linuxInput().settings.readOnlyPaths, "~/.cache/tool/conf"],
+        },
+      }),
+      tree,
+    );
+    expect(
+      policy.rejected
+        .filter(({ reason }) => reason.includes("symbolic link"))
+        .map(({ path, reason }) => [path, reason]),
+    ).toEqual([
+      [
+        `${HOME}/.ssh/id_ed25519`,
+        "Resolves through a symbolic link to credentials kept in ~/.ssh.",
+      ],
+      [`${HOME}/.ssh`, "Resolves through a symbolic link to credentials kept in ~/.ssh."],
+      [
+        `${HOME}/code/other`,
+        `Resolves through a symbolic link the sandbox can rewrite, to ${HOME}/code/other, outside the folders it can write.`,
+      ],
+    ]);
+    expect(accessOf(policy, `${HOME}/.ssh/id_ed25519`)).toBe("hidden");
+    expect(accessOf(policy, `${HOME}/code/other/file`)).toBe("hidden");
+  });
+
   it.each<readonly [string, Partial<SandboxPolicyInput>, string]>([
     ["the home directory", { cwd: HOME, gitCommonDirs: [] }, "contains the whole home directory"],
     [
@@ -523,12 +568,47 @@ describe("resolveSandboxPolicy", () => {
       { providerPaths: [{ path: `${HOME}/.codex/sessions`, access: "read-write" }] },
       `is inside ${HOME}/.kinako`,
     ],
+    [
+      "a cwd a link points into a worktree",
+      { cwd: `${HOME}/code/app2`, gitCommonDirs: [] },
+      `is inside ${HOME}/.kinako`,
+    ],
+    [
+      "an additional directory the workspace links elsewhere",
+      { additionalDirectories: [{ path: `${HOME}/code/app/escape`, access: "read-write" }] },
+      `resolves through a symbolic link the sandbox can rewrite, to ${HOME}/code/other`,
+    ],
+    [
+      "an additional directory in the temp dir linked elsewhere",
+      { additionalDirectories: [{ path: "/tmp/escape", access: "read-write" }] },
+      `resolves through a symbolic link the sandbox can rewrite, to ${HOME}/code/other`,
+    ],
+    [
+      "an additional directory linked elsewhere from the project root another thread writes",
+      {
+        cwd: `${HOME}/.kinako/worktrees/app/thread-1`,
+        gitCommonDirs: [],
+        additionalDirectories: [{ path: `${HOME}/code/app/escape`, access: "read-write" }],
+        sharedWritableRoots: [`${HOME}/.kinako/worktrees`, `${HOME}/code/app`],
+      },
+      `resolves through a symbolic link the sandbox can rewrite, to ${HOME}/code/other`,
+    ],
+    [
+      "an additional directory linked to credentials",
+      { additionalDirectories: [{ path: `${HOME}/data`, access: "read-write" }] },
+      "resolves through a symbolic link to credentials kept in ~/.aws",
+    ],
   ])("refuses a workspace at %s", (_name, overrides, reason) => {
     const tree: Record<string, FakeEntry> = {
       ...LINUX_TREE,
       "/srv": "directory",
       [`${HOME}/.codex`]: "directory",
       [`${HOME}/.codex/sessions`]: { link: `${HOME}/.kinako/userdata` },
+      [`${HOME}/code/app2`]: { link: `${HOME}/.kinako/worktrees/app/thread-1` },
+      [`${HOME}/code/app/escape`]: { link: `${HOME}/code/other` },
+      "/tmp/escape": { link: `${HOME}/code/other` },
+      [`${HOME}/.aws`]: "directory",
+      [`${HOME}/data`]: { link: `${HOME}/.aws` },
     };
     const resolution = resolveSandboxPolicy(linuxInput(overrides), fakeFacts(tree));
     expect(resolution._tag === "Refused" ? resolution.reason : "resolved").toContain(reason);
@@ -636,6 +716,24 @@ describe("effectiveSandboxSettings", () => {
     expect(accessOf(policy, "/private/tmp/tmux-1000/default")).toBe("hidden");
     expect(accessOf(policy, `${temp}/t3code-1000/app.sock`)).toBe("hidden");
     expect(accessOf(policy, "/private/tmp/t3code-1000/app.sock")).toBe("hidden");
+  });
+
+  it("refuses a writable provider file that is a symlink, which the sandbox could have planted", () => {
+    const tree: Record<string, FakeEntry> = {
+      "/Users/user": "directory",
+      "/Users/user/code/app": "directory",
+      "/Users/user/.zshrc": "file",
+      "/Users/user/.claude.json": { link: "/Users/user/.zshrc" },
+    };
+    const resolution = resolveSandboxPolicy(
+      darwinInput({
+        providerPaths: [{ path: "/Users/user/.claude.json", access: "read-write" }],
+      }),
+      fakeFacts(tree),
+    );
+    expect(resolution._tag === "Refused" ? resolution.reason : "resolved").toBe(
+      "provider /Users/user/.claude.json is a symbolic link the sandbox could have put in place of the file; name the file it points to instead.",
+    );
   });
 
   it("keeps one writable file inside a read-only provider directory", () => {

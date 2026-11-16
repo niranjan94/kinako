@@ -66,12 +66,14 @@ describe("seatbeltProfile", () => {
       rules: [
         `(deny file-read* file-test-existence file-write* (subpath "${HOME}"))`,
         '(allow file-read* file-test-existence file-write* (subpath "/private/tmp"))',
+        '(deny file-write-unlink file-write-create (literal "/private/tmp"))',
         `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/.gitconfig"))`,
         `(allow file-read* file-test-existence (literal "${HOME}/.gitconfig"))`,
         `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/.claude.json"))`,
         `(allow file-read* file-test-existence file-write* (regex #"^/Users/user/\\.claude\\.json($|\\.)"))`,
         `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/code/app"))`,
         `(allow file-read* file-test-existence file-write* (subpath "${HOME}/code/app"))`,
+        `(deny file-write-unlink file-write-create (literal "${HOME}/code/app"))`,
         `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/.1password/agent.sock"))`,
         `(allow file-read* file-test-existence file-write* (literal "${HOME}/.1password/agent.sock"))`,
       ],
@@ -96,11 +98,13 @@ describe("seatbeltProfile", () => {
       ],
       rules: [
         '(allow file-read* file-test-existence file-write* (subpath "/srv"))',
+        '(deny file-write-unlink file-write-create (literal "/srv"))',
         '(deny file-read* file-test-existence file-write* (subpath "/srv/kinako"))',
         '(allow file-read-metadata file-test-existence (path-ancestors "/srv/kinako/userdata/attachments"))',
         '(allow file-read* file-test-existence (subpath "/srv/kinako/userdata/attachments"))',
         '(allow file-read-metadata file-test-existence (path-ancestors "/srv/kinako/worktrees/app/t1"))',
         '(allow file-read* file-test-existence file-write* (subpath "/srv/kinako/worktrees/app/t1"))',
+        '(deny file-write-unlink file-write-create (literal "/srv/kinako/worktrees/app/t1"))',
       ],
     },
     {
@@ -124,6 +128,7 @@ describe("seatbeltProfile", () => {
         `(deny file-read* file-test-existence file-write* (subpath "${HOME}"))`,
         `(allow file-read-metadata file-test-existence (path-ancestors "${HOME}/.docker"))`,
         `(allow file-read* file-test-existence file-write* (subpath "${HOME}/.docker"))`,
+        `(deny file-write-unlink file-write-create (literal "${HOME}/.docker"))`,
         `(deny file-read* file-test-existence file-write* (literal "${HOME}/.docker/run/docker.sock"))`,
         `(deny network-outbound (remote unix-socket (path-literal "${HOME}/.docker/run/docker.sock")))`,
       ],
@@ -258,8 +263,10 @@ describe("Sandbox", () => {
       const project = path.join(root, "project");
       const outside = path.join(root, "outside");
       yield* fileSystem.makeDirectory(path.join(home, "secret"), { recursive: true });
+      const writable = path.join(root, "writable");
       yield* fileSystem.makeDirectory(project);
       yield* fileSystem.makeDirectory(outside);
+      yield* fileSystem.makeDirectory(writable);
       yield* fileSystem.writeFileString(path.join(home, "secret", "key"), "secret");
       const policy: SandboxPolicy = {
         platform: "darwin",
@@ -267,6 +274,7 @@ describe("Sandbox", () => {
         entries: [
           { path: home, access: "hidden", kind: "directory", source: "home" },
           { path: project, access: "read-write", kind: "directory", source: "cwd" },
+          { path: writable, access: "read-write", kind: "directory", source: "user-read-write" },
         ],
         rejected: [],
         warnings: [],
@@ -277,6 +285,9 @@ describe("Sandbox", () => {
         `touch ${outside}/escape 2>/dev/null && echo outside=ok || echo outside=fail`,
         `cat ${home}/secret/key 2>/dev/null && echo secret=ok || echo secret=fail`,
         "ps -p $$ >/dev/null 2>&1 && echo ps=ok || echo ps=fail",
+        `touch ${writable}/file && rm ${writable}/file && echo writable=ok || echo writable=fail`,
+        `mv ${writable} ${project}/moved 2>/dev/null && echo moved=ok || echo moved=fail`,
+        `rmdir ${writable} 2>/dev/null && echo removed=ok || echo removed=fail`,
       ].join("\n");
 
       const availability = yield* seatbelt.availability;
@@ -299,6 +310,9 @@ describe("Sandbox", () => {
         "outside=fail",
         "secret=fail",
         "ps=ok",
+        "writable=ok",
+        "moved=fail",
+        "removed=fail",
       ]);
       assert.isFalse(yield* fileSystem.exists(path.join(outside, "escape")));
     }).pipe(Effect.scoped, Effect.provide(Seatbelt.layer.pipe(Layer.provideMerge(services)))),

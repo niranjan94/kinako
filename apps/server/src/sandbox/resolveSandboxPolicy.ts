@@ -116,6 +116,10 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   const policyInput: SandboxPolicyInput = {
     ...input,
     gitCommonDirs,
+    sharedWritableRoots: [
+      input.worktreesDir,
+      ...input.gitCheckouts.map(({ repository }) => repository),
+    ],
     providerPaths: input.providerPaths.map(({ path, access }) => ({ path, access })),
     ...(gitExcludesFile.length === 0
       ? {}
@@ -142,7 +146,12 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   });
   const statPaths = new Set<string>([
     input.worktreesDir,
+    ...(policyInput.sharedWritableRoots ?? []),
     ...candidates.map((candidate) => candidate.path),
+    // Whether a writable file is itself a symlink is read against its parent's real path.
+    ...candidates
+      .filter((candidate) => candidate.access === "read-write")
+      .map((candidate) => path.dirname(candidate.path)),
     ...sandboxCredentialPaths(input.home),
     ...[...listings].flatMap(([directory, names]) =>
       names.map((name) => path.join(directory, name)),
