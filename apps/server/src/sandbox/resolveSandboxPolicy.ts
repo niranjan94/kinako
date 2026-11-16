@@ -1,3 +1,5 @@
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -24,7 +26,7 @@ export class SandboxPolicyRefusedError extends Schema.TaggedError<SandboxPolicyR
 
 export interface ResolveSandboxPolicyInput extends Omit<
   SandboxPolicyInput,
-  "gitCommonDirs" | "providerPaths"
+  "gitCommonDirs" | "providerPaths" | "darwinUserCacheDir" | "gitExcludesFile"
 > {
   /** Directories are created when missing; files that do not exist are left out. */
   readonly providerPaths: ReadonlyArray<{
@@ -40,6 +42,7 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const runner = yield* ProcessRunner.ProcessRunner;
+  const hostEnvironment = yield* HostProcess.Environment;
 
   for (const provider of input.providerPaths) {
     if (provider.kind !== "directory") continue;
@@ -54,18 +57,29 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
     );
   }
 
-  const gitCommonDir = (directory: string) =>
+  const output = (command: string, args: ReadonlyArray<string>, cwd?: string) =>
     runner
       .run({
-        command: "git",
-        args: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-        cwd: directory,
+        command,
+        args,
+        cwd,
+        env: { ...hostEnvironment, HOME: input.home },
         timeout: "10 seconds",
       })
       .pipe(
         Effect.map((result) => (result.code === 0 ? result.stdout.trim() : "")),
         Effect.orElseSucceed(() => ""),
       );
+  const gitCommonDir = (directory: string) =>
+    output("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], directory);
+  const gitExcludesFile = yield* output("git", [
+    "config",
+    "--global",
+    "--get",
+    "core.excludesfile",
+  ]);
+  const darwinUserCacheDir =
+    input.platform === "darwin" ? yield* output("getconf", ["DARWIN_USER_CACHE_DIR"]) : "";
   const gitCommonDirs = (yield* Effect.forEach(
     [input.cwd, ...input.additionalDirectories.map((directory) => directory.path)],
     gitCommonDir,
@@ -76,6 +90,10 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
     ...input,
     gitCommonDirs,
     providerPaths: input.providerPaths.map((provider) => provider.path),
+    ...(gitExcludesFile.length === 0
+      ? {}
+      : { gitExcludesFile: expandHomePath(gitExcludesFile, input.home) }),
+    ...(darwinUserCacheDir.length === 0 ? {} : { darwinUserCacheDir }),
   };
   const candidates = sandboxCandidates(policyInput);
 
@@ -90,7 +108,9 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   const probe = Effect.fnUntraced(function* (candidatePath: string) {
     const realPath = yield* fileSystem.realPath(candidatePath);
     const info = yield* fileSystem.stat(realPath);
-    return { realPath, kind: info.type === "Directory" ? "directory" : "file" } as const;
+    const kind =
+      info.type === "Directory" ? "directory" : info.type === "Socket" ? "socket" : "file";
+    return { realPath, kind } as const;
   });
   const statPaths = new Set<string>([
     input.worktreesDir,

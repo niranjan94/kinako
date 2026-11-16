@@ -8,9 +8,32 @@ import {
   type SandboxSettings,
 } from "@t3tools/contracts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import * as Schema from "effect/Schema";
+
+export const MAX_SANDBOX_REASON_LENGTH = 2_000;
+
+/** The OS sandbox cannot run here, with the tool's own words when it ran and failed. */
+export class SandboxUnavailableError extends Schema.TaggedError<SandboxUnavailableError>()(
+  "SandboxUnavailableError",
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return `The filesystem sandbox is unavailable: ${this.reason}`;
+  }
+}
+
+export type SandboxAvailability =
+  | { readonly _tag: "Available"; readonly command: string }
+  | { readonly _tag: "Unavailable"; readonly reason: string };
+
+export interface SandboxedCommand {
+  readonly command: string;
+  readonly args: ReadonlyArray<string>;
+  readonly env?: NodeJS.ProcessEnv | undefined;
+}
 
 export type SandboxAccess = "read-write" | "read-only" | "hidden";
-export type SandboxPathKind = "directory" | "file";
+export type SandboxPathKind = "directory" | "file" | "socket";
 
 export type SandboxEntrySource =
   | "cwd"
@@ -26,7 +49,8 @@ export type SandboxEntrySource =
   | "kinako-base-dir"
   | "runtime-dir"
   | "ssh-agent"
-  | "docker";
+  | "docker"
+  | "git-config";
 
 export interface SandboxPolicyEntry {
   readonly path: string;
@@ -80,6 +104,10 @@ export interface SandboxPolicyInput {
   readonly worktreesDir: string;
   readonly pathEnv: string | undefined;
   readonly tmpDir: string | undefined;
+  /** macOS `getconf DARWIN_USER_CACHE_DIR`, which system frameworks write to. */
+  readonly darwinUserCacheDir?: string | undefined;
+  /** git's `core.excludesfile`, already home-expanded. */
+  readonly gitExcludesFile?: string | undefined;
   readonly sshAuthSock: string | undefined;
   readonly settings: EffectiveSandboxSettings;
 }
@@ -130,7 +158,11 @@ function dockerSocketPaths(input: SandboxPolicyInput): ReadonlyArray<string> {
   const runtimeDir = runtimeDirFor(input);
   return input.platform === "linux"
     ? ["/run/docker.sock", "/var/run/docker.sock", `${runtimeDir}/docker.sock`]
-    : ["/var/run/docker.sock", NodePath.posix.join(input.home, ".docker/run/docker.sock")];
+    : [
+        "/var/run/docker.sock",
+        NodePath.posix.join(input.home, ".docker/run/docker.sock"),
+        NodePath.posix.join(input.home, ".orbstack/run/docker.sock"),
+      ];
 }
 
 const userPath = (raw: string, home: string) => expandHomePath(raw.trim(), home);
@@ -158,6 +190,9 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
     ),
     candidate("/tmp", "read-write", "temp"),
     ...(input.tmpDir === undefined ? [] : [candidate(input.tmpDir, "read-write", "temp")]),
+    ...(input.darwinUserCacheDir === undefined
+      ? []
+      : [candidate(input.darwinUserCacheDir, "read-write", "temp")]),
     ...input.providerPaths.map((path) => candidate(path, "read-write", "provider")),
     ...input.settings.readWritePaths.map((path) =>
       candidate(userPath(path, input.home), "read-write", "user-read-write"),
@@ -167,6 +202,12 @@ export function sandboxCandidates(input: SandboxPolicyInput): ReadonlyArray<Cand
     ),
     ...homePathEntries.map((path) => candidate(path, "read-only", "path")),
     candidate(input.attachmentsDir, "read-only", "attachments"),
+    // git exits on EPERM (macOS hidden paths) for its global config, so it stays readable.
+    ...[
+      NodePath.posix.join(input.home, ".gitconfig"),
+      NodePath.posix.join(input.home, ".config/git"),
+      ...(input.gitExcludesFile === undefined ? [] : [input.gitExcludesFile]),
+    ].map((path) => candidate(path, "read-only", "git-config")),
     ...(input.sshAuthSock === undefined || input.sshAuthSock.length === 0
       ? []
       : [
@@ -221,6 +262,7 @@ const USER_SOURCES: ReadonlySet<SandboxEntrySource> = new Set([
   "temp",
   "path",
   "ssh-agent",
+  "git-config",
 ]);
 const WORKSPACE_SOURCES: ReadonlySet<SandboxEntrySource> = new Set([
   "cwd",
@@ -298,8 +340,8 @@ export function resolveSandboxPolicy(
       const hidden = mandatoryHidden.find(
         (root) =>
           isWithin(path, root) &&
-          // The ssh-agent socket is the one runtime-dir path the settings may expose.
-          !(candidate.source === "ssh-agent" && root !== realBase),
+          // Sockets are the runtime-dir paths the settings may expose.
+          !(fact.kind === "socket" && root !== realBase),
       );
       if (hidden !== undefined) {
         reject(`Inside ${hidden}, which always stays hidden.`);

@@ -3,32 +3,15 @@ import { resolveCommandPath } from "@t3tools/shared/shell";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 
 import * as ProcessRunner from "../processRunner.ts";
-import type { SandboxPolicy } from "./sandboxPolicy.ts";
-
-const MAX_REASON_LENGTH = 2_000;
-
-/** bubblewrap cannot run here, with bwrap's own words when it ran and failed. */
-export class SandboxUnavailableError extends Schema.TaggedError<SandboxUnavailableError>()(
-  "SandboxUnavailableError",
-  { reason: Schema.String },
-) {
-  override get message(): string {
-    return `The filesystem sandbox is unavailable: ${this.reason}`;
-  }
-}
-
-export type BubblewrapAvailability =
-  | { readonly _tag: "Available"; readonly command: string }
-  | { readonly _tag: "Unavailable"; readonly reason: string };
-
-export interface SandboxedCommand {
-  readonly command: string;
-  readonly args: ReadonlyArray<string>;
-  readonly env?: NodeJS.ProcessEnv | undefined;
-}
+import {
+  MAX_SANDBOX_REASON_LENGTH,
+  type SandboxAvailability,
+  type SandboxedCommand,
+  type SandboxPolicy,
+  SandboxUnavailableError,
+} from "./sandboxPolicy.ts";
 
 /**
  * bwrap arguments that apply `policy`. Mount operations run in order, and the policy lists
@@ -80,7 +63,7 @@ export class Bubblewrap extends Context.Service<
   Bubblewrap,
   {
     /** Runs bwrap once per server; AppArmor can refuse it even when it is on PATH. */
-    readonly availability: Effect.Effect<BubblewrapAvailability>;
+    readonly availability: Effect.Effect<SandboxAvailability>;
     /** The command that runs `input` inside `policy`. Fails rather than run it unsandboxed. */
     readonly wrap: (
       input: SandboxedCommand & { readonly policy: SandboxPolicy },
@@ -114,7 +97,7 @@ export const make = Effect.fn("Bubblewrap.make")(function* (options?: {
     if (result._tag === "Failure") {
       return {
         _tag: "Unavailable",
-        reason: result.failure.message.slice(0, MAX_REASON_LENGTH),
+        reason: result.failure.message.slice(0, MAX_SANDBOX_REASON_LENGTH),
       } as const;
     }
     const { code, stderr } = result.success;
@@ -122,7 +105,10 @@ export const make = Effect.fn("Bubblewrap.make")(function* (options?: {
       ? ({ _tag: "Available", command: resolved } as const)
       : ({
           _tag: "Unavailable",
-          reason: (stderr.trim() || `bwrap exited with code ${code}.`).slice(0, MAX_REASON_LENGTH),
+          reason: (stderr.trim() || `bwrap exited with code ${code}.`).slice(
+            0,
+            MAX_SANDBOX_REASON_LENGTH,
+          ),
         } as const);
   });
   const availability = yield* Effect.cached(probe());

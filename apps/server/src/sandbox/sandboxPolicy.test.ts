@@ -71,8 +71,9 @@ const LINUX_TREE: Record<string, FakeEntry> = {
   "/tmp": "directory",
   "/run/user/1000": "directory",
   "/run/user/1000/bus": "file",
-  "/run/user/1000/keyring/ssh": "file",
-  "/run/docker.sock": "file",
+  "/run/user/1000/keyring/ssh": "socket",
+  "/run/user/1000/1password/agent.sock": "socket",
+  "/run/docker.sock": "socket",
   "/var/run": { link: "/run" },
   "/srv/kinako": "directory",
   "/srv/kinako/worktrees/app/thread-2": "directory",
@@ -211,6 +212,22 @@ describe("resolveSandboxPolicy", () => {
         settings: { ...linuxInput().settings, allowSshAgent: false },
       }),
       access: [["/run/user/1000/keyring/ssh", "hidden"]],
+    },
+    {
+      name: "a listed agent socket in the runtime dir, and git config with empty lists",
+      input: linuxInput({
+        settings: {
+          ...linuxInput().settings,
+          readWritePaths: ["/run/user/1000/1password/agent.sock"],
+          readOnlyPaths: [],
+        },
+      }),
+      access: [
+        ["/run/user/1000/1password/agent.sock", "read-write"],
+        ["/run/user/1000/bus", "hidden"],
+        [`${HOME}/.gitconfig`, "read-only"],
+        [`${HOME}/dotfiles/git/config`, "read-only"],
+      ],
     },
   ])("$name", ({ input, access }) => {
     const policy = resolved(input);

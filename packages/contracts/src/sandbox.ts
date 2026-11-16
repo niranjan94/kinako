@@ -83,6 +83,9 @@ export function defaultSandboxPaths(platform: SandboxPlatform): {
       platform === "darwin"
         ? ["~/Library/pnpm", "~/Library/Caches", ...SHARED_READ_WRITE_PATHS]
         : ["~/.local/share/pnpm", "~/.cache", ...SHARED_READ_WRITE_PATHS],
-    readOnlyPaths: SHARED_READ_ONLY_PATHS,
+    readOnlyPaths:
+      platform === "darwin"
+        ? ["~/Library/Preferences/pnpm", "~/.npmrc", ...SHARED_READ_ONLY_PATHS]
+        : SHARED_READ_ONLY_PATHS,
   };
 }
