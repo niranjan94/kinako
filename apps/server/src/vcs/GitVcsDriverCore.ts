@@ -54,6 +54,7 @@ import { removeEmptyDirectory, type RemoveEmptyDirectoryError } from "./removeEm
 import { VcsAutomaticFetchInterval } from "./VcsAutomaticFetchInterval.ts";
 import {
   explicitBareRepositoryEnv,
+  repositoryCommandsOffEnv,
   gitConfigEnv,
   unsetInheritedRepositoryEnv,
 } from "./VcsProcess.ts";
@@ -229,6 +230,7 @@ interface ExecuteGitOptions {
   keepLineCallbacksAfterTruncation?: boolean | undefined;
   progress?: GitVcsDriver.ExecuteGitProgress | undefined;
   writesSharedConfig?: boolean | undefined;
+  usesRepositoryHooks?: boolean | undefined;
 }
 
 function parseBranchAb(value: string): { ahead: number; behind: number } {
@@ -1076,7 +1078,14 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           ...input.env,
           ...trace2Monitor.env,
         };
-        const env = { ...baseEnv, ...explicitBareRepositoryEnv(baseEnv, hostPlatform) };
+        const bareRepositoryEnv = explicitBareRepositoryEnv(baseEnv, hostPlatform);
+        const env = {
+          ...baseEnv,
+          ...bareRepositoryEnv,
+          ...(input.usesRepositoryHooks
+            ? {}
+            : repositoryCommandsOffEnv({ ...baseEnv, ...bareRepositoryEnv }, hostPlatform)),
+        };
         const spawnEnv = { ...env, ...windowsLongPathConfigEnv(hostPlatform, env) };
         const resolved = yield* resolveSpawnCommand("git", [], { env: spawnEnv });
         const spawnError = (cause: unknown) =>
@@ -1266,6 +1275,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         : {}),
       ...(options.progress ? { progress: options.progress } : {}),
       ...(options.writesSharedConfig ? { writesSharedConfig: true } : {}),
+      ...(options.usesRepositoryHooks ? { usesRepositoryHooks: true } : {}),
     }).pipe(
       Effect.flatMap((result) => {
         if (options.allowNonZeroExit || result.exitCode === 0) {
@@ -3070,6 +3080,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
               options.progress?.onOutputLine?.({ stream: "stderr", text: line }) ?? Effect.void,
           };
     yield* executeGit("GitVcsDriver.commit.commit", cwd, args, {
+      usesRepositoryHooks: true,
       maxOutputBytes: REVIEW_METADATA_MAX_OUTPUT_BYTES,
       ...onlyPathspecStdin,
       ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
@@ -3247,7 +3258,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         "GitVcsDriver.pushCurrentBranch.pushWithRequestedRemote",
         cwd,
         ["push", "--", requestedRemoteName, `HEAD:refs/heads/${publishBranch}`],
-        { timeoutMs: null },
+        { timeoutMs: null, usesRepositoryHooks: true },
       );
       return {
         status: "pushed" as const,
@@ -3360,7 +3371,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           : "GitVcsDriver.pushCurrentBranch.pushWithUpstream",
         cwd,
         ["push", "--", remoteName, `HEAD:refs/heads/${publishBranch}`],
-        { timeoutMs: null },
+        { timeoutMs: null, usesRepositoryHooks: true },
       );
       return {
         status: "pushed" as const,
@@ -3375,7 +3386,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         "GitVcsDriver.pushCurrentBranch.pushUpstream",
         cwd,
         ["push", "--", destination.remoteName, `HEAD:refs/heads/${destination.branchName}`],
-        { timeoutMs: null },
+        { timeoutMs: null, usesRepositoryHooks: true },
       );
       return {
         status: "pushed" as const,
@@ -3392,6 +3403,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
 
     yield* executeGitWithStableDiagnostics("GitVcsDriver.pushCurrentBranch.push", cwd, ["push"], {
       timeoutMs: null,
+      usesRepositoryHooks: true,
     });
     return {
       status: "pushed" as const,
@@ -3467,6 +3479,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       timeoutMs: null,
       appendTruncationMarker: true,
       allowNonZeroExit: true,
+      usesRepositoryHooks: true,
     };
     let args = ["pull", "--ff-only"];
     let result = yield* executeGitWithStableDiagnostics(
@@ -5248,6 +5261,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         // Large checkouts and post-checkout hooks can legitimately run for many
         // minutes; a fixed deadline kills them and leaves an orphaned worktree.
         timeoutMs: null,
+        usesRepositoryHooks: true,
         // Hooks and filter drivers may print without bound; only progress lines are read.
         appendTruncationMarker: true,
         keepLineCallbacksAfterTruncation: true,
@@ -6121,6 +6135,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         {
           // Killing a checkout midway (large or LFS repos) leaves a half-updated working tree.
           timeoutMs: null,
+          usesRepositoryHooks: true,
           fallbackErrorDetail: "git checkout failed",
           // Creating a branch writes its upstream; Git also guesses a remote branch for a missing name.
           writesSharedConfig: checkoutArgs[1] === "--track" || (!localInputExists && !remoteExists),

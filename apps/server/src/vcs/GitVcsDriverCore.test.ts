@@ -4703,6 +4703,33 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("runs neither the repository's fsmonitor nor its hooks for background work", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const pathService = yield* Path.Path;
+        // A sandboxed agent can write the repository's config and hooks.
+        yield* git(cwd, ["config", "core.fsmonitor", "echo ran >> fsmonitor-runs; false"]);
+        for (const hook of ["post-index-change", "reference-transaction"]) {
+          yield* writeTextFile(cwd, `.git/hooks/${hook}`, `#!/bin/sh\necho ${hook} >> hook-runs\n`);
+          yield* fileSystem.chmod(pathService.join(cwd, `.git/hooks/${hook}`), 0o755);
+        }
+        yield* writeTextFile(cwd, "changed.txt", "changed\n");
+
+        assert.isTrue((yield* driver.statusDetailsLocal(cwd)).hasWorkingTreeChanges);
+        yield* driver.execute({
+          operation: "test.backgroundRef",
+          cwd,
+          args: ["update-ref", "refs/t3/test", "HEAD"],
+        });
+
+        assert.isFalse(yield* fileSystem.exists(pathService.join(cwd, "fsmonitor-runs")));
+        assert.isFalse(yield* fileSystem.exists(pathService.join(cwd, "hook-runs")));
+      }),
+    );
+
     it.effect("reads Changes totals without minimizing and keeps review diffs minimal", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

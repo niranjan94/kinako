@@ -65,6 +65,12 @@ export interface ExecuteGitInput {
   readonly progress?: ExecuteGitProgress;
   /** Writes .git/config, which every worktree shares and Git locks without waiting. */
   readonly writesSharedConfig?: boolean;
+  /**
+   * Keeps the repository's hooks and fsmonitor in effect as the user's own Git would, for a
+   * commit, push, pull or checkout the user asked for. Other work turns them off; see
+   * `repositoryCommandsOffEnv`.
+   */
+  readonly usesRepositoryHooks?: boolean;
 }
 
 export interface ExecuteGitResult {

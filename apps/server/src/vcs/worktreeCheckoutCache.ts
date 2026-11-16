@@ -120,6 +120,7 @@ export const makeWorktreeCheckoutCache = Effect.fn("WorktreeCheckoutCache.make")
     cwd: string,
     args: ReadonlyArray<string>,
     env?: NodeJS.ProcessEnv,
+    options?: { readonly usesRepositoryHooks?: boolean },
   ) =>
     execute({
       operation: `WorktreeCheckoutCache.git.${operation}`,
@@ -128,6 +129,7 @@ export const makeWorktreeCheckoutCache = Effect.fn("WorktreeCheckoutCache.make")
       allowNonZeroExit: true,
       timeoutMs: null,
       ...(env ? { env } : {}),
+      ...(options?.usesRepositoryHooks ? { usesRepositoryHooks: true } : {}),
     }).pipe(
       Effect.map((result) => (result.exitCode === 0 ? result.stdout : null)),
       Effect.orElseSucceed(() => null),
@@ -148,16 +150,23 @@ export const makeWorktreeCheckoutCache = Effect.fn("WorktreeCheckoutCache.make")
     cwd: string,
     rev: string,
   ) {
-    const stdout = yield* git("describe", cwd, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-      "--show-object-format",
-      "--git-path",
-      "hooks/post-index-change",
-      `${rev}^{commit}`,
-      `${rev}^{tree}`,
-    ]);
+    // The hook path must be the repository's own, not the one background Git work overrides.
+    const stdout = yield* git(
+      "describe",
+      cwd,
+      [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+        "--show-object-format",
+        "--git-path",
+        "hooks/post-index-change",
+        `${rev}^{commit}`,
+        `${rev}^{tree}`,
+      ],
+      undefined,
+      { usesRepositoryHooks: true },
+    );
     const [commonDir, objectFormat, indexHook, commit, tree] = stdout?.trim().split("\n") ?? [];
     if (
       !commonDir ||
@@ -672,6 +681,7 @@ export const makeWorktreeCheckoutCache = Effect.fn("WorktreeCheckoutCache.make")
       env: { LANGUAGE: "C" },
       allowNonZeroExit: true,
       timeoutMs: null,
+      usesRepositoryHooks: true,
     });
     if (hook.exitCode !== 0) {
       return yield* new GitCommandError({

@@ -135,6 +135,18 @@ export const gitConfigEnv = (
 export const explicitBareRepositoryEnv = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform) =>
   gitConfigEnv(env, "safe.bareRepository", "explicit", platform);
 
+/**
+ * A sandboxed agent can rewrite a repository's config and hooks, so the server's own Git work,
+ * such as status polls and checkpoints, runs neither its fsmonitor command nor its hooks.
+ */
+export const repositoryCommandsOffEnv = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform) => {
+  const fsmonitor = gitConfigEnv(env, "core.fsmonitor", "false", platform);
+  return {
+    ...fsmonitor,
+    ...gitConfigEnv({ ...env, ...fsmonitor }, "core.hooksPath", "/dev/null", platform),
+  };
+};
+
 const REPOSITORY_SELECTORS = new Set([
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -225,6 +237,17 @@ export const make = Effect.gen(function* () {
     baseError: VcsProcessErrorContext,
   ) {
     let failedExit = false;
+    const commandEnv = {
+      ...(input.command === "git" ? unsetInheritedRepositoryEnv(process.env, hostPlatform) : {}),
+      // Failures are read by English patterns; without LANG, macOS Git follows the system language.
+      // LANGUAGE leaves LC_CTYPE, which hooks inherit, alone.
+      ...(input.command === "git" ? { LANGUAGE: "C" } : {}),
+      ...input.env,
+    };
+    const bareRepositoryEnv = explicitBareRepositoryEnv(
+      { ...process.env, ...commandEnv },
+      hostPlatform,
+    );
     const execution = processRunner
       .run({
         command: input.command,
@@ -235,14 +258,14 @@ export const make = Effect.gen(function* () {
         ...(input.onStdoutChunk !== undefined ? { onStdoutChunk: input.onStdoutChunk } : {}),
         ...(input.onSpawn !== undefined ? { onSpawn: input.onSpawn } : {}),
         env: {
+          ...commandEnv,
+          ...bareRepositoryEnv,
           ...(input.command === "git"
-            ? unsetInheritedRepositoryEnv(process.env, hostPlatform)
+            ? repositoryCommandsOffEnv(
+                { ...process.env, ...commandEnv, ...bareRepositoryEnv },
+                hostPlatform,
+              )
             : {}),
-          // Failures are read by English patterns; without LANG, macOS Git follows the system language.
-          // LANGUAGE leaves LC_CTYPE, which hooks inherit, alone.
-          ...(input.command === "git" ? { LANGUAGE: "C" } : {}),
-          ...input.env,
-          ...explicitBareRepositoryEnv({ ...process.env, ...input.env }, hostPlatform),
         },
         timeout: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
         maxOutputBytes: input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,

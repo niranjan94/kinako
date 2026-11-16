@@ -447,6 +447,43 @@ describe("VcsProcess.run", () => {
     }).pipe(Effect.scoped, provideLive, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("runs neither a repository's fsmonitor nor its hooks", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const cwd = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-vcs-hooks-" });
+      const git = (args: ReadonlyArray<string>) =>
+        run({ operation: "test.repository-commands", command: "git", args, cwd });
+      yield* git(["init", "--quiet"]);
+      yield* git(["config", "core.fsmonitor", "echo ran >> fsmonitor-runs; false"]);
+      yield* fileSystem.makeDirectory(path.join(cwd, ".git", "hooks"), { recursive: true });
+      for (const hook of ["post-index-change", "reference-transaction"]) {
+        const hookPath = path.join(cwd, ".git", "hooks", hook);
+        yield* fileSystem.writeFileString(hookPath, `#!/bin/sh\necho ${hook} >> hook-runs\n`);
+        yield* fileSystem.chmod(hookPath, 0o755);
+      }
+      yield* fileSystem.writeFileString(path.join(cwd, "README.md"), "hello\n");
+
+      yield* git(["add", "README.md"]);
+      yield* git(["status", "--porcelain"]);
+      const tree = (yield* git(["write-tree"])).stdout.trim();
+      const commit = (yield* git([
+        "-c",
+        "user.name=T3",
+        "-c",
+        "user.email=t3@example.com",
+        "commit-tree",
+        tree,
+        "-m",
+        "checkpoint",
+      ])).stdout.trim();
+      yield* git(["update-ref", "refs/t3/checkpoint", commit]);
+
+      expect(yield* fileSystem.exists(path.join(cwd, "fsmonitor-runs"))).toBe(false);
+      expect(yield* fileSystem.exists(path.join(cwd, "hook-runs"))).toBe(false);
+    }).pipe(Effect.scoped, provideLive, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("classifies authentication failures without retaining stderr", () =>
     Effect.gen(function* () {
       const secretStderr = "authentication failed for token super-secret-token";
