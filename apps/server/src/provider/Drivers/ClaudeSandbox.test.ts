@@ -19,6 +19,7 @@ describe("claudeSandboxPaths", () => {
       executable: "/home/user/.local/share/claude/versions/2.1.0",
       expected: [
         ["/home/user/.claude", "read-write"],
+        ["/home/user/.claude/local", "read-only"],
         ["/home/user/.claude.json", "read-write"],
         ["/home/user/.local/state/claude", "read-write"],
         ["/home/user/.local/share/claude", "read-only"],
@@ -33,6 +34,7 @@ describe("claudeSandboxPaths", () => {
       executable: "/opt/homebrew/bin/claude",
       expected: [
         ["/Users/user/claude-config", "read-write"],
+        ["/Users/user/claude-config/local", "read-only"],
         ["/Users/user/.claude.json", "read-write"],
         ["/Users/user/.local/state/claude", "read-write"],
         ["/Users/user/.local/share/claude", "read-only"],

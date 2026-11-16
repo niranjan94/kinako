@@ -23,6 +23,8 @@ export function claudeSandboxPaths(input: {
   const inHome = (relative: string) => `${input.home}/${relative}`;
   return [
     { path: input.configDir, kind: "directory", access: "read-write" },
+    // The older npm-based install, which the host runs outside the sandbox.
+    { path: `${input.configDir}/local`, kind: "directory", access: "read-only" },
     // Claude replaces this through a sibling temp file, which a single-file bind cannot take on Linux.
     { path: inHome(".claude.json"), kind: "file", access: "read-write" },
     { path: inHome(".local/state/claude"), kind: "directory", access: "read-write" },
@@ -73,7 +75,8 @@ export const sandboxClaudeLaunch = Effect.fn("ClaudeSandbox.launch")(function* (
     cwd: input.cwd,
     additionalDirectories: input.additionalDirectories,
     executable: input.executable,
-    env: input.env,
+    // Its install folders are read-only inside, so an update could only fail.
+    env: { ...input.env, DISABLE_AUTOUPDATER: "1" },
     providerPaths: ({ platform, home, executable }) =>
       Effect.succeed(
         claudeSandboxPaths({

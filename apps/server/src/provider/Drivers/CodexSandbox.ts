@@ -23,11 +23,11 @@ export function codexSandboxPaths(input: {
   readonly selfInvocationRoot?: string | undefined;
 }): ReadonlyArray<CodexSandboxPath> {
   return [
-    ...input.homes.map((path) => ({
-      path,
-      kind: "directory" as const,
-      access: "read-write" as const,
-    })),
+    ...input.homes.flatMap((path) => [
+      { path, kind: "directory" as const, access: "read-write" as const },
+      // The standalone install and its updater's `current` link, which the host runs.
+      { path: `${path}/packages`, kind: "directory" as const, access: "read-only" as const },
+    ]),
     {
       path: input.executable.slice(0, input.executable.lastIndexOf("/")) || "/",
       kind: "directory",

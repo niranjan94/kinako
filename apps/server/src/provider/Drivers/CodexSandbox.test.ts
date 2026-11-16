@@ -11,6 +11,7 @@ describe("codexSandboxPaths", () => {
       selfInvocationRoot: undefined,
       expected: [
         ["/home/user/.codex", "read-write"],
+        ["/home/user/.codex/packages", "read-only"],
         ["/home/user/.codex/packages/standalone/releases/0.169.0/bin", "read-only"],
       ],
     },
@@ -21,7 +22,9 @@ describe("codexSandboxPaths", () => {
       selfInvocationRoot: "/home/user/code/kinako",
       expected: [
         ["/home/user/.kinako/userdata/providers/codex/work/shadow", "read-write"],
+        ["/home/user/.kinako/userdata/providers/codex/work/shadow/packages", "read-only"],
         ["/home/user/.codex", "read-write"],
+        ["/home/user/.codex/packages", "read-only"],
         ["/home/user/.kinako/tools/codex/0.169.0", "read-only"],
         ["/home/user/code/kinako", "read-only"],
       ],
