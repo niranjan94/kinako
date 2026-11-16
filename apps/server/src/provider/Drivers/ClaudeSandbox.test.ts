@@ -127,14 +127,18 @@ it.live("stops a sandboxed CLI with the SDK's SIGTERM and leaves no process behi
     yield* exited;
 
     assert.equal((yield* fileSystem.readFileString(path.join(cwd, "marker"))).trim(), "graceful");
-    // A killed process can stay a zombie until its reaper runs; that is not a survivor.
+    // The exit handler SIGKILLs the group as the CLI exits. A killed process can still be a
+    // zombie, or alive with SIGKILL pending until it next runs; neither is a survivor.
     const survivors: Array<number> = [];
     for (const pid of recorded) {
-      const stat = yield* fileSystem
-        .readFileString(`/proc/${pid}/stat`)
+      const status = yield* fileSystem
+        .readFileString(`/proc/${pid}/status`)
         .pipe(Effect.orElseSucceed(() => ""));
-      const state = stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3);
-      if (stat !== "" && state !== "Z") survivors.push(pid);
+      const field = (name: string) =>
+        BigInt(`0x${new RegExp(`^${name}:\\s*([0-9a-f]+)$`, "m").exec(status)?.[1] ?? "0"}`);
+      const killPending = ((field("SigPnd") | field("ShdPnd")) & (1n << 8n)) !== 0n;
+      const zombie = /^State:\s*[ZX]/m.test(status);
+      if (status !== "" && !zombie && !killPending) survivors.push(pid);
     }
     assert.deepEqual(survivors, []);
   }).pipe(Effect.scoped, Effect.provide(Bubblewrap.layer.pipe(Layer.provideMerge(services)))),
