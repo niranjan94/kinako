@@ -54,7 +54,9 @@ const ACCESS_CHOICES: ReadonlyArray<{
     label: "Read only",
     description: "Read projects and threads. Cannot start, message or change anything.",
   },
-  ...RUNTIME_MODE_CHOICES.map((choice) => ({ ...choice, access: choice.mode })),
+  ...RUNTIME_MODE_CHOICES.flatMap(({ mode, ...choice }) =>
+    mode === "sandboxed-full-access" ? [] : [{ ...choice, access: mode }],
+  ),
 ];
 const accessLabel = (access: AuthMcpClientAccess) =>
   ACCESS_CHOICES.find((choice) => choice.access === access)?.label ?? access;

@@ -3,10 +3,13 @@ import {
   type ManagedPolicySummary,
   type RuntimeMode,
 } from "@t3tools/contracts";
+import {
+  isRuntimeModeOffered,
+  SANDBOXED_FULL_ACCESS_DESCRIPTION,
+} from "@t3tools/client-runtime/runtime-modes";
 
-// Sandboxed full access stays out of pickers until providers run inside the sandbox.
 export const RUNTIME_MODE_CHOICES: ReadonlyArray<{
-  readonly mode: Exclude<RuntimeMode, "sandboxed-full-access">;
+  readonly mode: RuntimeMode;
   readonly label: string;
   readonly description: string;
 }> = [
@@ -26,18 +29,25 @@ export const RUNTIME_MODE_CHOICES: ReadonlyArray<{
     description: "Supported providers approve routine actions; others still ask.",
   },
   {
+    mode: "sandboxed-full-access",
+    label: "Sandboxed full access",
+    description: SANDBOXED_FULL_ACCESS_DESCRIPTION,
+  },
+  {
     mode: "full-access",
     label: "Full access",
     description: "Allow commands and edits without prompts.",
   },
 ];
 
+/** The modes offered for a provider; a thread's own sandboxed full access always stays listed. */
 export function runtimeModeChoicesForSupportedModes(
   supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined,
+  runtimeMode: RuntimeMode,
 ) {
-  return supportedRuntimeModes && supportedRuntimeModes.length > 0
-    ? RUNTIME_MODE_CHOICES.filter((choice) => supportedRuntimeModes.includes(choice.mode))
-    : RUNTIME_MODE_CHOICES;
+  return RUNTIME_MODE_CHOICES.filter((choice) =>
+    isRuntimeModeOffered(choice.mode, runtimeMode, supportedRuntimeModes),
+  );
 }
 
 export type RuntimeModeChoice = (typeof RUNTIME_MODE_CHOICES)[number] & {
@@ -57,6 +67,18 @@ export function withManagedRuntimeModeLimits(
     const reason = policies
       .map((policy) => managedRuntimeModeDenial(policy, choice.mode))
       .find((denial) => denial !== undefined);
+    return reason === undefined ? choice : { ...choice, disabledReason: reason };
+  });
+}
+
+/** Disables the choices `deny` refuses with its reason, keeping any reason already given. */
+export function withRuntimeModeDenials(
+  choices: ReadonlyArray<RuntimeModeChoice>,
+  deny: (mode: RuntimeMode) => string | undefined,
+): ReadonlyArray<RuntimeModeChoice> {
+  return choices.map((choice) => {
+    if (choice.disabledReason !== undefined) return choice;
+    const reason = deny(choice.mode);
     return reason === undefined ? choice : { ...choice, disabledReason: reason };
   });
 }

@@ -28,7 +28,7 @@ export function ManagedRuntimeModeNotice(props: {
   const runtimeMode = draftSettings.runtimeMode ?? props.threadRuntimeMode;
   const denial = managedRuntimeModeDenial(props.policy, runtimeMode);
   if (denial === undefined) return null;
-  const choices = runtimeModeChoicesForSupportedModes(props.supportedRuntimeModes);
+  const choices = runtimeModeChoicesForSupportedModes(props.supportedRuntimeModes, runtimeMode);
   const target = clampManagedRuntimeMode(
     props.policy,
     runtimeMode,

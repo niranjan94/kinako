@@ -1,3 +1,4 @@
+import { sandboxedRuntimeModeDenial } from "@t3tools/client-runtime/runtime-modes";
 import {
   getPromptControlledTraits,
   getTraitSelectChange,
@@ -112,6 +113,7 @@ import {
   compatibleRuntimeModeForChoices,
   runtimeModeChoicesForSupportedModes,
   withManagedRuntimeModeLimits,
+  withRuntimeModeDenials,
   type RuntimeModeChoice,
   selectableChoices,
 } from "./thread-settings-options";
@@ -522,9 +524,13 @@ function ThreadSettingsSessionProvider(
     pendingModel ??
     props.providerGroups.flatMap((group) => group.models).find((option) => isApplied(option)) ??
     null;
-  const runtimeModeChoices = withManagedRuntimeModeLimits(
-    runtimeModeChoicesForSupportedModes(displayedModel?.supportedRuntimeModes),
-    [config?.managedPolicy],
+  const runtimeModeChoices = withRuntimeModeDenials(
+    withManagedRuntimeModeLimits(
+      runtimeModeChoicesForSupportedModes(displayedModel?.supportedRuntimeModes, props.runtimeMode),
+      [config?.managedPolicy],
+    ),
+    (mode) =>
+      sandboxedRuntimeModeDenial(mode, displayedModel?.supportedRuntimeModes, config?.sandbox),
   );
   const compatibleRuntimeMode = compatibleRuntimeModeForChoices(
     props.runtimeMode,

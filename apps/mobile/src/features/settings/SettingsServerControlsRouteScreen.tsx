@@ -1,3 +1,4 @@
+import { sandboxUnavailableReason } from "@t3tools/client-runtime/runtime-modes";
 import { FORK_PROJECT_FILE_NAME } from "@t3tools/shared/forkBrand";
 import { useNavigation } from "@react-navigation/native";
 import { SettingsRow } from "./components/SettingsRow";
@@ -21,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   RUNTIME_MODE_CHOICES,
   withManagedRuntimeModeLimits,
+  withRuntimeModeDenials,
 } from "../threads/thread-settings-options";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
@@ -285,9 +287,17 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     const reason = managed(key);
     return reason === undefined ? subtitle : `${subtitle} ${reason}`;
   };
-  const runtimeModeChoices = withManagedRuntimeModeLimits(
-    RUNTIME_MODE_CHOICES,
-    targets.map((target) => target.environment.serverConfig.managedPolicy),
+  const runtimeModeChoices = withRuntimeModeDenials(
+    withManagedRuntimeModeLimits(
+      RUNTIME_MODE_CHOICES,
+      targets.map((target) => target.environment.serverConfig.managedPolicy),
+    ),
+    (mode) =>
+      mode === "sandboxed-full-access"
+        ? targets
+            .map((target) => sandboxUnavailableReason(target.environment.serverConfig.sandbox))
+            .find((reason) => reason !== undefined)
+        : undefined,
   );
   const disabledFor = (key: string) =>
     disabled ||
