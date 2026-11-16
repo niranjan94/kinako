@@ -3,6 +3,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { shortcutLabelForCommand } from "../keybindings";
 import { useManagedPolicy } from "../state/managedPolicy";
+import { useSandboxStatus } from "../state/sandbox";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { ComposerControl } from "./chat/ComposerControl";
 import { ComposerPermissionsSection } from "./chat/ComposerFooterControls";
@@ -30,7 +31,10 @@ export function ComposerContextPermissions(props: {
     props.runtimeMode,
     props.supportedRuntimeModes,
   );
-  const options = resolveRuntimeModeOptions(modes, useManagedPolicy(props.environmentId));
+  const options = resolveRuntimeModeOptions(modes, useManagedPolicy(props.environmentId), {
+    supportedRuntimeModes: props.supportedRuntimeModes,
+    sandbox: useSandboxStatus(props.environmentId),
+  });
   const composerMenuProps = useComposerMenuProps();
   const { icon: Icon, label } = runtimeModeConfig[mode];
   return (

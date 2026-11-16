@@ -343,6 +343,27 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "sandbox-paths",
+    title: "Sandbox paths",
+    to: "/settings/threads",
+    scope: "project-defaults",
+    searchTerms: ["sandboxed full access filesystem read write read only allowlist folders"],
+  },
+  {
+    id: "sandbox-docker",
+    title: "Docker in the sandbox",
+    to: "/settings/threads",
+    scope: "environment",
+    searchTerms: ["sandboxed full access docker socket containers"],
+  },
+  {
+    id: "sandbox-ssh-agent",
+    title: "SSH agent in the sandbox",
+    to: "/settings/threads",
+    scope: "environment",
+    searchTerms: ["sandboxed full access ssh agent keys git signing commit"],
+  },
+  {
     id: "color-scheme",
     title: "Color scheme",
     to: "/settings/appearance",

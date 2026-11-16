@@ -1,9 +1,14 @@
 import {
   managedRuntimeModeDenial,
   type ManagedPolicySummary,
-  providerSupportsRuntimeMode,
   type RuntimeMode,
+  type SandboxStatus,
 } from "@t3tools/contracts";
+import {
+  isRuntimeModeOffered,
+  SANDBOXED_FULL_ACCESS_DESCRIPTION,
+  sandboxedRuntimeModeDenial,
+} from "@t3tools/client-runtime/runtime-modes";
 import {
   BoxIcon,
   type LucideIcon,
@@ -34,7 +39,7 @@ export const runtimeModeConfig: Record<
   },
   "sandboxed-full-access": {
     label: "Sandboxed full access",
-    description: "Allow commands and edits without prompts, confined to a filesystem sandbox.",
+    description: SANDBOXED_FULL_ACCESS_DESCRIPTION,
     icon: BoxIcon,
   },
   "full-access": {
@@ -45,10 +50,7 @@ export const runtimeModeConfig: Record<
   },
 };
 
-// Sandboxed full access stays out of pickers until providers run inside the sandbox.
-export const runtimeModeOptions: ReadonlyArray<RuntimeMode> = (
-  Object.keys(runtimeModeConfig) as RuntimeMode[]
-).filter((mode) => mode !== "sandboxed-full-access");
+export const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
 
 /** The modes a provider supports and the mode a thread really runs in. */
 export function resolveCompatibleRuntimeMode(
@@ -56,7 +58,7 @@ export function resolveCompatibleRuntimeMode(
   supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined,
 ) {
   const modes = runtimeModeOptions.filter((mode) =>
-    providerSupportsRuntimeMode(supportedRuntimeModes, mode),
+    isRuntimeModeOffered(mode, runtimeMode, supportedRuntimeModes),
   );
   return { modes, mode: modes.includes(runtimeMode) ? runtimeMode : (modes[0] ?? runtimeMode) };
 }
@@ -64,10 +66,16 @@ export function resolveCompatibleRuntimeMode(
 export function resolveRuntimeModeOptions(
   modes: ReadonlyArray<RuntimeMode>,
   managedPolicy: ManagedPolicySummary | undefined,
+  environment: {
+    readonly supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined;
+    readonly sandbox: SandboxStatus | undefined;
+  },
 ) {
   return modes.map((mode) => {
     const option = { mode, ...runtimeModeConfig[mode] };
-    const disabledReason = managedRuntimeModeDenial(managedPolicy, mode);
+    const disabledReason =
+      managedRuntimeModeDenial(managedPolicy, mode) ??
+      sandboxedRuntimeModeDenial(mode, environment.supportedRuntimeModes, environment.sandbox);
     return disabledReason === undefined ? option : { ...option, disabledReason };
   });
 }

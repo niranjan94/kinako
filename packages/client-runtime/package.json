@@ -31,6 +31,10 @@
       "types": "./src/locales.ts",
       "default": "./src/locales.ts"
     },
+    "./runtime-modes": {
+      "types": "./src/runtimeModes.ts",
+      "default": "./src/runtimeModes.ts"
+    },
     "./model-search": {
       "types": "./src/modelSearch.ts",
       "default": "./src/modelSearch.ts"

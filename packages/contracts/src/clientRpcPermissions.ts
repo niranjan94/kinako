@@ -102,6 +102,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // Exposes or withdraws this environment on the internet, like the relay tunnel.
   [WS_METHODS.publicRouteEnable]: AuthRelayWriteScope,
   [WS_METHODS.publicRouteDisable]: AuthRelayWriteScope,
+  [WS_METHODS.serverCheckSandboxPaths]: AuthSettingsWriteScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

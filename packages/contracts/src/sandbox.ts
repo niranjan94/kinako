@@ -89,3 +89,29 @@ export function defaultSandboxPaths(platform: SandboxPlatform): {
         : SHARED_READ_ONLY_PATHS,
   };
 }
+
+/** Whether this environment can run sandboxed full access, with the server's reason when not. */
+export const SandboxStatus = Schema.Struct({
+  available: Schema.Boolean,
+  reason: Schema.optionalKey(Schema.String),
+});
+export type SandboxStatus = typeof SandboxStatus.Type;
+
+export const SandboxPathCheckInput = Schema.Struct({
+  readWritePaths: SandboxPathList,
+  readOnlyPaths: SandboxPathList,
+});
+export type SandboxPathCheckInput = typeof SandboxPathCheckInput.Type;
+
+/** A listed path the sandbox leaves out, with the resolver's reason. */
+export const SandboxRejectedPath = Schema.Struct({
+  path: Schema.String,
+  list: Schema.Literals(["read-write", "read-only"]),
+  reason: Schema.String,
+});
+export type SandboxRejectedPath = typeof SandboxRejectedPath.Type;
+
+export const SandboxPathCheckResult = Schema.Struct({
+  rejected: Schema.Array(SandboxRejectedPath),
+});
+export type SandboxPathCheckResult = typeof SandboxPathCheckResult.Type;

@@ -134,6 +134,7 @@ import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as SourceControlSignIn from "./sourceControl/SourceControlSignIn.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
+import * as ProcessRunner from "./processRunner.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as PublicRoute from "./publicRoute/PublicRoute.ts";
 import * as DatabaseService from "./database/DatabaseService.ts";
@@ -816,6 +817,7 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
 
 // Build the production RPC layer; unrelated capabilities fail if this test calls them.
 const layerUnusedConfigRpcServices = Layer.mergeAll(
+  Layer.mock(ProcessRunner.ProcessRunner)({}),
   Layer.mock(DocumentText.DocumentText)({}),
   Layer.mock(ServerSecretStore.ServerSecretStore)({}),
   Layer.mock(SecretCheck.SecretCheck)({}),

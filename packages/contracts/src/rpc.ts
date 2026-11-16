@@ -421,6 +421,7 @@ import {
   ListTextGeneratorModelsResult,
   TextGeneratorError,
 } from "./settings.ts";
+import { SandboxPathCheckInput, SandboxPathCheckResult } from "./sandbox.ts";
 import {
   ScheduledTaskDeleteInput,
   ScheduledTaskDeleteResult,
@@ -711,6 +712,7 @@ export const WS_METHODS = {
   issuesList: "issues.list",
   issuesDetail: "issues.detail",
   issuesComment: "issues.comment",
+  serverCheckSandboxPaths: "server.checkSandboxPaths",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -1095,6 +1097,12 @@ const WsServerRetryResourceTelemetryRpc = Rpc.make(WS_METHODS.serverRetryResourc
 const WsServerCheckOtlpEndpointRpc = Rpc.make(WS_METHODS.serverCheckOtlpEndpoint, {
   payload: OtlpEndpointCheckInput,
   success: OtlpEndpointCheckResult,
+  error: EnvironmentAuthorizationError,
+});
+
+const WsServerCheckSandboxPathsRpc = Rpc.make(WS_METHODS.serverCheckSandboxPaths, {
+  payload: SandboxPathCheckInput,
+  success: SandboxPathCheckResult,
   error: EnvironmentAuthorizationError,
 });
 
@@ -2619,4 +2627,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsPublicRouteEnableRpc,
   WsPublicRouteDisableRpc,
   WsPublicRouteSubscribeStatusRpc,
+  WsServerCheckSandboxPathsRpc,
 ).middleware(RpcScopeAuthorization);

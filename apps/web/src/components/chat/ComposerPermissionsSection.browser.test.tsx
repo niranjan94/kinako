@@ -72,7 +72,7 @@ it("marks the current mode as checked and closes on Escape", async () => {
   await using screen = await render(<OverflowMenu />, { router: false }); // no routes involved
   await userEvent.tab();
   await userEvent.keyboard("{ArrowDown}");
-  const fullAccess = page.getByRole("menuitemradio", { name: "Full access" });
+  const fullAccess = page.getByRole("menuitemradio", { name: "Full access", exact: true });
   await expect.element(fullAccess).toHaveAttribute("aria-checked", "true");
   await userEvent.keyboard("{Escape}");
   await expect.element(fullAccess).not.toBeInTheDocument();
@@ -128,7 +128,7 @@ it("on a touch tablet, tapping outside the Permissions menu leaves the editor un
   await using screen = await render(ui, { router: false }); // no routes involved
   await userEvent.click(screen.getByRole("button", { name: "Model" }));
   await userEvent.click(page.getByRole("button", { name: "Permissions: Full access" }));
-  const fullAccess = page.getByRole("menuitemradio", { name: "Full access" });
+  const fullAccess = page.getByRole("menuitemradio", { name: "Full access", exact: true });
   await expect.element(fullAccess).toBeInTheDocument();
   const permissionsTrigger = page.getByRole("button", { name: "Permissions: Full access" });
   // The first outside tap closes the Permissions menu, the second the picker around it.
@@ -145,12 +145,16 @@ it("opens on the checked permission when composer.mode marked the trigger", asyn
   const trigger = screen.getByRole("button", { name: "More" });
   markOpenToPermissions(trigger.element() as HTMLElement);
   await userEvent.click(trigger);
-  await expect.element(page.getByRole("menuitemradio", { name: "Full access" })).toHaveFocus();
+  await expect
+    .element(page.getByRole("menuitemradio", { name: "Full access", exact: true }))
+    .toHaveFocus();
 
   // The mark is used once: a plain reopen lands on the menu's usual first focus.
   await userEvent.keyboard("{Escape}");
   await userEvent.click(trigger);
-  await expect.element(page.getByRole("menuitemradio", { name: "Full access" })).not.toHaveFocus();
+  await expect
+    .element(page.getByRole("menuitemradio", { name: "Full access", exact: true }))
+    .not.toHaveFocus();
 });
 
 // Mirrors ComposerControlsBar: the chip shows only while the mode differs from the default.
@@ -177,7 +181,7 @@ it("returns focus to the editor when picking the default hides the chip", async 
   const { handle, ui } = withComposer(<PermissionsChip />);
   await using screen = await render(ui, { router: false }); // no routes involved
   await userEvent.click(screen.getByRole("button", { name: "Permissions: Supervised" }));
-  await userEvent.click(page.getByRole("menuitemradio", { name: "Full access" }));
+  await userEvent.click(page.getByRole("menuitemradio", { name: "Full access", exact: true }));
   await vi.waitFor(() => expect(handle.focusAtEnd).toHaveBeenCalled());
   await expect.element(screen.getByRole("button", { name: "Model" })).not.toHaveFocus();
 });
@@ -198,7 +202,7 @@ it("opens permissions directly from the context strip and applies a supported mo
   await using screen = await render(<ContextPermissions />, { router: false }); // no routes involved
   await userEvent.click(screen.getByRole("button", { name: "Permissions: Full access" }));
   await expect
-    .element(page.getByRole("menuitemradio", { name: "Full access" }))
+    .element(page.getByRole("menuitemradio", { name: "Full access", exact: true }))
     .toHaveAttribute("aria-checked", "true");
   await expect
     .element(page.getByRole("menuitemradio", { name: "Auto", exact: true }))

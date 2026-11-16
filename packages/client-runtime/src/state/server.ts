@@ -1911,6 +1911,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:check-otlp-endpoint",
       tag: WS_METHODS.serverCheckOtlpEndpoint,
     }),
+    checkSandboxPaths: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:check-sandbox-paths",
+      tag: WS_METHODS.serverCheckSandboxPaths,
+    }),
     checkSecretSource: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:check-secret-source",
       tag: WS_METHODS.serverCheckSecretSource,

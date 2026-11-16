@@ -5,6 +5,7 @@ import {
   type WorktreeSubmodules,
   managedRuntimeModeDenial,
 } from "@t3tools/contracts";
+import { sandboxUnavailableReason } from "@t3tools/client-runtime/runtime-modes";
 import { createModelSelection, pickModelSelection } from "@t3tools/shared/model";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
@@ -383,17 +384,25 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                   {runtimeModeOptions.map((mode) => {
                     const option = runtimeModeConfig[mode];
                     const Icon = option.icon;
-                    const managedReason = firstManagedDenial(
-                      connectedEnvironments.map(
-                        (environment) => environment.serverConfig?.managedPolicy,
-                      ),
-                      (policy) => managedRuntimeModeDenial(policy, mode),
-                    );
+                    const disabledReason =
+                      firstManagedDenial(
+                        connectedEnvironments.map(
+                          (environment) => environment.serverConfig?.managedPolicy,
+                        ),
+                        (policy) => managedRuntimeModeDenial(policy, mode),
+                      ) ??
+                      (mode === "sandboxed-full-access"
+                        ? connectedEnvironments
+                            .map((environment) =>
+                              sandboxUnavailableReason(environment.serverConfig?.sandbox),
+                            )
+                            .find((reason) => reason !== undefined)
+                        : undefined);
                     return (
                       <SelectItem
                         key={mode}
                         value={mode}
-                        disabled={managedReason !== undefined}
+                        disabled={disabledReason !== undefined}
                         className="min-w-64"
                       >
                         <div className="grid gap-0.5">
@@ -402,7 +411,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                             {option.label}
                           </span>
                           <span className="text-xs leading-4 text-muted-foreground">
-                            {managedReason ?? option.description}
+                            {disabledReason ?? option.description}
                           </span>
                         </div>
                       </SelectItem>

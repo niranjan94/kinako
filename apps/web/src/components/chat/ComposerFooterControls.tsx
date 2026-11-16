@@ -44,7 +44,7 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
     supervisedRuntimeModeOption;
   const RuntimeModeIcon = runtimeModeOption.icon;
   // The chip opens the same Permissions toggle used in the model picker and the overflow menu.
-  const permissionsTooltip = `Permissions: ${runtimeModeOption.label}. ${runtimeModeOption.description}`;
+  const permissionsTooltip = `Permissions: ${runtimeModeOption.label}. ${runtimeModeOption.disabledReason ?? runtimeModeOption.description}`;
   const permissionsChip = (
     <Menu
       open={open}
