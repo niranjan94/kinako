@@ -527,11 +527,41 @@ describe("effectiveSandboxSettings", () => {
     expect(policy.entries.map(({ path, access }) => [path, access])).toEqual([
       ["/Users/user", "hidden"],
       ["/private/tmp", "read-write"],
+      ["/private/tmp/tmux-1000", "hidden"],
       ["/Users/user/Library/Caches", "read-write"],
       ["/Users/user/code/app", "read-write"],
       // Not there yet; Seatbelt denies it before Docker creates it.
       ["/private/var/run/docker.sock", "hidden"],
     ]);
+  });
+
+  it.each([
+    ["exist", true],
+    ["do not exist yet", false],
+  ])("hides the user's screen and tmux socket dirs when they %s", (_, present) => {
+    const temp = "/private/var/folders/xy/T";
+    const tree: Record<string, FakeEntry> = {
+      "/Users/user": "directory",
+      "/Users/user/code/app": "directory",
+      "/private/tmp": "directory",
+      "/tmp": { link: "/private/tmp" },
+      "/var": { link: "/private/var" },
+      [temp]: "directory",
+      ...(present
+        ? { [`${temp}/.screen`]: "directory", "/private/tmp/tmux-1000": "directory" }
+        : {}),
+    };
+    const policy = resolved(
+      darwinInput({
+        tmpDir: "/var/folders/xy/T",
+        darwinUserTempDir: "/var/folders/xy/T",
+        userName: "user",
+      }),
+      tree,
+    );
+    expect(accessOf(policy, `${temp}/scratch`)).toBe("read-write");
+    expect(accessOf(policy, `${temp}/.screen/123.session`)).toBe("hidden");
+    expect(accessOf(policy, "/private/tmp/tmux-1000/default")).toBe("hidden");
   });
 
   it("keeps one writable file inside a read-only provider directory", () => {

@@ -115,6 +115,8 @@ export interface SandboxPolicyInput {
   readonly tmpDir: string | undefined;
   /** macOS `getconf DARWIN_USER_CACHE_DIR`, which system frameworks write to. */
   readonly darwinUserCacheDir?: string | undefined;
+  /** macOS `getconf DARWIN_USER_TEMP_DIR`, where the system screen keeps its sockets. */
+  readonly darwinUserTempDir?: string | undefined;
   /** git's `core.excludesfile`, already home-expanded. */
   readonly gitExcludesFile?: string | undefined;
   readonly sshAuthSock: string | undefined;
@@ -169,6 +171,9 @@ function multiplexerSocketDirs(input: SandboxPolicyInput): ReadonlyArray<string>
       : input.platform === "linux"
         ? [`/run/screen/S-${user}`, `/var/run/screen/S-${user}`]
         : [`${tmpRoot}/.screen`, `${tmpRoot}/screens/S-${user}`]),
+    ...(input.platform === "darwin" && input.darwinUserTempDir !== undefined
+      ? [NodePath.posix.join(input.darwinUserTempDir, ".screen")]
+      : []),
   ];
 }
 
@@ -415,16 +420,21 @@ export function resolveSandboxPolicy(
     if (fact === undefined) {
       if (candidate.required)
         return refuse(`${candidate.source} ${candidate.path} does not exist.`);
-      // Seatbelt can deny a path before it exists, so a Docker socket created after launch
-      // inside a listed directory such as ~/.docker stays masked. bwrap cannot mask a missing path.
+      // Seatbelt can deny a path before it exists, so a Docker socket or multiplexer socket dir
+      // created after launch stays masked. bwrap cannot mask a missing path.
       if (
         input.platform === "darwin" &&
-        candidate.source === "docker" &&
+        (candidate.source === "docker" || candidate.source === "multiplexer") &&
         candidate.access === "hidden"
       ) {
         const path = realMissingPath(candidate.path, facts);
         if (path !== undefined && !byPath.has(path)) {
-          byPath.set(path, { path, access: "hidden", kind: "socket", source: "docker" });
+          byPath.set(path, {
+            path,
+            access: "hidden",
+            kind: candidate.source === "docker" ? "socket" : "directory",
+            source: candidate.source,
+          });
         }
       }
       continue;

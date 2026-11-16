@@ -27,7 +27,7 @@ export class SandboxPolicyRefusedError extends Schema.TaggedError<SandboxPolicyR
 
 export interface ResolveSandboxPolicyInput extends Omit<
   SandboxPolicyInput,
-  "gitCommonDirs" | "providerPaths" | "darwinUserCacheDir" | "gitExcludesFile"
+  "gitCommonDirs" | "providerPaths" | "darwinUserCacheDir" | "darwinUserTempDir" | "gitExcludesFile"
 > {
   /** Checkouts paired with the repositories the server knows they come from. */
   readonly gitCheckouts: ReadonlyArray<{ readonly checkout: string; readonly repository: string }>;
@@ -82,6 +82,8 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
   ]);
   const darwinUserCacheDir =
     input.platform === "darwin" ? yield* output("getconf", ["DARWIN_USER_CACHE_DIR"]) : "";
+  const darwinUserTempDir =
+    input.platform === "darwin" ? yield* output("getconf", ["DARWIN_USER_TEMP_DIR"]) : "";
   // The agent can rewrite a checkout's `.git` file, so it only says whether the checkout is a
   // linked worktree; the git dir granted is always the server-known repository's own.
   const gitCommonDirs: Array<string> = [];
@@ -117,6 +119,7 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
       ? {}
       : { gitExcludesFile: expandHomePath(gitExcludesFile, input.home) }),
     ...(darwinUserCacheDir.length === 0 ? {} : { darwinUserCacheDir }),
+    ...(darwinUserTempDir.length === 0 ? {} : { darwinUserTempDir }),
   };
   const candidates = sandboxCandidates(policyInput);
 
@@ -141,9 +144,9 @@ export const resolveSandboxPolicy = Effect.fn("SandboxPolicy.resolve")(function*
     ...[...listings].flatMap(([directory, names]) =>
       names.map((name) => path.join(directory, name)),
     ),
-    // A Docker socket missing at launch is masked at its real location, found from its parents.
+    // A socket path missing at launch is masked at its real location, found from its parents.
     ...candidates.flatMap((candidate) => {
-      if (candidate.source !== "docker") return [];
+      if (candidate.source !== "docker" && candidate.source !== "multiplexer") return [];
       const parents: Array<string> = [];
       for (let parent = path.dirname(candidate.path); parent !== "/";) {
         parents.push(parent);
