@@ -61,6 +61,7 @@ const SHARED_READ_ONLY_PATHS = [
   "~/.nvm",
   "~/.fnm",
   "~/.local/share/fnm",
+  "~/.local/share/vite-plus",
   "~/.local/share/mise",
   "~/.volta",
   "~/.cargo",
