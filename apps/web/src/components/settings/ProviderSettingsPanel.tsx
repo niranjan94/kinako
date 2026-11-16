@@ -1278,7 +1278,7 @@ function ProviderInstanceRow({
   readonly projectOverrideValue: boolean | undefined;
   readonly projectOverrideEffectiveEnabled: boolean;
   readonly modelPreferences:
-    | { readonly hiddenModels: ReadonlyArray<string>; readonly modelOrder: ReadonlyArray<string> }
+    | NonNullable<UnifiedSettings["providerModelPreferences"]>[ProviderInstanceId]
     | undefined;
   readonly favorites: UnifiedSettings["favorites"];
   readonly actions: ProviderInstanceRowActions;
@@ -1422,6 +1422,12 @@ function ProviderInstanceRow({
       hiddenModels={hiddenModels}
       favoriteModels={favoriteModels}
       modelOrder={modelOrder}
+      defaultEfforts={modelPreferences?.defaultEfforts}
+      onDefaultEffortChange={(model, effort) => {
+        void actions.updateModelPreferences({
+          setModelEffortDefaults: [{ provider: instanceId, model, effort }],
+        });
+      }}
       onHiddenModelsChange={(next, affectedModels) => {
         const hidden = new Set(next);
         void actions.updateModelPreferences({

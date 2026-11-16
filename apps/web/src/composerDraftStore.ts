@@ -49,6 +49,7 @@ import {
   draftModelPickMatchesThread,
   normalizeCustomModelSlug,
   normalizeModelSlug,
+  withModelEffortDefault,
 } from "@t3tools/shared/model";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import * as Option from "effect/Option";
@@ -1368,9 +1369,20 @@ export function deriveEffectiveComposerModelState(input: {
       : null,
   );
 
+  const modelOptions = draftOptions || storedOptions ? { ...storedOptions, ...draftOptions } : null;
+  const instanceId = input.selectedInstanceId ?? defaultInstanceIdForDriver(input.selectedProvider);
+  const effective = withModelEffortDefault(
+    createModelSelection(instanceId, selectedModel, modelOptions?.[instanceId]),
+    input.settings.providerModelPreferences,
+    input.providers
+      .find((provider) => provider.instanceId === instanceId)
+      ?.models.find((model) => model.slug === selectedModel)?.capabilities ?? null,
+  );
   return {
     selectedModel,
-    modelOptions: draftOptions || storedOptions ? { ...storedOptions, ...draftOptions } : null,
+    modelOptions: effective.options
+      ? { ...modelOptions, [instanceId]: effective.options }
+      : modelOptions,
   };
 }
 

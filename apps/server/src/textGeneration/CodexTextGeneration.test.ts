@@ -635,6 +635,7 @@ it.layer(layerCodexTextGenerationTest)("CodexTextGeneration", (it) => {
 
 const PREFLIGHT_PRIMARY_STATES = [
   "ready",
+  "model default effort",
   "pending",
   "exhausted",
   "not installed",
@@ -653,7 +654,7 @@ it.effect.each(PREFLIGHT_PRIMARY_STATES)("text generation preflight: %s", (prima
     const selection = {
       instanceId: primary,
       model: "chat-model",
-      options: [{ id: "effort", value: "high" }],
+      options: primaryState === "model default effort" ? [] : [{ id: "effort", value: "high" }],
     };
     const threadDefault = {
       instanceId: fallback,
@@ -672,7 +673,26 @@ it.effect.each(PREFLIGHT_PRIMARY_STATES)("text generation preflight: %s", (prima
         auth: { status: "authenticated" },
         version: null,
         checkedAt: "1970-01-01T00:00:00Z",
-        models: [],
+        models:
+          primaryState === "model default effort" && instanceId === primary
+            ? [
+                {
+                  slug: selection.model,
+                  name: selection.model,
+                  isCustom: false,
+                  capabilities: {
+                    optionDescriptors: [
+                      {
+                        id: "effort",
+                        type: "select",
+                        label: "Reasoning",
+                        options: [{ id: "xhigh", label: "Extra High" }],
+                      },
+                    ],
+                  },
+                },
+              ]
+            : [],
         slashCommands: [],
         skills: [],
         ...(primaryState === "pending" && instanceId === primary
@@ -752,6 +772,13 @@ it.effect.each(PREFLIGHT_PRIMARY_STATES)("text generation preflight: %s", (prima
               },
             },
             defaultModelSelection: threadDefault,
+            providerModelPreferences: {
+              [primary]: {
+                hiddenModels: [],
+                modelOrder: [],
+                defaultEfforts: { [selection.model]: { id: "effort", value: "xhigh" } },
+              },
+            },
             ...(primaryState === "not installed, fallback disabled for project"
               ? {
                   projectSettingsOverrides: {
@@ -778,12 +805,14 @@ it.effect.each(PREFLIGHT_PRIMARY_STATES)("text generation preflight: %s", (prima
       }),
     ).toEqual({ title: "Generated title" });
     expect(calls).toEqual([
-      primaryState === "ready" ||
-      primaryState === "pending" ||
-      primaryState === "not installed, fallback disabled for project" ||
-      primaryState === "signed out, fallback failed"
-        ? selection
-        : threadDefault,
+      primaryState === "model default effort"
+        ? { ...selection, options: [{ id: "effort", value: "xhigh" }] }
+        : primaryState === "ready" ||
+            primaryState === "pending" ||
+            primaryState === "not installed, fallback disabled for project" ||
+            primaryState === "signed out, fallback failed"
+          ? selection
+          : threadDefault,
     ]);
   }),
 );

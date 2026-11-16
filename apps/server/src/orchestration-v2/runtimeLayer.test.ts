@@ -355,7 +355,7 @@ const layerTest = Layer.mergeAll(
   Layer.provide(SqlitePersistence.layerMemory),
   Layer.provide(layerCheckpointStoreTest),
   Layer.provide(layerServerConfig),
-  Layer.provide(ServerSettings.layerTest()),
+  Layer.provideMerge(ServerSettings.layerTest()),
   Layer.provide(layerTestProviderInstanceRegistry),
   Layer.provide(layerGitWorkflowTest),
   Layer.provide(layerProjectServiceTest),
@@ -3424,6 +3424,79 @@ const writeHtmlRenderRun = Effect.fn("test.writeHtmlRenderRun")(function* (input
 });
 
 it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
+  it.effect("persists model effort defaults and preserves explicit thread efforts", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const settings = yield* ServerSettings.ServerSettingsService;
+      const original = yield* settings.getSettings;
+      yield* Effect.gen(function* () {
+        const projectId = ProjectId.make("model-effort-project");
+        const threadId = ThreadId.make("model-effort-thread");
+        const effort = { id: "reasoningEffort", value: "xhigh" };
+        yield* settings.updateSettings({
+          setModelEffortDefaults: [
+            { provider: modelSelection.instanceId, model: modelSelection.model, effort },
+          ],
+        });
+        yield* seedProject({
+          projectId,
+          title: "Model efforts",
+          workspaceRoot: "/workspace/project",
+          defaultModelSelection: null,
+          createdAt: "2026-09-07T00:00:00.000Z",
+        });
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make("model-effort-create"),
+          threadId,
+          projectId,
+          title: "Model efforts",
+          createdBy: "user",
+          creationSource: "web",
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+        });
+        assert.deepEqual(
+          (yield* orchestrator.getThreadProjection(threadId)).thread.modelSelection.options,
+          [effort],
+        );
+        yield* orchestrator.dispatch({
+          type: "thread.model-selection.set",
+          commandId: CommandId.make("model-effort-explicit"),
+          threadId,
+          modelSelection: { ...modelSelection, options: [{ ...effort, value: "low" }] },
+        });
+        assert.deepEqual(
+          (yield* orchestrator.getThreadProjection(threadId)).thread.modelSelection.options,
+          [{ ...effort, value: "low" }],
+        );
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make("model-effort-queue"),
+          threadId,
+          messageId: MessageId.make("model-effort-message"),
+          text: "Use my model default",
+          attachments: [],
+          modelSelection,
+          dispatchMode: { type: "defer_start" },
+          createdBy: "user",
+          creationSource: "web",
+        });
+        const projection = yield* orchestrator.getThreadProjection(threadId);
+        assert.deepEqual(projection.runs.at(-1)?.modelSelection.options, [effort]);
+      }).pipe(
+        Effect.ensuring(
+          settings
+            .updateSettings({ providerModelPreferences: original.providerModelPreferences ?? {} })
+            .pipe(Effect.orDie),
+        ),
+      );
+    }),
+  );
+
   it.effect("locks additional directories once the thread exists but records their worktrees", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;

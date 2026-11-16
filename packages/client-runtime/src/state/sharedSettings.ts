@@ -125,10 +125,12 @@ function modelSettingsPatchForEnvironment(
     sameInstance(source, target, change.provider);
   const setModelFavorites = patch.setModelFavorites?.filter(matches) ?? [];
   const setModelsHidden = patch.setModelsHidden?.filter(matches) ?? [];
+  const setModelEffortDefaults = patch.setModelEffortDefaults?.filter(matches) ?? [];
   const setProviderCustomModels = patch.setProviderCustomModels?.filter(matches) ?? [];
   return {
     ...(setModelFavorites.length > 0 ? { setModelFavorites } : {}),
     ...(setModelsHidden.length > 0 ? { setModelsHidden } : {}),
+    ...(setModelEffortDefaults.length > 0 ? { setModelEffortDefaults } : {}),
     ...(patch.setProviderModelOrder && matches(patch.setProviderModelOrder)
       ? { setProviderModelOrder: patch.setProviderModelOrder }
       : {}),

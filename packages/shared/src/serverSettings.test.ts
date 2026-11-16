@@ -922,6 +922,30 @@ describe("worktreesDirectory", () => {
 });
 
 describe("synchronized model preferences", () => {
+  it("sets and clears individual effort defaults without losing concurrent model preferences", () => {
+    const provider = ProviderInstanceId.make("codex");
+    const effort = { id: "reasoningEffort", value: "xhigh" };
+    const first = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      setModelEffortDefaults: [{ provider, model: "sol", effort }],
+    });
+    const next = applyServerSettingsPatch(first, {
+      setModelEffortDefaults: [{ provider, model: "luna", effort: { ...effort, value: "low" } }],
+      setModelsHidden: [{ provider, model: "astra", hidden: true }],
+      setProviderModelOrder: { provider, modelOrder: ["sol", "luna"] },
+    });
+    expect(next.providerModelPreferences?.[provider]).toEqual({
+      hiddenModels: ["astra"],
+      modelOrder: ["sol", "luna"],
+      defaultEfforts: { sol: effort, luna: { ...effort, value: "low" } },
+    });
+    const cleared = applyServerSettingsPatch(next, {
+      setModelEffortDefaults: [{ provider, model: "sol", effort: null }],
+    });
+    expect(cleared.providerModelPreferences?.[provider]?.defaultEfforts).toEqual({
+      luna: { ...effort, value: "low" },
+    });
+    expect(first.providerModelPreferences?.[provider]?.defaultEfforts).toEqual({ sol: effort });
+  });
   it("supports provider identifiers that match inherited object keys", () => {
     const provider = ProviderInstanceId.make("toString");
     const next = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {

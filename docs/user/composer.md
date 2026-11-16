@@ -109,9 +109,11 @@ device until you sign back into the same account.
 
 ## Model settings across environments
 
-Favorites, hidden models, model order, and custom models are saved on each environment. When you change one while connected to several environments, the change is also made on every connected environment where that provider exists with the same ID and type. Built-in providers such as `codex` and `claudeAgent` always match. A provider you added yourself matches only where it has the same ID. Custom models sync only to environments where you can manage providers.
+Favorites, hidden models, model order, default efforts, and custom models are saved on each environment. When you change one while connected to several environments, the change is also made on every connected environment where that provider exists with the same ID and type. Built-in providers such as `codex` and `claudeAgent` always match. A provider you added yourself matches only where it has the same ID. Custom models sync only to environments where you can manage providers.
 
 Environments that were disconnected, or that run an older version, miss those changes. To catch one up, open Settings → Providers for that environment and choose **Copy models from** to replace its model settings with another environment's.
+
+In Settings → Providers → **Models** on web or desktop, choose a default effort for each model that supports it. New selections use that effort on every client; an explicit effort in a thread or project takes priority. Choose **Provider default** to remove the override.
 
 ## Custom models
 

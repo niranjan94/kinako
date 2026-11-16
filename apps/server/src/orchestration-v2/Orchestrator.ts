@@ -83,7 +83,7 @@ import {
   managedRuntimeModeCeilingMessage,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
-import { modelSelectionsEqual } from "@t3tools/shared/model";
+import { modelSelectionsEqual, withModelEffortDefault } from "@t3tools/shared/model";
 import { modelSwitchSince } from "./modelSwitch.ts";
 import { isPlaceholderThreadTitle } from "./placeholderThreadTitle.ts";
 import { combinePullRequestWatchWakes, type PullRequestWatchWake } from "./pullRequestWatch.ts";
@@ -15936,6 +15936,25 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       "orchestration_v2.command_type": command.type,
       "orchestration_v2.thread_id": commandThreadId(command),
     });
+
+    if (
+      command.type === "thread.create" ||
+      command.type === "thread.model-selection.set" ||
+      command.type === "message.dispatch" ||
+      command.type === "provider.switch" ||
+      command.type === "delegated_task.request"
+    ) {
+      if (command.modelSelection !== undefined) {
+        const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+        command = {
+          ...command,
+          modelSelection: withModelEffortDefault(
+            command.modelSelection,
+            settings.providerModelPreferences,
+          ),
+        };
+      }
+    }
 
     const events = yield* Ref.make<Array<OrchestrationV2DomainEvent>>([]);
     const effects = yield* Ref.make<Array<PendingOrchestrationEffectV2>>([]);

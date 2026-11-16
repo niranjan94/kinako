@@ -13,6 +13,7 @@ import {
   modelSelectionsEqual,
   pickModelSelection,
   withImplicitFastModeDefault,
+  withModelEffortDefault,
 } from "./model.ts";
 
 const codexCaps: ModelCapabilities = createModelCapabilities({
@@ -120,6 +121,69 @@ describe("descriptor helpers", () => {
       instanceId: "codex",
       model: "gpt-5.4",
     });
+  });
+
+  it("applies only the selected instance and model's effort, preserving explicit options", () => {
+    const instanceId = ProviderInstanceId.make("codex");
+    const effort = { id: "reasoningEffort", value: "xhigh" };
+    const preferences = {
+      [instanceId]: {
+        hiddenModels: [],
+        modelOrder: [],
+        defaultEfforts: { sol: effort, luna: { ...effort, value: "high" } },
+      },
+    };
+    const selection = createModelSelection(instanceId, "sol", [{ id: "fastMode", value: true }]);
+    expect(withModelEffortDefault(selection, preferences, codexCaps).options).toEqual([
+      { id: "fastMode", value: true },
+      effort,
+    ]);
+    const explicit = createModelSelection(instanceId, "sol", [{ id: effort.id, value: "high" }]);
+    expect(withModelEffortDefault(explicit, preferences, codexCaps)).toBe(explicit);
+    expect(pickModelSelection(explicit, instanceId, "sol")).toBe(explicit);
+    expect(
+      withModelEffortDefault(pickModelSelection(explicit, instanceId, "luna"), preferences).options,
+    ).toEqual([{ ...effort, value: "high" }]);
+    expect(withModelEffortDefault({ ...selection, model: "astra" }, preferences).options).toEqual(
+      selection.options,
+    );
+    expect(
+      withModelEffortDefault(
+        { ...selection, instanceId: ProviderInstanceId.make("codex_work") },
+        preferences,
+      ).options,
+    ).toEqual(selection.options);
+    expect(withModelEffortDefault(selection, null)).toBe(selection);
+  });
+
+  it("ignores unavailable effort choices and prompt-injected options", () => {
+    const instanceId = ProviderInstanceId.make("claudeAgent");
+    const selection = createModelSelection(instanceId, "opus");
+    for (const value of ["removed", "ultrathink"]) {
+      const preferences = {
+        [instanceId]: {
+          hiddenModels: [],
+          modelOrder: [],
+          defaultEfforts: { opus: { id: "effort", value } },
+        },
+      };
+      const caps = createModelCapabilities({
+        optionDescriptors: [
+          {
+            id: "effort",
+            type: "select",
+            label: "Reasoning",
+            options: [
+              { id: "high", label: "High" },
+              { id: "ultrathink", label: "Ultrathink" },
+            ],
+            promptInjectedValues: ["ultrathink"],
+          },
+        ],
+      });
+      expect(withModelEffortDefault(selection, preferences, caps)).toBe(selection);
+      expect(withModelEffortDefault(selection, preferences, null)).toBe(selection);
+    }
   });
 });
 

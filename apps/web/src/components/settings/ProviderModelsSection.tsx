@@ -4,8 +4,13 @@ import {
   ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProviderModel,
+  type ModelPreferences,
 } from "@t3tools/contracts";
-import { isReasoningControl } from "@t3tools/client-runtime/model-traits";
+import {
+  isReasoningControl,
+  isReasoningSelect,
+  selectableProviderOptionChoices,
+} from "@t3tools/client-runtime/model-traits";
 import { type CustomModelDefinition, normalizeCustomModelSlug } from "@t3tools/shared/model";
 
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -15,6 +20,7 @@ import { MAX_CUSTOM_MODEL_LENGTH } from "../../modelSelection";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { CustomModelEditor } from "./CustomModelEditor";
 
@@ -27,6 +33,9 @@ const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Partial<Record<ProviderDriverKind, strin
 };
 
 const FILTER_THRESHOLD = 8;
+type EffortDefaults = NonNullable<
+  ModelPreferences["providerModelPreferences"][ProviderInstanceId]["defaultEfforts"]
+>;
 
 const PROVIDER_ALIAS_SLUGS = new Set(["default", "auto"]);
 
@@ -109,6 +118,10 @@ interface ProviderModelsSectionProps {
   readonly hiddenModels: ReadonlyArray<string>;
   readonly favoriteModels: ReadonlyArray<string>;
   readonly modelOrder: ReadonlyArray<string>;
+  readonly defaultEfforts?: EffortDefaults | undefined;
+  readonly onDefaultEffortChange?:
+    | ((model: string, effort: EffortDefaults[string] | null) => void)
+    | undefined;
   /** Resolves true once the custom models are saved. */
   readonly onChange: (next: ReadonlyArray<CustomModelDefinition>) => Promise<boolean>;
   readonly onHiddenModelsChange: (
@@ -130,6 +143,8 @@ export function ProviderModelsSection({
   hiddenModels,
   favoriteModels,
   modelOrder,
+  defaultEfforts,
+  onDefaultEffortChange,
   onChange,
   onHiddenModelsChange,
   onFavoriteModelsChange,
@@ -299,6 +314,10 @@ export function ProviderModelsSection({
     onSetHidden: useStableCallback(setHidden),
     onToggleEdit: handleToggleEdit,
     onRemove: useStableCallback(handleRemove),
+    onDefaultEffortChange: useStableCallback(
+      (model: string, effort: EffortDefaults[string] | null) =>
+        onDefaultEffortChange?.(model, effort),
+    ),
   };
 
   const renderRow = (model: (typeof displayModels)[number]) => {
@@ -318,6 +337,7 @@ export function ProviderModelsSection({
         flagMissingReasoning={flagMissingReasoning}
         canWritePreferences={canWritePreferences}
         canManageCustomModels={canManageCustomModels}
+        defaultEffort={defaultEfforts?.[model.slug]}
         {...rowHandlers}
       />
     );
@@ -490,6 +510,8 @@ const ProviderModelRow = memo(function ProviderModelRow({
   onSetHidden,
   onToggleEdit,
   onRemove,
+  defaultEffort,
+  onDefaultEffortChange,
 }: {
   readonly model: ServerProviderModel;
   readonly isHidden: boolean;
@@ -505,7 +527,16 @@ const ProviderModelRow = memo(function ProviderModelRow({
   readonly onSetHidden: (slug: string, hidden: boolean) => void;
   readonly onToggleEdit: (slug: string) => void;
   readonly onRemove: (slug: string) => void;
+  readonly defaultEffort: EffortDefaults[string] | undefined;
+  readonly onDefaultEffortChange: (model: string, effort: EffortDefaults[string] | null) => void;
 }) {
+  const reasoning = model.capabilities?.optionDescriptors?.find(isReasoningSelect);
+  const effortChoices = reasoning ? selectableProviderOptionChoices(reasoning) : [];
+  const selectedEffort =
+    reasoning?.id === defaultEffort?.id &&
+    effortChoices.some(({ id }) => id === defaultEffort?.value)
+      ? defaultEffort?.value
+      : "";
   const capLabels = describeModelCapabilities(model, flagMissingReasoning);
   const nameClassName = cn("text-xs", isHidden ? "text-muted-foreground" : "text-foreground/90");
   const pickerTooltip = model.isCustom
@@ -518,7 +549,7 @@ const ProviderModelRow = memo(function ProviderModelRow({
     <div
       data-model-slug={model.slug}
       className={cn(
-        "grid h-7 grid-cols-[1.5rem_minmax(0,1fr)_auto_minmax(5.5rem,auto)_auto] items-center gap-2 rounded-md px-2 transition-colors hover:bg-muted/30",
+        "grid min-h-8 grid-cols-[1.5rem_minmax(0,1fr)_auto_minmax(5.5rem,auto)_auto] items-center gap-2 rounded-md px-2 transition-colors hover:bg-muted/30",
         isHidden && "opacity-50",
       )}
     >
@@ -567,9 +598,35 @@ const ProviderModelRow = memo(function ProviderModelRow({
           <span className="shrink-0 text-2xs text-muted-foreground/70">custom</span>
         ) : null}
       </span>
-      <span className="text-2xs text-muted-foreground/70">
+      <span className="flex items-center gap-2 text-2xs text-muted-foreground/70">
+        {reasoning && effortChoices.length > 0 ? (
+          <Select
+            value={selectedEffort}
+            disabled={!canWritePreferences}
+            onValueChange={(value) => {
+              if (value === null) return;
+              onDefaultEffortChange(model.slug, value === "" ? null : { id: reasoning.id, value });
+            }}
+          >
+            <SelectTrigger size="xs" aria-label={`Default effort for ${model.name}`}>
+              <SelectValue>
+                {(value: string | null) =>
+                  effortChoices.find(({ id }) => id === value)?.label ?? "Provider default"
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup align="end" alignItemWithTrigger={false}>
+              <SelectItem value="">Provider default</SelectItem>
+              {effortChoices.map(({ id, label }) => (
+                <SelectItem key={id} value={id}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        ) : null}
         {capLabels.length > 0 ? (
-          <span className="hidden sm:inline">{capLabels.join(" · ")}</span>
+          <span className="hidden whitespace-nowrap sm:inline">{capLabels.join(" · ")}</span>
         ) : null}
       </span>
       <span className="flex shrink-0 items-center justify-end gap-0.5">

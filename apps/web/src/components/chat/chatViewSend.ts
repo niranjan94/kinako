@@ -1,6 +1,7 @@
 import {
   type EnvironmentId,
   type ModelSelection,
+  type ModelPreferences,
   type ScopedThreadRef,
   type ThreadId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -31,7 +32,7 @@ import {
   DraftId,
 } from "../../composerDraftStore";
 import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT } from "@t3tools/shared/composerContextReferences";
-import { createModelSelection } from "@t3tools/shared/model";
+import { createModelSelection, withModelEffortDefault } from "@t3tools/shared/model";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { getComposerPromptInjectionState, getComposerProviderState } from "./composerProviderState";
 import {
@@ -261,6 +262,7 @@ export function resolveMultipleModelTargets(input: {
   readonly selections: ReadonlyArray<ModelSelection>;
   readonly providerInstanceEntries: ReadonlyArray<ProviderInstanceEntry>;
   readonly messageText: string;
+  readonly modelPreferences?: ModelPreferences["providerModelPreferences"] | null | undefined;
 }): Array<MultipleModelTarget | { readonly error: string }> {
   const { messageText } = input;
   return input.selections.map((selection) => {
@@ -276,7 +278,11 @@ export function resolveMultipleModelTargets(input: {
       provider: provider.driverKind,
       model: selection.model,
       models: provider.models,
-      modelOptions: selection.options,
+      modelOptions: withModelEffortDefault(
+        selection,
+        input.modelPreferences,
+        provider.models.find((model) => model.slug === selection.model)?.capabilities ?? null,
+      ).options,
       promptInjectionState: getComposerPromptInjectionState(messageText),
     });
     return {

@@ -414,6 +414,7 @@ export function applyServerSettingsPatch(
     setModelFavorites,
     setModelsHidden,
     setProviderModelOrder,
+    setModelEffortDefaults,
     setProviderCustomModels,
     providerModelPreferences,
     automaticGitFetchInterval,
@@ -521,6 +522,20 @@ export function applyServerSettingsPatch(
         modelOrder: [...setProviderModelOrder.modelOrder],
       },
     };
+  }
+  if (setModelEffortDefaults?.length) {
+    const updated = { ...nextModelPreferences };
+    for (const { provider, model, effort } of setModelEffortDefaults) {
+      const preferences = (Object.hasOwn(updated, provider) ? updated[provider] : undefined) ?? {
+        hiddenModels: [],
+        modelOrder: [],
+      };
+      const defaultEfforts = { ...preferences.defaultEfforts };
+      if (effort === null) delete defaultEfforts[model];
+      else defaultEfforts[model] = effort;
+      updated[provider] = { ...preferences, defaultEfforts };
+    }
+    nextModelPreferences = updated;
   }
   const next = deepMerge(current, patchForMerge);
   const nextWithReplacementsBase = {

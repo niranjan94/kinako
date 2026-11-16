@@ -20,6 +20,7 @@ import {
 import {
   buildExplicitProviderOptionSelectionsFromDescriptors,
   getProviderOptionDescriptors,
+  withModelEffortDefault,
 } from "@t3tools/shared/model";
 import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
 import { resolveProvidersForCwd } from "@t3tools/client-runtime/providerSkills";
@@ -253,7 +254,11 @@ export function resolveSelectableModelSelection(
     isProviderEnabledForProject(config, provider, projectId) &&
     provider.installed &&
     provider.auth.status !== "unauthenticated"
-    ? selection
+    ? withModelEffortDefault(
+        selection,
+        config.settings?.providerModelPreferences,
+        provider.models.find((model) => model.slug === selection.model)?.capabilities ?? null,
+      )
     : null;
 }
 
@@ -411,10 +416,14 @@ export function buildModelOptions(
         ...(updateRequired ? { providerUpdateRequired: updateRequired } : {}),
         capabilities: model.capabilities,
         selection: normalizeSelectionOptions(
-          {
-            instanceId: provider.instanceId,
-            model: model.slug,
-          },
+          withModelEffortDefault(
+            {
+              instanceId: provider.instanceId,
+              model: model.slug,
+            },
+            config?.settings?.providerModelPreferences,
+            model.capabilities,
+          ),
           model.capabilities,
         ),
       });
@@ -440,7 +449,14 @@ export function buildModelOptions(
         selection:
           existing.providerDriver === "antigravity"
             ? fallbackModelSelection
-            : normalizeSelectionOptions(fallbackModelSelection, existing.capabilities),
+            : normalizeSelectionOptions(
+                withModelEffortDefault(
+                  fallbackModelSelection,
+                  config?.settings?.providerModelPreferences,
+                  existing.capabilities,
+                ),
+                existing.capabilities,
+              ),
       });
     } else {
       const provider = config?.providers.find(
