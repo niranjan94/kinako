@@ -39,6 +39,16 @@ const FORK_ERA_UPSTREAM_IDS: ReadonlyMap<string, number> = new Map([
 /** Moves fork rows out of a fork-era shared ledger and restores upstream's ids for the rest. */
 export const splitForkMigrationLedger = Effect.fn("splitForkMigrationLedger")(function* () {
   const sql = yield* SqlClient.SqlClient;
+  // Transactions begin IMMEDIATE; check without one so a split ledger never takes the write lock.
+  const ledger = yield* sql`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'effect_sql_migrations'
+  `;
+  if (ledger.length === 0) return;
+  const forkEraRows = yield* sql`
+    SELECT 1 FROM effect_sql_migrations WHERE name IN ${sql.in([...FORK_ERA_FORK_IDS.keys()])}
+    LIMIT 1
+  `;
+  if (forkEraRows.length === 0) return;
   yield* sql.withTransaction(
     Effect.gen(function* () {
       const tables = yield* sql`
@@ -92,6 +102,21 @@ export const splitForkMigrationLedger = Effect.fn("splitForkMigrationLedger")(fu
 });
 
 const run = Migrator.make({});
+
+const latestForkMigrationId = Math.max(...forkMigrationEntries.map(([id]) => id));
+
+// Mirrors the Migrator, which runs only ids above the highest recorded, without its write lock.
+export const hasPendingForkMigrations = Effect.fn("hasPendingForkMigrations")(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const tables = yield* sql`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${FORK_MIGRATIONS_TABLE}
+  `;
+  if (tables.length === 0) return true;
+  const rows = yield* sql<{ readonly latestId: number | null }>`
+    SELECT MAX(migration_id) AS latestId FROM ${sql(FORK_MIGRATIONS_TABLE)}
+  `;
+  return (rows[0]?.latestId ?? 0) < latestForkMigrationId;
+});
 
 export const runForkMigrations = Effect.fn("runForkMigrations")(function* ({
   toMigrationInclusive,

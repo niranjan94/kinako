@@ -645,6 +645,7 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
         enableTrackpadSwipe
         fullSwipeAction="primary"
         fullSwipeWidth={props.fullSwipeWidth ?? windowWidth - 32}
+        listAnimatesLayout
         onDelete={handleDelete}
         onSwipeableClose={props.onSwipeableClose}
         onSwipeableWillOpen={props.onSwipeableWillOpen}
@@ -861,6 +862,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   });
 
   const visitThread = useAtomCommand(threadEnvironment.visit, { reportFailure: false });
+  const markThreadUnread = useAtomCommand(threadEnvironment.markUnread, { reportFailure: false });
   const handleAcknowledgeWoke = useCallback(() => {
     if (props.wokeAt === null) return;
     void visitThread({
@@ -1031,6 +1033,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         supported: props.titleRegenerationSupported,
         isRegenerating: isRegeneratingTitle,
       }),
+      { id: "mark-unread", title: "Mark unread", image: "envelope.badge" },
       ...(canTurnIntoProject
         ? [
             {
@@ -1157,6 +1160,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "rename") handleRename();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
       if (nativeEvent.event === "turn-into-project") void turnThreadIntoProject(thread);
+      if (nativeEvent.event === "mark-unread") {
+        void markThreadUnread({
+          environmentId: thread.environmentId,
+          input: { threadId: thread.id },
+        });
+      }
       if (nativeEvent.event === "copy-thread") {
         const target = threadChipCopyTarget(
           { environmentId: thread.environmentId, threadId: thread.id },
@@ -1211,6 +1220,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleUnpin,
       handleUnsettle,
       handleUnsnooze,
+      markThreadUnread,
       setCustomSnoozeOpen,
       snoozePresets,
       props.snoozePresets,
@@ -1700,6 +1710,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         enableTrackpadSwipe
         fullSwipeAction="primary"
         fullSwipeWidth={props.fullSwipeWidth ?? windowWidth - 32}
+        listAnimatesLayout
         onDelete={handleDelete}
         onSwipeableClose={props.onSwipeableClose}
         onSwipeableWillOpen={props.onSwipeableWillOpen}

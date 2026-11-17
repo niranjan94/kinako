@@ -6,7 +6,11 @@ import {
   DATABASE_MIGRATIONS_FINISHED_MESSAGE,
   DATABASE_MIGRATIONS_STARTED_MESSAGE,
 } from "@t3tools/shared/databaseMigrationLog";
-import { runForkMigrations, splitForkMigrationLedger } from "./ForkMigrations.ts";
+import {
+  hasPendingForkMigrations,
+  runForkMigrations,
+  splitForkMigrationLedger,
+} from "./ForkMigrations.ts";
 import { reconcileV2PreviewMigration } from "./reconcileV2PreviewMigration.ts";
 
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
@@ -292,10 +296,12 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
 }: RunMigrationsOptions = {}) {
   yield* splitForkMigrationLedger();
   // The desktop waits past its readiness budget until the finished line follows this one.
-  if (yield* hasPendingMigrations()) yield* Effect.log(DATABASE_MIGRATIONS_STARTED_MESSAGE);
+  const hasPending = yield* hasPendingMigrations();
+  if (hasPending) yield* Effect.log(DATABASE_MIGRATIONS_STARTED_MESSAGE);
   const includesV2 =
     toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_V2_MIGRATION_ID;
-  const previewMigrations = includesV2 ? yield* reconcileV2PreviewMigration() : [];
+  // The reconcile takes the write lock; CLI startup must not contend with the server for a no-op.
+  const previewMigrations = includesV2 && hasPending ? yield* reconcileV2PreviewMigration() : [];
   if (includesV2) {
     yield* assertV2MigrationsCanRun(toMigrationInclusive);
   }
@@ -328,7 +334,9 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
     }
     executedMigrations.push(...(yield* run({ loader: makeMigrationLoader(id) })));
   }
-  if (toMigrationInclusive === undefined) yield* runForkMigrations();
+  if (toMigrationInclusive === undefined && (yield* hasPendingForkMigrations())) {
+    yield* runForkMigrations();
+  }
   const migrations = executedMigrations.map(([id, name]) => `${id}_${name}`);
   yield* migrations.length === 0
     ? Effect.logDebug("Database schema is current")
