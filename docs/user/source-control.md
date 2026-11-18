@@ -402,6 +402,8 @@ comment, edit the title and description, change labels and assignees, react, and
 reopen (with a close reason where the tracker records one) when the tracker and your account
 allow it. An issue read through a project that does not own its repository is shown read-only.
 
+To hand an issue to an agent, use the agent menu in the issue's header (the issue menu on mobile). **Send to agent** opens a new thread in the issue's project with the task in the composer. **Ask about this issue** opens one with the issue attached, for your question, and asks before changing anything. Nothing is sent until you send it.
+
 An issue can be kept with a thread the way a pull request can: open it beside the thread (issue
 links in the conversation open there) and use **Link to this thread** in its header; **Unlink**
 undoes it. Linked issues are listed in the thread's details beside its pull requests. Agents link the

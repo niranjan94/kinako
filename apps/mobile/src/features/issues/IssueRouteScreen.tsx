@@ -53,6 +53,7 @@ import { pullRequestStatus } from "../pull-requests/pullRequestStatus";
 import { usePullRequestConnected } from "../pull-requests/usePullRequestConnected";
 import { IssueCommentComposer } from "./IssueCommentComposer";
 import { issueIdentity, issueParamsKey, issueTarget, type IssueParams } from "./issueParams";
+import { useIssueHandoff } from "./useIssueHandoff";
 import {
   IssueLabelPill,
   issueCommandError,
@@ -406,6 +407,10 @@ function IssueRoute({ params }: { readonly params: IssueParams }) {
   const detail = detailQuery.data;
   const issue: IssueSummary | null = detail ?? params.initialSummary ?? null;
   const access = useIssueAccess(params, detail);
+  const handoff = useIssueHandoff({
+    environmentId: target.environmentId,
+    projectId: target.input.projectId,
+  });
 
   const loadComments = useAtomCommand(issueEnvironment.comments, { reportFailure: false });
   const postComment = useAtomCommand(issueEnvironment.comment, { reportFailure: false });
@@ -517,6 +522,24 @@ function IssueRoute({ params }: { readonly params: IssueParams }) {
               title: gt("Issue actions"),
               icon: "ellipsis",
               items: [
+                ...(issue && handoff.canStart
+                  ? [
+                      {
+                        id: "send-to-agent",
+                        title: gt("Send to agent"),
+                        icon: "bubble.left.and.bubble.right",
+                        disabled: handoff.busy,
+                        onPress: () => void handoff.start("send", issue),
+                      },
+                      {
+                        id: "ask-about-issue",
+                        title: gt("Ask about this issue"),
+                        icon: "bubble.left.and.text.bubble.right",
+                        disabled: handoff.busy,
+                        onPress: () => void handoff.start("ask", issue),
+                      },
+                    ]
+                  : []),
                 ...(access?.edit
                   ? [
                       {

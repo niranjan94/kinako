@@ -647,6 +647,10 @@
       "types": "./src/pullRequestReviewers.ts",
       "default": "./src/pullRequestReviewers.ts"
     },
+    "./issue-handoff": {
+      "types": "./src/issueHandoff.ts",
+      "default": "./src/issueHandoff.ts"
+    },
     "./issue-links": {
       "types": "./src/issueLinks.ts",
       "default": "./src/issueLinks.ts"

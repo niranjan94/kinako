@@ -73,6 +73,7 @@ import {
 } from "../pullRequest/pullRequestPresentation";
 import { IssueCommentComposer } from "./IssueCommentComposer";
 import { IssueDetailGhost } from "./IssueDetailGhost";
+import { IssueHandoffMenu } from "./IssueHandoffMenu";
 import { ReactionBar } from "../pullRequest/PullRequestReactions";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { issueTrackerPresentation, issueStatePresentation } from "./issuePresentation";
@@ -674,6 +675,11 @@ export function IssueDetailPanel({
                 threadRef={threadRef}
               />
             ) : null}
+            <IssueHandoffMenu
+              environmentId={environmentId}
+              projectId={reference.projectId}
+              issue={detail}
+            />
             <Button
               size="icon-xs"
               variant="ghost"
