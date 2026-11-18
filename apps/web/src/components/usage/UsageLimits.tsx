@@ -38,8 +38,10 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { UsageLimitsPooled } from "./UsageLimitsPooled";
+import { UsageQuotaForecast } from "./UsageQuotaForecast";
 import { formatResetsIn, resetCreditChoices } from "@t3tools/shared/usageLimitsCopy";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
@@ -399,6 +401,8 @@ export function UsageLimitsSection({
   readonly now: number;
 }) {
   const presentations = useAtomValue(environmentPresentations.presentationsWithProvidersAtom);
+  const gt = useGT();
+  const [view, setView] = useState<"current" | "forecast">("current");
   const hiddenDrivers = new Set<ServerProvider["driver"]>(
     [...hiddenProviders].map((provider) => PROVIDER_PRESENTATION[provider].driverKind),
   );
@@ -428,5 +432,37 @@ export function UsageLimitsSection({
       ];
     }),
   );
-  return <UsageLimitsPooled presentations={selected} now={now} />;
+  const hubs = [...presentations].flatMap(([environmentId, presentation]) => {
+    if (presentation.connection.phase !== "connected" || !selected.has(environmentId)) return [];
+    return (presentation.serverConfig?.usageLimitSources ?? []).map((source) => ({
+      key: JSON.stringify([environmentId, source.id]),
+      environmentId,
+      label: `${presentation.entry.target.label} · ${source.label}`,
+      source,
+    }));
+  });
+  const forecasting = view === "forecast" && hubs.length > 0;
+  return (
+    <div className="flex flex-col gap-5">
+      {hubs.length > 0 && (
+        <ToggleGroup
+          aria-label={gt("Limits view")}
+          value={[view]}
+          onValueChange={([value]) => setView(value === "forecast" ? "forecast" : "current")}
+        >
+          <ToggleGroupItem value="current">
+            <T>Current limits</T>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="forecast">
+            <T>Quota forecast</T>
+          </ToggleGroupItem>
+        </ToggleGroup>
+      )}
+      {forecasting ? (
+        <UsageQuotaForecast hubs={hubs} hiddenDrivers={hiddenDrivers} now={now} />
+      ) : (
+        <UsageLimitsPooled presentations={selected} now={now} />
+      )}
+    </div>
+  );
 }

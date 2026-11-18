@@ -4,6 +4,7 @@ import {
   type ProviderConsumeResetCreditResult,
   type UsageLimitSourceAccount,
   type UsageLimitSourceConfig,
+  type UsageLimitSourceSnapshot,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
@@ -481,27 +482,50 @@ export const makeCliproxyApi = Effect.gen(function* () {
         }),
       })),
     );
-    return { id: account.id, driver: provider.driver, ...reading };
+    const identity = yield* encodeJson([
+      provider.driver,
+      account.id,
+      account.id_token?.chatgpt_account_id,
+      account.email,
+      account.project_id,
+      reading.usageLimits.credentialFingerprint,
+    ]).pipe(Effect.orDie);
+    const historyKey = Hex.encode(
+      yield* digest.digest(Digest.sha256, new TextEncoder().encode(identity)).pipe(Effect.orDie),
+    );
+    return { id: account.id, driver: provider.driver, ...reading, historyKey };
   });
 
-  const readAccounts = Effect.fn("CliproxyApi.readAccounts")(function* (
+  const readHub = Effect.fn("CliproxyApi.readHub")(function* (
     hub: CliproxyHub,
-  ): Effect.fn.Return<ReadonlyArray<UsageLimitSourceAccount>, UsageLimitSourceError> {
-    const accounts = yield* authFiles(hub).pipe(
+  ): Effect.fn.Return<
+    Pick<UsageLimitSourceSnapshot, "accounts" | "credentials">,
+    UsageLimitSourceError
+  > {
+    const files = yield* authFiles(hub).pipe(
       Effect.mapError((error) =>
         isUsageLimitSourceError(error)
           ? error
           : new UsageLimitSourceError({ detail: "The hub could not list accounts." }),
       ),
     );
-    return yield* Effect.forEach(
-      accounts.flatMap((account) => {
+    const credentials = new Map<string, { provider: string; total: number; enabled: number }>();
+    for (const file of files) {
+      const provider = file.provider.trim() || "unknown";
+      const count = credentials.get(provider) ?? { provider, total: 0, enabled: 0 };
+      count.total += 1;
+      if (!file.disabled) count.enabled += 1;
+      credentials.set(provider, count);
+    }
+    const accounts = yield* Effect.forEach(
+      files.flatMap((account) => {
         const provider = HUB_PROVIDERS.get(account.provider);
         return provider && !account.disabled ? [{ account, provider }] : [];
       }),
       ({ account, provider }) => readAccount(hub, account, provider),
       { concurrency: 4 },
     );
+    return { accounts, credentials: [...credentials.values()] };
   });
 
   const consume = Effect.fn("CliproxyApi.consume")(function* (
@@ -562,5 +586,5 @@ export const makeCliproxyApi = Effect.gen(function* () {
       ),
     );
   });
-  return { readAccounts, consume };
+  return { readHub, consume };
 });

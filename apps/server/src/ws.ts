@@ -2498,6 +2498,10 @@ export const layerWsRpc = (
         [WS_METHODS.serverRefreshProviders]:
           /* Request instrumentation already owns the span; keep this helper in that context. */
           Effect.fnUntraced(function* (input) {
+            if (input.usageSourceId !== undefined) {
+              yield* usageLimitSources.refreshSource(input.usageSourceId);
+              return { providers: [] };
+            }
             if (input.modelCatalogOnly === true) {
               yield* providerRegistry.refreshModelCatalog;
               return { providers: [] };
@@ -2763,6 +2767,7 @@ export const layerWsRpc = (
         [WS_METHODS.serverGetResourceTelemetryHistory]: (input) =>
           resourceTelemetry.readHistory(input),
         [WS_METHODS.serverGetUsageSummary]: (input) => usage.readSummary(input),
+        [WS_METHODS.serverGetUsageQuotaHistory]: (input) => usageLimitSources.quotaHistory(input),
         [WS_METHODS.serverRefreshUsageRates]: (_input) => usage.refreshRates,
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) => resourceTelemetry.retry,
         [WS_METHODS.serverCheckOtlpEndpoint]: (input) => otlpEndpointCheck.check(input),

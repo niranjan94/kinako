@@ -75,6 +75,7 @@ export type ProviderUsageLimitsUpdate = typeof ProviderUsageLimitsUpdate.Type;
 export const UsageLimitSourceAccount = Schema.Struct({
   id: TrimmedNonEmptyString,
   driver: ProviderDriverKind,
+  historyKey: Schema.optional(TrimmedNonEmptyString),
   email: Schema.optional(TrimmedNonEmptyString),
   plan: Schema.optional(TrimmedNonEmptyString),
   workspaceId: Schema.optional(TrimmedNonEmptyString),
@@ -92,12 +93,56 @@ export const UsageLimitSourceSnapshot = Schema.Struct({
   endpoint: Schema.optional(TrimmedNonEmptyString),
   checkedAt: IsoDateTime,
   accounts: ForwardCompatibleArray(UsageLimitSourceAccount),
+  credentials: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        provider: TrimmedNonEmptyString,
+        total: NonNegativeInt,
+        enabled: NonNegativeInt,
+      }),
+    ),
+  ),
   error: Schema.optional(TrimmedNonEmptyString),
 });
 export type UsageLimitSourceSnapshot = typeof UsageLimitSourceSnapshot.Type;
 
 export const UsageLimitSourceSnapshots = ForwardCompatibleArray(UsageLimitSourceSnapshot);
 export type UsageLimitSourceSnapshots = typeof UsageLimitSourceSnapshots.Type;
+
+export const UsageQuotaSample = Schema.Struct({
+  checkedAt: IsoDateTime,
+  accounts: ForwardCompatibleArray(
+    Schema.Struct({
+      key: TrimmedNonEmptyString,
+      driver: ProviderDriverKind,
+      plan: Schema.optional(TrimmedNonEmptyString),
+      windows: ForwardCompatibleArray(ServerProviderUsageWindow),
+      unavailable: Schema.optional(Schema.Boolean),
+    }),
+  ),
+});
+export type UsageQuotaSample = typeof UsageQuotaSample.Type;
+
+export const UsageQuotaHistory = Schema.Array(UsageQuotaSample);
+
+export const UsageQuotaHistoryInput = Schema.Struct({
+  sourceId: UsageLimitSourceId,
+  from: IsoDateTime,
+  to: IsoDateTime,
+});
+export type UsageQuotaHistoryInput = typeof UsageQuotaHistoryInput.Type;
+
+export class UsageQuotaHistoryReadError extends Schema.TaggedError<UsageQuotaHistoryReadError>()(
+  "UsageQuotaHistoryReadError",
+  {
+    reason: Schema.Literals(["invalidRange", "unavailable"]),
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  override get message(): string {
+    return "Could not read quota history.";
+  }
+}
 
 export const UsageLimitSourceConsumeResetCreditInput = Schema.Struct({
   sourceId: UsageLimitSourceId,

@@ -9,8 +9,12 @@ import {
   settingsSecretLiteral,
   type UsageLimitSourceId,
   type UsageLimitSourceSnapshot,
+  type UsageQuotaHistoryInput,
+  UsageQuotaHistoryReadError,
+  UsageQuotaSample,
 } from "@t3tools/contracts";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -19,7 +23,9 @@ import * as Equal from "effect/Equal";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
@@ -36,11 +42,24 @@ export class UsageLimitSources extends Context.Service<
     readonly current: Effect.Effect<ReadonlyArray<UsageLimitSourceSnapshot>>;
     readonly streamChanges: Stream.Stream<ReadonlyArray<UsageLimitSourceSnapshot>>;
     readonly refresh: Effect.Effect<void>;
+    readonly refreshSource: (id: UsageLimitSourceId) => Effect.Effect<void>;
+    readonly quotaHistory: (
+      input: UsageQuotaHistoryInput,
+    ) => Effect.Effect<readonly UsageQuotaSample[], UsageQuotaHistoryReadError>;
     readonly consumeResetCredit: (
       input: UsageLimitSourceConsumeResetCreditInput,
     ) => Effect.Effect<ProviderConsumeResetCreditResult, UsageLimitSourceError>;
   }
 >()("t3/usage/UsageLimitSources") {}
+
+const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
+const QUOTA_HISTORY_RETENTION_MS = 30 * DAY_MS;
+const RECENT_QUOTA_HISTORY_MS = 6 * 60 * MINUTE_MS;
+const quotaSampleJson = Schema.fromJsonString(UsageQuotaSample);
+const encodeQuotaSample = Schema.encodeSync(quotaSampleJson);
+const decodeQuotaSample = Schema.decodeUnknownEffect(quotaSampleJson);
+const isQuotaHistoryReadError = Schema.is(UsageQuotaHistoryReadError);
 
 function sourceLabel(id: string, config: UsageLimitSourceConfig): string {
   if (config.label) return config.label;
@@ -99,6 +118,7 @@ export const make = Effect.gen(function* () {
   const settingsService = yield* Settings.ServerSettingsService;
   const secrets = yield* SecretResolver.SecretResolver;
   const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
+  const sql = yield* SqlClient.SqlClient;
   const readManagementKey = Effect.fn("UsageLimitSources.readManagementKey")(function* (
     config: UsageLimitSourceConfig,
   ) {
@@ -133,15 +153,85 @@ export const make = Effect.gen(function* () {
     if (managementKey.length === 0) {
       return { ...base, accounts: [], error: missingManagementKey(config) };
     }
-    const accounts = yield* api
-      .readAccounts({ url: config.url, managementKey })
-      .pipe(Effect.result);
-    if (accounts._tag === "Failure") {
-      yield* Effect.logDebug("usage limit source read failed", { id, cause: accounts.failure });
-      return { ...base, accounts: [], error: accounts.failure.detail };
+    const reading = yield* api.readHub({ url: config.url, managementKey }).pipe(Effect.result);
+    if (reading._tag === "Failure") {
+      yield* Effect.logDebug("usage limit source read failed", { id, cause: reading.failure });
+      return { ...base, accounts: [], error: reading.failure.detail };
     }
-    return { ...base, accounts: accounts.success };
+    return { ...base, ...reading.success };
   });
+
+  const recordQuotaHistory = Effect.fn("UsageLimitSources.recordQuotaHistory")(
+    function* (snapshots: readonly UsageLimitSourceSnapshot[]) {
+      const now = DateTime.toEpochMillis(yield* DateTime.now);
+      const cutoff = Math.floor((now - QUOTA_HISTORY_RETENTION_MS) / MINUTE_MS);
+      yield* sql`DELETE FROM usage_quota_history WHERE minute < ${cutoff}`;
+      for (const snapshot of snapshots) {
+        if (!snapshot.endpoint) continue;
+        const sample = encodeQuotaSample({
+          checkedAt: snapshot.checkedAt,
+          accounts: snapshot.accounts.flatMap(({ historyKey, driver, plan, usageLimits }) =>
+            historyKey
+              ? [
+                  {
+                    key: historyKey,
+                    driver,
+                    ...(plan ? { plan } : {}),
+                    windows: usageLimits.windows,
+                    ...(usageLimits.unavailable ? { unavailable: true } : {}),
+                  },
+                ]
+              : [],
+          ),
+        });
+        const minute = Math.floor(Date.parse(snapshot.checkedAt) / MINUTE_MS);
+        yield* sql`
+        INSERT INTO usage_quota_history (source_id, endpoint, minute, sample_json)
+        VALUES (${snapshot.id}, ${snapshot.endpoint}, ${minute}, ${sample})
+        ON CONFLICT (source_id, endpoint, minute) DO UPDATE SET sample_json = excluded.sample_json
+      `;
+      }
+    },
+    sql.withTransaction,
+    Effect.ignoreCause({ log: true }),
+  );
+
+  const quotaHistory = Effect.fn("UsageLimitSources.quotaHistory")(
+    function* (input: UsageQuotaHistoryInput) {
+      const from = Date.parse(input.from);
+      const to = Date.parse(input.to);
+      if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 8 * DAY_MS) {
+        return yield* new UsageQuotaHistoryReadError({ reason: "invalidRange" });
+      }
+      const snapshots = yield* Ref.get(stateRef);
+      const endpoint = snapshots.find((source) => source.id === input.sourceId)?.endpoint;
+      if (!endpoint) return [];
+      const now = DateTime.toEpochMillis(yield* DateTime.now);
+      const retentionStart = now - QUOTA_HISTORY_RETENTION_MS;
+      const recentMinute = Math.floor((Math.min(now, to) - RECENT_QUOTA_HISTORY_MS) / MINUTE_MS);
+      const rows = yield* sql<{ sample_json: string }>`
+      SELECT sample_json FROM usage_quota_history
+      WHERE source_id = ${input.sourceId} AND endpoint = ${endpoint} AND minute IN (
+        SELECT MAX(minute) FROM usage_quota_history
+        WHERE source_id = ${input.sourceId} AND endpoint = ${endpoint}
+          AND minute BETWEEN ${Math.floor(Math.max(from, retentionStart) / MINUTE_MS)}
+            AND ${Math.floor(to / MINUTE_MS)}
+        GROUP BY CASE WHEN minute >= ${recentMinute} THEN minute ELSE (minute / 5) * 5 END
+      )
+      ORDER BY minute
+    `.pipe(NodeSqliteClient.readOnly);
+      const samples = yield* Effect.forEach(rows, (row) => decodeQuotaSample(row.sample_json));
+      return samples.filter(({ checkedAt }) => {
+        const time = Date.parse(checkedAt);
+        return time >= Math.max(from, retentionStart) && time < to;
+      });
+    },
+    Effect.mapError((cause) =>
+      isQuotaHistoryReadError(cause)
+        ? cause
+        : new UsageQuotaHistoryReadError({ reason: "unavailable", cause }),
+    ),
+  );
 
   const publish = Effect.fn("UsageLimitSources.publish")(function* (
     next: ReadonlyArray<UsageLimitSourceSnapshot>,
@@ -154,20 +244,32 @@ export const make = Effect.gen(function* () {
 
   // Serialize refreshes so slow old-settings reads cannot resurrect removed sources after newer refreshes.
   const refreshLock = yield* Semaphore.make(1);
-  const refresh = Effect.gen(function* () {
-    const settings = yield* settingsService.getSettings.pipe(
-      Effect.orElseSucceed((): ServerSettings | null => null),
-    );
-    const entries = Object.entries(settings?.usageLimitSources ?? {}).filter(
-      ([, config]) => config.enabled,
-    );
-    const snapshots = yield* Effect.forEach(
-      entries,
-      ([id, config]) => readSource(id as UsageLimitSourceId, config),
-      { concurrency: 4 },
-    );
-    yield* publish(keepLastGoodReadings(yield* Ref.get(stateRef), snapshots));
-  }).pipe(refreshLock.withPermits(1), Effect.ignoreCause({ log: true }));
+  const refreshSource = Effect.fn("UsageLimitSources.refresh")(
+    function* (sourceId?: UsageLimitSourceId) {
+      const settings = yield* settingsService.getSettings.pipe(
+        Effect.orElseSucceed((): ServerSettings | null => null),
+      );
+      const entries = Object.entries(settings?.usageLimitSources ?? {}).filter(
+        ([id, config]) => config.enabled && (sourceId === undefined || id === sourceId),
+      );
+      const snapshots = yield* Effect.forEach(
+        entries,
+        ([id, config]) => readSource(id as UsageLimitSourceId, config),
+        { concurrency: 4 },
+      );
+      yield* recordQuotaHistory(snapshots);
+      const previous = yield* Ref.get(stateRef);
+      const next = keepLastGoodReadings(previous, snapshots);
+      if (sourceId === undefined || !previous.some((source) => source.id === sourceId)) {
+        yield* publish(sourceId === undefined ? next : [...previous, ...next]);
+      } else {
+        yield* publish(previous.flatMap((source) => (source.id === sourceId ? next : [source])));
+      }
+    },
+    refreshLock.withPermits(1),
+    Effect.ignoreCause({ log: true }),
+  );
+  const refresh = refreshSource();
 
   // Shares the refresh lock so a stale in-flight read cannot overwrite a redemption.
   const consumeResetCredit = Effect.fn("UsageLimitSources.consumeResetCredit")(function* (
@@ -193,6 +295,7 @@ export const make = Effect.gen(function* () {
     );
     // A redemption changes the reading, so a refused re-read must not bring back the one before it.
     const snapshot = yield* readSource(input.sourceId, config);
+    yield* recordQuotaHistory([snapshot]);
     const previous = yield* Ref.get(stateRef);
     yield* publish(previous.map((source) => (source.id === input.sourceId ? snapshot : source)));
     return result;
@@ -231,6 +334,8 @@ export const make = Effect.gen(function* () {
     current: Ref.get(stateRef),
     consumeResetCredit,
     refresh,
+    refreshSource,
+    quotaHistory,
     get streamChanges() {
       return Stream.unwrap(
         Effect.gen(function* () {
