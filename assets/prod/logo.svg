@@ -1,4 +1,22 @@
-<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M0 10C0 4.47715 4.47715 0 10 0H118C123.523 0 128 4.47715 128 10V118C128 123.523 123.523 128 118 128H10C4.47715 128 0 123.523 0 118V10Z" fill="black"/>
-<path d="M21.47 111.47L33.89 99.06A14 14 0 0 0 53.06 79.89L56.89 76.06A14 14 0 0 0 76.06 56.89L79.89 53.06A14 14 0 0 0 99.06 33.89L106.47 26.47A3.5 3.5 0 0 0 101.53 21.53L94.11 28.94A14 14 0 0 0 74.94 48.11L71.11 51.94A14 14 0 0 0 51.94 71.11L48.11 74.94A14 14 0 0 0 28.94 94.11L16.53 106.53A3.5 3.5 0 0 0 21.47 111.47Z" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Kinako</title>
+  <defs>
+    <clipPath id="corners">
+      <rect width="128" height="128" rx="28"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#corners)">
+  <defs>
+    <linearGradient id="background" x1="12" y1="4" x2="108" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B291F"/>
+      <stop offset="1" stop-color="#201611"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" fill="url(#background)"/>
+    <rect x=".5" y=".5" width="127" height="127" rx="27.5" fill="none" stroke="#D4A47E" stroke-opacity=".22"/>
+  </g>
+  <g transform="translate(1 0)">
+    <path fill="#F8E6BF" d="M32 33Q32 27 38 27H47Q53 27 53 33V55L77 30Q80 27 84 27H95Q101 27 97 33L71 61Q66 66 60 66H53V95Q53 101 47 101H38Q32 101 32 95Z"/>
+    <path fill="#D99759" d="M63 77Q71 75 77 69L100 94Q106 101 97 101H86Q82 101 79 98L61 81Q59 79 63 77Z"/>
+  </g>
 </svg>

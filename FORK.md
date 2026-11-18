@@ -106,7 +106,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 
 `scripts/mobile-behavior/device.ts` targets Kinako's dev app ID and URL scheme through `forkBrand`, just like the native client and E2E runners.
 
-The icon glyph is in `assets/{prod,nightly,dev}/app-icon.icon/Assets/text.svg`, `assets/prod/logo.svg`, both `T3Wordmark.tsx` components, `apps/mobile/assets/widget/T3Mark.svg`, the Android notification drawable, and the DMG backgrounds. After changing it, run `vp run icons:export` (needs Icon Composer.app) and `vp run icons:export:android`. The dev icon's `annotations.svg` still draws dimension lines for the old T3 glyph.
+The shared mark lives in `packages/shared/src/forkBrand.ts`. Run `vp run icons:export` to regenerate the raster icons, Icon Composer layers, and widget asset. The DMG backgrounds and Android activity notification drawable embed the paths directly. See [Brand icons](assets/README.md).
 
 Upstream code that grows a new `t3code://` link, `~/.t3` path, `t3` executable reference, `com.t3tools.t3code` ID, 3773 default, `t3.json` read, or user-visible "T3 Code" string needs the same treatment. Grep for them after each merge.
 

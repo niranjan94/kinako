@@ -1,12 +1,14 @@
 import type { SVGProps } from "react";
+import {
+  FORK_MARK_BRANCH_PATH,
+  FORK_MARK_STEM_PATH,
+  FORK_MARK_VIEWBOX,
+} from "@t3tools/shared/forkBrand";
 
 export function T3Wordmark(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg {...props} viewBox="15.5 20.5 92 92" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M21.47 111.47L33.89 99.06A14 14 0 0 0 53.06 79.89L56.89 76.06A14 14 0 0 0 76.06 56.89L79.89 53.06A14 14 0 0 0 99.06 33.89L106.47 26.47A3.5 3.5 0 0 0 101.53 21.53L94.11 28.94A14 14 0 0 0 74.94 48.11L71.11 51.94A14 14 0 0 0 51.94 71.11L48.11 74.94A14 14 0 0 0 28.94 94.11L16.53 106.53A3.5 3.5 0 0 0 21.47 111.47Z"
-        fill="currentColor"
-      />
+    <svg {...props} viewBox={FORK_MARK_VIEWBOX} xmlns="http://www.w3.org/2000/svg">
+      <path d={`${FORK_MARK_STEM_PATH} ${FORK_MARK_BRANCH_PATH}`} fill="currentColor" />
     </svg>
   );
 }

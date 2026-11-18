@@ -6,6 +6,12 @@
 
 export const FORK_DISPLAY_NAME = "Kinako";
 
+export const FORK_MARK_VIEWBOX = "27 24 80 80";
+export const FORK_MARK_STEM_PATH =
+  "M32 33Q32 27 38 27H47Q53 27 53 33V55L77 30Q80 27 84 27H95Q101 27 97 33L71 61Q66 66 60 66H53V95Q53 101 47 101H38Q32 101 32 95Z";
+export const FORK_MARK_BRANCH_PATH =
+  "M63 77Q71 75 77 69L100 94Q106 101 97 101H86Q82 101 79 98L61 81Q59 79 63 77Z";
+
 /** Base data directory under the user's home, the default `T3CODE_HOME`. */
 export const FORK_HOME_DIR_NAME = ".kinako";
 
