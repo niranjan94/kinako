@@ -187,6 +187,10 @@ The hub's Codex, Claude, xAI (shown as Grok) and Antigravity accounts appear und
 accounts for other providers are not read. Codex accounts show banked reset credits; select an
 account and choose **Use reset** to redeem one. No hub plugin is required.
 
+On web and desktop, open **Usage → Limits → Quota forecast** and select a hub. Choose a quota window on each provider card, or switch to **Drain rate** to see how quickly the pool has been spending. The dashed line estimates future quota using the selected burn-rate period and the hub's reported reset times. Change **Future usage** to see how a different spending rate affects the estimate. Emails are hidden until you choose **Show emails**.
+
+The environment saves 30 days of quota readings from its regular hub checks. The graph starts filling in after you connect the hub, and the forecast appears once the environment has observed enough usage. Missed hub checks leave gaps in the chart.
+
 This connection supplies usage information; configure
 the provider separately to send agent requests through the hub. Remove the hub from the same
 settings section when you no longer need it.

@@ -1581,6 +1581,18 @@ export function createServerEnvironmentAtoms<R, E>(
       execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetHostResources>) =>
         request(WS_METHODS.serverGetHostResources, input).pipe(Effect.timeout("5 seconds")),
     }),
+    usageQuotaHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:usage-quota-history",
+      tag: WS_METHODS.serverGetUsageQuotaHistory,
+      idleTtlMs: 0,
+      staleTimeMs: 30_000,
+      refreshTrigger: ({ environmentId, input }) =>
+        Atom.map(
+          configValueAtom(environmentId),
+          (config) =>
+            config?.usageLimitSources?.find((source) => source.id === input.sourceId)?.checkedAt,
+        ),
+    }),
     hostResourcesHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:host-resources-history",
       tag: WS_METHODS.serverGetHostResourcesHistory,

@@ -153,7 +153,7 @@ describe("CLIProxyAPI hub failures", () => {
             }),
           }),
       );
-      const error = yield* Effect.flip(api.readAccounts(config));
+      const error = yield* Effect.flip(api.readHub(config));
       expect(error.detail).toContain("UNABLE_TO_GET_ISSUER_CERT_LOCALLY");
       expect(error.detail).toContain("NODE_EXTRA_CA_CERTS");
     }),
@@ -171,7 +171,7 @@ describe("CLIProxyAPI hub failures", () => {
             }),
           }),
       );
-      const error = yield* Effect.flip(api.readAccounts(config));
+      const error = yield* Effect.flip(api.readHub(config));
       expect(error.detail).toBe("The hub management request failed.");
     }),
   );
@@ -190,7 +190,7 @@ describe("CLIProxyAPI hub failures", () => {
         Effect.provideService(HttpClient.HttpClient, test),
         Effect.provide(NodeCrypto.layer),
       );
-      const error = yield* Effect.flip(api.readAccounts(config));
+      const error = yield* Effect.flip(api.readHub(config));
       expect(error.detail).toContain("401");
       expect(error.detail).not.toContain("management-secret");
     }),
@@ -205,7 +205,7 @@ describe("CLIProxyAPI built-in management API", () => {
         yield* TestClock.setTime(1788710400000);
         const test = fixture();
         const api = yield* test.api;
-        const result = yield* api.readAccounts(config);
+        const { accounts: result } = yield* api.readHub(config);
         expect(result.map((account) => account.usageLimits.resetCredits)).toEqual([
           { availableCount: 2, nextCreditId: "first", nextExpiresAt: "2099-01-01T00:00:00.000Z" },
           { availableCount: 2, nextCreditId: "first", nextExpiresAt: "2099-01-01T00:00:00.000Z" },
@@ -257,7 +257,7 @@ describe("CLIProxyAPI built-in management API", () => {
         }),
       });
       const api = yield* test.api;
-      const result = yield* api.readAccounts(config);
+      const { accounts: result } = yield* api.readHub(config);
       expect(result.map((account) => [account.plan, account.usageLimits.windows[0]?.kind])).toEqual(
         [
           ["ChatGPT Plus Subscription", "session"],
@@ -282,7 +282,7 @@ describe("CLIProxyAPI built-in management API", () => {
     Effect.gen(function* () {
       const test = fixture();
       const api = yield* test.api;
-      yield* api.readAccounts({ ...config, url });
+      yield* api.readHub({ ...config, url });
       expect(test.requests.length).toBeGreaterThan(0);
       expect(
         test.requests.every((request) => request.path.startsWith("/cliproxy/v0/management/")),
@@ -294,7 +294,7 @@ describe("CLIProxyAPI built-in management API", () => {
     Effect.gen(function* () {
       const test = fixture();
       const api = yield* test.api;
-      yield* api.readAccounts({ ...config, url: "https://tools.test/team-management.html" });
+      yield* api.readHub({ ...config, url: "https://tools.test/team-management.html" });
       expect(test.requests.length).toBeGreaterThan(0);
       expect(
         test.requests.every((request) =>
@@ -313,7 +313,7 @@ describe("CLIProxyAPI built-in management API", () => {
             : { status: 200, body: { rate_limit: { primary_window: { used_percent: 12 } } } },
       });
       const api = yield* test.api;
-      const result = yield* api.readAccounts(config);
+      const { accounts: result } = yield* api.readHub(config);
       expect(result[0]?.usageLimits.windows[0]?.usedPercent).toBe(12);
       expect(result[0]?.usageLimits.resetCredits).toBeUndefined();
     }),
@@ -333,7 +333,7 @@ describe("CLIProxyAPI built-in management API", () => {
               },
       });
       const api = yield* test.api;
-      const result = yield* api.readAccounts(config);
+      const { accounts: result } = yield* api.readHub(config);
       expect(result[0]?.usageLimits.unavailable?.reason).toBe("probeFailed");
       expect(result[1]?.usageLimits.windows[0]?.usedPercent).toBe(12);
       expect(encodeJson(result)).not.toContain("do-not-publish");
@@ -362,7 +362,7 @@ describe("CLIProxyAPI built-in management API", () => {
         }),
       });
       const api = yield* test.api;
-      const result = yield* api.readAccounts(config);
+      const { accounts: result } = yield* api.readHub(config);
       expect(
         result[0]?.usageLimits.windows.map((window) => [window.id, window.usedPercent]),
       ).toEqual([
@@ -404,7 +404,7 @@ describe("CLIProxyAPI built-in management API", () => {
           body: { five_hour: { utilization: 10, resets_at: null }, ...budget },
         }),
       });
-      const result = yield* (yield* test.api).readAccounts(config);
+      const { accounts: result } = yield* (yield* test.api).readHub(config);
       expect(
         result[0]?.usageLimits.windows.map((window) => [window.id, window.usedPercent]),
       ).toEqual([
@@ -432,7 +432,7 @@ describe("CLIProxyAPI built-in management API", () => {
           },
         }),
       });
-      const result = yield* (yield* test.api).readAccounts(config);
+      const { accounts: result } = yield* (yield* test.api).readHub(config);
       expect(result[0]?.usageLimits.windows.map((window) => window.id)).toEqual(["five_hour"]);
     }),
   );
@@ -449,7 +449,7 @@ describe("CLIProxyAPI built-in management API", () => {
           },
         }),
       });
-      const result = yield* (yield* test.api).readAccounts(config);
+      const { accounts: result } = yield* (yield* test.api).readHub(config);
       expect(result[0]?.usageLimits.unavailable).toBeUndefined();
       expect(
         result[0]?.usageLimits.windows.map((window) => [window.id, window.usedPercent]),
@@ -482,7 +482,9 @@ describe("CLIProxyAPI built-in management API", () => {
           },
         }),
       });
-      const [account] = yield* (yield* test.api).readAccounts(config);
+      const {
+        accounts: [account],
+      } = yield* (yield* test.api).readHub(config);
       expect(account).toMatchObject({ driver: "grok", email: "x@example.com" });
       expect(account?.usageLimits.windows).toMatchObject([
         { id: "subscription", kind: "weekly", usedPercent: 40 },
@@ -515,7 +517,9 @@ describe("CLIProxyAPI built-in management API", () => {
           body: request.url?.endsWith("/userinfo") ? { id: "google-42" } : antigravitySummary,
         }),
       });
-      const [account] = yield* (yield* test.api).readAccounts(config);
+      const {
+        accounts: [account],
+      } = yield* (yield* test.api).readHub(config);
       expect(account?.driver).toBe("antigravity");
       expect(account?.email).toBeUndefined();
       expect(account?.usageLimits.credentialFingerprint).toBe(
@@ -575,7 +579,7 @@ describe("CLIProxyAPI built-in management API", () => {
                 body: antigravitySummary,
               },
       });
-      const result = yield* (yield* test.api).readAccounts(config);
+      const { accounts: result } = yield* (yield* test.api).readHub(config);
       expect(result).toHaveLength(1);
       const [account] = result;
       expect(account).toMatchObject({ driver: "antigravity", email: "g@example.com" });
@@ -599,7 +603,9 @@ describe("CLIProxyAPI built-in management API", () => {
         accounts: [{ id: `${provider}.json`, auth_index: "a", provider, project_id: "project-7" }],
         upstream: () => ({ status, body }),
       });
-      const [account] = yield* (yield* test.api).readAccounts(config);
+      const {
+        accounts: [account],
+      } = yield* (yield* test.api).readHub(config);
       expect(account?.usageLimits.unavailable?.reason).toBe("probeFailed");
     }),
   );
@@ -618,7 +624,9 @@ describe("CLIProxyAPI built-in management API", () => {
             },
           ],
         });
-        const [account] = yield* (yield* test.api).readAccounts(config);
+        const {
+          accounts: [account],
+        } = yield* (yield* test.api).readHub(config);
         expect(account?.usageLimits.unavailable?.reason).toBe("probeFailed");
         expect(test.requests.map((request) => request.path)).toEqual(["/v0/management/auth-files"]);
       }),
@@ -633,7 +641,7 @@ describe("CLIProxyAPI built-in management API", () => {
         ],
         upstream: () => ({ status: 200, body: { five_hour: { utilization: 1, resets_at: null } } }),
       });
-      const result = yield* (yield* test.api).readAccounts(config);
+      const { accounts: result } = yield* (yield* test.api).readHub(config);
       expect(result.map((account) => account.driver)).toEqual(["claudeAgent"]);
       expect(test.requests.map((request) => request.body?.auth_index)).not.toContain("k");
     }),
@@ -677,7 +685,10 @@ describe("CLIProxyAPI built-in management API", () => {
     Effect.gen(function* () {
       const test = fixture({ accounts: [{ ...accounts[0]!, disabled: true }] });
       const api = yield* test.api;
-      expect(yield* api.readAccounts(config)).toEqual([]);
+      expect(yield* api.readHub(config)).toEqual({
+        accounts: [],
+        credentials: [{ provider: "codex", total: 1, enabled: 0 }],
+      });
       expect((yield* api.consume(config, "first.json", "credit").pipe(Effect.result))._tag).toBe(
         "Failure",
       );

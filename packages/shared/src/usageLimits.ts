@@ -524,7 +524,8 @@ export function collectLimitPools(
       .sort((left, right) => WINDOW_KIND_ORDER[left.kind] - WINDOW_KIND_ORDER[right.kind])[0];
     const orderReset = (account: LimitAccount) => {
       const window = account.limits.windows.find(
-        (window) => orderWindow && poolKey(driver, window) === poolKey(driver, orderWindow),
+        (window) =>
+          orderWindow && limitPoolKey(driver, window) === limitPoolKey(driver, orderWindow),
       );
       return (
         (window ? resetMillis(poolMember(account, window, now).window) : null) ??
@@ -553,23 +554,46 @@ const CODEX_PLAN_CAPACITY: Record<string, number> = {
 // Claude's published plan multipliers describe the session allowance only.
 const CLAUDE_SESSION_CAPACITY: Record<string, number> = { Pro: 1, Max: 5, Ultra: 20 };
 
-function planCapacity(account: LimitAccount, kind: ServerProviderUsageWindow["kind"]) {
-  if (!account.plan) return undefined;
-  if (account.driver === "codex" && (kind === "session" || kind === "weekly")) {
-    return CODEX_PLAN_CAPACITY[account.plan];
+function planCapacity(
+  driver: LimitAccount["driver"],
+  plan: string | undefined,
+  kind: ServerProviderUsageWindow["kind"],
+) {
+  if (!plan) return undefined;
+  if (driver === "codex" && (kind === "session" || kind === "weekly")) {
+    return CODEX_PLAN_CAPACITY[plan];
   }
-  if (account.driver === "claudeAgent" && kind === "session") {
-    return CLAUDE_SESSION_CAPACITY[account.plan];
+  if (driver === "claudeAgent" && kind === "session") {
+    return CLAUDE_SESSION_CAPACITY[plan];
   }
   return undefined;
 }
 
+export function limitPoolWeights(
+  driver: LimitAccount["driver"],
+  kind: ServerProviderUsageWindow["kind"],
+  accounts: readonly { readonly plan?: string | undefined }[],
+): readonly number[] {
+  // One unknown plan makes the pool incomparable by plan, so every member then counts once.
+  const capacities = accounts.map(({ plan }) => planCapacity(driver, plan, kind));
+  return capacities.every((capacity) => capacity !== undefined)
+    ? capacities
+    : accounts.map(() => 1);
+}
+
 // Codex ids name slots, so pool by kind; other drivers' ids identify distinct allowances.
-function poolKey(driver: ServerProvider["driver"], window: ServerProviderUsageWindow): string {
+export function limitPoolKey(
+  driver: ServerProvider["driver"],
+  window: ServerProviderUsageWindow,
+): string {
   return driver === "codex" ? window.kind : `${window.kind}:${window.id}`;
 }
 
-function poolMember(account: LimitAccount, reported: ServerProviderUsageWindow, now: number) {
+export function effectivePoolQuota(
+  account: Pick<LimitAccount, "driver" | "limits">,
+  reported: ServerProviderUsageWindow,
+  now: number,
+) {
   const spentWeekly =
     reported.kind === "session"
       ? account.limits.windows.find(
@@ -580,7 +604,7 @@ function poolMember(account: LimitAccount, reported: ServerProviderUsageWindow, 
               : account.driver === "codex" && window.kind === "weekly"),
         )
       : undefined;
-  if (!spentWeekly) return { account, window: reported, refillPercent: reported.usedPercent };
+  if (!spentWeekly) return { window: reported, refillPercent: reported.usedPercent };
 
   const weeklyReset = resetMillis(spentWeekly);
   const sessionReset = resetMillis(reported);
@@ -606,11 +630,14 @@ function poolMember(account: LimitAccount, reported: ServerProviderUsageWindow, 
     }
   }
   return {
-    account,
     // Suppression is not session spending, so it has no session pace clock.
     window: { ...reported, usedPercent: 100, resetsAt, windowDurationMins: undefined },
     refillPercent,
   };
+}
+
+function poolMember(account: LimitAccount, reported: ServerProviderUsageWindow, now: number) {
+  return { account, ...effectivePoolQuota(account, reported, now) };
 }
 
 function poolWindows(accounts: readonly LimitAccount[], now: number): readonly LimitPoolWindow[] {
@@ -619,7 +646,7 @@ function poolWindows(accounts: readonly LimitAccount[], now: number): readonly L
     for (const reported of account.limits.windows) {
       const member = poolMember(account, reported, now);
       const { window } = member;
-      const pooled = poolKey(account.driver, window);
+      const pooled = limitPoolKey(account.driver, window);
       const key = byKey.get(pooled)?.some((member) => member.account === account)
         ? `${window.kind}:${window.id}`
         : pooled;
@@ -632,11 +659,11 @@ function poolWindows(accounts: readonly LimitAccount[], now: number): readonly L
     const memberByAccount = new Map(members.map((member) => [member.account.key, member]));
     const first = members[0]!.window;
     const id = members[0]!.account.driver === "codex" ? key : first.id;
-    // One unknown plan makes the pool incomparable by plan, so every member then counts once.
-    const capacities = members.map((m) => planCapacity(m.account, first.kind));
-    const weights = capacities.every((capacity) => capacity !== undefined)
-      ? capacities
-      : members.map(() => 1);
+    const weights = limitPoolWeights(
+      members[0]!.account.driver,
+      first.kind,
+      members.map((member) => member.account),
+    );
     const weightOf = new Map(members.map((m, index) => [m, weights[index]!]));
     const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
     const usedPercent =

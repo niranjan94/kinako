@@ -19,6 +19,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
+import * as Sqlite from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as UsageLimitSources from "./UsageLimitSources.ts";
 
@@ -105,6 +106,7 @@ it.effect("keeps malformed source URLs encodable for config subscribers", () =>
         HttpClient.make(() => Effect.die("Unexpected network request")),
       ),
       NodeCrypto.layer,
+      Sqlite.layerMemory,
     ]),
   ),
 );
@@ -171,6 +173,7 @@ it.effect("reads a management key from its secret provider", () => {
         ),
       ),
       NodeCrypto.layer,
+      Sqlite.layerMemory,
     ]),
   );
 });
@@ -179,24 +182,42 @@ it.effect("keeps an account's last good reading when the hub's next read of it i
   let refused = true;
   let workspace = "account-a";
   let listsIdentity = true;
-  const readAccount = Effect.gen(function* () {
+  return Effect.gen(function* () {
+    yield* TestClock.setTime(NOW);
     const sources = yield* UsageLimitSources.make;
-    return Effect.gen(function* () {
+    const read = Effect.gen(function* () {
       yield* sources.refresh;
       const [source] = yield* sources.current;
       return source?.accounts[0]?.usageLimits;
     });
-  });
-  return Effect.gen(function* () {
-    const read = yield* readAccount;
     // Nothing to keep yet: the account stays listed as unreadable.
     expect(yield* read).toMatchObject({ windows: [], unavailable: { reason: "probeFailed" } });
+    yield* TestClock.adjust("2 minutes");
     refused = false;
+    yield* read;
+    yield* TestClock.adjust("3 minutes");
     const good = yield* read;
     expect(good?.windows.map((window) => window.usedPercent)).toEqual([78]);
     expect(good?.unavailable).toBeUndefined();
+    yield* TestClock.adjust("5 minutes");
     refused = true;
     expect(yield* read).toEqual(good);
+    const history = yield* sources.quotaHistory({
+      sourceId: UsageLimitSourceId.make("hub"),
+      from: at(0),
+      to: at(1),
+    });
+    expect(history.map(({ accounts }) => accounts[0]?.unavailable)).toEqual([
+      true,
+      undefined,
+      undefined,
+      true,
+    ]);
+    expect(history[1]?.accounts[0]?.windows[0]?.usedPercent).toBe(78);
+    expect(history[3]?.accounts[0]?.key).toBe(history[1]?.accounts[0]?.key);
+    expect(history[3]?.accounts[0]?.windows).toEqual([]);
+    expect(history[1]?.accounts[0]).not.toHaveProperty("email");
+    expect(history[1]?.accounts[0]).not.toHaveProperty("id");
     // The same auth file now holds another login, whose reading is unknown.
     workspace = "account-b";
     expect(yield* read).toMatchObject({ windows: [], unavailable: { reason: "probeFailed" } });
@@ -272,6 +293,7 @@ it.effect("keeps an account's last good reading when the hub's next read of it i
         ),
       ),
       NodeCrypto.layer,
+      Sqlite.layerMemory,
     ]),
   );
 });
