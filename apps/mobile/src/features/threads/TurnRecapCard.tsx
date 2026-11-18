@@ -3,6 +3,7 @@ import {
   type TurnRecap,
   type TurnRecapOutcome,
 } from "@t3tools/client-runtime/state/turn-recap";
+import { useGT, useMessages } from "gt-react-native";
 import { View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
@@ -21,12 +22,14 @@ const OUTCOME_TONE: Record<TurnRecapOutcome, string> = {
 };
 
 export function TurnRecapCard(props: { readonly recap: TurnRecap }) {
+  const gt = useGT();
+  const m = useMessages();
   const { recap } = props;
   const { changes } = recap;
   const generated = recap.generated;
   return (
     <View
-      accessibilityLabel="Turn recap"
+      accessibilityLabel={gt("Turn recap")}
       className="mb-3 gap-1.5 rounded-[20px] border border-border bg-card-alt px-4 py-3"
     >
       <View className="flex-row flex-wrap items-center gap-x-3 gap-y-1">
@@ -36,12 +39,14 @@ export function TurnRecapCard(props: { readonly recap: TurnRecap }) {
             OUTCOME_TONE[recap.outcome],
           )}
         >
-          {TURN_RECAP_OUTCOME_LABELS[recap.outcome]}
+          {m(TURN_RECAP_OUTCOME_LABELS[recap.outcome])}
         </Text>
         {changes ? (
           <View className="flex-row items-center gap-2">
             <Text className="font-t3-medium text-xs text-foreground-secondary">
-              {changes.fileCount} changed file{changes.fileCount === 1 ? "" : "s"}
+              {gt("{count, plural, one {{count} changed file} other {{count} changed files}}", {
+                count: changes.fileCount,
+              })}
             </Text>
             <PullRequestDiffStats
               additions={changes.additions}

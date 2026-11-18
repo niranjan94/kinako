@@ -3,9 +3,11 @@ import { hasNewSnoozeWake } from "@t3tools/client-runtime/state/thread-settled";
 import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Notifications from "expo-notifications";
+import { msg } from "gt-react-native";
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 
+import { m } from "../../i18n/messages";
 import { useEnvironments } from "../../state/environments";
 import { environmentShell } from "../../state/shell";
 
@@ -43,7 +45,7 @@ function EnvironmentSnoozeWakeNotifications({ environmentId }: { environmentId: 
       // as relay notifications, and respects device notification permission.
       void Notifications.scheduleNotificationAsync({
         content: {
-          title: "Snooze ended",
+          title: m(msg("Snooze ended")),
           body: thread.title,
           data: { environmentId, threadId: thread.id },
         },

@@ -4,15 +4,16 @@ import {
   ProjectId,
   resolvePullRequestAuthorFilter,
   type EnvironmentId,
-  type PullRequestListCursors,
   type PullRequestDiffStat,
   type PullRequestListEntry,
   type PullRequestListInput,
   type PullRequestListResult,
   type PullRequestListStatsInput,
 } from "@t3tools/contracts";
+import { msg } from "gt-react-native";
 import type { PullRequestListControls } from "../../persistence/mobile-preferences";
 import { compareTimestamps } from "../../lib/time";
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export const PR_LIST_PAGE_SIZE = 30;
 export type { PullRequestListControls } from "../../persistence/mobile-preferences";
@@ -234,25 +235,9 @@ export function mergeEnvironmentPullRequestPages(
   };
 }
 
-type ListEntry = Pick<
-  PullRequestListEntry,
-  "host" | "repository" | "number" | "updatedAt" | "observedAt"
->;
-/** A page of either listing: pull requests and issues share cursors and paging. */
-interface ListHead {
-  readonly entries: readonly ListEntry[];
-  readonly nextCursors: PullRequestListCursors;
-  readonly truncated: boolean;
-}
-type ListInput = {
-  readonly state: string;
-  readonly limit?: number;
-  readonly cursors?: PullRequestListCursors;
-};
-
-export function mergePullRequestListEntries<Entry extends ListEntry>(
-  previous: readonly Entry[],
-  incoming: readonly Entry[],
+export function mergePullRequestListEntries(
+  previous: readonly PullRequestListEntry[],
+  incoming: readonly PullRequestListEntry[],
 ) {
   const entries = new Map(previous.map((entry) => [pullRequestListKey(entry), entry]));
   for (const entry of incoming) {
@@ -263,20 +248,19 @@ export function mergePullRequestListEntries<Entry extends ListEntry>(
   return [...entries.values()].sort((a, b) => compareTimestamps(b.updatedAt, a.updatedAt));
 }
 
-export interface ListPages<Head extends ListHead> {
-  readonly head: Head;
-  readonly entries: ReadonlyArray<Head["entries"][number]>;
-  readonly nextCursors: PullRequestListCursors;
+export interface PullRequestListPages {
+  readonly head: PullRequestListResult;
+  readonly entries: readonly PullRequestListEntry[];
+  readonly nextCursors: PullRequestListResult["nextCursors"];
   readonly truncated: boolean;
   readonly limit: number;
   readonly continued: boolean;
 }
-export type PullRequestListPages = ListPages<PullRequestListResult>;
 
-export function pullRequestListHead<Head extends ListHead>(
-  previous: ListPages<Head> | null,
-  head: Head,
-): ListPages<Head> {
+export function pullRequestListHead(
+  previous: PullRequestListPages | null,
+  head: PullRequestListResult,
+): PullRequestListPages {
   if (previous?.head === head) return previous;
   return previous?.continued
     ? { ...previous, head, entries: mergePullRequestListEntries(previous.entries, head.entries) }
@@ -333,10 +317,10 @@ export function pullRequestListInput(
   };
 }
 
-export function nextPullRequestListInput<Input extends ListInput>(
-  pages: ListPages<ListHead>,
-  input: Input,
-): (Input & Omit<ListInput, "state">) | null {
+export function nextPullRequestListInput(
+  pages: PullRequestListPages,
+  input: PullRequestListInput,
+): PullRequestListInput | null {
   if (Object.keys(pages.nextCursors).length)
     return { ...input, limit: PR_LIST_PAGE_SIZE, cursors: pages.nextCursors };
   return pages.truncated && pages.limit < 500
@@ -344,11 +328,11 @@ export function nextPullRequestListInput<Input extends ListInput>(
     : null;
 }
 
-export function appendPullRequestListPage<Head extends ListHead, Input extends ListInput>(
-  previous: ListPages<Head>,
-  page: Head,
-  input: Input,
-): ListPages<Head> {
+export function appendPullRequestListPage(
+  previous: PullRequestListPages,
+  page: PullRequestListResult,
+  input: PullRequestListInput,
+): PullRequestListPages {
   return {
     ...previous,
     entries: mergePullRequestListEntries(previous.entries, page.entries),
@@ -390,9 +374,7 @@ export function pullRequestFilterChoices(input: {
   return rows.slice(0, FILTER_CHOICE_LIMIT);
 }
 
-export function pullRequestListFacets(
-  entries: readonly Pick<PullRequestListEntry, "author" | "labels">[],
-) {
+export function pullRequestListFacets(entries: readonly PullRequestListEntry[]) {
   return {
     authors: [
       ...new Set(entries.flatMap((entry) => (entry.author ? [entry.author.login] : []))),
@@ -402,52 +384,6 @@ export function pullRequestListFacets(
     ),
     labelColors: pullRequestLabelColors(entries.flatMap((entry) => entry.labels)),
   };
-}
-
-/** The filters both listings apply to rows they already hold. */
-export function matchesListAuthorAndLabels(
-  entry: Pick<PullRequestListEntry, "author" | "labels">,
-  filters: PullRequestListControls["filters"],
-  viewer: string | undefined,
-) {
-  const normalize = (value: string) => value.toLowerCase();
-  if (filters.author) {
-    const author = resolvePullRequestAuthorFilter(filters.author, viewer);
-    if (!author || normalize(entry.author?.login ?? "") !== normalize(author)) return false;
-  }
-  const labels = new Set(entry.labels.map((label) => normalize(label.name)));
-  if (filters.labels?.some((group) => !group.some((label) => labels.has(normalize(label)))))
-    return false;
-  return !filters.excludedLabels?.some((label) => labels.has(normalize(label)));
-}
-
-/**
- * The same repository can be available on multiple machines. Keep its first matching source,
- * unless that machine is unreachable and another one can answer: its rows may only be cached.
- */
-export function uniqueSortedListEntries<
-  Entry extends ListEntry & { readonly createdAt: string; readonly environmentId?: string },
->(
-  entries: readonly Entry[],
-  sort: PullRequestListControls["sort"],
-  connectedEnvironmentIds?: ReadonlySet<string>,
-) {
-  const reachable = (entry: Entry) =>
-    !connectedEnvironmentIds ||
-    (entry.environmentId !== undefined && connectedEnvironmentIds.has(entry.environmentId));
-  const unique = new Map<string, Entry>();
-  for (const entry of entries) {
-    const key = pullRequestListKey(entry);
-    const held = unique.get(key);
-    if (!held || (!reachable(held) && reachable(entry))) unique.set(key, entry);
-  }
-  return [...unique.values()].sort((a, b) =>
-    sort === "created"
-      ? compareTimestamps(b.createdAt, a.createdAt)
-      : sort === "oldest"
-        ? compareTimestamps(a.updatedAt, b.updatedAt)
-        : compareTimestamps(b.updatedAt, a.updatedAt),
-  );
 }
 
 /** Each label's dot color by lowercased name; the first usable color a name carries wins. */
@@ -492,11 +428,18 @@ export function filterPullRequestList<
       return false;
     if ((filters.draft === "only" && !entry.isDraft) || (filters.draft === "hide" && entry.isDraft))
       return false;
-    if (!matchesListAuthorAndLabels(entry, filters, viewer)) return false;
+    if (filters.author) {
+      const author = resolvePullRequestAuthorFilter(filters.author, viewer);
+      if (normalize(entry.author?.login ?? "") !== normalize(author)) return false;
+    }
     if (filters.review && entry.reviewDecision && entry.reviewDecision !== filters.review)
       return false;
     if (filters.review === "none" && entry.reviewDecision) return false;
     if (filters.checks && entry.checksState && entry.checksState !== filters.checks) return false;
+    const labels = new Set(entry.labels.map((label) => normalize(label.name)));
+    if (filters.labels?.some((group) => !group.some((label) => labels.has(normalize(label)))))
+      return false;
+    if (filters.excludedLabels?.some((label) => labels.has(normalize(label)))) return false;
     if (words.length && localSearchHosts.has(viewerKey)) {
       const text =
         `${entry.repository} #${entry.number} ${entry.title} ${entry.author?.login ?? ""} ${entry.headBranch} ${entry.baseBranch} ${entry.labels.map((label) => label.name).join(" ")}`.toLowerCase();
@@ -504,37 +447,53 @@ export function filterPullRequestList<
     }
     return true;
   });
-  return uniqueSortedListEntries(filtered, controls.sort, connectedEnvironmentIds);
+  const reachable = (entry: Entry) =>
+    !connectedEnvironmentIds ||
+    (entry.environmentId !== undefined && connectedEnvironmentIds.has(entry.environmentId));
+  const unique = new Map<string, Entry>();
+  for (const entry of filtered) {
+    const key = pullRequestListKey(entry);
+    const held = unique.get(key);
+    if (!held || (!reachable(held) && reachable(entry))) unique.set(key, entry);
+  }
+  return [...unique.values()].sort((a, b) =>
+    controls.sort === "created"
+      ? compareTimestamps(b.createdAt, a.createdAt)
+      : controls.sort === "oldest"
+        ? compareTimestamps(a.updatedAt, b.updatedAt)
+        : compareTimestamps(b.updatedAt, a.updatedAt),
+  );
 }
 
 export function pullRequestListReviewStatus(
   entry: Pick<PullRequestListEntry, "reviewDecision" | "viewerReviewRequested">,
+  resolve: MessageResolver = m,
 ) {
   if (entry.reviewDecision === "changes-requested")
     return {
-      label: "Changes",
-      accessibleLabel: "Changes requested",
+      label: resolve(msg("Changes", { $context: "review status badge: changes requested" })),
+      accessibleLabel: resolve(msg("Changes requested")),
       icon: "person.fill.xmark",
       tint: "accent-danger-foreground",
     } as const;
   if (entry.reviewDecision === "approved")
     return {
-      label: "Approved",
-      accessibleLabel: "Reviews approved",
+      label: resolve(msg("Approved", { $context: "review status badge" })),
+      accessibleLabel: resolve(msg("Reviews approved")),
       icon: "person.fill.checkmark",
       tint: "accent-adaptive-emerald-600-400",
     } as const;
   if (entry.viewerReviewRequested)
     return {
-      label: "Your review",
-      accessibleLabel: "Your review requested",
+      label: resolve(msg("Your review")),
+      accessibleLabel: resolve(msg("Your review requested")),
       icon: "person.badge.clock",
       tint: "accent-warning-foreground",
     } as const;
   if (entry.reviewDecision === "review-required")
     return {
-      label: "Review",
-      accessibleLabel: "Review required",
+      label: resolve(msg("Review", { $context: "review status badge: review required" })),
+      accessibleLabel: resolve(msg("Review required")),
       icon: "person.badge.clock",
       tint: "accent-icon-muted",
     } as const;

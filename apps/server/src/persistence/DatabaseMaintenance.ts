@@ -1,4 +1,4 @@
-import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's access check has no execute flag.
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
+import * as NodeURL from "node:url";
 import * as SqlClient from "effect/sql/SqlClient";
 import { isSqlError } from "effect/sql/SqlError";
 
@@ -68,9 +69,20 @@ export class LegacyDatabaseRemoveError extends Schema.TaggedError<LegacyDatabase
   { path: Schema.String, cause: Schema.Defect() },
 ) {
   override get message() {
-    return "Could not delete the database from before 0.1.0. Check that this user can write to the data directory.";
+    return "Could not delete the database from before 0.1.0. Check that both databases are readable and the data directory is writable.";
   }
 }
+
+export class LegacyDatabaseHasUnmigratedRecordsError extends Schema.TaggedError<LegacyDatabaseHasUnmigratedRecordsError>()(
+  "LegacyDatabaseHasUnmigratedRecordsError",
+  { projects: Schema.Int, threads: Schema.Int },
+) {
+  override get message() {
+    return `The current database is missing legacy records. Projects missing: ${this.projects}. Threads missing: ${this.threads}. Keep the old database for recovery.`;
+  }
+}
+
+type LegacyOnlyRecords = { readonly projects: number; readonly threads: number };
 
 export type DatabaseCompactStep = "prune-events" | "vacuum" | "rebuild-search" | "checkpoint";
 
@@ -84,6 +96,7 @@ export class DatabaseMaintenance extends Context.Service<
         readonly incrementalVacuumEnabled: boolean;
         /** Size of the database from before 0.1.0 still kept beside it, or null. */
         readonly legacyDatabaseBytes: number | null;
+        readonly legacyOnlyRecords: LegacyOnlyRecords | null;
       },
       DatabaseMissingError | DatabaseInspectError
     >;
@@ -106,7 +119,10 @@ export class DatabaseMaintenance extends Context.Service<
     /** Deletes only the pre-0.1.0 database; earlier versions still use it. */
     readonly removeLegacyDatabase: (
       databasePath: string,
-    ) => Effect.Effect<void, DatabaseInUseError | LegacyDatabaseRemoveError>;
+    ) => Effect.Effect<
+      void,
+      DatabaseInUseError | LegacyDatabaseRemoveError | LegacyDatabaseHasUnmigratedRecordsError
+    >;
   }
 >()("t3/persistence/DatabaseMaintenance") {}
 
@@ -136,7 +152,7 @@ const lockExclusively = Effect.fn("DatabaseMaintenance.lockExclusively")(functio
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`PRAGMA busy_timeout = 0`;
-  yield* sql`PRAGMA locking_mode = EXCLUSIVE`;
+  yield* sql`PRAGMA main.locking_mode = EXCLUSIVE`;
   yield* sql`BEGIN EXCLUSIVE`.pipe(
     Effect.mapError((cause) =>
       isSqlError(cause) && cause.reason._tag === "LockTimeoutError"
@@ -159,6 +175,29 @@ const make = Effect.gen(function* () {
     }
   });
 
+  const readLegacyOnlyRecords = Effect.fn("DatabaseMaintenance.readLegacyOnlyRecords")(function* (
+    databasePath: string,
+  ) {
+    const sql = yield* SqlClient.SqlClient;
+    const currentUri = `${NodeURL.pathToFileURL(databasePath).href}?mode=ro`;
+    yield* sql`ATTACH DATABASE ${currentUri} AS current_v2`;
+    const [counts] = yield* sql<LegacyOnlyRecords>`
+      SELECT
+        (SELECT COUNT(*) FROM main.projection_projects legacy
+          WHERE legacy.deleted_at IS NULL AND NOT EXISTS (
+            SELECT 1 FROM current_v2.projection_projects current
+            WHERE current.project_id = legacy.project_id
+          )) AS projects,
+        (SELECT COUNT(*) FROM main.projection_threads legacy
+          WHERE legacy.deleted_at IS NULL AND NOT EXISTS (
+            SELECT 1 FROM current_v2.orchestration_v2_projection_threads current
+            WHERE current.thread_id = legacy.thread_id
+          )) AS threads
+    `;
+    if (!counts) return yield* Effect.die(new Error("Missing result from legacy database counts"));
+    return counts;
+  });
+
   const inspect = Effect.fn("DatabaseMaintenance.inspect")(
     function* (databasePath: string) {
       yield* locate(databasePath);
@@ -169,7 +208,14 @@ const make = Effect.gen(function* () {
       const legacyDatabaseBytes = (yield* fs.exists(legacy))
         ? Number((yield* fs.stat(legacy)).size)
         : null;
-      return { ...storage, legacyDatabaseBytes };
+      const legacyOnlyRecords =
+        legacyDatabaseBytes === null
+          ? null
+          : yield* readLegacyOnlyRecords(databasePath).pipe(
+              Effect.provide(NodeSqliteClient.layer({ filename: legacy, readonly: true })),
+              Effect.orElseSucceed(() => null),
+            );
+      return { ...storage, legacyDatabaseBytes, legacyOnlyRecords };
     },
     (effect, databasePath) =>
       effect.pipe(
@@ -235,21 +281,27 @@ const make = Effect.gen(function* () {
         { discard: true },
       );
       const connection = NodeSqliteClient.layer({ filename: legacy });
+      const check = lockExclusively(legacy).pipe(
+        Effect.andThen(readLegacyOnlyRecords(databasePath)),
+        Effect.flatMap((counts) =>
+          counts.projects > 0 || counts.threads > 0
+            ? new LegacyDatabaseHasUnmigratedRecordsError(counts)
+            : Effect.void,
+        ),
+      );
       if ((yield* HostProcess.Platform) === "win32") {
         // Windows blocks unlink while any SQLite handle is open, including our own.
-        yield* lockExclusively(legacy).pipe(Effect.provide(connection));
+        yield* check.pipe(Effect.provide(connection));
         yield* removeFiles;
       } else {
-        yield* lockExclusively(legacy).pipe(
-          Effect.andThen(removeFiles),
-          Effect.provide(connection),
-        );
+        yield* check.pipe(Effect.andThen(removeFiles), Effect.provide(connection));
       }
     },
     (effect, databasePath) =>
       effect.pipe(
         Effect.mapError((cause) =>
-          cause._tag === "DatabaseInUseError"
+          cause._tag === "DatabaseInUseError" ||
+          cause._tag === "LegacyDatabaseHasUnmigratedRecordsError"
             ? cause
             : new LegacyDatabaseRemoveError({ path: legacyPath(databasePath), cause }),
         ),
@@ -294,7 +346,7 @@ export const runRequestedReclaim = Effect.fn("DatabaseMaintenance.runRequestedRe
             .writeFileString(
               files.failure,
               error._tag === "DatabaseInUseError"
-                ? "Another program kept the database open. Close other T3 Code apps and t3 commands on this machine, then try again."
+                ? `Another program kept the database open. Close other ${FORK_DISPLAY_NAME} apps and ${FORK_CLI_NAME} commands on this machine, then try again.`
                 : error.message,
             )
             .pipe(

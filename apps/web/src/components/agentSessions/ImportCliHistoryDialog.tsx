@@ -37,8 +37,10 @@ import {
 import { ChevronRightIcon } from "lucide-react";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { useRef, useState } from "react";
 
+import { m } from "~/i18n/messages";
 import { newProjectId } from "~/lib/utils";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { agentSessionScan } from "~/state/agentSessions";
@@ -96,8 +98,6 @@ type FolderSessions =
       readonly moreError: string | null;
     };
 
-const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some folders or sessions may be missing.";
-
 function failureMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback;
 }
@@ -111,10 +111,12 @@ function scanInputFor(ageWindow: AgentSessionAgeWindow) {
 }
 
 function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: EnvironmentId }) {
+  const gt = useGT();
+  const resolve = useMessages();
   const { environments } = useEnvironments();
   const environmentLabel =
     environments.find((environment) => environment.environmentId === environmentId)?.label ??
-    "this computer";
+    gt("this computer");
   const [ageWindow, setAgeWindow] = useState<AgentSessionAgeWindow>(
     DEFAULT_AGENT_SESSION_AGE_WINDOW,
   );
@@ -161,8 +163,8 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
     if (result._tag === "Success") return result.value;
     throw new Error(
       isAtomCommandInterrupted(result)
-        ? "Listing sessions was interrupted."
-        : failureMessage(squashAtomCommandFailure(result), "Could not list sessions."),
+        ? m(msg("Listing sessions was interrupted."))
+        : failureMessage(squashAtomCommandFailure(result), m(msg("Could not list sessions."))),
     );
   };
 
@@ -179,7 +181,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
       }),
       (error: unknown) => ({
         status: "error",
-        message: failureMessage(error, "Could not list sessions."),
+        message: failureMessage(error, m(msg("Could not list sessions."))),
       }),
     );
     // A listing for a period the user has since switched away from must not land in the new one.
@@ -206,7 +208,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
       (value) => ({ ok: true as const, value }),
       (error: unknown) => ({
         ok: false as const,
-        message: failureMessage(error, "Could not list more sessions."),
+        message: failureMessage(error, m(msg("Could not list more sessions."))),
       }),
     );
     if (ageWindowKeyRef.current !== requestedAgeWindowKey) return;
@@ -263,7 +265,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
         if (result._tag === "Success") return;
         if (isAtomCommandInterrupted(result)) throw new AgentSessionProjectCreateInterrupted();
         throw new Error(
-          failureMessage(squashAtomCommandFailure(result), "Could not add the project."),
+          failureMessage(squashAtomCommandFailure(result), m(msg("Could not add the project."))),
         );
       },
     });
@@ -292,11 +294,15 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
         if (result._tag === "Success") return result.value;
         throw new Error(
           isAtomCommandInterrupted(result)
-            ? "The import was interrupted."
-            : failureMessage(squashAtomCommandFailure(result), "Could not import the session."),
+            ? m(msg("The import was interrupted."))
+            : failureMessage(
+                squashAtomCommandFailure(result),
+                m(msg("Could not import the session.")),
+              ),
         );
       },
       shouldStop: () => stopRef.current,
+      resolve: m,
       onEvent: (event) => {
         if (event.type === "session") {
           const key = agentSessionKey(event.session);
@@ -396,7 +402,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
               ? [
                   {
                     key: agentSessionKey(session),
-                    label: session.title.trim() || "Untitled session",
+                    label: session.title.trim() || gt("Untitled session"),
                     detail: folder.path,
                     reason: result.reason,
                   },
@@ -414,10 +420,14 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
     >
       <DialogPopup className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Import CLI history</DialogTitle>
+          <DialogTitle>
+            <T>Import CLI history</T>
+          </DialogTitle>
           <DialogDescription>
-            Claude Code and Codex sessions found on {environmentLabel}. Folders without a project
-            are added as projects.
+            {gt(
+              "Claude Code and Codex sessions found on {environmentLabel}. Folders without a project are added as projects.",
+              { environmentLabel },
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -425,7 +435,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
             <Select
               value={ageWindow.key}
               items={Object.fromEntries(
-                AGENT_SESSION_AGE_WINDOWS.map((option) => [option.key, option.label]),
+                AGENT_SESSION_AGE_WINDOWS.map((option) => [option.key, resolve(option.label)]),
               )}
               disabled={running}
               onValueChange={(value) => {
@@ -437,13 +447,13 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
                 setFolderSessions(new Map());
               }}
             >
-              <SelectTrigger aria-label="Session age">
+              <SelectTrigger aria-label={gt("Session age")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectPopup>
                 {AGENT_SESSION_AGE_WINDOWS.map((option) => (
                   <SelectItem key={option.key} value={option.key}>
-                    {option.label}
+                    {resolve(option.label)}
                   </SelectItem>
                 ))}
               </SelectPopup>
@@ -458,7 +468,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
                     setSelection(new Map(candidates.map((candidate) => [candidate.path, "all"])))
                   }
                 >
-                  Select all
+                  <T>Select all</T>
                 </Button>
                 <Button
                   variant="ghost"
@@ -466,14 +476,14 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
                   disabled={running || selection.size === 0}
                   onClick={() => setSelection(new Map())}
                 >
-                  Select none
+                  <T>Select none</T>
                 </Button>
               </div>
             ) : null}
           </div>
           {scan?.truncated ? (
             <p className="mt-2 text-muted-foreground text-xs" role="status">
-              {SCAN_LIMIT_MESSAGE}
+              {gt("Scan limit reached. Some folders or sessions may be missing.")}
             </p>
           ) : null}
           <ScrollArea scrollFade className="mt-3 h-auto max-h-96">
@@ -481,7 +491,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
               {scan === null && scanResult._tag !== "Failure" ? (
                 <div className="flex items-center gap-2 py-6 text-muted-foreground text-sm">
                   <Spinner size="sm" />
-                  Looking for sessions
+                  <T>Looking for sessions</T>
                 </div>
               ) : scanResult._tag === "Failure" && scan === null ? (
                 <div className="flex flex-col items-start gap-3 py-2">
@@ -493,12 +503,12 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
                     variant="outline"
                     onClick={() => appAtomRegistry.refresh(scanAtom)}
                   >
-                    Retry
+                    <T>Retry</T>
                   </Button>
                 </div>
               ) : candidates.length === 0 ? (
                 <p className="py-6 text-muted-foreground text-sm">
-                  No Claude Code or Codex sessions found in this period.
+                  <T>No Claude Code or Codex sessions found in this period.</T>
                 </p>
               ) : (
                 <>
@@ -517,7 +527,7 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
                   {other.length > 0 ? (
                     <div>
                       <p className="px-2 pt-2 pb-1 font-medium text-muted-foreground text-xs">
-                        Other folders
+                        <T>Other folders</T>
                       </p>
                       {other.map((candidate) => folderRow(candidate, true))}
                     </div>
@@ -529,9 +539,14 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
           {summary !== null ? (
             <div className="mt-4 space-y-2">
               <p className="text-sm" role="status">
-                {running ? (stopping ? "Stopping after the current session. " : "Importing. ") : ""}
-                {summary.imported} imported, {summary.alreadyImported} already imported,{" "}
-                {summary.failed} failed.
+                {running
+                  ? `${stopping ? gt("Stopping after the current session.") : gt("Importing.")} `
+                  : ""}
+                {gt("{imported} imported, {alreadyImported} already imported, {failed} failed.", {
+                  imported: summary.imported,
+                  alreadyImported: summary.alreadyImported,
+                  failed: summary.failed,
+                })}
               </p>
               {failures.length > 0 ? (
                 <ul className="max-h-32 space-y-1 overflow-y-auto text-xs">
@@ -557,12 +572,12 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
                 setStopping(true);
               }}
             >
-              Stop after current
+              <T>Stop after current</T>
             </Button>
           ) : (
             <>
               <Button variant="ghost" onClick={closeImportCliHistoryDialog}>
-                {progress === null ? "Cancel" : "Done"}
+                {progress === null ? gt("Cancel") : gt("Done")}
               </Button>
               {retryPlan.length > 0 ? (
                 <Button
@@ -570,14 +585,16 @@ function ImportCliHistoryDialog({ environmentId }: { readonly environmentId: Env
                   disabled={!canImport}
                   onClick={() => void runImport(retryPlan)}
                 >
-                  Retry failed
+                  <T>Retry failed</T>
                 </Button>
               ) : null}
               <Button
                 disabled={!canImport || selectedPlan.length === 0}
                 onClick={() => void runImport(selectedPlan)}
               >
-                Import {selectedPlan.length} {selectedPlan.length === 1 ? "folder" : "folders"}
+                {gt("Import {count, plural, one {{count} folder} other {{count} folders}}", {
+                  count: selectedPlan.length,
+                })}
               </Button>
             </>
           )}
@@ -600,6 +617,7 @@ function FolderRow(props: {
   readonly onFolderChecked: (checked: boolean) => void;
   readonly onSessionChecked: (session: AgentSessionListItem, checked: boolean) => void;
 }) {
+  const gt = useGT();
   const { candidate, selection, sessions } = props;
   const isPartial = selection !== undefined && selection !== "all";
   return (
@@ -616,7 +634,7 @@ function FolderRow(props: {
         }
       >
         <Checkbox
-          aria-label={`Import ${candidate.title}`}
+          aria-label={gt("Import {title}", { title: candidate.title })}
           checked={selection !== undefined && !isPartial}
           indeterminate={isPartial}
           disabled={props.disabled}
@@ -629,8 +647,10 @@ function FolderRow(props: {
             <span className="font-mono text-2xs text-muted-foreground">{candidate.path}</span>
           </span>
           <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-            {candidate.threadCount} {candidate.threadCount === 1 ? "session" : "sessions"}
-            {candidate.alreadyImported ? " · project exists" : ""}
+            {gt("{count, plural, one {{count} session} other {{count} sessions}}", {
+              count: candidate.threadCount,
+            })}
+            {candidate.alreadyImported ? ` · ${gt("project exists")}` : ""}
           </span>
         </CollapsibleTrigger>
       </div>
@@ -639,12 +659,14 @@ function FolderRow(props: {
           {sessions === undefined || sessions.status === "loading" ? (
             <div className="flex items-center gap-2 py-2 text-muted-foreground text-xs">
               <Spinner size="sm" />
-              Loading sessions
+              <T>Loading sessions</T>
             </div>
           ) : sessions.status === "error" ? (
             <p className="py-2 text-destructive text-xs">{sessions.message}</p>
           ) : sessions.listing.sessions.length === 0 ? (
-            <p className="py-2 text-muted-foreground text-xs">No sessions in this period.</p>
+            <p className="py-2 text-muted-foreground text-xs">
+              <T>No sessions in this period.</T>
+            </p>
           ) : (
             <>
               {sessions.listing.sessions.map((session) => (
@@ -677,7 +699,7 @@ function FolderRow(props: {
                   disabled={props.disabled || sessions.loadingMore}
                   onClick={props.onLoadMore}
                 >
-                  {sessions.loadingMore ? "Loading..." : "Show older sessions"}
+                  {sessions.loadingMore ? gt("Loading...") : gt("Show older sessions")}
                 </Button>
               ) : null}
             </>
@@ -697,6 +719,7 @@ function SessionRow(props: {
   readonly disabled: boolean;
   readonly onCheckedChange: (checked: boolean) => void;
 }) {
+  const gt = useGT();
   const { session, result } = props;
   const label = providerLabel(session.provider);
   const imported =
@@ -718,10 +741,12 @@ function SessionRow(props: {
         />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">{session.title.trim() || "Untitled session"}</span>
+        <span className="block truncate text-sm">
+          {session.title.trim() || gt("Untitled session")}
+        </span>
         {props.recentlyActive && !imported ? (
           <span className="block text-warning-foreground text-xs">
-            May still be open in a terminal. Close it there first.
+            <T>May still be open in a terminal. Close it there first.</T>
           </span>
         ) : null}
         {result?.status === "failed" ? (
@@ -732,7 +757,7 @@ function SessionRow(props: {
         {props.importing ? (
           <Spinner size="sm" />
         ) : imported ? (
-          "Imported"
+          gt("Imported")
         ) : (
           formatRelativeTimeLabel(session.updatedAt)
         )}

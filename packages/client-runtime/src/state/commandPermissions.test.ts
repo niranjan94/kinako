@@ -294,6 +294,31 @@ describe("command permissions", () => {
       }),
   );
 
+  it.effect("requires the destination settings grant to connect or bind an issue tracker", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const connect = createCommandPermissions(runtime, WS_METHODS.issueTrackersConnect);
+        const bind = createCommandPermissions(runtime, WS_METHODS.issueTrackersBindProject);
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(connect.permissionAtom(env))).toBe(false);
+        expect(registry.get(bind.permissionAtom(env))).toBe(false);
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthSettingsWriteScope],
+            permissions: [AuthSettingsWriteScope],
+          }),
+        );
+        expect(registry.get(connect.permissionAtom(env))).toBe(true);
+        expect(registry.get(bind.permissionAtom(env))).toBe(true);
+        yield* connect.authorize(registry, env);
+        yield* bind.authorize(registry, env);
+      }),
+    ),
+  );
+
   it.effect.each([WS_METHODS.scheduledTasksDelete, ORCHESTRATION_V2_WS_METHODS.stopWorkflow])(
     "uses the target grant for both availability and execution of %s",
     (method) =>
@@ -385,11 +410,9 @@ it.effect(
       const registry = yield* setup;
       registry.set(sessions(env), AsyncResult.success(grant(true)));
       const git = createCommandPermissions(runtime, WS_METHODS.vcsInit);
-      const issueComment = createCommandPermissions(runtime, WS_METHODS.issuesComment);
       expect((yield* git.authorize(registry, env).pipe(Effect.flip)).requiredPermission).toBe(
         AuthSourceControlWriteScope,
       );
-      expect(registry.get(issueComment.permissionAtom(env))).toBe(false);
       registry.set(
         sessions(env),
         AsyncResult.success({
@@ -399,7 +422,6 @@ it.effect(
         }),
       );
       yield* git.authorize(registry, env);
-      expect(registry.get(issueComment.permissionAtom(env))).toBe(true);
       const prepare = createCommandPermissions(runtime, WS_METHODS.gitPreparePullRequestThread);
       const input = {
         cwd: "/repo",

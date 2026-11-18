@@ -78,6 +78,7 @@ export function clientPresentationMetadata(input: {
 }): AuthClientPresentationMetadata {
   if (input.desktopBridge !== undefined) {
     return {
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- device label stored by the server as an identifier
       label: `${APP_BASE_NAME} Desktop`,
       deviceType: "desktop",
       os: clientOsFromElectronPlatform(input.desktopBridge.getClientPlatform()),
@@ -87,6 +88,7 @@ export function clientPresentationMetadata(input: {
   }
 
   return {
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- device label stored by the server as an identifier
     label: `${APP_BASE_NAME} Web`,
     deviceType: browserDeviceType(input.identity),
     os: browserClientOs(input.identity),

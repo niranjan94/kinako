@@ -1,7 +1,7 @@
+import { msg } from "gt-i18n";
+import { MarkedText, translatableMessage } from "../errors/translatable.ts";
 import {
   WS_METHODS,
-  IssueDetail,
-  IssueListResult,
   PullRequestActivity,
   PullRequestDetail as PullRequestDetailSchema,
   PullRequestPreview,
@@ -68,7 +68,7 @@ export * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
 /** @public Required to name the error in consumers' inferred pull request results. */
 export class EnvironmentHttpConnectionNotReadyError extends Schema.TaggedError<EnvironmentHttpConnectionNotReadyError>()(
   "EnvironmentHttpConnectionNotReadyError",
-  { message: Schema.String },
+  { message: Schema.String, i18nMessage: Schema.optionalKey(MarkedText) },
 ) {}
 
 const LINKED_PULL_REQUEST_IDLE_TTL_MS = 5_000;
@@ -869,16 +869,6 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       Atom.setIdleTTL(5 * 60_000),
     ),
   );
-  const issueDetail = writableQueryFamily(
-    createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:issues:detail",
-      persistence: persistQuery(IssueDetail),
-      tag: WS_METHODS.issuesDetail,
-      execute: (input) => routedRequest(WS_METHODS.issuesDetail, input),
-      staleTimeMs: 60_000,
-      refreshTrigger: ({ environmentId }) => refreshes({ environmentId, input: {} }),
-    }),
-  );
   const detailAnswers = normalizePullRequestQuery((target) =>
     detailAnswerAtoms(JSON.stringify(target)),
   );
@@ -1094,7 +1084,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     const prepared = yield* SubscriptionRef.get(supervisor.prepared);
     if (Option.isNone(prepared)) {
       return yield* new EnvironmentHttpConnectionNotReadyError({
-        message: "The environment HTTP connection is not ready.",
+        ...translatableMessage(msg("The environment HTTP connection is not ready.")),
       });
     }
     return yield* loader.load(prepared.value, input);
@@ -1304,7 +1294,13 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       label: "environment-data:pull-requests:diff",
       persistence: persistQuery(PullRequestDiffResult),
       staleTimeMs: 60_000,
-      execute: loadDiff,
+      // A guide tied to a commit must not reuse another push's cached pages.
+      execute: ({
+        cacheHeadSha: _cacheHeadSha,
+        ...input
+      }: PullRequestDiffInput & {
+        readonly cacheHeadSha?: string;
+      }) => loadDiff(input),
     }),
     diffFileContents: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:pull-requests:diff-file-contents",
@@ -1399,23 +1395,6 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       }),
       (_registry, { input }) => updateEdit(input),
     ),
-    issueList: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:issues:list",
-      persistence: persistQuery(IssueListResult),
-      tag: WS_METHODS.issuesList,
-      staleTimeMs: 30_000,
-      refreshTrigger: ({ environmentId, input }) =>
-        input.cursors === undefined ? refreshes({ environmentId, input: {} }) : undefined,
-    }),
-    issueDetail,
-    issueComment: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:issues:comment",
-      tag: WS_METHODS.issuesComment,
-      execute: (input) => routedRequest(WS_METHODS.issuesComment, input),
-      onSuccess: (target, registry) => Effect.sync(() => registry.refresh(issueDetail(target))),
-      scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
-    }),
     comment: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:pull-requests:comment",
       tag: WS_METHODS.pullRequestsComment,

@@ -22,9 +22,11 @@ import {
   SaveIcon,
   SquareIcon,
 } from "lucide-react";
+import { msg, useGT, useMessages } from "gt-react";
 import { useContext, useRef, useState } from "react";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { formatShortcutLabel } from "../../keybindings";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { randomUUID } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
 import { databaseState } from "../../state/database";
@@ -62,9 +64,14 @@ const shortcut = (shiftKey: boolean) =>
 const RUN_SHORTCUT = shortcut(false);
 const RUN_ALL_SHORTCUT = shortcut(true);
 
-const sqlLocation = (sql: string, offset: number) => {
+const sqlLocation = (sql: string, offset: number, resolve: MessageResolver = m) => {
   const before = sql.slice(0, offset).split("\n");
-  return `Line ${before.length}, column ${(before.at(-1)?.length ?? 0) + 1}`;
+  return resolve(
+    msg("Line {line}, column {column}", {
+      line: before.length,
+      column: (before.at(-1)?.length ?? 0) + 1,
+    }),
+  );
 };
 
 // Work outlives the view when the drawer switches tabs, so these are keyed by tab id.
@@ -113,6 +120,8 @@ function ConsoleView({
   tab: DatabaseWorkspaceTab;
   workspaceRoot: string;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const registry = useContext(RegistryContext);
   const scope: DatabaseWorkspaceScope = { registry, environmentId, projectId, threadRef };
   const { connections, allowed } = useDatabaseConnections(environmentId, projectId);
@@ -194,10 +203,10 @@ function ConsoleView({
         risky.statement.length > 300 ? `${risky.statement.slice(0, 300)}…` : risky.statement;
       const confirmed = await ensureLocalApi().dialogs.confirm(
         [
-          `Run this on ${tabConnection.name}?`,
+          gt("Run this on {name}?", { name: tabConnection.name }),
           risky.risk === "drop"
-            ? "It drops or truncates data."
-            : "It runs UPDATE or DELETE without a WHERE clause, so it changes every row.",
+            ? gt("It drops or truncates data.")
+            : gt("It runs UPDATE or DELETE without a WHERE clause, so it changes every row."),
           "",
           statement,
         ].join("\n"),
@@ -322,7 +331,7 @@ function ConsoleView({
         }),
       );
       if (!isLive(tab.id)) return;
-      if (current(tab.id)?.queryId !== queryId) throw new Error("Query cancelled.");
+      if (current(tab.id)?.queryId !== queryId) throw new Error(gt("Query cancelled."));
       updateTab(tab.id, {
         result: {
           ...previousResult,
@@ -349,7 +358,7 @@ function ConsoleView({
           ...(sessionLost ? { sessionId: undefined, queryId: undefined } : {}),
           result: { ...previousResult, hasMore: false },
           error: cancelled
-            ? "Query cancelled. Run again to start a new session."
+            ? gt("Query cancelled. Run again to start a new session.")
             : databaseErrorMessage(error),
         });
       })
@@ -371,11 +380,18 @@ function ConsoleView({
         });
         // The server cannot tell a missing file from an unreadable one, so any failure asks.
         const question = !AsyncResult.isSuccess(probe)
-          ? `Save to ${filePath}?\nIt does not exist yet, or could not be read: ${databaseErrorMessage(squashAtomCommandFailure(probe))}`
+          ? gt("Save to {filePath}?\nIt does not exist yet, or could not be read: {reason}", {
+              filePath,
+              reason: databaseErrorMessage(squashAtomCommandFailure(probe)),
+            })
           : probe.value.truncated
-            ? `Overwrite ${filePath}?\nThe file is too large to compare with this console.`
+            ? gt("Overwrite {filePath}?\nThe file is too large to compare with this console.", {
+                filePath,
+              })
             : probe.value.contents !== tab.sql && probe.value.contents !== tab.savedSql
-              ? `Overwrite ${filePath}?\nThe file has contents this console did not write.`
+              ? gt("Overwrite {filePath}?\nThe file has contents this console did not write.", {
+                  filePath,
+                })
               : null;
         if (question && !(await confirm(question))) return;
         databaseValue(
@@ -390,17 +406,23 @@ function ConsoleView({
           tab.sql.trim() &&
           tab.sql !== tab.savedSql &&
           !(await confirm(
-            `Replace ${tab.title} with ${filePath}?\nThe console's unsaved SQL is discarded.`,
+            gt("Replace {title} with {filePath}?\nThe console's unsaved SQL is discarded.", {
+              title: tab.title,
+              filePath,
+            }),
           ))
         )
           return;
         const result = databaseValue(
           await readFile({ environmentId, input: { cwd: workspaceRoot, relativePath: filePath } }),
         );
-        if (result.truncated) throw new Error("This SQL file is too large to open in the editor.");
+        if (result.truncated)
+          throw new Error(gt("This SQL file is too large to open in the editor."));
         updateTab(tab.id, { sql: result.contents, savedSql: result.contents });
       }
-      setNotice(save ? `Saved ${filePath}` : `Opened ${filePath}`);
+      setNotice(
+        save ? gt("Saved {filePath}", { filePath }) : gt("Opened {filePath}", { filePath }),
+      );
     })().catch(async (error: unknown) => {
       setNotice(databaseErrorMessage(error));
     });
@@ -429,11 +451,15 @@ function ConsoleView({
       progress: undefined,
     });
   };
-  if (!allowed) return <p className="p-3 text-sm">Database access requires terminal permission.</p>;
+  if (!allowed)
+    return <p className="p-3 text-sm">{gt("Database access requires terminal permission.")}</p>;
   const status = tab.loading
     ? tab.progress
-      ? `Running ${tab.progress.index + 1} of ${tab.progress.total}`
-      : "Running"
+      ? gt("Running {current} of {total}", {
+          current: tab.progress.index + 1,
+          total: tab.progress.total,
+        })
+      : gt("Running")
     : null;
   const result = (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -449,8 +475,15 @@ function ConsoleView({
         <div role="alert" className="overflow-auto p-4 font-mono text-xs">
           {tab.progress && (
             <p className="mb-2 text-muted-foreground">
-              Statement {tab.progress.index + 1} of {tab.progress.total}{" "}
-              {tab.result.cancelled ? "was cancelled" : "failed"}. Earlier statements ran.
+              {tab.result.cancelled
+                ? gt("Statement {current} of {total} was cancelled. Earlier statements ran.", {
+                    current: tab.progress.index + 1,
+                    total: tab.progress.total,
+                  })
+                : gt("Statement {current} of {total} failed. Earlier statements ran.", {
+                    current: tab.progress.index + 1,
+                    total: tab.progress.total,
+                  })}
             </p>
           )}
           <p
@@ -460,17 +493,18 @@ function ConsoleView({
                 : "whitespace-pre-wrap text-destructive-foreground"
             }
           >
-            {tab.result.cancelled ? "Query cancelled." : tab.result.message}
+            {tab.result.cancelled ? gt("Query cancelled.") : tab.result.message}
           </p>
           {tab.result.cancelled && tabConnection && tabConnection.target.engine !== "postgres" && (
             <p className="mt-2 text-muted-foreground">
-              {ENGINE_LABELS[tabConnection.target.engine]} session reset. Run again to start a new
-              session.
+              {gt("{engine} session reset. Run again to start a new session.", {
+                engine: ENGINE_LABELS[tabConnection.target.engine],
+              })}
             </p>
           )}
           {(tab.result.code || tab.errorAt !== undefined) && (
             <p className="mt-2 text-muted-foreground">
-              {[tab.result.code, tab.errorAt !== undefined && sqlLocation(tab.sql, tab.errorAt)]
+              {[tab.result.code, tab.errorAt !== undefined && sqlLocation(tab.sql, tab.errorAt, m)]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
@@ -478,12 +512,18 @@ function ConsoleView({
         </div>
       ) : tab.result?.kind === "command" ? (
         <div className="p-4 font-mono text-xs" role="status">
-          <p>{tab.result.command} completed</p>
+          <p>{gt("{command} completed", { command: tab.result.command })}</p>
           <p className="mt-1 text-muted-foreground">
             {tab.result.affectedRows !== null
-              ? `${tab.result.affectedRows.toLocaleString()} ${tab.result.affectedRows === 1 ? "row" : "rows"} affected · `
+              ? `${gt(
+                  "{count, plural, one {{formatted} row affected} other {{formatted} rows affected}}",
+                  {
+                    count: tab.result.affectedRows,
+                    formatted: tab.result.affectedRows.toLocaleString(),
+                  },
+                )} · `
               : ""}
-            {tab.result.durationMs} ms
+            {gt("{durationMs} ms", { durationMs: tab.result.durationMs })}
           </p>
         </div>
       ) : tab.result?.kind === "rows" ? (
@@ -501,7 +541,7 @@ function ConsoleView({
       ) : (
         <div className="flex flex-1 items-center justify-center gap-2 px-6 text-xs text-muted-foreground">
           {tab.loading && <Spinner size="sm" tone="muted" />}
-          {tab.loading ? "Executing query…" : "Run a query to see results here."}
+          {tab.loading ? gt("Executing query…") : gt("Run a query to see results here.")}
         </div>
       )}
     </div>
@@ -511,7 +551,7 @@ function ConsoleView({
       <div
         className="flex h-9 shrink-0 items-center gap-1 border-b px-2"
         role="toolbar"
-        aria-label="SQL actions"
+        aria-label={gt("SQL actions")}
       >
         <Button
           size="xs"
@@ -521,11 +561,13 @@ function ConsoleView({
           aria-keyshortcuts="Control+Enter Meta+Enter"
         >
           {tab.loading ? <Spinner /> : <PlayIcon className="text-success" />}
-          {status ?? "Run"}
+          {status ?? gt("Run")}
           {!tab.loading && <Kbd>{RUN_SHORTCUT}</Kbd>}
         </Button>
         <Menu>
-          <MenuTrigger render={<Button size="icon-xs" variant="ghost" aria-label="Run options" />}>
+          <MenuTrigger
+            render={<Button size="icon-xs" variant="ghost" aria-label={gt("Run options")} />}
+          >
             <ChevronDownIcon />
           </MenuTrigger>
           <MenuPopup align="start">
@@ -535,13 +577,13 @@ function ConsoleView({
                 void run(sqlStatementRanges(tab.sql, tabConnection?.target.engine ?? "postgres"))
               }
             >
-              Run entire script
+              {gt("Run entire script")}
               <MenuShortcut>{RUN_ALL_SHORTCUT}</MenuShortcut>
             </MenuItem>
           </MenuPopup>
         </Menu>
         <DatabaseToolbarButton
-          label="Cancel query (Escape)"
+          label={gt("Cancel query (Escape)")}
           disabled={!tab.loading}
           onClick={cancel}
         >
@@ -549,7 +591,7 @@ function ConsoleView({
         </DatabaseToolbarButton>
         <span className="mx-1 h-4 border-l" />
         <DatabaseToolbarButton
-          label={filesOpen ? "Hide SQL file" : "Open or save a SQL file"}
+          label={filesOpen ? gt("Hide SQL file") : gt("Open or save a SQL file")}
           onClick={() => setFilesOpen(!filesOpen)}
           aria-pressed={filesOpen}
         >
@@ -567,7 +609,9 @@ function ConsoleView({
                 <Button
                   size="xs"
                   variant="ghost"
-                  aria-label={`Database: ${databaseName ?? "unavailable"}. Change database`}
+                  aria-label={gt("Database: {name}. Change database", {
+                    name: databaseName ?? gt("unavailable"),
+                  })}
                 />
               }
             >
@@ -597,15 +641,19 @@ function ConsoleView({
                 size="xs"
                 variant="ghost"
                 className="ml-auto min-w-0"
-                aria-label={`Connection: ${tabConnection?.name ?? "unavailable"}. Change connection`}
+                aria-label={gt("Connection: {name}. Change connection", {
+                  name: tabConnection?.name ?? gt("unavailable"),
+                })}
               />
             }
           >
             <DatabaseIcon />
             <span className="truncate">
               {tabConnection
-                ? `${tabConnection.name}${tabConnection.readOnly ? " · Read-only" : ""}`
-                : "Connection unavailable"}
+                ? tabConnection.readOnly
+                  ? gt("{name} · Read-only", { name: tabConnection.name })
+                  : tabConnection.name
+                : gt("Connection unavailable")}
             </span>
             <ChevronDownIcon />
           </MenuTrigger>
@@ -616,7 +664,7 @@ function ConsoleView({
                 {connection.name}
                 <span className="ml-auto pl-4 text-xs text-muted-foreground">
                   {ENGINE_LABELS[connection.target.engine]}
-                  {connection.readOnly ? " · Read-only" : ""}
+                  {connection.readOnly ? ` · ${gt("Read-only")}` : ""}
                 </span>
               </MenuItem>
             ))}
@@ -629,7 +677,7 @@ function ConsoleView({
             <Input
               size="compact"
               font="mono"
-              aria-label="SQL file path, relative to the project"
+              aria-label={gt("SQL file path, relative to the project")}
               value={filePath}
               onChange={(event) => updateTab(tab.id, { filePath: event.target.value })}
               onKeyDown={(event) => {
@@ -638,12 +686,15 @@ function ConsoleView({
             />
           </div>
           <DatabaseToolbarButton
-            label="Open file into this console"
+            label={gt("Open file into this console")}
             onClick={() => void queryFile(false)}
           >
             <FolderOpenIcon />
           </DatabaseToolbarButton>
-          <DatabaseToolbarButton label="Save console to file" onClick={() => void queryFile(true)}>
+          <DatabaseToolbarButton
+            label={gt("Save console to file")}
+            onClick={() => void queryFile(true)}
+          >
             <SaveIcon />
           </DatabaseToolbarButton>
         </div>
@@ -666,7 +717,7 @@ function ConsoleView({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <DatabaseSplit
         direction="horizontal"
-        label="Resize SQL editor and results"
+        label={gt("Resize SQL editor and results")}
         first={editor}
         second={result}
         initial={45}

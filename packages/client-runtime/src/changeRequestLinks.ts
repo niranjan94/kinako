@@ -73,12 +73,8 @@ export function resolveChangeRequestLinkTarget<Project extends ChangeRequestProj
   readonly repository: string;
   readonly number: number;
   readonly host?: string;
-  readonly item?: "issue";
 } | null {
-  const pullRequest = sourceControlClients.parseChangeRequestUrl(url)?.link;
-  const issue =
-    pullRequest === undefined ? sourceControlClients.parseIssueUrl(url)?.link : undefined;
-  const link = pullRequest ?? issue;
+  const link = sourceControlClients.parseChangeRequestUrl(url)?.link;
   if (link === undefined) return null;
   // Matching remotes do not make project ids usable outside the link's environment.
   const candidates = (
@@ -100,7 +96,6 @@ export function resolveChangeRequestLinkTarget<Project extends ChangeRequestProj
     repository: link.repository,
     number: link.number,
     host: link.authority ?? link.host,
-    ...(issue === undefined ? {} : { item: "issue" as const }),
   };
 }
 

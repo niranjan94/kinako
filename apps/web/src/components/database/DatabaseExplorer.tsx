@@ -22,6 +22,7 @@ import {
   SquareTerminalIcon,
   Table2Icon,
 } from "lucide-react";
+import { msg, useGT, useMessages } from "gt-react";
 import { memo, useContext, useEffect, useId, useRef, useState } from "react";
 import { databaseState } from "../../state/database";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
@@ -59,6 +60,7 @@ function DatabaseNode({
   ) => void;
   onQuery: (connection: DatabaseConnection, database?: string) => void;
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const revision = useAtomValue(databaseState.revision(environmentId));
   const kind = scope.kind;
@@ -105,9 +107,18 @@ function DatabaseNode({
           : EyeIcon;
   const description =
     kind === "schemas" || kind === "databases"
-      ? `${connection.name}${database ? ` · ${database}` : ""} · ${ENGINE_LABELS[connection.target.engine]}${connection.readOnly ? " · Read-only" : ""}`
+      ? [
+          connection.name,
+          database,
+          ENGINE_LABELS[connection.target.engine],
+          connection.readOnly ? gt("Read-only") : undefined,
+        ]
+          .filter(Boolean)
+          .join(" · ")
       : kind === "columns" && objectType !== "table"
-        ? `${label} · ${objectType === "view" ? "View" : "Materialized view"}`
+        ? objectType === "view"
+          ? gt("{label} · View", { label })
+          : gt("{label} · Materialized view", { label })
         : label;
   return (
     <div className="min-w-0" role="none">
@@ -125,7 +136,9 @@ function DatabaseNode({
               className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs outline-none hover:bg-accent focus:bg-accent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
               aria-label={label}
               aria-description={
-                kind === "columns" ? `${description}. Press Enter to open its rows.` : description
+                kind === "columns"
+                  ? gt("{description}. Press Enter to open its rows.", { description })
+                  : description
               }
               onClick={() => setExpanded(!open)}
               onDoubleClick={() => {
@@ -167,7 +180,7 @@ function DatabaseNode({
         </div>
         {kind === "schemas" && database !== undefined && (
           <DatabaseToolbarButton
-            label={`New query console for ${database}`}
+            label={gt("New query console for {database}", { database })}
             onClick={() => onQuery(connection, database)}
           >
             <SquareTerminalIcon />
@@ -181,7 +194,7 @@ function DatabaseNode({
               {error}
             </p>
           ) : !metadata ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">Loading…</p>
+            <p className="px-2 py-1 text-xs text-muted-foreground">{gt("Loading…")}</p>
           ) : metadata.kind === "databases" ? (
             metadata.databases.length ? (
               metadata.databases.map((item) => (
@@ -195,7 +208,9 @@ function DatabaseNode({
                 />
               ))
             ) : (
-              <p className="px-2 py-1 text-xs text-muted-foreground">No databases available.</p>
+              <p className="px-2 py-1 text-xs text-muted-foreground">
+                {gt("No databases available.")}
+              </p>
             )
           ) : metadata.kind === "schemas" ? (
             metadata.schemas.map((schema) => (
@@ -249,7 +264,7 @@ function DatabaseNode({
                 aria-hidden
               >
                 <Columns3Icon className="size-3.5" />
-                Columns <span className="text-2xs">{metadata.columns.length}</span>
+                {gt("Columns")} <span className="text-2xs">{metadata.columns.length}</span>
               </div>
               <div className="ml-4" role="none">
                 {metadata.columns.map((column) => {
@@ -288,9 +303,9 @@ function DatabaseNode({
 }
 
 const LEVEL_LABELS = {
-  project: "This project",
-  environment: "This environment",
-  global: "All environments",
+  project: msg("This project"),
+  environment: msg("This environment"),
+  global: msg("All environments"),
 } as const;
 
 export const DatabaseExplorer = memo(function DatabaseExplorer({
@@ -317,6 +332,8 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
   onQuery: (connection: DatabaseConnection, database?: string) => void;
   onEdit: (connection: DatabaseConnection) => void;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const canEdit = useAtomValue(databaseState.saveConnection.permissionAtom(environmentId));
   const tree = useRef<HTMLDivElement>(null);
   // Roving tabindex: the tree is one tab stop, landing on the last focused row.
@@ -330,7 +347,7 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
       className="min-h-0 flex-1 overflow-auto px-1 py-2"
       ref={tree}
       role="tree"
-      aria-label="Database explorer"
+      aria-label={gt("Database explorer")}
       onFocus={(event) => {
         if (!event.target.matches("[data-database-tree-row]")) return;
         for (const row of event.currentTarget.querySelectorAll<HTMLElement>(
@@ -362,9 +379,9 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
         const items = connections.filter((connection) => connection.level === level);
         if (!items.length) return null;
         return (
-          <section key={level} className="mb-3" role="group" aria-label={LEVEL_LABELS[level]}>
+          <section key={level} className="mb-3" role="group" aria-label={m(LEVEL_LABELS[level])}>
             <h3 className="px-2 pb-1 text-2xs font-medium text-muted-foreground" aria-hidden>
-              {LEVEL_LABELS[level]}
+              {m(LEVEL_LABELS[level])}
             </h3>
             {items.map((connection) => (
               <div key={connection.id} role="none">
@@ -386,18 +403,22 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
                   </div>
                   <Menu>
                     <MenuTrigger
-                      render={<DatabaseToolbarButton label={`Actions for ${connection.name}`} />}
+                      render={
+                        <DatabaseToolbarButton
+                          label={gt("Actions for {name}", { name: connection.name })}
+                        />
+                      }
                     >
                       <MoreHorizontalIcon />
                     </MenuTrigger>
                     <MenuPopup align="end">
                       <MenuItem onClick={() => onQuery(connection)}>
                         <SquareTerminalIcon />
-                        New query console
+                        {gt("New query console")}
                       </MenuItem>
                       <MenuItem disabled={!canEdit} onClick={() => onEdit(connection)}>
                         <Settings2Icon />
-                        Connection properties
+                        {gt("Connection properties")}
                       </MenuItem>
                     </MenuPopup>
                   </Menu>
@@ -409,7 +430,9 @@ export const DatabaseExplorer = memo(function DatabaseExplorer({
       })}
       {!connections.length && (
         <p className="px-3 py-2 text-xs text-muted-foreground">
-          {loading ? "Loading connections…" : "Add a connection to browse its schemas and tables."}
+          {loading
+            ? gt("Loading connections…")
+            : gt("Add a connection to browse its schemas and tables.")}
         </p>
       )}
     </div>

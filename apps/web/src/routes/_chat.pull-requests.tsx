@@ -29,9 +29,6 @@ function pullRequestSearchLabels(raw: unknown): PullRequestsSearch["labels"] {
 
 export const Route = createFileRoute("/_chat/pull-requests")({
   validateSearch: (raw: Record<string, unknown>): PullRequestsSearch => ({
-    // Own keys for the same reason as `q` below: an omitted key lets the raw value through.
-    kind: raw.kind === "issues" ? "issues" : undefined,
-    selectedKind: raw.selectedKind === "issue" ? "issue" : undefined,
     ...(typeof raw.selectedUrl === "string" ? { selectedUrl: raw.selectedUrl.slice(0, 4096) } : {}),
     involvement:
       raw.involvement === "reviewing" || raw.involvement === "authored" ? raw.involvement : "all",

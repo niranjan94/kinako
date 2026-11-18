@@ -15,6 +15,7 @@ import {
   ShieldAlertIcon,
 } from "lucide-react";
 import { memo } from "react";
+import { msg, useGT, useMessages } from "gt-react";
 
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -37,6 +38,8 @@ export const TurnRecapCard = memo(function TurnRecapCard(props: {
   changesShownAbove: boolean;
   onOpenTurnDiff: (runId: RunId) => void;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const { recap, changesShownAbove, onOpenTurnDiff } = props;
   const { variant, Icon } = OUTCOME_PRESENTATION[recap.outcome];
   const { runId } = recap;
@@ -46,19 +49,21 @@ export const TurnRecapCard = memo(function TurnRecapCard(props: {
   return (
     <div className="mb-3 px-1">
       <section
-        aria-label="Turn recap"
+        aria-label={gt("Turn recap")}
         data-turn-recap={recap.outcome}
         className="flex flex-col gap-1.5 rounded-lg bg-secondary px-3 py-2.5 text-sm sm:text-xs dark:bg-input/20"
       >
         <div className="flex min-w-0 items-center gap-3">
           <Badge variant={variant}>
             <Icon />
-            {TURN_RECAP_OUTCOME_LABELS[recap.outcome]}
+            {m(TURN_RECAP_OUTCOME_LABELS[recap.outcome])}
           </Badge>
           {changes ? (
             <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
               <span className="truncate">
-                {changes.fileCount} changed file{changes.fileCount === 1 ? "" : "s"}
+                {gt("{count, plural, one {{count} changed file} other {{count} changed files}}", {
+                  count: changes.fileCount,
+                })}
               </span>
               {hasNonZeroStat(changes) ? (
                 <DiffStatLabel
@@ -75,11 +80,11 @@ export const TurnRecapCard = memo(function TurnRecapCard(props: {
                 type="button"
                 size="xs"
                 variant="ghost-muted"
-                aria-label="Open diff"
+                aria-label={gt("Open diff")}
                 onClick={() => onOpenTurnDiff(runId)}
               >
                 <FileDiffIcon className="size-3" />
-                <span className="max-sm:hidden">Open diff</span>
+                <span className="max-sm:hidden">{gt("Open diff")}</span>
               </Button>
             </span>
           ) : null}
@@ -93,13 +98,13 @@ export const TurnRecapCard = memo(function TurnRecapCard(props: {
           <>
             <p className="wrap-break-word leading-relaxed text-foreground">{generated.summary}</p>
             {[
-              ["Checks", generated.verification],
-              ["Remaining", generated.remainingWork],
-              ["Next", generated.nextAction],
+              [msg("Checks"), generated.verification],
+              [msg("Remaining"), generated.remainingWork],
+              [msg("Next"), generated.nextAction],
             ].map(([label, text]) =>
               text ? (
                 <p key={label} className="wrap-break-word leading-relaxed text-muted-foreground">
-                  <span className="font-medium">{label}: </span>
+                  <span className="font-medium">{m(label)}: </span>
                   {text}
                 </p>
               ) : null,

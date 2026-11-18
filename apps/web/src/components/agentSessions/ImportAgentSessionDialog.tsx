@@ -13,8 +13,10 @@ import {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
+import { msg, T, useGT } from "gt-react";
 import { useEffect, useState } from "react";
 
+import { m } from "~/i18n/messages";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { waitForThreadShell } from "~/state/entities";
 import { serverEnvironment } from "~/state/server";
@@ -85,6 +87,7 @@ function failureMessage(error: unknown, fallback: string): string {
 }
 
 function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedProjectRef }) {
+  const gt = useGT();
   const navigate = useNavigate();
   const listSessions = useAtomCommand(serverEnvironment.listAgentSessions, {
     reportFailure: false,
@@ -109,7 +112,7 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
     if (isAtomCommandInterrupted(result)) return null;
     return {
       status: "error",
-      message: failureMessage(squashAtomCommandFailure(result), "Could not list sessions."),
+      message: failureMessage(squashAtomCommandFailure(result), m(msg("Could not list sessions."))),
     };
   };
 
@@ -135,9 +138,12 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
     if (!(await waitForThreadShell(threadRef))) {
       toastManager.add({
         type: "error",
-        title: "Could not open the thread",
-        description:
-          "The thread exists, but its data did not reach this client. Reconnect and try opening it from the sidebar.",
+        title: m(msg("Could not open the thread")),
+        description: m(
+          msg(
+            "The thread exists, but its data did not reach this client. Reconnect and try opening it from the sidebar.",
+          ),
+        ),
       });
       return;
     }
@@ -165,17 +171,17 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
         if (!isAtomCommandInterrupted(result)) {
           toastManager.add({
             type: "error",
-            title: "Could not import session",
+            title: m(msg("Could not import session")),
             description: failureMessage(
               squashAtomCommandFailure(result),
-              "The session could not be imported.",
+              m(msg("The session could not be imported.")),
             ),
           });
         }
         return;
       }
       if (result.value.imported) {
-        toastManager.add({ type: "success", title: "Session imported" });
+        toastManager.add({ type: "success", title: m(msg("Session imported")) });
       }
       await openThread(result.value.threadId);
     })().finally(() => {
@@ -192,35 +198,39 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
     >
       <DialogPopup className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Import CLI session</DialogTitle>
+          <DialogTitle>
+            <T>Import CLI session</T>
+          </DialogTitle>
           <DialogDescription>
-            Continue a Claude Code or Codex session you started in a terminal in this project's
-            folder.
+            <T>
+              Continue a Claude Code or Codex session you started in a terminal in this project's
+              folder.
+            </T>
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
           {listState.status === "loading" ? (
             <div className="flex items-center gap-2 py-6 text-muted-foreground text-sm">
               <Spinner size="sm" />
-              Loading sessions
+              <T>Loading sessions</T>
             </div>
           ) : listState.status === "error" ? (
             <div className="flex flex-col items-start gap-3 py-2">
               <p className="text-destructive text-sm">{listState.message}</p>
               <Button type="button" size="sm" variant="outline" onClick={() => void retry()}>
-                Retry
+                <T>Retry</T>
               </Button>
             </div>
           ) : listState.sessions.length === 0 ? (
             <p className="py-6 text-muted-foreground text-sm">
-              No Claude Code or Codex sessions found for this folder.
+              <T>No Claude Code or Codex sessions found for this folder.</T>
             </p>
           ) : (
             <ul className="divide-y divide-border/60">
               {listState.sessions.map((session) => {
                 const key = sessionKey(session);
                 const label = providerLabel(session.provider);
-                const title = session.title.trim() || "Untitled session";
+                const title = session.title.trim() || gt("Untitled session");
                 const isOpen = session.importedThreadId !== null;
                 const isPending = pendingKey === key;
                 return (
@@ -239,7 +249,7 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
                       </p>
                       {isAgentSessionRecentlyActive(session, listState.loadedAtMs) ? (
                         <p className="text-warning-foreground text-xs">
-                          May still be open in a terminal. Close it there first.
+                          <T>May still be open in a terminal. Close it there first.</T>
                         </p>
                       ) : null}
                     </div>
@@ -250,7 +260,11 @@ function ImportAgentSessionDialog({ projectRef }: { readonly projectRef: ScopedP
                       disabled={pendingKey !== null || (!isOpen && !canImport)}
                       onClick={() => void runRowAction(session)}
                     >
-                      {isOpen ? "Open" : isPending ? "Importing..." : "Import"}
+                      {isOpen
+                        ? gt("Open", { $context: "opens an imported session" })
+                        : isPending
+                          ? gt("Importing...")
+                          : gt("Import", { $context: "button that imports a session" })}
                     </Button>
                   </li>
                 );

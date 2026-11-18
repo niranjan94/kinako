@@ -23,7 +23,6 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import {
   resolvePullRequestAuthorFilter,
-  type IssueListState,
   PositiveInt,
   TrimmedNonEmptyString,
   type PullRequestAction,
@@ -66,7 +65,6 @@ import {
   PullRequestReadsGraphQLGroup,
 } from "./pullRequestReads.graphql.ts";
 import { PullRequestReviewsGraphQLGroup } from "./pullRequestReviews.graphql.ts";
-import { IssueNodeId } from "./issues.graphql.ts";
 import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import {
@@ -110,14 +108,6 @@ import {
   toReviewThreadPage,
   toStackMembership,
   toViewerPermissions,
-  LenientIssueDetail,
-  LenientIssueSearch,
-  toIssueDetailPage,
-  toIssueNodeId,
-  toIssueSearchBatch,
-  type GitHubIssue,
-  type GitHubIssueDetailPage,
-  type GitHubIssueSearchBatch,
   decodePullRequestFilesJson,
   decodePullRequestStacksJson,
   buildLabelRequest,
@@ -341,6 +331,11 @@ const isGraphQlClientError = (error: unknown): error is GraphQLClientError.Graph
 
 const { isNotFoundOnly } = GitHubGraphQlClient;
 
+const isGitHubApiResponseError = Schema.is(GitHubRequestPolicy.GitHubApiResponseError);
+
+const isGitHubServerError = (error: unknown): boolean =>
+  isGitHubApiResponseError(error) && error.status >= 500;
+
 const isMissingPullRef = ({ path, type }: GraphQLClientError.GraphQLError): boolean =>
   type === "NOT_FOUND" && path?.join(".") === "repository.pullRequest.baseRef.compare";
 
@@ -447,23 +442,14 @@ const collect = Effect.fn("GitHubPullRequestApi.collect")(function* <Item, E>(
 
 const PULL_REQUEST_FALLBACK_MAX_ROWS = 1_000;
 
-const DIFF_FILES_PAGE_SIZE = 100;
+// Larger pages make GitHub drop patches and report those files as 0/0.
+const DIFF_FILES_PAGE_SIZE = 30;
 const FILES_VIEWED_MAX_PAGES = 5;
 const FILES_VIEWED_PER_REQUEST = 100;
 
 export const NODE_ID_CACHE_CAPACITY = 128;
 
 const REVIEW_THREAD_PAGES = 10;
-
-/** Pages of a hundred comments an issue's conversation is read to. */
-const ISSUE_COMMENT_PAGES = 5;
-
-export interface GitHubIssueDetail extends GitHubIssue {
-  readonly body: string;
-  readonly comments: ReadonlyArray<PullRequestComment>;
-  readonly commentsTruncated: boolean;
-  readonly viewerCanComment: boolean;
-}
 
 const CHECK_CONTEXT_PAGES = 10;
 
@@ -800,35 +786,6 @@ export class GitHubPullRequestApi extends Context.Service<
       readonly body: string;
     }) => Effect.Effect<void, GitHubPullRequestApiError>;
 
-    /** One slice of issues across repositories on one host, newest update first. */
-    readonly listIssues: (input: {
-      readonly cwd: string;
-      readonly host: string;
-      readonly repositories: ReadonlyArray<string>;
-      readonly state: IssueListState;
-      readonly limit: number;
-      readonly query?: string | undefined;
-      readonly cursor?: ProviderListCursor | undefined;
-    }) => Effect.Effect<
-      { readonly items: ReadonlyArray<GitHubIssue>; readonly truncated: boolean },
-      GitHubPullRequestApiError
-    >;
-
-    readonly getIssue: (input: {
-      readonly cwd: string;
-      readonly repository: string;
-      readonly host: string;
-      readonly number: number;
-    }) => Effect.Effect<GitHubIssueDetail, GitHubPullRequestApiError>;
-
-    readonly commentOnIssue: (input: {
-      readonly cwd: string;
-      readonly repository: string;
-      readonly host: string;
-      readonly number: number;
-      readonly body: string;
-    }) => Effect.Effect<void, GitHubPullRequestApiError>;
-
     readonly submitReview: (input: {
       readonly cwd: string;
       readonly repository: string;
@@ -979,30 +936,6 @@ function matchesUnsortedListing(
 
 const SEARCH_REPOSITORY = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
-/**
- * A slice of issues as one GitHub search. Null where a repository is not `owner/name`.
- */
-function issueSearchQuery(input: {
-  readonly repositories: ReadonlyArray<string>;
-  readonly state: IssueListState;
-  readonly query?: string | undefined;
-  readonly cursor?: ProviderListCursor | undefined;
-}): string | null {
-  if (input.repositories.length === 0) return null;
-  const repositories = input.repositories.map((repository) => repository.trim());
-  if (!repositories.every((repository) => SEARCH_REPOSITORY.test(repository))) return null;
-  const query = input.query?.trim() ?? "";
-  return [
-    "is:issue",
-    ...(input.state === "open" ? ["is:open"] : []),
-    ...(input.state === "closed" ? ["is:closed"] : []),
-    ...(query.length === 0 ? [] : [searchPhrase(query)]),
-    ...(input.cursor === undefined ? [] : [`updated:<=${input.cursor.updatedBefore}`]),
-    "sort:updated-desc",
-    ...repositories.map((repository) => `repo:${repository}`),
-  ].join(" ");
-}
-
 /** Unquoted repo: values must not inject qualifiers. */
 function searchQuery(input: {
   readonly repositories: ReadonlyArray<string>;
@@ -1061,7 +994,6 @@ const PullRequestGraphQLGroup = GraphQLGroup.merge(
   PullRequestReadsGraphQLGroup,
   PullRequestReviewsGraphQLGroup,
   PullRequestMutationsGraphQLGroup,
-  GraphQLGroup.make(LenientIssueSearch, LenientIssueDetail, IssueNodeId),
 ).middleware(GitHubGraphQlClient.GitHubGraphQlAuth);
 
 interface RestReadInput<A> {
@@ -2028,13 +1960,16 @@ export const make = Effect.gen(function* () {
             });
           }),
         );
-      // Unindexed repositories silently return no search rows; fall back to the repository listing.
-      const hasQuery = (input.query?.trim().length ?? 0) > 0;
+      // Unindexed repositories silently return no search rows, and search can fail while the
+      // listing answers. The listing cannot apply a text query or an `updated:<=` cursor.
+      const listingServes = input.cursor === undefined && (input.query?.trim().length ?? 0) === 0;
       const listed = read(true).pipe(
-        Effect.filterOrElse(
-          (batch) => batch.items.length > 0 || input.cursor !== undefined || hasQuery,
-          () => read(false),
-        ),
+        Effect.matchEffect({
+          onSuccess: (batch) =>
+            batch.items.length > 0 || !listingServes ? Effect.succeed(batch) : read(false),
+          onFailure: (error) =>
+            listingServes && isGitHubServerError(error) ? read(false) : Effect.fail(error),
+        }),
         Effect.filterOrElse(
           (batch) => !stacks || batch.items.length === 0,
           (batch) =>
@@ -2925,84 +2860,6 @@ export const make = Effect.gen(function* () {
           client
             .AddComment({ subjectId, body: input.body })
             .pipe(graphql({ ...input, operation: "commentOnPullRequest" })),
-        ),
-        Effect.asVoid,
-      );
-    }),
-
-    listIssues: Effect.fn("GitHubPullRequestApi.listIssues")(function* (input) {
-      const query = issueSearchQuery(input);
-      if (query === null) {
-        return yield* new GitHubRepositorySelectorError({
-          cwd: input.cwd,
-          operation: "listIssues",
-        });
-      }
-      // One row over the page is the probe for a next page.
-      const rows = input.limit + 1;
-      const pages: GitHubIssueSearchBatch[] = [];
-      const seen = new Set<string>();
-      let fetched = 0;
-      let after: string | null = null;
-      let truncated = false;
-      while (true) {
-        const page: GitHubIssueSearchBatch = yield* client
-          .IssueSearch({ q: query, first: pageRows(rows - fetched), after })
-          .pipe(graphql({ ...input, operation: "listIssues" }), Effect.map(toIssueSearchBatch));
-        pages.push(page);
-        fetched += page.rawCount;
-        const next = page.endCursor;
-        if (next === null) break;
-        if (seen.has(next) || fetched >= rows) {
-          truncated = true;
-          break;
-        }
-        seen.add(next);
-        after = next;
-      }
-      return {
-        items: pages.flatMap((page) => page.items).slice(0, input.limit),
-        truncated: truncated || fetched > input.limit,
-      };
-    }),
-
-    getIssue: Effect.fn("GitHubPullRequestApi.getIssue")(function* (input) {
-      const { owner, name } = parseRepositorySelector(input.repository);
-      const target = { ...input, operation: "getIssue" };
-      const comments: PullRequestComment[] = [];
-      let first: GitHubIssueDetail | null = null;
-      let after: string | null = null;
-      for (let page = 0; page < ISSUE_COMMENT_PAGES; page++) {
-        const read: GitHubIssueDetailPage = yield* client
-          .IssueDetail({ owner, name, number: input.number, after })
-          .pipe(
-            graphql(target),
-            Effect.map((result) => toIssueDetailPage(result, input.repository)),
-            Effect.flatMap(found(target)),
-          );
-        comments.push(...read.comments);
-        after = read.nextCommentsCursor;
-        first ??= {
-          ...read.issue,
-          commentCount: read.commentCount,
-          comments: [],
-          commentsTruncated: false,
-          viewerCanComment: read.viewerCanComment,
-        };
-        if (after === null) break;
-      }
-      return { ...first!, comments, commentsTruncated: after !== null };
-    }),
-
-    commentOnIssue: Effect.fn("GitHubPullRequestApi.commentOnIssue")(function (input) {
-      const { owner, name } = parseRepositorySelector(input.repository);
-      const target = { ...input, operation: "commentOnIssue" };
-      return client.IssueNodeId({ owner, name, number: input.number }).pipe(
-        graphql({ ...target, allowReserve: true }),
-        Effect.map(toIssueNodeId),
-        Effect.flatMap(found(target)),
-        Effect.flatMap((subjectId) =>
-          client.AddComment({ subjectId, body: input.body }).pipe(graphql(target)),
         ),
         Effect.asVoid,
       );

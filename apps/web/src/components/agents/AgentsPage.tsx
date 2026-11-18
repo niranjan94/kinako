@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { T, useGT, useMessages } from "gt-react";
 import { useNavigate } from "@tanstack/react-router";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { useProjects, useThreadShells } from "../../state/entities";
@@ -14,6 +15,8 @@ import { OfficeFrame } from "./OfficeFrame";
 import { buildOfficeRoster, filterOfficeRoster, type OfficeScope } from "./officeRoster";
 
 export function AgentsPage() {
+  const gt = useGT();
+  const m = useMessages();
   const threads = useThreadShells();
   const projects = useProjects();
   const { environments } = useEnvironments();
@@ -24,18 +27,22 @@ export function AgentsPage() {
   const [project, setProject] = useState("all");
   const nowMinute = useNowMinute();
   const query = search.trim().toLowerCase();
-  const roster = buildOfficeRoster(threads, {
-    now: `${nowMinute}:00Z`,
-    projectName: (thread) =>
-      projects.find(
-        (item) => item.environmentId === thread.environmentId && item.id === thread.projectId,
-      )?.title ?? "Project",
-    connected: (thread) =>
-      environments.some(
-        (item) =>
-          item.environmentId === thread.environmentId && item.connection.phase === "connected",
-      ),
-  }).filter(
+  const roster = buildOfficeRoster(
+    threads,
+    {
+      now: `${nowMinute}:00Z`,
+      projectName: (thread) =>
+        projects.find(
+          (item) => item.environmentId === thread.environmentId && item.id === thread.projectId,
+        )?.title ?? gt("Project"),
+      connected: (thread) =>
+        environments.some(
+          (item) =>
+            item.environmentId === thread.environmentId && item.connection.phase === "connected",
+        ),
+    },
+    m,
+  ).filter(
     (agent) =>
       (environment === "all" || agent.thread.environmentId === environment) &&
       (project === "all" ||
@@ -60,18 +67,21 @@ export function AgentsPage() {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden">
       <WorkspacePageHeader electron={isElectron}>
-        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">Agent office</h1>
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
+          <T>Agent office</T>
+        </h1>
         <span className="text-xs text-muted-foreground">
-          {agents.length} threads · {working} working
-          {snoozed > 0 && ` · ${snoozed} snoozed`}
-          {subagentCount > 0 && ` · ${subagentCount} subagent${subagentCount === 1 ? "" : "s"}`}
+          {gt("{count} threads · {working} working", { count: agents.length, working })}
+          {snoozed > 0 && ` · ${gt("{count} snoozed", { count: snoozed })}`}
+          {subagentCount > 0 &&
+            ` · ${gt("{count, plural, one {{count} subagent} other {{count} subagents}}", { count: subagentCount })}`}
         </span>
       </WorkspacePageHeader>
       <div className="grid grid-cols-2 items-center gap-2 border-b px-4 py-2 sm:flex sm:flex-wrap">
         <div className="min-w-0 sm:w-48">
           <Input
-            aria-label="Search threads"
-            placeholder="Find a thread…"
+            aria-label={gt("Search threads")}
+            placeholder={gt("Find a thread…")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -84,16 +94,18 @@ export function AgentsPage() {
               setProject("all");
             }}
           >
-            <SelectTrigger size="sm" aria-label="Environment">
+            <SelectTrigger size="sm" aria-label={gt("Environment")}>
               <SelectValue>
                 {environment === "all"
-                  ? "All environments"
+                  ? gt("All environments")
                   : (environments.find((item) => item.environmentId === environment)?.label ??
-                    "Environment")}
+                    gt("Environment"))}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup>
-              <SelectItem value="all">All environments</SelectItem>
+              <SelectItem value="all">
+                <T>All environments</T>
+              </SelectItem>
               {environments.map((item) => (
                 <SelectItem key={item.environmentId} value={item.environmentId}>
                   {item.label}
@@ -104,16 +116,18 @@ export function AgentsPage() {
         </div>
         <div className="min-w-0 sm:w-44">
           <Select value={project} onValueChange={(value) => setProject(value ?? "all")}>
-            <SelectTrigger size="sm" aria-label="Project">
+            <SelectTrigger size="sm" aria-label={gt("Project")}>
               <SelectValue>
                 {project === "all"
-                  ? "All projects"
+                  ? gt("All projects")
                   : (projects.find((item) => `${item.environmentId}:${item.id}` === project)
-                      ?.title ?? "Project")}
+                      ?.title ?? gt("Project"))}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup>
-              <SelectItem value="all">All projects</SelectItem>
+              <SelectItem value="all">
+                <T>All projects</T>
+              </SelectItem>
               {projects
                 .filter((item) => environment === "all" || item.environmentId === environment)
                 .map((item) => (
@@ -129,19 +143,25 @@ export function AgentsPage() {
         </div>
         <div className="min-w-0 sm:w-44">
           <Select value={scope} onValueChange={(value) => setScope(value ?? "all")}>
-            <SelectTrigger size="sm" aria-label="Threads to show">
+            <SelectTrigger size="sm" aria-label={gt("Threads to show")}>
               <SelectValue>
                 {scope === "active"
-                  ? "Working + needs input"
+                  ? gt("Working + needs input")
                   : scope === "all"
-                    ? "All unsettled threads"
-                    : "Working + recent"}
+                    ? gt("All unsettled threads")
+                    : gt("Working + recent")}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup>
-              <SelectItem value="all">All unsettled threads</SelectItem>
-              <SelectItem value="active">Working + needs input</SelectItem>
-              <SelectItem value="recent">Working + recent</SelectItem>
+              <SelectItem value="all">
+                <T>All unsettled threads</T>
+              </SelectItem>
+              <SelectItem value="active">
+                <T>Working + needs input</T>
+              </SelectItem>
+              <SelectItem value="recent">
+                <T>Working + recent</T>
+              </SelectItem>
             </SelectPopup>
           </Select>
         </div>

@@ -1,4 +1,5 @@
-import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
+import { msg, useGT } from "gt-react";
+import { writeTextToClipboard, type ClipboardTarget } from "../../hooks/useCopyToClipboard";
 import type { DatabaseCell, DatabaseColumnInfo, DatabaseResultColumn } from "@t3tools/contracts";
 import { DataGrid, type Column, type SortColumn } from "react-data-grid";
 import { memo, useEffect, useRef, useState } from "react";
@@ -16,6 +17,18 @@ import { DatabaseToolbarButton } from "./DatabaseToolbarButton";
 import { Dialog, DialogHeader, DialogTitle, DialogPanel, DialogPopup } from "../ui/dialog";
 import "react-data-grid/lib/styles.css";
 import "./database.css";
+
+const SELECTION_CLIPBOARD_TARGET: ClipboardTarget = {
+  target: "database selection",
+  unavailableMessage: msg("Clipboard API is unavailable while copying the selection."),
+  failureMessage: msg("Failed to copy the selection to the clipboard."),
+};
+
+const CELL_CLIPBOARD_TARGET: ClipboardTarget = {
+  target: "cell value",
+  unavailableMessage: msg("Clipboard API is unavailable while copying the cell value."),
+  failureMessage: msg("Failed to copy the cell value to the clipboard."),
+};
 
 const EMPTY_COLUMN_INFO: readonly DatabaseColumnInfo[] = [];
 
@@ -68,6 +81,7 @@ export const DatabaseGrid = memo(function DatabaseGrid({
   orderBy?: string;
   onOrderBy?: (orderBy: string) => void;
 }) {
+  const gt = useGT();
   const [range, setRange] = useState<{ anchor: Position; end: Position } | null>(null);
   const [viewer, setViewer] = useState<{ name: string; value: DatabaseCell } | null>(null);
   const dragging = useRef(false);
@@ -166,7 +180,9 @@ export const DatabaseGrid = memo(function DatabaseGrid({
             }}
             aria-label={
               foreignKey
-                ? `References ${foreignKey.schema}.${foreignKey.object}.${foreignKey.column}`
+                ? gt("References {target}", {
+                    target: `${foreignKey.schema}.${foreignKey.object}.${foreignKey.column}`,
+                  })
                 : undefined
             }
           >
@@ -233,7 +249,7 @@ export const DatabaseGrid = memo(function DatabaseGrid({
       }}
     >
       <DataGrid
-        aria-label="Database results"
+        aria-label={gt("Database results")}
         rowHeight={28}
         headerRowHeight={30}
         columns={gridColumns}
@@ -273,7 +289,7 @@ export const DatabaseGrid = memo(function DatabaseGrid({
           if (column.idx === 0) return;
           const value = row.cells[column.idx - 1];
           if (value !== undefined)
-            setViewer({ name: columns[column.idx - 1]?.name ?? "Value", value });
+            setViewer({ name: columns[column.idx - 1]?.name ?? gt("Value"), value });
         }}
         onScroll={(event) => {
           const element = event.currentTarget;
@@ -288,40 +304,48 @@ export const DatabaseGrid = memo(function DatabaseGrid({
       <div className="flex h-8 shrink-0 items-center gap-1 border-t bg-muted/20 px-2 text-2xs text-muted-foreground">
         <Table2Icon className="mr-1 size-3.5" />
         <span role="status">
-          {rows.length.toLocaleString()} {rows.length === 1 && !hasMore ? "row" : "rows"}
+          {gt("{count, plural, one {{formatted} row} other {{formatted} rows}}", {
+            count: rows.length === 1 && hasMore ? 2 : rows.length,
+            formatted: rows.length.toLocaleString(),
+          })}
           {hasMore ? "+" : ""}
-          {durationMs !== undefined ? ` · ${durationMs} ms` : ""}
+          {durationMs !== undefined ? ` · ${gt("{durationMs} ms", { durationMs })}` : ""}
         </span>
         {hasMore && expires && (
-          <span className="ml-2 truncate">· Unread rows expire after 60 seconds idle</span>
+          <span className="ml-2 truncate">· {gt("Unread rows expire after 60 seconds idle")}</span>
         )}
         {bounds && (
           <span className="ml-2">
-            {bounds.bottom - bounds.top + 1} × {bounds.right - bounds.left + 1} selected
+            {gt("{rows} × {columns} selected", {
+              rows: bounds.bottom - bounds.top + 1,
+              columns: bounds.right - bounds.left + 1,
+            })}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
           <DatabaseToolbarButton
-            label="Copy selection"
+            label={gt("Copy selection")}
             disabled={!range}
-            onClick={() => void writeTextToClipboard(selectedText(), "database selection")}
+            onClick={() => void writeTextToClipboard(selectedText(), SELECTION_CLIPBOARD_TARGET)}
           >
             <CopyIcon />
           </DatabaseToolbarButton>
           <Menu>
             <MenuTrigger
-              render={<Button size="icon-xs" variant="ghost" aria-label="Export results" />}
+              render={<Button size="icon-xs" variant="ghost" aria-label={gt("Export results")} />}
             >
               <DownloadIcon />
             </MenuTrigger>
             <MenuPopup align="end">
-              <MenuItem onClick={() => download("csv")}>Export loaded rows as CSV</MenuItem>
-              <MenuItem onClick={() => download("json")}>Export loaded rows as JSON</MenuItem>
+              <MenuItem onClick={() => download("csv")}>{gt("Export loaded rows as CSV")}</MenuItem>
+              <MenuItem onClick={() => download("json")}>
+                {gt("Export loaded rows as JSON")}
+              </MenuItem>
             </MenuPopup>
           </Menu>
           {hasMore && (
             <Button variant="ghost" size="xs" disabled={loading} onClick={onLoadMore}>
-              {loading ? "Loading…" : "Next 200"}
+              {loading ? gt("Loading…") : gt("Next 200")}
               <ChevronRightIcon />
             </Button>
           )}
@@ -352,8 +376,10 @@ export const DatabaseGrid = memo(function DatabaseGrid({
                     <div className="flex items-center gap-2 pt-2">
                       {typeof viewer.value === "object" && viewer.value !== null && (
                         <p className="mr-auto text-xs text-muted-foreground">
-                          Showing the first {viewer.value.truncated.length.toLocaleString()} of{" "}
-                          {viewer.value.length.toLocaleString()} characters.
+                          {gt("Showing the first {shown} of {total} characters.", {
+                            shown: viewer.value.truncated.length.toLocaleString(),
+                            total: viewer.value.length.toLocaleString(),
+                          })}
                         </p>
                       )}
                       <Button
@@ -361,10 +387,10 @@ export const DatabaseGrid = memo(function DatabaseGrid({
                         variant="outline"
                         className="ml-auto"
                         disabled={viewer.value === null}
-                        onClick={() => void writeTextToClipboard(value, "cell value")}
+                        onClick={() => void writeTextToClipboard(value, CELL_CLIPBOARD_TARGET)}
                       >
                         <CopyIcon />
-                        Copy value
+                        {gt("Copy value")}
                       </Button>
                     </div>
                   </>

@@ -1,14 +1,15 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type { ClientSettings, NotificationSoundTheme } from "@t3tools/contracts/settings";
+import { msg } from "gt-react";
 
 import { NOTIFICATION_SOUND_THEMES } from "./notificationSounds";
 
 type NotificationMode = ClientSettings["notificationMode"];
 export const NOTIFICATION_MODE_LABELS = {
-  off: "Off",
-  notifications: "Notifications only",
-  sound: "Sound only",
-  "notifications-and-sound": "Notifications with sound",
+  off: msg("Off", { $context: "notification setting, no notifications or sound" }),
+  notifications: msg("Notifications only"),
+  sound: msg("Sound only"),
+  "notifications-and-sound": msg("Notifications with sound"),
 } satisfies Record<NotificationMode, string>;
 
 export function hasNotificationSound(mode: NotificationMode) {

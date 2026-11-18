@@ -9,8 +9,10 @@ import type {
   TurnItemId,
 } from "@t3tools/contracts";
 import { ChevronDownIcon, ListCollapseIcon, RotateCcwIcon } from "lucide-react";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { useState } from "react";
 
+import { m, type MessageResolver } from "../../i18n/messages";
 import { useRunHistory } from "../../state/queries";
 import ChatMarkdown from "../ChatMarkdown";
 import {
@@ -45,21 +47,32 @@ export interface ConversationSummaryTimelineControls {
   readonly activeProviderThreadId: ProviderThreadId | null;
 }
 
-const SUMMARY_DIRECTION_TITLES: Record<OrchestrationV2ConversationSummaryDirection, string> = {
-  from_here: "Summarize from here",
-  up_to_here: "Summarize up to here",
+const SUMMARY_DIRECTION_TITLES: Record<
+  OrchestrationV2ConversationSummaryDirection,
+  { readonly title: string; readonly confirmTitle: string }
+> = {
+  from_here: {
+    title: msg("Summarize from here"),
+    confirmTitle: msg("Summarize from here?"),
+  },
+  up_to_here: {
+    title: msg("Summarize up to here"),
+    confirmTitle: msg("Summarize up to here?"),
+  },
 };
 
 function fromHereUnavailableReason(input: {
   readonly controls: ConversationSummaryTimelineControls;
   readonly messageId: MessageId;
+  readonly resolve?: MessageResolver;
 }): string | null {
+  const resolve = input.resolve ?? m;
   if (!input.controls.supportsConversationRollback) {
-    return "This provider cannot rewind its conversation.";
+    return resolve(msg("This provider cannot rewind its conversation."));
   }
   return input.controls.fromHereMessageIds.has(input.messageId)
     ? null
-    : "There is no checkpoint before this message.";
+    : resolve(msg("There is no checkpoint before this message."));
 }
 
 export function SummarizeMessageMenu(props: {
@@ -67,10 +80,12 @@ export function SummarizeMessageMenu(props: {
   readonly controls: ConversationSummaryTimelineControls;
   readonly disabled: boolean;
 }) {
-  const fromHereReason = fromHereUnavailableReason(props);
+  const gt = useGT();
+  const m = useMessages();
+  const fromHereReason = fromHereUnavailableReason({ ...props, resolve: m });
   const upToHereReason = props.controls.upToHereMessageIds.has(props.messageId)
     ? null
-    : "There is nothing before this message to summarize.";
+    : gt("There is nothing before this message to summarize.");
   const options: ReadonlyArray<{
     readonly direction: OrchestrationV2ConversationSummaryDirection;
     readonly reason: string | null;
@@ -90,7 +105,7 @@ export function SummarizeMessageMenu(props: {
                   size="xs"
                   variant="ghost"
                   disabled={props.disabled}
-                  aria-label="Summarize conversation"
+                  aria-label={gt("Summarize conversation")}
                 />
               }
             />
@@ -98,7 +113,7 @@ export function SummarizeMessageMenu(props: {
         >
           <ListCollapseIcon className="size-3" />
         </TooltipTrigger>
-        <TooltipPopup side="top">Summarize conversation</TooltipPopup>
+        <TooltipPopup side="top">{gt("Summarize conversation")}</TooltipPopup>
       </Tooltip>
       <MenuPopup align="end">
         {options.map((option) => (
@@ -109,7 +124,7 @@ export function SummarizeMessageMenu(props: {
             onClick={() => props.controls.onSummarize(props.messageId, option.direction)}
           >
             <span className="flex min-w-0 flex-col">
-              <span>{SUMMARY_DIRECTION_TITLES[option.direction]}</span>
+              <span>{m(SUMMARY_DIRECTION_TITLES[option.direction].title)}</span>
               {option.reason === null ? null : (
                 <span className="text-muted-foreground text-xs">{option.reason}</span>
               )}
@@ -129,6 +144,7 @@ function SummarizedTurns(props: {
   readonly threadRef: ScopedThreadRef | null;
   readonly skills: ReadonlyArray<ServerProviderSkill>;
 }) {
+  const gt = useGT();
   const history = useRunHistory({
     environmentId: props.environmentId,
     threadId: props.threadId,
@@ -137,7 +153,7 @@ function SummarizedTurns(props: {
   if (history.data == null) {
     return (
       <p className="text-muted-foreground text-xs">
-        {history.error ?? "Loading summarized turns…"}
+        {history.error ?? gt("Loading summarized turns…")}
       </p>
     );
   }
@@ -147,10 +163,10 @@ function SummarizedTurns(props: {
         <div key={message.itemId} className="flex flex-col gap-1">
           <span className="font-medium text-muted-foreground text-xs">
             {message.kind === "user_message"
-              ? "You"
+              ? gt("You", { $context: "label for the user's own message" })
               : message.kind === "assistant_message"
-                ? "Agent"
-                : `Agent · ${message.kind.replaceAll("_", " ")}`}
+                ? gt("Agent", { $context: "label for the agent's message" })
+                : gt("Agent · {kind}", { kind: message.kind.replaceAll("_", " ") })}
           </span>
           <div className="text-muted-foreground text-xs leading-relaxed">
             <ChatMarkdown
@@ -178,6 +194,7 @@ export function ConversationSummaryRow(props: {
   readonly skills: ReadonlyArray<ServerProviderSkill>;
   readonly disabled: boolean;
 }) {
+  const gt = useGT();
   const { item } = props;
   const [turnsOpen, setTurnsOpen] = useState(false);
   const restorable =
@@ -203,13 +220,17 @@ export function ConversationSummaryRow(props: {
       <div className="flex flex-wrap items-center justify-center gap-1">
         <Collapsible>
           <CollapsibleTrigger render={<Button type="button" size="micro" variant="ghost-muted" />}>
-            Summary
+            <T>Summary</T>
             <ChevronDownIcon aria-hidden="true" />
           </CollapsibleTrigger>
           <CollapsiblePanel>
             <div className="mt-1 rounded-lg border border-border/60 px-3 py-2 text-muted-foreground text-xs leading-relaxed">
               {item.range.instructions === undefined ? null : (
-                <p className="mb-2 italic">Focus: {item.range.instructions}</p>
+                <p className="mb-2 italic">
+                  <T>
+                    Focus: <Var>{item.range.instructions}</Var>
+                  </T>
+                </p>
               )}
               <ChatMarkdown
                 text={item.summary ?? ""}
@@ -226,7 +247,12 @@ export function ConversationSummaryRow(props: {
             <CollapsibleTrigger
               render={<Button type="button" size="micro" variant="ghost-muted" />}
             >
-              {turnCount === 1 ? "1 summarized turn" : `${turnCount} summarized turns`}
+              {gt(
+                "{count, plural, one {{count} summarized turn} other {{count} summarized turns}}",
+                {
+                  count: turnCount,
+                },
+              )}
               <ChevronDownIcon aria-hidden="true" />
             </CollapsibleTrigger>
             <CollapsiblePanel>
@@ -254,7 +280,7 @@ export function ConversationSummaryRow(props: {
             onClick={() => props.controls?.onRestore(item.id)}
           >
             <RotateCcwIcon aria-hidden="true" />
-            Restore full context
+            <T>Restore full context</T>
           </Button>
         ) : null}
       </div>
@@ -268,6 +294,8 @@ export function SummarizeConversationDialog(props: {
   readonly onCancel: () => void;
   readonly onConfirm: (instructions: string) => void;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const [instructions, setInstructions] = useState("");
   const direction = props.direction ?? "from_here";
   return (
@@ -282,24 +310,32 @@ export function SummarizeConversationDialog(props: {
     >
       <AlertDialogPopup>
         <AlertDialogHeader>
-          <AlertDialogTitle>{SUMMARY_DIRECTION_TITLES[direction]}?</AlertDialogTitle>
+          <AlertDialogTitle>{m(SUMMARY_DIRECTION_TITLES[direction].confirmTitle)}</AlertDialogTitle>
           <AlertDialogDescription>
             {direction === "from_here"
-              ? "This message and everything after it are replaced by a summary in the agent's context. Your prompt and attachments return to the composer. Files are not changed."
-              : "Everything before this message is replaced by a summary in the agent's context. This message and everything after it stay as they are. Files are not changed, and you can restore the full context later."}
+              ? gt(
+                  "This message and everything after it are replaced by a summary in the agent's context. Your prompt and attachments return to the composer. Files are not changed.",
+                )
+              : gt(
+                  "Everything before this message is replaced by a summary in the agent's context. This message and everything after it stay as they are. Files are not changed, and you can restore the full context later.",
+                )}
           </AlertDialogDescription>
           <Label htmlFor="summarize-conversation-instructions" className="mt-2">
-            Focus (optional)
+            <T>Focus (optional)</T>
           </Label>
           <Textarea
             id="summarize-conversation-instructions"
             value={instructions}
-            placeholder="What the summary should keep, such as decisions about the database schema"
+            placeholder={gt(
+              "What the summary should keep, such as decisions about the database schema",
+            )}
             onChange={(event) => setInstructions(event.target.value)}
           />
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+          <AlertDialogClose render={<Button variant="outline" />}>
+            <T>Cancel</T>
+          </AlertDialogClose>
           <Button
             onClick={() => {
               const value = instructions;
@@ -307,7 +343,7 @@ export function SummarizeConversationDialog(props: {
               props.onConfirm(value);
             }}
           >
-            Summarize
+            <T>Summarize</T>
           </Button>
         </AlertDialogFooter>
       </AlertDialogPopup>

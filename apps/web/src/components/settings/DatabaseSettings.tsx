@@ -7,6 +7,7 @@ import {
 } from "@t3tools/client-runtime/state/database";
 import type { DatabaseConnection, EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
+import { useGT } from "gt-react";
 import { useContext, useState, type ReactNode } from "react";
 import { databaseState } from "../../state/database";
 import { useEnvironments } from "../../state/environments";
@@ -43,17 +44,18 @@ function ConnectionLoader({
   projectId?: ProjectId;
   label: string;
 }) {
+  const gt = useGT();
   const { error, allowed } = useDatabaseConnections(environmentId, projectId);
   return error ? (
     <SettingsRow
-      title={`Could not load connections on ${label}`}
+      title={gt("Could not load connections on {label}", { label })}
       description={error}
       role="alert"
     />
   ) : !allowed ? (
     <SettingsRow
-      title={`No database access on ${label}`}
-      description="Database access requires terminal permission on this environment."
+      title={gt("No database access on {label}", { label })}
+      description={gt("Database access requires terminal permission on this environment.")}
     />
   ) : null;
 }
@@ -73,6 +75,7 @@ function ConnectionRow({
   onDelete: () => void;
   children?: ReactNode;
 }) {
+  const gt = useGT();
   const canEdit = useAtomValue(databaseState.saveConnection.permissionAtom(environmentId));
   return (
     <SettingsRow
@@ -81,7 +84,7 @@ function ConnectionRow({
           <span className="truncate">{connection.name}</span>
           {connection.readOnly && (
             <Badge size="sm" variant="outline">
-              Read-only
+              {gt("Read-only")}
             </Badge>
           )}
         </span>
@@ -97,10 +100,10 @@ function ConnectionRow({
       control={
         <>
           <Button size="sm" variant="outline" disabled={!canEdit} onClick={onEdit}>
-            Edit
+            {gt("Edit")}
           </Button>
           <Button size="sm" variant="ghost" disabled={!canEdit} onClick={onDelete}>
-            Delete
+            {gt("Delete")}
           </Button>
         </>
       }
@@ -111,6 +114,7 @@ function ConnectionRow({
 }
 
 export function DatabaseSettings() {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const { scope, targets, connectedEnvironments, target } = useSettingsScope();
   const { environments } = useEnvironments();
@@ -165,10 +169,12 @@ export function DatabaseSettings() {
   const remove = async (connection: DatabaseConnection, environmentId: EnvironmentId) => {
     const confirmed = await ensureLocalApi().dialogs.confirm(
       [
-        `Delete ${connection.name}?`,
+        gt("Delete {name}?", { name: connection.name }),
         connection.level === "global"
-          ? "The connection is removed from every reachable environment. Offline environments keep their copy until you delete it here."
-          : "Its stored password is removed too. Database contents are not affected.",
+          ? gt(
+              "The connection is removed from every reachable environment. Offline environments keep their copy until you delete it here.",
+            )
+          : gt("Its stored password is removed too. Database contents are not affected."),
       ].join("\n"),
       { variant: "destructive" },
     );
@@ -190,7 +196,10 @@ export function DatabaseSettings() {
     const failures = results.filter((item) => !item.ok);
     setMessage(
       failures.length
-        ? `${failures.length} environment(s) could not delete this connection. Reconnect and delete the remaining copies.`
+        ? gt(
+            "{count} environment(s) could not delete this connection. Reconnect and delete the remaining copies.",
+            { count: failures.length },
+          )
         : null,
     );
     if (connection.level === "global")
@@ -209,7 +218,7 @@ export function DatabaseSettings() {
     <SettingsPageContainer>
       <SettingsSection
         id="database-connections"
-        title="Databases"
+        title={gt("Databases")}
         headerAction={
           <Button
             size="xs"
@@ -217,7 +226,7 @@ export function DatabaseSettings() {
             disabled={!initialEnvironment}
             onClick={() => initialEnvironment && setEditing({ environmentId: initialEnvironment })}
           >
-            New connection
+            {gt("New connection")}
           </Button>
         }
       >
@@ -229,7 +238,9 @@ export function DatabaseSettings() {
             {...(projectId ? { projectId } : {})}
           />
         ))}
-        {message && <SettingsRow title="Some copies remain" description={message} role="status" />}
+        {message && (
+          <SettingsRow title={gt("Some copies remain")} description={message} role="status" />
+        )}
         {coverage.map((entry) => {
           const source = entry.copies.find(
             (copy) => copy.connection.updatedAt === entry.connection.updatedAt,
@@ -244,9 +255,12 @@ export function DatabaseSettings() {
               connection={entry.connection}
               environmentId={source.environmentId}
               status={[
-                `All environments · on ${entry.copies.length} of ${environments.length}`,
-                entry.older.length ? `${entry.older.length} out of date` : "",
-                orphaned ? "Deleted elsewhere; delete this copy here" : "",
+                gt("All environments · on {count} of {total}", {
+                  count: entry.copies.length,
+                  total: environments.length,
+                }),
+                entry.older.length ? gt("{count} out of date", { count: entry.older.length }) : "",
+                orphaned ? gt("Deleted elsewhere; delete this copy here") : "",
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -274,7 +288,7 @@ export function DatabaseSettings() {
                         })
                       }
                     >
-                      Copy to {environmentLabel(id)}
+                      {gt("Copy to {label}", { label: environmentLabel(id) })}
                     </Button>
                   ))}
                 </div>
@@ -289,15 +303,21 @@ export function DatabaseSettings() {
               key={`${copy.environmentId}:${copy.connection.id}`}
               connection={copy.connection}
               environmentId={copy.environmentId}
-              status={`${copy.connection.level === "project" ? "This project" : "Every project"} on ${environmentLabel(copy.environmentId)}`}
+              status={
+                copy.connection.level === "project"
+                  ? gt("This project on {label}", { label: environmentLabel(copy.environmentId) })
+                  : gt("Every project on {label}", { label: environmentLabel(copy.environmentId) })
+              }
               onEdit={() => setEditing(copy)}
               onDelete={() => void remove(copy.connection, copy.environmentId)}
             />
           ))}
         {coverage.length === 0 && !copies.some((copy) => copy.connection.level !== "global") && (
           <SettingsRow
-            title="No database connections"
-            description="Add a PostgreSQL or SQLite connection to browse and query it from a thread's Databases panel. Connections open on the environment they are saved to."
+            title={gt("No database connections")}
+            description={gt(
+              "Add a PostgreSQL or SQLite connection to browse and query it from a thread's Databases panel. Connections open on the environment they are saved to.",
+            )}
           />
         )}
       </SettingsSection>

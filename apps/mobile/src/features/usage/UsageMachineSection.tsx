@@ -11,6 +11,7 @@ import {
 } from "@t3tools/client-runtime/state/host-resources";
 import type { EnvironmentId, HostResourcesHistory } from "@t3tools/contracts";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { T, useGT, useMessages } from "gt-react-native";
 import { type ContextType, useContext, useEffect } from "react";
 import { type ColorValue, View } from "react-native";
 import Svg, { Line, Path } from "react-native-svg";
@@ -53,7 +54,7 @@ export function UsageMachineSection(props: {
             <MachineMeters environmentId={environment.environmentId} active={props.active} />
           ) : (
             <Text className="p-4 text-sm text-foreground-muted">
-              This environment is not connected.
+              <T>This environment is not connected.</T>
             </Text>
           )}
         </SettingsSection>
@@ -64,6 +65,7 @@ export function UsageMachineSection(props: {
 
 function MachineMeters(props: { readonly environmentId: EnvironmentId; readonly active: boolean }) {
   const { environmentId, active } = props;
+  const resolve = useMessages();
   const registry = useContext(RegistryContext);
   const result = useAtomValue(hostResourcesAtom(environmentId));
   const historyResult = useAtomValue(hostResourcesHistoryAtom(environmentId));
@@ -91,7 +93,7 @@ function MachineMeters(props: { readonly environmentId: EnvironmentId; readonly 
   if (snapshot === null && result._tag === "Failure") {
     return (
       <Text className="p-4 text-sm text-foreground-muted">
-        This environment could not report machine usage.
+        <T>This environment could not report machine usage.</T>
       </Text>
     );
   }
@@ -109,7 +111,7 @@ function MachineMeters(props: { readonly environmentId: EnvironmentId; readonly 
               first={index === 0}
             />
           ))
-        : hostResourceMeters(snapshot).map((meter, index) => (
+        : hostResourceMeters(snapshot, resolve).map((meter, index) => (
             <MeterRow
               key={meter.kind}
               label={meter.label}
@@ -140,6 +142,7 @@ function MeterRow(props: {
   readonly showGraph: boolean;
   readonly first: boolean;
 }) {
+  const gt = useGT();
   const percent = props.usedFraction === null ? null : Math.round(props.usedFraction * 100);
   const tone = toneOf(percent);
   const { color } = useResolveClassNames(tone.text);
@@ -148,7 +151,7 @@ function MeterRow(props: {
       <View className="flex-row items-baseline justify-between gap-3">
         <Text className="text-base text-foreground">{props.label}</Text>
         <Text className="text-base tabular-nums text-foreground">
-          {percent === null ? "–" : `${percent}% used`}
+          {percent === null ? "–" : gt("{percent}% used", { percent })}
         </Text>
       </View>
       <View className="h-1.5 flex-row overflow-hidden rounded-full bg-subtle">
@@ -174,6 +177,7 @@ function HistoryGraph(props: {
   readonly history: HostResourcesHistory | null;
   readonly color: ColorValue | undefined;
 }) {
+  const gt = useGT();
   const { kind, history, color } = props;
   const series =
     history === null || kind === undefined ? null : hostResourceHistorySeries(history, kind);
@@ -185,7 +189,10 @@ function HistoryGraph(props: {
     <View
       className="gap-1"
       accessible
-      accessibilityLabel={`${props.label} use over the past ${hours} hours`}
+      accessibilityLabel={gt("{label} use over the past {hours} hours", {
+        label: props.label,
+        hours,
+      })}
     >
       <Svg width="100%" height={48} viewBox={`0 0 ${width} 100`} preserveAspectRatio="none">
         <Line
@@ -215,8 +222,10 @@ function HistoryGraph(props: {
         ) : null}
       </Svg>
       <View className="flex-row justify-between">
-        <Text className="text-xs text-foreground-tertiary">{hours}h ago</Text>
-        <Text className="text-xs text-foreground-tertiary">now</Text>
+        <Text className="text-xs text-foreground-tertiary">{gt("{hours}h ago", { hours })}</Text>
+        <Text className="text-xs text-foreground-tertiary">
+          {gt("now", { $context: "right edge of a usage graph, the present moment" })}
+        </Text>
       </View>
     </View>
   );

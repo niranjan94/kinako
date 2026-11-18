@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { filterFilesystemBrowseEntries } from "@t3tools/client-runtime/state/filesystem";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { FolderIcon, FolderSearchIcon } from "lucide-react";
+import { useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
 import { useClientSettings } from "../hooks/useSettings";
@@ -51,6 +52,8 @@ export function AdditionalDirectoryPickerDialog(props: {
 }
 
 function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>[0]) {
+  const gt = useGT();
+  const m = useMessages();
   const [browsing, setBrowsing] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
@@ -148,21 +151,21 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
 
   const groups: CommandPaletteGroup[] = browsing
     ? browseItems.length > 0
-      ? [{ value: "additional-directory-folders", label: "Folders", items: browseItems }]
+      ? [{ value: "additional-directory-folders", label: gt("Folders"), items: browseItems }]
       : []
     : [
         ...(projectItems.length > 0
-          ? [{ value: "additional-directory-projects", label: "Projects", items: projectItems }]
+          ? [{ value: "additional-directory-projects", label: gt("Projects"), items: projectItems }]
           : []),
         {
           value: "additional-directory-other",
-          label: "Other",
+          label: gt("Other"),
           items: [
             {
               kind: "action",
               value: CHOOSE_FOLDER_VALUE,
               searchTerms: ["folder", "browse"],
-              title: "Choose a folder…",
+              title: gt("Choose a folder…"),
               icon: <FolderSearchIcon />,
               keepOpen: true,
               run: async () => startBrowsing(),
@@ -174,23 +177,23 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
   const browsedFolder = browsing ? (browseResult?.parentPath ?? null) : null;
   const emptyStateMessage = browsing
     ? !browseAccess.canReadFiles && !browseAccess.isPending
-      ? (browseAccess.error ?? "This connection cannot browse host folders.")
+      ? (browseAccess.error ?? gt("This connection cannot browse host folders."))
       : browseQuery.isPending
-        ? "Loading folders…"
-        : "No folders here."
-    : "No matching projects.";
+        ? gt("Loading folders…")
+        : gt("No folders here.")
+    : gt("No matching projects.");
 
   return (
     <CommandDialogPopup
-      aria-label="Add a directory"
+      aria-label={gt("Add a directory")}
       className="overflow-hidden"
       onBackdropPointerDown={() => props.onOpenChange(false)}
     >
       <CommandPaletteContent
-        aria-label="Add a directory"
+        aria-label={gt("Add a directory")}
         autoHighlight="always"
-        escapeLabel="Close"
-        footerActionLabel={browsing ? "Open folder" : "Add"}
+        escapeLabel={gt("Close")}
+        footerActionLabel={browsing ? gt("Open folder") : gt("Add")}
         footerTrailing={
           <>
             {browsedFolder !== null ? (
@@ -198,7 +201,7 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
                 disabled={excluded.has(browsedFolder)}
                 onClick={() => select(browsedFolder)}
               >
-                Use this folder
+                {gt("Use this folder")}
               </CommandFooterAction>
             ) : null}
             {canPickNative ? (
@@ -214,12 +217,14 @@ function PickerContent(props: Parameters<typeof AdditionalDirectoryPickerDialog>
                     .finally(() => setIsPickingNative(false));
                 }}
               >
-                {`Open in ${getLocalFileManagerName(clientPlatform)}`}
+                {gt("Open in {fileManager}", {
+                  fileManager: getLocalFileManagerName(clientPlatform, m),
+                })}
               </CommandFooterAction>
             ) : null}
           </>
         }
-        inputProps={{ placeholder: browsing ? "Type a folder path…" : "Search projects…" }}
+        inputProps={{ placeholder: browsing ? gt("Type a folder path…") : gt("Search projects…") }}
         mode="none"
         onItemHighlighted={(value) => {
           setHighlightedItemValue(typeof value === "string" ? value : null);

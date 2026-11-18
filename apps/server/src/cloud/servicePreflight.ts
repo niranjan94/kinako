@@ -1,13 +1,28 @@
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
 import packageJson from "../../package.json" with { type: "json" };
 import { BUILD_MIGRATION_HEAD, recordedMigrations } from "../persistence/databaseMigrationHead.ts";
 import { skippedV2Migrations } from "../persistence/Migrations.ts";
 import { reconciledV2PreviewHistory } from "../persistence/reconcileV2PreviewMigration.ts";
+import type * as ProcessRunner from "../processRunner.ts";
+import {
+  pinnedRuntimeCommand,
+  PinnedRuntimeInstallError,
+  type PinnedRuntimePaths,
+  PinnedRuntimePreflightBlockedError,
+} from "./pinnedRuntime.ts";
 import {
   isSupportedLauncherProtocol,
   SERVICE_LAUNCHER_PROTOCOL,
   type SupportedLauncherProtocol,
 } from "./serviceProtocol.ts";
 import { FORK_CLI_NAME, FORK_REPOSITORY } from "@t3tools/shared/forkBrand";
+
+// A staged runtime's cold start can take over a minute on a loaded, swapping host.
+const PREFLIGHT_TIMEOUT = Duration.minutes(3);
+const decodePreflightJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
 
 export type ServicePreflightResult =
   | {
@@ -49,7 +64,7 @@ export function runServicePreflight(input: {
     return {
       status: "blocked",
       version,
-      reason: `Could not read this database to confirm t3@${version} supports it.`,
+      reason: `Could not read this database to confirm ${FORK_CLI_NAME}@${version} supports it.`,
     };
   }
   const newer = recorded
@@ -59,7 +74,7 @@ export function runServicePreflight(input: {
     return {
       status: "blocked",
       version,
-      reason: `This database has migrations that t3@${version} does not know: ${newer.join(", ")}. A newer build wrote them, and running t3@${version} on this database is not safe. Stay on the newer release, or wait for a release that includes these migrations.`,
+      reason: `This database has migrations that ${FORK_CLI_NAME}@${version} does not know: ${newer.join(", ")}. A newer build wrote them, and running ${FORK_CLI_NAME}@${version} on this database is not safe. Stay on the newer release, or wait for a release that includes these migrations.`,
     };
   }
 
@@ -78,7 +93,7 @@ export function runServicePreflight(input: {
   return { status: "ready", version, launcherProtocol };
 }
 
-export function decodeServicePreflightResult(
+function decodeServicePreflightResult(
   value: unknown,
   launcherProtocol: SupportedLauncherProtocol,
 ): ServicePreflightResult | undefined {
@@ -102,3 +117,57 @@ export function decodeServicePreflightResult(
   }
   return undefined;
 }
+
+/** Asks a staged runtime whether it can run on this database under this launcher protocol. */
+export const runStagedServicePreflight = Effect.fn("cloud.service_preflight.run_staged")(
+  function* (input: {
+    readonly runner: ProcessRunner.ProcessRunner["Service"];
+    readonly runtime: PinnedRuntimePaths;
+    readonly targetVersion: string;
+    readonly databasePath: string;
+    readonly launcherProtocol: SupportedLauncherProtocol;
+  }) {
+    const step = "running the staged service preflight";
+    const command = pinnedRuntimeCommand(input.runtime);
+    const result = yield* input.runner
+      .run({
+        command: command.command,
+        args: [
+          ...command.args,
+          "__service-preflight",
+          "--database-path",
+          input.databasePath,
+          "--launcher-protocol",
+          String(input.launcherProtocol),
+        ],
+        timeout: PREFLIGHT_TIMEOUT,
+      })
+      .pipe(Effect.mapError((cause) => new PinnedRuntimeInstallError({ step, cause })));
+    if (result.code !== 0) {
+      return yield* new PinnedRuntimeInstallError({
+        step,
+        exitCode: Number(result.code),
+        stdoutLength: result.stdout.length,
+        stderrLength: result.stderr.length,
+      });
+    }
+    const parsed = yield* decodePreflightJson(result.stdout.trim()).pipe(
+      Effect.mapError(
+        (cause) =>
+          new PinnedRuntimeInstallError({ step: "decoding the staged service preflight", cause }),
+      ),
+    );
+    const preflight = decodeServicePreflightResult(parsed, input.launcherProtocol);
+    if (preflight === undefined || preflight.version !== input.targetVersion) {
+      return yield* new PinnedRuntimeInstallError({
+        step: "verifying the staged service preflight",
+      });
+    }
+    if (preflight.status === "blocked") {
+      return yield* new PinnedRuntimePreflightBlockedError({
+        version: input.targetVersion,
+        reason: preflight.reason,
+      });
+    }
+  },
+);

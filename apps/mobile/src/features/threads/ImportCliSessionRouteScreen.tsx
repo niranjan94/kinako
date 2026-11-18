@@ -16,6 +16,7 @@ import {
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { AgentSessionListItem, ThreadId } from "@t3tools/contracts";
 import * as Haptics from "expo-haptics";
+import { msg, useGT } from "gt-react-native";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,6 +29,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import { Toolbar } from "../../components/ui/Toolbar";
 import { ProviderIcon } from "../../components/ProviderIcon";
+import { m } from "../../i18n/messages";
 import { cn } from "../../lib/cn";
 import { relativeTime } from "../../lib/time";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
@@ -41,8 +43,6 @@ type ImportCliSessionRouteParams = {
   readonly environmentId?: string | string[];
   readonly projectId?: string | string[];
 };
-
-const SCREEN_TITLE = "Import CLI session";
 
 type SessionsResult =
   | { readonly status: "error"; readonly message: string }
@@ -65,6 +65,8 @@ export function ImportCliSessionRouteScreen({
 }: StaticScreenProps<ImportCliSessionRouteParams | undefined>) {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const gt = useGT();
+  const screenTitle = gt("Import CLI session");
   const environmentId = firstParam(route.params?.environmentId);
   const projectId = firstParam(route.params?.projectId);
   const project = useProjects().find(
@@ -77,19 +79,19 @@ export function ImportCliSessionRouteScreen({
   return (
     <View className="flex-1 bg-sheet" collapsable={false}>
       <NativeStackScreenOptions
-        options={{ headerShown: Platform.OS !== "android", title: SCREEN_TITLE }}
+        options={{ headerShown: Platform.OS !== "android", title: screenTitle }}
       />
       {isSheetRoot ? (
         <Toolbar placement="left">
           <Toolbar.Button
-            accessibilityLabel="Cancel import"
-            label="Cancel"
+            accessibilityLabel={gt("Cancel import")}
+            label={gt("Cancel")}
             onPress={() => (navigation.getParent() ?? navigation).goBack()}
           />
         </Toolbar>
       ) : null}
       {Platform.OS === "android" ? (
-        <AppBar embedded title={SCREEN_TITLE} hideBottomBorder onBack={() => navigation.goBack()} />
+        <AppBar embedded title={screenTitle} hideBottomBorder onBack={() => navigation.goBack()} />
       ) : null}
       <ScreenContent>
         <ScrollView
@@ -106,8 +108,8 @@ export function ImportCliSessionRouteScreen({
             <ProjectSessions project={project} />
           ) : (
             <EmptyState
-              title="Project unavailable"
-              detail="This project is not on a connected environment."
+              title={gt("Project unavailable")}
+              detail={gt("This project is not on a connected environment.")}
             />
           )}
         </ScrollView>
@@ -119,6 +121,7 @@ export function ImportCliSessionRouteScreen({
 function ProjectSessions(props: { readonly project: EnvironmentProject }) {
   const { environmentId, id: projectId } = props.project;
   const navigation = useNavigation();
+  const gt = useGT();
   const serverConfig = useEnvironmentServerConfig(environmentId);
   const supported = supportsAgentSessionImport(serverConfig);
   const canImport = useAtomValue(
@@ -155,7 +158,7 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
                 status: "error",
                 message: failureMessage(
                   squashAtomCommandFailure(result),
-                  "The sessions could not be loaded.",
+                  m(msg("The sessions could not be loaded.")),
                 ),
               },
       });
@@ -200,8 +203,11 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
       }
       if (!isAtomCommandInterrupted(result)) {
         Dialog.alert(
-          "Could not import session",
-          failureMessage(squashAtomCommandFailure(result), "The session could not be imported."),
+          m(msg("Could not import session")),
+          failureMessage(
+            squashAtomCommandFailure(result),
+            m(msg("The session could not be imported.")),
+          ),
         );
       }
     } finally {
@@ -215,8 +221,10 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
   if (!supported) {
     return (
       <EmptyState
-        title="Not available on this environment"
-        detail={`Update ${FORK_DISPLAY_NAME} on this environment to import CLI sessions.`}
+        title={gt("Not available on this environment")}
+        detail={gt("Update {appName} on this environment to import CLI sessions.", {
+          appName: FORK_DISPLAY_NAME,
+        })}
       />
     );
   }
@@ -226,9 +234,9 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
   if (state.status === "error") {
     return (
       <EmptyState
-        title="Could not load sessions"
+        title={gt("Could not load sessions")}
         detail={state.message}
-        actionLabel="Try again"
+        actionLabel={gt("Try again")}
         onAction={() => setLoadAttempt((attempt) => attempt + 1)}
       />
     );
@@ -236,8 +244,8 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
   if (state.sessions.length === 0) {
     return (
       <EmptyState
-        title="No sessions"
-        detail="No Claude Code or Codex sessions found for this folder."
+        title={gt("No sessions")}
+        detail={gt("No Claude Code or Codex sessions found for this folder.")}
       />
     );
   }
@@ -259,7 +267,7 @@ function ProjectSessions(props: { readonly project: EnvironmentProject }) {
             session={session}
             isLast={index === state.sessions.length - 1}
             recentlyActive={isAgentSessionRecentlyActive(session, state.loadedAtMs)}
-            actionLabel={importedThreadId ? "Open" : "Import"}
+            actionLabel={importedThreadId ? gt("Open") : gt("Import")}
             importing={importingKey === key}
             disabled={importedThreadId ? false : !canImport || importingKey !== null}
             onPress={() => {
@@ -278,10 +286,11 @@ function sessionKey(session: AgentSessionListItem): string {
 }
 
 function LoadingState() {
+  const gt = useGT();
   return (
     <View className="items-center py-16">
       <AppActivityIndicator colorClassName="accent-icon" />
-      <Text className="mt-3 text-sm text-foreground-muted">Loading sessions...</Text>
+      <Text className="mt-3 text-sm text-foreground-muted">{gt("Loading sessions...")}</Text>
     </View>
   );
 }
@@ -295,13 +304,21 @@ function SessionRow(props: {
   readonly disabled: boolean;
   readonly onPress: () => void;
 }) {
-  const title = props.session.title.trim() || "Untitled session";
+  const gt = useGT();
+  const title = props.session.title.trim() || gt("Untitled session");
   const providerLabel = props.session.provider === "claudeAgent" ? "Claude Code" : "Codex";
-  const subtitle = `${providerLabel} · ${relativeTime(props.session.updatedAt)}`;
+  const subtitle = gt("{provider} · {time}", {
+    provider: providerLabel,
+    time: relativeTime(props.session.updatedAt),
+  });
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${props.actionLabel} ${title}, ${subtitle}`}
+      accessibilityLabel={gt("{action} {title}, {subtitle}", {
+        action: props.actionLabel,
+        title,
+        subtitle,
+      })}
       accessibilityState={{ disabled: props.disabled, busy: props.importing }}
       className={cn(
         "min-h-14 flex-row items-center gap-3 bg-grouped-card px-4 py-3 active:bg-subtle",
@@ -320,7 +337,7 @@ function SessionRow(props: {
         </Text>
         {props.recentlyActive ? (
           <Text className="text-xs font-t3-medium text-warning-foreground">
-            May still be open in a terminal. Close it there first.
+            {gt("May still be open in a terminal. Close it there first.")}
           </Text>
         ) : null}
       </View>

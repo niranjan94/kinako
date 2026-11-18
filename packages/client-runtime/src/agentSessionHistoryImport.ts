@@ -7,15 +7,17 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 import { isAgentSessionRecentlyActive } from "./agentSessionImport.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const AGENT_SESSION_AGE_WINDOWS = [
-  { key: "30d", label: "Last 30 days", maxAgeMs: 30 * DAY_MS },
-  { key: "90d", label: "Last 90 days", maxAgeMs: 90 * DAY_MS },
-  { key: "all", label: "All time", maxAgeMs: undefined },
+  { key: "30d", label: msg("Last 30 days"), maxAgeMs: 30 * DAY_MS },
+  { key: "90d", label: msg("Last 90 days"), maxAgeMs: 90 * DAY_MS },
+  { key: "all", label: msg("All time"), maxAgeMs: undefined },
 ] as const;
 export type AgentSessionAgeWindow = (typeof AGENT_SESSION_AGE_WINDOWS)[number];
 export const DEFAULT_AGENT_SESSION_AGE_WINDOW: AgentSessionAgeWindow = AGENT_SESSION_AGE_WINDOWS[0];
@@ -267,10 +269,14 @@ export interface AgentSessionHistoryImportDeps {
   /** Checked between requests, so a stop keeps what already finished. */
   readonly shouldStop: () => boolean;
   readonly onEvent: (event: AgentSessionImportEvent) => void;
+  /** Resolves the copy this module writes into events; English when omitted. */
+  readonly resolve?: MFunctionType;
 }
 
-function failureReason(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : "Unknown error.";
+function failureReason(error: unknown, resolve: MFunctionType = mFallback): string {
+  return error instanceof Error && error.message.length > 0
+    ? error.message
+    : resolve(msg("Unknown error."));
 }
 
 /** Imports the chosen sessions one request at a time, reporting each outcome as it lands. */
@@ -297,7 +303,7 @@ async function importFolder(
       try {
         listing = { ...(await deps.listSessions(folder, cursor)), listedAtMs: deps.nowMs() };
       } catch (error) {
-        deps.onEvent({ type: "folder-failed", folder, reason: failureReason(error) });
+        deps.onEvent({ type: "folder-failed", folder, reason: failureReason(error, deps.resolve) });
         return true;
       }
     }
@@ -332,7 +338,7 @@ async function importFolder(
         try {
           projectId = await deps.ensureProject(folder);
         } catch (error) {
-          const reason = failureReason(error);
+          const reason = failureReason(error, deps.resolve);
           for (const session of pending) {
             deps.onEvent({
               type: "session",
@@ -363,7 +369,7 @@ async function importFolder(
             type: "session",
             folder,
             session,
-            result: { status: "failed", reason: failureReason(error) },
+            result: { status: "failed", reason: failureReason(error, deps.resolve) },
           });
         }
       }

@@ -4,6 +4,7 @@ import {
   type DatabaseWorkspaceTab,
 } from "@t3tools/client-runtime/state/database";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { PlayIcon, RefreshCwIcon } from "lucide-react";
 import { useContext, useEffect, useEffectEvent } from "react";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -56,6 +57,7 @@ function TableView({
   threadKey: string;
   tab: TableTab;
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const workspaceAtom = databaseState.workspaces(threadKey);
   const allowed = useAtomValue(databaseState.browseTable.permissionAtom(environmentId));
@@ -145,12 +147,13 @@ function TableView({
       }),
     ),
   );
-  if (!allowed) return <p className="p-3 text-sm">Database access requires terminal permission.</p>;
+  if (!allowed)
+    return <p className="p-3 text-sm">{gt("Database access requires terminal permission.")}</p>;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <form
         className="flex h-8 shrink-0 items-center gap-1 border-b px-1"
-        aria-label={`Filter ${tab.title}`}
+        aria-label={gt("Filter {title}", { title: tab.title })}
         onSubmit={(event) => {
           event.preventDefault();
           void loadTable(tab.id);
@@ -158,7 +161,7 @@ function TableView({
       >
         <DatabaseToolbarButton
           type="button"
-          label="Reload rows"
+          label={gt("Reload rows")}
           disabled={tab.loading}
           onClick={() => void loadTable(tab.id)}
         >
@@ -169,7 +172,9 @@ function TableView({
             size="compact"
             unstyled
             font="mono"
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- SQL clause the user types into
             aria-label="WHERE condition"
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- SQL clause the user types into
             placeholder="WHERE condition"
             value={tab.table.where}
             onChange={(event) =>
@@ -182,7 +187,9 @@ function TableView({
             size="compact"
             unstyled
             font="mono"
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- SQL clause the user types into
             aria-label="ORDER BY"
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- SQL clause the user types into
             placeholder="ORDER BY column"
             value={tab.table.orderBy}
             onChange={(event) =>
@@ -190,7 +197,11 @@ function TableView({
             }
           />
         </div>
-        <DatabaseToolbarButton label="Apply filter (Enter)" type="submit" disabled={tab.loading}>
+        <DatabaseToolbarButton
+          label={gt("Apply filter (Enter)")}
+          type="submit"
+          disabled={tab.loading}
+        >
           <PlayIcon />
         </DatabaseToolbarButton>
       </form>
@@ -220,7 +231,7 @@ function TableView({
         ) : (
           <div className="flex flex-1 items-center justify-center gap-2 px-6 text-xs text-muted-foreground">
             {!tab.error && <Spinner size="sm" tone="muted" />}
-            {tab.error ? "Fix the filter and apply it again." : "Loading rows…"}
+            {tab.error ? gt("Fix the filter and apply it again.") : gt("Loading rows…")}
           </div>
         )}
       </div>

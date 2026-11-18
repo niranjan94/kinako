@@ -1,3 +1,4 @@
+import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
@@ -20,17 +21,19 @@ const FOLLOW_UP_OPTIONS: ReadonlyArray<{
 }> = [
   {
     behavior: "queue",
-    label: "Queue",
-    description: "Your message waits and runs after the current turn finishes.",
+    label: msg("Queue", { $context: "verb, follow-up behavior" }),
+    description: msg("Your message waits and runs after the current turn finishes."),
   },
   {
     behavior: "steer",
-    label: "Steer",
-    description: "Your message reaches the agent right away, changing what it is working on.",
+    label: msg("Steer", { $context: "verb, follow-up behavior" }),
+    description: msg("Your message reaches the agent right away, changing what it is working on."),
   },
 ];
 
 export function SettingsFollowUpRouteScreen() {
+  const gt = useGT();
+  const m = useMessages();
   const insets = useSafeAreaInsets();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
@@ -47,12 +50,12 @@ export function SettingsFollowUpRouteScreen() {
       contentContainerClassName="gap-3 px-5 pt-4"
       contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
     >
-      <SettingsSection title="While the agent is running">
+      <SettingsSection title={gt("While the agent is running")}>
         {FOLLOW_UP_OPTIONS.map((option, index) => (
           <SettingsChoiceRow
             key={option.behavior}
-            label={option.label}
-            description={option.description}
+            label={m(option.label)}
+            description={m(option.description)}
             selected={selectedBehavior === option.behavior}
             separated={index > 0}
             disabled={!preferencesReady}
@@ -61,18 +64,21 @@ export function SettingsFollowUpRouteScreen() {
         ))}
       </SettingsSection>
       <Text className="px-2 text-sm text-foreground-muted">
-        Long-press the send button to use the other option for a single message. With a hardware
-        keyboard, hold {Platform.OS === "android" ? "Ctrl" : "Command"} while sending.
+        <T>
+          Long-press the send button to use the other option for a single message. With a hardware
+          keyboard, hold <Var>{Platform.OS === "android" ? "Ctrl" : "Command"}</Var> while sending.
+        </T>
       </Text>
       <ComposerSettingsSection />
     </ScrollView>
   );
 
-  return <SettingsScreen title="Chat">{content}</SettingsScreen>;
+  return <SettingsScreen title={gt("Chat")}>{content}</SettingsScreen>;
 }
 
 /** Device-local counterpart of web's composer toggles in Settings → Chat. */
 function ComposerSettingsSection() {
+  const gt = useGT();
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const preferences = useAtomValue(mobilePreferencesAtom);
   const contextWindowIndicatorEnabled =
@@ -81,17 +87,19 @@ function ComposerSettingsSection() {
 
   return (
     <View className="gap-3 pt-3">
-      <SettingsSection title="Composer">
+      <SettingsSection title={gt("Composer")}>
         <SettingsSwitchRow
           icon="chart.bar.xaxis"
-          label="Context window indicator"
+          label={gt("Context window indicator")}
           value={contextWindowIndicatorEnabled}
           onValueChange={(value) => savePreferences({ contextWindowIndicatorEnabled: value })}
         />
       </SettingsSection>
       <Text className="px-2 text-sm text-foreground-muted">
-        Show how full the thread's context window is in the composer. Tap it for a breakdown of what
-        fills the window.
+        <T>
+          Show how full the thread's context window is in the composer. Tap it for a breakdown of
+          what fills the window.
+        </T>
       </Text>
     </View>
   );

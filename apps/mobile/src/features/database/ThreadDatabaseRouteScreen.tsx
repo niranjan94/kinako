@@ -16,6 +16,7 @@ import {
   type ProjectId,
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
+import { msg, useGT, useMessages } from "gt-react-native";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList } from "@legendapp/list/react-native";
 import { Modal, Pressable, ScrollView, View } from "react-native";
@@ -40,26 +41,27 @@ const errorMessage = (error: unknown) =>
     : typeof error === "object" && error !== null && "message" in error
       ? String(error.message)
       : String(error);
-const cellText = (cell: DatabaseCell) =>
+const cellText = (cell: DatabaseCell, gt: ReturnType<typeof useGT>) =>
   cell === null
     ? "NULL"
     : typeof cell === "object"
-      ? `${cell.truncated}… (${cell.length} characters)`
+      ? gt("{truncated}… ({length} characters)", { truncated: cell.truncated, length: cell.length })
       : String(cell);
 
 const LEVEL_LABELS = {
-  project: "This project",
-  environment: "This environment",
-  global: "All environments",
+  project: msg("This project"),
+  environment: msg("This environment"),
+  global: msg("All environments"),
 } as const;
 
 type Props = StaticScreenProps<{ environmentId: string; threadId: string }>;
 export function ThreadDatabaseRouteScreen(_props: Props) {
   const navigation = useNavigation();
   const { selectedThread } = useThreadSelection();
+  const gt = useGT();
   return (
     <>
-      <AppBar title="Database" onBack={() => navigation.goBack()} />
+      <AppBar title={gt("Database")} onBack={() => navigation.goBack()} />
       {selectedThread ? (
         <DatabaseScreen
           environmentId={selectedThread.environmentId}
@@ -67,7 +69,7 @@ export function ThreadDatabaseRouteScreen(_props: Props) {
         />
       ) : (
         <View className="flex-1 bg-screen p-4">
-          <AppText>Open a project thread to browse its databases.</AppText>
+          <AppText>{gt("Open a project thread to browse its databases.")}</AppText>
         </View>
       )}
     </>
@@ -81,6 +83,8 @@ function DatabaseScreen({
   environmentId: EnvironmentId;
   projectId: ProjectId;
 }) {
+  const gt = useGT();
+  const resolve = useMessages();
   const registry = useContext(RegistryContext);
   const allowed = useAtomValue(databaseState.execute.permissionAtom(environmentId));
   const revision = useAtomValue(databaseState.revision(environmentId));
@@ -283,7 +287,7 @@ function DatabaseScreen({
   const listing = status === "connected" && listed !== `${environmentId}:${projectId}:${revision}`;
   const parent =
     scope.kind === "objects"
-      ? { label: "All schemas", scope: { kind: "schemas" } as const }
+      ? { label: gt("All schemas"), scope: { kind: "schemas" } as const }
       : scope.kind === "columns"
         ? {
             label: scope.schema,
@@ -292,7 +296,7 @@ function DatabaseScreen({
         : scope.kind === "schemas" &&
             connection?.target.engine === "postgres" &&
             connection.target.databaseSelection
-          ? { label: "All databases", scope: { kind: "databases" } as const }
+          ? { label: gt("All databases"), scope: { kind: "databases" } as const }
           : null;
   const resultColumns = useMemo(
     () =>
@@ -314,14 +318,24 @@ function DatabaseScreen({
           </AppText>
         )}
         {!allowed ? (
-          <AppText className="p-4">Database access requires terminal permission.</AppText>
+          <AppText className="p-4">{gt("Database access requires terminal permission.")}</AppText>
         ) : !connection ? (
           <ScrollView>
             {connections.map((item) => (
               <DatabaseRow
                 key={item.id}
                 busy={busy}
-                label={`${item.name} · ${LEVEL_LABELS[item.level]}${item.readOnly ? " · Read-only" : ""}`}
+                label={
+                  item.readOnly
+                    ? gt("{name} · {level} · Read-only", {
+                        name: item.name,
+                        level: resolve(LEVEL_LABELS[item.level]),
+                      })
+                    : gt("{name} · {level}", {
+                        name: item.name,
+                        level: resolve(LEVEL_LABELS[item.level]),
+                      })
+                }
                 onPress={() => {
                   setConnection(item);
                   setResult(null);
@@ -344,12 +358,12 @@ function DatabaseScreen({
                 <View className="flex-row items-center gap-2 p-4">
                   <AppActivityIndicator />
                   <AppText>
-                    {status === "connected" ? "Loading connections…" : "Connecting…"}
+                    {status === "connected" ? gt("Loading connections…") : gt("Connecting…")}
                   </AppText>
                 </View>
               ) : (
                 <AppText className="p-4">
-                  Create a database connection in Settings → Databases on web or desktop.
+                  {gt("Create a database connection in Settings → Databases on web or desktop.")}
                 </AppText>
               ))}
           </ScrollView>
@@ -357,7 +371,7 @@ function DatabaseScreen({
           <>
             <View className="flex-row flex-wrap gap-2 p-3">
               <Button
-                label="Connections"
+                label={gt("Connections")}
                 tone="text"
                 disabled={busy}
                 onPress={() => {
@@ -368,8 +382,9 @@ function DatabaseScreen({
                 }}
               />
               <AppText className="self-center font-t3-medium">
-                {connection.name}
-                {databaseName ? ` · ${databaseName}` : ""} · Read-only
+                {gt("{name} · Read-only", {
+                  name: `${connection.name}${databaseName ? ` · ${databaseName}` : ""}`,
+                })}
               </AppText>
             </View>
             <ScrollView style={result ? { maxHeight: "40%" } : { flex: 1 }}>
@@ -377,7 +392,7 @@ function DatabaseScreen({
                 <DatabaseRow
                   busy={busy}
                   label={`‹ ${parent.label}`}
-                  accessibilityLabel={`Back to ${parent.label}`}
+                  accessibilityLabel={gt("Back to {label}", { label: parent.label })}
                   onPress={() => void describe(parent.scope)}
                 />
               )}
@@ -391,7 +406,7 @@ function DatabaseScreen({
                   />
                 ))}
               {metadata?.kind === "databases" && metadata.databases.length === 0 && (
-                <AppText className="p-4">No databases available.</AppText>
+                <AppText className="p-4">{gt("No databases available.")}</AppText>
               )}
               {metadata?.kind === "schemas" &&
                 metadata.schemas.map((schema) => (
@@ -425,14 +440,14 @@ function DatabaseScreen({
               {scope.kind === "columns" && (
                 <DatabaseRow
                   busy={busy}
-                  label={`Browse ${scope.schema}.${scope.object}`}
+                  label={gt("Browse {name}", { name: `${scope.schema}.${scope.object}` })}
                   onPress={() => void browse(scope.schema, scope.object)}
                 />
               )}
             </ScrollView>
             <View className="gap-2 border-y border-border p-3">
               <AppTextInput
-                accessibilityLabel="SQL query"
+                accessibilityLabel={gt("SQL query")}
                 value={sql}
                 onChangeText={setSql}
                 multiline
@@ -442,13 +457,13 @@ function DatabaseScreen({
               />
               <View className="flex-row gap-2">
                 <Button
-                  label="Run read-only query"
+                  label={gt("Run read-only query")}
                   loading={busy}
                   disabled={!allowed || !sql.trim() || scope.kind === "databases"}
                   onPress={() => void execute()}
                 />
                 <Button
-                  label="Cancel"
+                  label={gt("Cancel")}
                   tone="text"
                   disabled={!busy}
                   onPress={() => {
@@ -468,22 +483,39 @@ function DatabaseScreen({
             )}
             {result?.kind === "failed" ? (
               <AppText accessibilityRole="alert" className="p-3">
-                {result.message}
-                {result.code ? ` · ${result.code}` : ""} · {result.durationMs} ms
+                {gt("{detail} · {duration} ms", {
+                  detail: `${result.message}${result.code ? ` · ${result.code}` : ""}`,
+                  duration: result.durationMs,
+                })}
               </AppText>
             ) : result?.kind === "command" ? (
               <AppText className="p-3">
-                {result.command}
                 {result.affectedRows !== null
-                  ? ` · ${result.affectedRows} ${result.affectedRows === 1 ? "row" : "rows"}`
-                  : ""}{" "}
-                · {result.durationMs} ms
+                  ? gt(
+                      "{command} · {count, plural, one {{count} row} other {{count} rows}} · {duration} ms",
+                      {
+                        command: result.command,
+                        count: result.affectedRows,
+                        duration: result.durationMs,
+                      },
+                    )
+                  : gt("{command} · {duration} ms", {
+                      command: result.command,
+                      duration: result.durationMs,
+                    })}
               </AppText>
             ) : result?.kind === "rows" ? (
               <>
                 <AppText className="px-3 py-1 text-xs">
-                  {result.rows.length} rows · {result.durationMs} ms
-                  {result.hasMore && !tablePage ? " · Unread results expire after 60 seconds" : ""}
+                  {result.hasMore && !tablePage
+                    ? gt("{count} rows · {duration} ms · Unread results expire after 60 seconds", {
+                        count: result.rows.length,
+                        duration: result.durationMs,
+                      })
+                    : gt("{count} rows · {duration} ms", {
+                        count: result.rows.length,
+                        duration: result.durationMs,
+                      })}
                 </AppText>
                 <ScrollView horizontal style={{ flex: 1 }}>
                   <View style={{ width: Math.max(1, result.columns.length) * 160, flex: 1 }}>
@@ -517,7 +549,7 @@ function DatabaseScreen({
                               <Pressable
                                 key={column.key}
                                 accessibilityRole="button"
-                                onPress={() => setViewer(cellText(cell))}
+                                onPress={() => setViewer(cellText(cell, gt))}
                                 style={{ width: 160 }}
                                 className="justify-center px-2"
                               >
@@ -525,7 +557,7 @@ function DatabaseScreen({
                                   numberOfLines={1}
                                   className={cell === null ? "text-foreground-muted italic" : ""}
                                 >
-                                  {cellText(cell)}
+                                  {cellText(cell, gt)}
                                 </AppText>
                               </Pressable>
                             );
@@ -537,7 +569,7 @@ function DatabaseScreen({
                 </ScrollView>
                 {result.hasMore && (
                   <View className="p-2">
-                    <Button label="Load more" disabled={busy} onPress={() => void more()} />
+                    <Button label={gt("Load more")} disabled={busy} onPress={() => void more()} />
                   </View>
                 )}
               </>
@@ -551,7 +583,7 @@ function DatabaseScreen({
           presentationStyle="pageSheet"
         >
           <View className="flex-1 bg-screen p-4">
-            <Button label="Close value" onPress={() => setViewer(null)} />
+            <Button label={gt("Close value")} onPress={() => setViewer(null)} />
             <ScrollView>
               <AppText selectable className="py-4">
                 {viewer}

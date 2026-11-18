@@ -109,6 +109,7 @@ export const addRouteOverConnection = Effect.fn("AuthAccess.addRouteOverConnecti
         request: ({ client, headers }) =>
           client.pairingCredential({
             headers,
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- credential label sent to the server as an identifier
             payload: { label: "Route", scopes: input.grantedScopes.filter(isGrantScope) },
           }),
       }),

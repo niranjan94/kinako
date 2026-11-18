@@ -1,8 +1,10 @@
 /* oxlint-disable react/iframe-missing-sandbox -- This trusted package needs same-origin host messages and Canvas asset access. */
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import * as Schema from "effect/Schema";
+import { msg, T, useGT } from "gt-react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { m } from "../../i18n/messages";
 import { Button } from "../ui/button";
 import { loadOfficeAssets } from "./officeAssets";
 import { OfficeBridge, type OfficeAgent, type OfficeMessage } from "./officeBridge";
@@ -41,6 +43,7 @@ function OfficeFrameSession({
   onOpen,
   onRetry,
 }: OfficeFrameProps & { onRetry: () => void }) {
+  const gt = useGT();
   const frame = useRef<HTMLIFrameElement>(null);
   const bridge = useRef<OfficeBridge | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -125,11 +128,11 @@ function OfficeFrameSession({
     const fail = (reason: unknown) => {
       if (controller.signal.aborted) return;
       clearTimeout(timeout);
-      setError(reason instanceof Error ? reason.message : "Could not load the office.");
+      setError(reason instanceof Error ? reason.message : m(msg("Could not load the office.")));
       setState("error");
     };
     const timeout = setTimeout(
-      () => fail(new Error("The office did not respond. Try reloading it.")),
+      () => fail(new Error(m(msg("The office did not respond. Try reloading it.")))),
       30_000,
     );
     const receive = (event: MessageEvent<unknown>) => {
@@ -171,7 +174,7 @@ function OfficeFrameSession({
       <iframe
         ref={frame}
         src="/pixel-office/index.html"
-        title="Agent office"
+        title={gt("Agent office")}
         className="h-full min-h-0 w-full border-0"
       />
       {state !== "ready" && (
@@ -179,8 +182,12 @@ function OfficeFrameSession({
           className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background p-6 text-center"
           role="status"
         >
-          <p>{state === "error" ? error : "Opening the office…"}</p>
-          {state === "error" && <Button onClick={onRetry}>Reload office</Button>}
+          <p>{state === "error" ? error : gt("Opening the office…")}</p>
+          {state === "error" && (
+            <Button onClick={onRetry}>
+              <T>Reload office</T>
+            </Button>
+          )}
         </div>
       )}
       <input
@@ -188,7 +195,7 @@ function OfficeFrameSession({
         type="file"
         accept="application/json"
         className="hidden"
-        aria-label="Import office layout"
+        aria-label={gt("Import office layout")}
         onChange={async (event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
@@ -198,7 +205,7 @@ function OfficeFrameSession({
             .then((text) => ({ value: JSON.parse(text) as unknown }))
             .catch(() => null);
           if (!result || !isOfficeLayout(result.value)) {
-            setError("Choose a valid Pixel Agents office layout.");
+            setError(m(msg("Choose a valid Pixel Agents office layout.")));
             return;
           }
           const layout = result.value;
@@ -210,7 +217,7 @@ function OfficeFrameSession({
         <div className="absolute top-2 left-2 rounded bg-background p-3 text-sm" role="alert">
           {error}
           <Button size="sm" variant="ghost" onClick={() => setError("")}>
-            Dismiss
+            <T>Dismiss</T>
           </Button>
         </div>
       )}

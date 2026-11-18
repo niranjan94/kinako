@@ -35,54 +35,29 @@ describe("native PR entry points", () => {
         projects,
       ),
     ).toEqual({
-      name: "PullRequest",
-      params: {
-        ...context,
-        host: "github.com",
-        repository: "org/repo",
-        number: 12,
-        navigationUrl: "https://github.com/org/repo/pull/12/files#diff",
-      },
+      ...context,
+      host: "github.com",
+      repository: "org/repo",
+      number: 12,
+      navigationUrl: "https://github.com/org/repo/pull/12/files#diff",
     });
     expect(
       nativePullRequestDestination(
         "https://git.example/group/sub/repo/-/merge_requests/9",
         context,
         projects,
-      )?.params,
+      ),
     ).toMatchObject({ projectId: "gitlab", repository: "group/sub/repo" });
     expect(
       nativePullRequestDestination("http://forgejo.test:3000/org/repo/pulls/3", context, projects)
-        ?.params.host,
+        ?.host,
     ).toBe("forgejo.test:3000");
   });
 
   it("opens a repository nobody has checked out under a project on its host, as web does", () => {
     expect(
       nativePullRequestDestination("https://github.com/someone/else/pull/12", context, projects),
-    ).toEqual({
-      name: "PullRequest",
-      params: { ...context, host: "github.com", repository: "someone/else", number: 12 },
-    });
-  });
-
-  it("opens GitHub issues on the issue screen", () => {
-    expect(
-      nativePullRequestDestination(
-        "https://github.com/Org/Repo/issues/12#issuecomment-1",
-        context,
-        projects,
-      ),
-    ).toEqual({
-      name: "Issue",
-      params: {
-        ...context,
-        host: "github.com",
-        repository: "org/repo",
-        number: 12,
-        navigationUrl: "https://github.com/Org/Repo/issues/12#issuecomment-1",
-      },
-    });
+    ).toEqual({ ...context, host: "github.com", repository: "someone/else", number: 12 });
   });
 
   it("leaves links to the external opener when the environment cannot show them", () => {
@@ -90,18 +65,15 @@ describe("native PR entry points", () => {
     expect(nativePullRequestDestination(url, context, projects, () => false)).toBeNull();
   });
 
-  it("leaves other hosts' issues, unknown sites, and unscoped links to the external opener", () => {
+  it("leaves issues, unknown sites, and unscoped links to the external opener", () => {
     expect(
-      nativePullRequestDestination("https://gitlab.com/org/repo/-/issues/12", context, projects),
+      nativePullRequestDestination("https://github.com/org/repo/issues/12", context, projects),
     ).toBeNull();
     expect(
       nativePullRequestDestination("https://example.com/org/repo/pull/12", context, projects),
     ).toBeNull();
     expect(
       nativePullRequestDestination("https://github.com/org/repo/pull/12", null, projects),
-    ).toBeNull();
-    expect(
-      nativePullRequestDestination("https://github.com/org/repo/issues/12", null, projects),
     ).toBeNull();
   });
 });

@@ -14,7 +14,6 @@ import {
   PullRequestOperationError,
   PullRequestUnavailableError,
   type EnvironmentId,
-  type IssueListInput,
   type ProjectId,
   type PullRequestChecksState,
   type PullRequestFilesViewedResult,
@@ -44,7 +43,6 @@ import {
   type EnvironmentPullRequestStat,
   type MergedPullRequestList,
 } from "../components/pullRequest/pullRequestList.logic";
-import { mergeIssueLists, type MergedIssueList } from "../components/pullRequest/issue.logic";
 import { writePullRequestDetailSnapshot } from "../components/pullRequest/pullRequestDetail.logic";
 import { pullRequestChecksState } from "../components/pullRequest/pullRequestPresentation";
 import { useGuideRunStore } from "../components/pullRequest/guide/guideRunStore";
@@ -720,11 +718,6 @@ const usePullRequestListsQuery = createMergedEnvironmentQuery(
   observeFailedPullRequestList,
 );
 
-const useIssueListsQuery = createMergedEnvironmentQuery(
-  "web-issues:list",
-  pullRequestEnvironment.issueList,
-);
-
 const usePullRequestStatsQuery = createMergedEnvironmentQuery(
   "web-pull-requests:list-stats",
   pullRequestEnvironment.listStats,
@@ -776,22 +769,6 @@ export function usePullRequestList(
     observations: query.observations,
     refresh: query.refresh,
   };
-}
-
-export interface MergedIssueListView {
-  readonly data: MergedIssueList | null;
-  readonly error: EnvironmentQueryError | null;
-  readonly isPending: boolean;
-  readonly refresh: (targets?: ReadonlyArray<EnvironmentQueryTarget<IssueListInput>>) => void;
-}
-
-/** One issue listing per environment, merged the way the pull request listings are. */
-export function useIssueList(
-  targets: ReadonlyArray<EnvironmentQueryTarget<IssueListInput>>,
-): MergedIssueListView {
-  const query = useIssueListsQuery(targets);
-  const data = (() => mergeIssueLists(query.values))();
-  return { data, error: query.error, isPending: query.isPending, refresh: query.refresh };
 }
 
 export function usePullRequestHostList(

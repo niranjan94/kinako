@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { msg } from "gt-react-native";
 import { useEffect } from "react";
 import { AppState } from "react-native";
 import * as Atom from "effect/reactivity/Atom";
@@ -12,7 +13,8 @@ import {
   pullRequestReviewKey,
   type ReviewDraft,
 } from "./pullRequestReviewDrafts";
-import type { PullRequestReferenceParams } from "./usePullRequestDiff";
+import type { PullRequestParams } from "./usePullRequestDiff";
+import { m } from "../../i18n/messages";
 
 const state = Atom.make<{
   drafts: Record<string, ReviewDraft>;
@@ -41,7 +43,7 @@ function load() {
     } catch {
       appAtomRegistry.set(state, {
         ...appAtomRegistry.get(state),
-        error: "Could not restore review drafts. Reopen this screen to retry.",
+        error: m(msg("Could not restore review drafts. Reopen this screen to retry.")),
       });
       loading = null;
     }
@@ -67,12 +69,12 @@ async function persist() {
     } catch {
       appAtomRegistry.set(state, {
         ...appAtomRegistry.get(state),
-        error: "Drafts are kept in this session, but could not be saved on this device.",
+        error: m(msg("Drafts are kept in this session, but could not be saved on this device.")),
       });
     }
   });
 }
-export function usePullRequestReviewDraft(params: PullRequestReferenceParams) {
+export function usePullRequestReviewDraft(params: PullRequestParams) {
   const snapshot = useAtomValue(state);
   const key = pullRequestReviewKey(params);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- loads review drafts from disk and persists them when AppState leaves active and on unmount

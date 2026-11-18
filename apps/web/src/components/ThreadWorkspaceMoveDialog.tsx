@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { msg, T, useGT } from "gt-react";
 import { useAtomValue } from "@effect/atom-react";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { ScopedThreadRef, VcsMoveThreadInput } from "@t3tools/contracts";
 
+import { m } from "../i18n/messages";
 import { useQuietThreadShell } from "../state/entities";
 import { useAtomCommand } from "../state/use-atom-command";
 import { vcsEnvironment } from "../state/vcs";
@@ -42,6 +44,7 @@ export function ThreadWorkspaceMoveDialog() {
 }
 
 function MoveDialog({ threadRef, onClose }: { threadRef: ScopedThreadRef; onClose: () => void }) {
+  const gt = useGT();
   const thread = useQuietThreadShell(threadRef);
   const [branch, setBranch] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,25 +70,31 @@ function MoveDialog({ threadRef, onClose }: { threadRef: ScopedThreadRef; onClos
     setBusy(false);
     if (result._tag === "Failure") {
       const failure = squashAtomCommandFailure(result);
-      setError(failure instanceof Error ? failure.message : "Could not move the workspace.");
+      setError(
+        failure instanceof Error ? failure.message : m(msg("Could not move the workspace.")),
+      );
       setRetry(input);
       return;
     }
     if (result.value.cleanupPending) {
       setRetry(input);
-      setError("Workspace moved. Source changes are still present; retry to finish cleanup.");
+      setError(
+        m(msg("Workspace moved. Source changes are still present; retry to finish cleanup.")),
+      );
       return;
     }
     toastManager.add(
       result.value.setupScript.status === "failed"
         ? {
             type: "error",
-            title: "Workspace moved; setup script failed",
+            title: m(msg("Workspace moved; setup script failed")),
             description: result.value.setupScript.detail,
           }
         : {
             type: "success",
-            title: toLocal ? "Workspace moved to local" : "Workspace moved to worktree",
+            title: toLocal
+              ? m(msg("Workspace moved to local"))
+              : m(msg("Workspace moved to worktree")),
           },
     );
     onClose();
@@ -99,19 +108,21 @@ function MoveDialog({ threadRef, onClose }: { threadRef: ScopedThreadRef; onClos
     >
       <DialogPopup>
         <DialogHeader>
-          <DialogTitle>{toLocal ? "Move to local" : "Move to worktree"}</DialogTitle>
+          <DialogTitle>{toLocal ? gt("Move to local") : gt("Move to worktree")}</DialogTitle>
           <DialogDescription>
-            Move this conversation and its uncommitted changes. The thread must be idle and the
-            destination clean.
             {toLocal
-              ? " The local checkout will use the worktree's commit in detached HEAD mode when needed. The worktree is retained."
-              : " Enter a new branch name or the branch of an existing worktree at the same commit."}
+              ? gt(
+                  "Move this conversation and its uncommitted changes. The thread must be idle and the destination clean. The local checkout will use the worktree's commit in detached HEAD mode when needed. The worktree is retained.",
+                )
+              : gt(
+                  "Move this conversation and its uncommitted changes. The thread must be idle and the destination clean. Enter a new branch name or the branch of an existing worktree at the same commit.",
+                )}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 px-6 py-3">
           {!toLocal && (
             <Input
-              aria-label="Worktree branch"
+              aria-label={gt("Worktree branch")}
               placeholder="feature/my-change"
               value={branch}
               disabled={busy || retry !== null}
@@ -126,7 +137,7 @@ function MoveDialog({ threadRef, onClose }: { threadRef: ScopedThreadRef; onClos
         </div>
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={onClose}>
-            Cancel
+            <T>Cancel</T>
           </Button>
           {retry && thread?.worktreePath === retry.expectedWorktreePath && (
             <Button
@@ -137,7 +148,7 @@ function MoveDialog({ threadRef, onClose }: { threadRef: ScopedThreadRef; onClos
                 setError(null);
               }}
             >
-              Change destination
+              <T>Change destination</T>
             </Button>
           )}
           {!toLocal && !retry && (
@@ -146,14 +157,14 @@ function MoveDialog({ threadRef, onClose }: { threadRef: ScopedThreadRef; onClos
               disabled={busy || !permission}
               onClick={() => void submit(true)}
             >
-              Use associated worktree
+              <T>Use associated worktree</T>
             </Button>
           )}
           <Button
             disabled={busy || !permission || (!toLocal && !retry && !branch.trim())}
             onClick={() => void submit()}
           >
-            {busy ? "Moving…" : retry ? "Retry" : "Move"}
+            {busy ? gt("Moving…") : retry ? gt("Retry") : gt("Move")}
           </Button>
         </DialogFooter>
       </DialogPopup>

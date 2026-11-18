@@ -1,4 +1,5 @@
 import type { NotificationSoundTheme } from "@t3tools/contracts/settings";
+import { msg } from "gt-react";
 
 // Desktop CSP blocks fetching data URLs, so even small audio files must stay external.
 import completionUrl from "./assets/notification-completion.mp3?no-inline";
@@ -19,12 +20,21 @@ import smoothCompletion from "./assets/notification-sounds/smooth-completion.mp3
 import smoothInput from "./assets/notification-sounds/smooth-input.mp3?no-inline";
 
 export const NOTIFICATION_SOUND_THEMES = {
-  default: { label: "Default", completion: completionUrl, input: inputUrl },
-  smooth: { label: "Smooth Notifications", completion: smoothCompletion, input: smoothInput },
+  default: {
+    label: msg("Default", { $context: "notification sound theme" }),
+    completion: completionUrl,
+    input: inputUrl,
+  },
+  smooth: { label: msg("Smooth Notifications"), completion: smoothCompletion, input: smoothInput },
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- game and franchise names are proper nouns
   aoe2: { label: "Age of Empires 2", completion: aoe2Completion, input: aoe2Input },
-  retro: { label: "Retro Computing", completion: retroCompletion, input: retroInput },
+  retro: { label: msg("Retro Computing"), completion: retroCompletion, input: retroInput },
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- game and franchise names are proper nouns
   minecraft: { label: "Minecraft", completion: minecraftCompletion, input: minecraftInput },
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- game and franchise names are proper nouns
   sims: { label: "The Sims", completion: simsCompletion, input: simsInput },
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- game and franchise names are proper nouns
   re: { label: "Resident Evil", completion: reCompletion, input: reInput },
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- game and franchise names are proper nouns
   argento: { label: "Argento", completion: argentoCompletion, input: argentoInput },
 } satisfies Record<NotificationSoundTheme, { label: string; completion: string; input: string }>;

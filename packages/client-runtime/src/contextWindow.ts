@@ -1,3 +1,6 @@
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
+
 import type { ContextWindowSnapshot } from "./state/contextWindow.ts";
 
 export type ContextWindowSegmentKind = "used" | "free" | "buffer";
@@ -24,6 +27,7 @@ export interface ContextWindowBreakdown {
  */
 export function deriveContextWindowBreakdown(
   snapshot: ContextWindowSnapshot,
+  resolve: MFunctionType = mFallback,
 ): ContextWindowBreakdown | null {
   if (snapshot.categories !== null && snapshot.categories.length > 0) {
     const segments = snapshot.categories.flatMap((category) =>
@@ -52,11 +56,11 @@ export function deriveContextWindowBreakdown(
   const otherTokens = Math.max(0, snapshot.usedTokens - inputTokens - outputTokens);
   const freeTokens = Math.max(0, snapshot.maxTokens - snapshot.usedTokens);
   const segments: Array<ContextWindowSegment> = [
-    { label: "Cached input", tokens: cachedTokens, kind: "used" },
-    { label: "New input", tokens: inputTokens - cachedTokens, kind: "used" },
-    { label: "Output", tokens: outputTokens, kind: "used" },
-    { label: "Other", tokens: otherTokens, kind: "used" },
-    { label: "Free space", tokens: freeTokens, kind: "free" },
+    { label: resolve(msg("Cached input")), tokens: cachedTokens, kind: "used" },
+    { label: resolve(msg("New input")), tokens: inputTokens - cachedTokens, kind: "used" },
+    { label: resolve(msg("Output")), tokens: outputTokens, kind: "used" },
+    { label: resolve(msg("Other")), tokens: otherTokens, kind: "used" },
+    { label: resolve(msg("Free space")), tokens: freeTokens, kind: "free" },
   ];
   const visible = segments.filter((segment) => segment.tokens > 0);
   return visible.some((segment) => segment.kind === "used")

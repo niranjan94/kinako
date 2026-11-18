@@ -43,6 +43,8 @@ import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { FORK_DEFAULT_PORT, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import { msg } from "gt-i18n";
+import { m } from "../i18n/messages.ts";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = FORK_DEFAULT_PORT;
 const MAX_TCP_PORT = 65_535;
@@ -148,7 +150,7 @@ const handleFatalStartupError = Effect.fn("desktop.startup.handleFatalStartupErr
   const wasQuitting = yield* Ref.getAndSet(state.quitting, true);
   if (!wasQuitting) {
     yield* electronDialog.showErrorBox(
-      `${FORK_DISPLAY_NAME} failed to start`,
+      m(msg("{app} failed to start"), { app: FORK_DISPLAY_NAME }),
       `Stage: ${stage}\n${message}${detail}`,
     );
   }
@@ -217,7 +219,7 @@ const startLocalBackend = Effect.gen(function* () {
       owner: Option.getOrNull(owner),
     });
     yield* (yield* ElectronDialog.ElectronDialog).showErrorBox(
-      "This T3 home is unavailable",
+      m(msg("This T3 home is unavailable")),
       DesktopHomeOwner.homeOwnedMessage(owner),
     );
     yield* (yield* ElectronApp.ElectronApp).quit;

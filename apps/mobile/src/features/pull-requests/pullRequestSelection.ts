@@ -1,14 +1,12 @@
 import type { NavigationState } from "@react-navigation/native";
 import { pullRequestListKey } from "./pullRequestList";
 
-const isItemRoute = (name: string) => name.startsWith("PullRequest") || name.startsWith("Issue");
-
 export function selectedPullRequestKey(state: Pick<NavigationState, "routes" | "index">) {
   for (let index = state.index; index >= 0; index--) {
     const route = state.routes[index];
     if (!route) continue;
     if (route.name === "Home" || route.name.startsWith("Thread")) return null;
-    if (!isItemRoute(route.name)) continue;
+    if (!route.name.startsWith("PullRequest")) continue;
     const params = route.params;
     if (
       params &&
@@ -27,7 +25,7 @@ export function selectedPullRequestKey(state: Pick<NavigationState, "routes" | "
         number: params.number,
       })}`;
     }
-    if (route.name === "PullRequest" || route.name === "Issue") return null;
+    if (route.name === "PullRequest") return null;
   }
   return null;
 }

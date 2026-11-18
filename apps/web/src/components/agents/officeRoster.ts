@@ -1,4 +1,6 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { msg } from "gt-react";
+import { m, type MessageResolver } from "../../i18n/messages";
 import {
   officeAgentState,
   officeThreadKey,
@@ -13,6 +15,7 @@ export function buildOfficeRoster(
     connected: (thread: EnvironmentThreadShell) => boolean;
     projectName: (thread: EnvironmentThreadShell) => string;
   },
+  resolve: MessageResolver = m,
 ): OfficeAgent[] {
   const visible = threads.filter(
     (thread) =>
@@ -67,7 +70,7 @@ export function buildOfficeRoster(
       const key = `${officeThreadKey(thread)}:task:${task.taskId}`;
       group.set(key, {
         key,
-        title: task.description ?? "Subagent",
+        title: task.description ?? resolve(msg("Subagent")),
         state: "working",
         approval: false,
       });

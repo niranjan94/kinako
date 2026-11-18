@@ -5,6 +5,9 @@ import {
 import type { MenuAction } from "@react-native-menu/menu";
 import type { PullRequestDetail, PullRequestLinkedThreadsResult } from "@t3tools/contracts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import { msg } from "gt-react-native";
+import { m, type MessageResolver } from "../../i18n/messages";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 
 export type PullRequestAgentTask =
   | "ask"
@@ -29,6 +32,7 @@ export function pullRequestAgentThreadActions(
   threads: PullRequestLinkedThreadsResult["threads"],
   task: PullRequestAgentTask,
   canAsk: boolean,
+  resolve: MessageResolver = m,
 ): MenuAction[] {
   const active: MenuAction[] = [];
   const settled: MenuAction[] = [];
@@ -37,20 +41,22 @@ export function pullRequestAgentThreadActions(
       id: `${task}:${thread.id}`,
       title: thread.title,
       subtitle: thread.archivedAt
-        ? "Archived thread"
+        ? resolve(msg("Archived thread"))
         : thread.settled
-          ? "Settled thread"
-          : "Continue thread",
+          ? resolve(msg("Settled thread"))
+          : resolve(msg("Continue thread")),
       image: "bubble.left.and.bubble.right",
       attributes: { disabled: task !== "ask" && Boolean(thread.archivedAt) },
     };
     (thread.settled ? settled : active).push(action);
   }
   return [
-    ...(canAsk ? [{ id: `${task}:new`, title: "Start a new thread", image: "plus" }] : []),
+    ...(canAsk
+      ? [{ id: `${task}:new`, title: resolve(msg("Start a new thread")), image: "plus" }]
+      : []),
     ...active,
     ...(settled.length
-      ? [{ id: `${task}:settled`, title: "Settled threads", subactions: settled }]
+      ? [{ id: `${task}:settled`, title: resolve(msg("Settled threads")), subactions: settled }]
       : []),
   ];
 }
@@ -65,14 +71,19 @@ export function pullRequestAgentPrompt(
     case "question":
       return "";
     case "explain":
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- prompt sent to the agent
       return `Explain this ${singular}. Read the diff and walk through its purpose, the changes, the risks, and what I should read closely before approving. Do not change any code.`;
     case "feedback":
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- prompt sent to the agent
       return `Address the actionable feedback and failing checks on this ${singular}. Fetch the latest review threads and check results, skip resolved feedback, and verify each finding before changing code. First confirm this thread is on the ${shortLabel}'s branch; if it isn't, prepare the ${shortLabel} in its own worktree. Keep the fixes focused and run the relevant checks.`;
     case "conflicts":
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- prompt sent to the agent
       return `Resolve this ${singular}'s conflicts with its base branch. First confirm this thread is on the ${shortLabel}'s branch; if it isn't, prepare the ${shortLabel} in its own worktree. Bring it up to date using this repository's convention, preserve the intent of both sides, and run the relevant checks before pushing.`;
     case "watch":
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- prompt sent to the agent
       return `Watch this ${singular} for check results, new feedback, and conflicts using ${FORK_DISPLAY_NAME}'s pull request watch. End the turn once the watch is armed. When it wakes you, assess what changed and report what needs attention.`;
     case "auto-fix":
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- prompt sent to the agent
       return `Turn on Auto-fix CI for this ${singular}: call watch_pull_request with autoFix set to true, then end the turn. When ${FORK_DISPLAY_NAME} wakes you with failing checks, fix them as the wake describes.`;
   }
 }
@@ -81,38 +92,53 @@ export function pullRequestAgentActions(
   pr: PullRequestDetail,
   canWatch: boolean,
   canAutoFix: boolean,
+  resolve: MessageResolver = m,
 ) {
-  const { shortLabel } = sourceControlClients.get(pr.provider).changeRequest;
+  const term = changeRequestTermKind(sourceControlClients.get(pr.provider).changeRequest);
   return [
-    { task: "ask", title: "Work on PR", icon: "bubble.left.and.bubble.right", disabled: false },
+    {
+      task: "ask",
+      title: resolve(
+        msg("Work on {term, select, mr {MR} cr {change request} other {PR}}", { term }),
+      ),
+      icon: "bubble.left.and.bubble.right",
+      disabled: false,
+    },
     {
       task: "question",
-      title: "Ask a question",
+      title: resolve(msg("Ask a question")),
       icon: "bubble.left.and.text.bubble.right",
       disabled: false,
     },
-    { task: "explain", title: `Explain this ${shortLabel}`, icon: "book", disabled: false },
+    {
+      task: "explain",
+      title: resolve(
+        msg("Explain this {term, select, mr {MR} cr {change request} other {PR}}", { term }),
+      ),
+      icon: "book",
+      disabled: false,
+    },
     {
       task: "feedback",
-      title: "Address feedback",
+      title: resolve(msg("Address feedback")),
       icon: "wrench.and.screwdriver",
       disabled: pr.state !== "open",
     },
     {
       task: "conflicts",
-      title: "Resolve conflicts",
+      title: resolve(msg("Resolve conflicts")),
       icon: "arrow.triangle.branch",
       disabled: pr.state !== "open" || pr.mergeability !== "conflicting",
     },
     {
       task: "watch",
-      title: `Watch ${shortLabel}`,
+      title: resolve(msg("Watch {term, select, mr {MR} cr {change request} other {PR}}", { term })),
       icon: "eye",
       disabled: pr.state !== "open" || !canWatch,
     },
     {
       task: "auto-fix",
-      title: "Auto-fix CI",
+      title: resolve(msg("Auto-fix CI")),
       icon: "hammer",
       disabled: pr.state !== "open" || !canAutoFix,
     },

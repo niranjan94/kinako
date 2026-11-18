@@ -2,8 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type {
-  IssueListState,
-  IssueState,
   PullRequestStackMembership,
   PullRequestAction,
   PullRequestStackHead,
@@ -291,37 +289,6 @@ export interface ProviderFileRevisions {
   readonly complete?: boolean;
 }
 
-/** One issue as a listing reads it. `repository` names it, since a listing spans repositories. */
-export interface ProviderIssue {
-  readonly repository: string;
-  readonly number: number;
-  readonly title: string;
-  readonly url: string;
-  readonly author: PullRequestActor | null;
-  readonly state: IssueState;
-  readonly labels: ReadonlyArray<PullRequestLabel>;
-  readonly assignees: ReadonlyArray<PullRequestActor>;
-  readonly commentCount: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly closedAt: string | null;
-}
-
-export interface ProviderIssuePage {
-  /** Newest update first, which is the order a cursor carries on from. */
-  readonly items: ReadonlyArray<ProviderIssue>;
-  /** True when the host has more rows than the page size asked for. */
-  readonly truncated: boolean;
-}
-
-export interface ProviderIssueDetail extends ProviderIssue {
-  readonly body: string;
-  /** Oldest first. */
-  readonly comments: ReadonlyArray<PullRequestComment>;
-  readonly commentsTruncated: boolean;
-  readonly viewerCanComment: boolean;
-}
-
 export interface ProviderFilterOptionPage<A> {
   readonly items: ReadonlyArray<A>;
   readonly truncated: boolean;
@@ -564,29 +531,6 @@ export interface PullRequestProviderApi {
   ) => Effect.Effect<void, PullRequestProviderError>;
 
   readonly comment: (
-    input: ProviderRepositoryRef & { readonly number: number; readonly body: string },
-  ) => Effect.Effect<void, PullRequestProviderError>;
-
-  /**
-   * One slice of issues across several repositories on one host, newest update first. Present
-   * with `getIssue` and `commentOnIssue` only where `capabilities.issues` is true.
-   */
-  readonly listIssues?: (input: {
-    /** Any checkout on the host. */
-    readonly cwd: string;
-    readonly host: string;
-    readonly repositories: ReadonlyArray<string>;
-    readonly state: IssueListState;
-    readonly limit: number;
-    readonly query?: string | undefined;
-    readonly cursor?: ProviderListCursor | undefined;
-  }) => Effect.Effect<ProviderIssuePage, PullRequestProviderError>;
-
-  readonly getIssue?: (
-    input: ProviderRepositoryRef & { readonly number: number },
-  ) => Effect.Effect<ProviderIssueDetail, PullRequestProviderError>;
-
-  readonly commentOnIssue?: (
     input: ProviderRepositoryRef & { readonly number: number; readonly body: string },
   ) => Effect.Effect<void, PullRequestProviderError>;
 

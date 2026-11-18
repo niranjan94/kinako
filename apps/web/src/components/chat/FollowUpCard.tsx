@@ -16,7 +16,9 @@ import type {
 } from "@t3tools/contracts";
 import { CheckIcon, ChevronDownIcon, MinusIcon, SquarePlusIcon } from "lucide-react";
 import { useState } from "react";
+import { T, useGT } from "gt-react";
 
+import { m } from "../../i18n/messages";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
@@ -30,6 +32,7 @@ export function FollowUpCard(props: {
   readonly visibility: OrchestrationV2ProjectedTurnItem["visibility"];
   readonly onOpenThread: (threadId: ThreadId) => void;
 }) {
+  const gt = useGT();
   const { item } = props;
   const display = followUpDisplay(item, props.visibility);
   const icon = <SquarePlusIcon className="size-3.5 text-icon-muted" aria-hidden />;
@@ -44,7 +47,7 @@ export function FollowUpCard(props: {
         <WorkLogRow
           data-v2-item-type={item.type}
           icon={<CheckIcon className="size-3.5 text-icon-muted" aria-hidden />}
-          label={<>{item.label} · Started in a new thread</>}
+          label={gt("{label} · Started in a new thread", { label: item.label })}
           {...(threadId === null ? {} : { onClick: () => props.onOpenThread(threadId) })}
         />
       );
@@ -54,7 +57,7 @@ export function FollowUpCard(props: {
         <WorkLogRow
           data-v2-item-type={item.type}
           icon={icon}
-          label={<>{item.label} · Suggested in the original thread</>}
+          label={gt("{label} · Suggested in the original thread", { label: item.label })}
         />
       );
   }
@@ -73,7 +76,7 @@ function useFollowUpAction(environmentId: EnvironmentId) {
     setError(null);
     const result = await action().finally(() => setBusy(false));
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      setError(followUpFailureMessage(squashAtomCommandFailure(result)));
+      setError(followUpFailureMessage(squashAtomCommandFailure(result), m));
     }
   };
   return { start, setDismissed, disabled: busy || !canOperate, error, run };
@@ -83,6 +86,7 @@ function SuggestedFollowUp(props: {
   readonly environmentId: EnvironmentId;
   readonly item: FollowUpItem;
 }) {
+  const gt = useGT();
   const { item, environmentId } = props;
   const { start, setDismissed, disabled, error, run } = useFollowUpAction(environmentId);
   // Omitting the workspace follows the project's default for new threads.
@@ -130,7 +134,7 @@ function SuggestedFollowUp(props: {
             )
           }
         >
-          Dismiss
+          <T>Dismiss</T>
         </Button>
         <Group>
           <Button
@@ -140,7 +144,7 @@ function SuggestedFollowUp(props: {
             disabled={disabled}
             onClick={() => startIn()}
           >
-            Start thread
+            <T>Start thread</T>
           </Button>
           <GroupSeparator />
           <Menu>
@@ -151,15 +155,19 @@ function SuggestedFollowUp(props: {
                   type="button"
                   size="icon-xs"
                   variant="outline"
-                  aria-label="More ways to start"
+                  aria-label={gt("More ways to start")}
                 />
               }
             >
               <ChevronDownIcon />
             </MenuTrigger>
             <MenuPopup align="end">
-              <MenuItem onClick={() => startIn("current")}>Start in this checkout</MenuItem>
-              <MenuItem onClick={() => startIn("worktree")}>Start in a new worktree</MenuItem>
+              <MenuItem onClick={() => startIn("current")}>
+                <T>Start in this checkout</T>
+              </MenuItem>
+              <MenuItem onClick={() => startIn("worktree")}>
+                <T>Start in a new worktree</T>
+              </MenuItem>
             </MenuPopup>
           </Menu>
         </Group>
@@ -172,17 +180,17 @@ function DismissedFollowUp(props: {
   readonly environmentId: EnvironmentId;
   readonly item: FollowUpItem;
 }) {
+  const gt = useGT();
   const { item, environmentId } = props;
   const { setDismissed, disabled, error, run } = useFollowUpAction(environmentId);
   return (
     <WorkLogRow
       data-v2-item-type={item.type}
       icon={<MinusIcon className="size-3.5 text-icon-muted" aria-hidden />}
-      label={
-        <>
-          {item.label} · {error ?? "Dismissed"}
-        </>
-      }
+      label={gt("{label} · {status}", {
+        label: item.label,
+        status: error ?? gt("Dismissed"),
+      })}
       trailing={
         <Button
           type="button"
@@ -198,7 +206,7 @@ function DismissedFollowUp(props: {
             )
           }
         >
-          Restore
+          <T>Restore</T>
         </Button>
       }
     />

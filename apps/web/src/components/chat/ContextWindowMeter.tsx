@@ -1,4 +1,5 @@
 import { Button } from "../ui/button";
+import { T, useGT, useMessages } from "gt-react";
 import {
   type ContextWindowBreakdown,
   deriveContextWindowBreakdown,
@@ -17,6 +18,7 @@ function formatPercentage(value: number | null): string | null {
 }
 
 function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }) {
+  const gt = useGT();
   const { segments, deferred } = props.breakdown;
   const windowTokens = segments.reduce((sum, segment) => sum + segment.tokens, 0);
   const share = (tokens: number) => (windowTokens > 0 ? (tokens / windowTokens) * 100 : 0);
@@ -35,7 +37,7 @@ function ContextWindowBreakdownView(props: { breakdown: ContextWindowBreakdown }
       <div
         className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-muted/60"
         role="img"
-        aria-label="Context window usage by category"
+        aria-label={gt("Context window usage by category")}
       >
         {rows.map((row) => (
           <div
@@ -83,6 +85,8 @@ export function ContextWindowMeter(props: {
   compactDisabled?: boolean | undefined;
   compactDisabledReason?: string | null | undefined;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const { usage, onCompact, compactDisabled, compactDisabledReason } = props;
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
@@ -91,7 +95,7 @@ export function ContextWindowMeter(props: {
   const dashOffset = circumference * (1 - normalizedPercentage / 100);
   const totalProcessedTokens = usage.totalProcessedTokens ?? null;
   const showTotalProcessed = totalProcessedTokens !== null && totalProcessedTokens > 0;
-  const breakdown = deriveContextWindowBreakdown(usage);
+  const breakdown = deriveContextWindowBreakdown(usage, m);
   const isOverloaded = normalizedPercentage > 90;
   const usageColor = isOverloaded
     ? "var(--color-error)"
@@ -110,8 +114,10 @@ export function ContextWindowMeter(props: {
             className="size-7"
             aria-label={
               usage.maxTokens !== null && usedPercentage
-                ? `Context window ${usedPercentage} used`
-                : `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used`
+                ? gt("Context window {percentage} used", { percentage: usedPercentage })
+                : gt("Context window {tokens} tokens used", {
+                    tokens: formatContextWindowTokens(usage.usedTokens),
+                  })
             }
           >
             <span className="relative flex size-5 items-center justify-center">
@@ -156,7 +162,9 @@ export function ContextWindowMeter(props: {
       >
         <div className="flex flex-col gap-2 p-(--floating-content-inset)">
           <div className="flex items-center justify-between gap-3">
-            <div className="font-medium text-muted-foreground text-xs">Context Window</div>
+            <div className="font-medium text-muted-foreground text-xs">
+              <T>Context Window</T>
+            </div>
             {usage.maxTokens !== null && usedPercentage ? (
               <div className="text-secondary-label text-2xs tabular-nums">
                 <span>{usedPercentage}</span>
@@ -181,7 +189,7 @@ export function ContextWindowMeter(props: {
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(normalizedPercentage)}
-              aria-label="Context window usage"
+              aria-label={gt("Context window usage")}
             >
               <div
                 className="h-full rounded-full transition-[width,background-color] duration-500 ease-out motion-reduce:transition-none"
@@ -191,7 +199,9 @@ export function ContextWindowMeter(props: {
           ) : null}
           {showTotalProcessed ? (
             <div className="flex items-center justify-between gap-3 text-2xs leading-4">
-              <span className="text-secondary-label">Total processed</span>
+              <span className="text-secondary-label">
+                <T>Total processed</T>
+              </span>
               <span className="font-medium tabular-nums text-secondary-label">
                 {formatContextWindowTokens(totalProcessedTokens)}
               </span>
@@ -199,7 +209,9 @@ export function ContextWindowMeter(props: {
           ) : null}
           {usage.cost != null ? (
             <div className="flex items-center justify-between gap-3 text-2xs leading-4">
-              <span className="text-secondary-label">Cost</span>
+              <span className="text-secondary-label">
+                <T>Cost</T>
+              </span>
               <span className="font-medium tabular-nums text-secondary-label">
                 {formatContextWindowCost(usage.cost)}
               </span>
@@ -207,7 +219,7 @@ export function ContextWindowMeter(props: {
           ) : null}
           {usage.compactsAutomatically ? (
             <div className="mt-1 text-pretty text-secondary-label text-2xs font-medium">
-              {formatContextWindowCompactionMessage(usage.autoCompactThreshold)}
+              {formatContextWindowCompactionMessage(usage.autoCompactThreshold, m)}
             </div>
           ) : null}
           {onCompact ? (
@@ -220,7 +232,7 @@ export function ContextWindowMeter(props: {
                 onClick={onCompact}
               >
                 <Minimize2Icon aria-hidden="true" />
-                Compact context
+                <T>Compact context</T>
               </Button>
               {compactDisabled && compactDisabledReason ? (
                 <div className="text-pretty text-secondary-label text-2xs">

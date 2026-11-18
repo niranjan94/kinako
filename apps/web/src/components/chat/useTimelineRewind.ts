@@ -1,3 +1,6 @@
+import { msg } from "gt-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m } from "~/i18n/messages";
 import type { EnvironmentThreadShell, ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import type { ComposerThreadTarget } from "../../composerDraftStore";
 import type { ComposerHandleRef } from "../../composerHandleContext";
@@ -157,12 +160,29 @@ export function useTimelineRewind(input: TimelineRewindInput) {
   };
 
   /** Why the thread cannot rewind or summarize now, or null when it can. */
-  const conversationChangeBlocker = (action: string) => {
+  const conversationChangeBlocker = (action: "reverting" | "summarizing" | "restoring") => {
     if (activeEnvironmentUnavailable && activeEnvironmentUnavailableLabel) {
-      return `Reconnect ${activeEnvironmentUnavailableLabel} before ${action}.`;
+      const environment = activeEnvironmentUnavailableLabel;
+      switch (action) {
+        case "reverting":
+          return m(msg("Reconnect {environment} before reverting checkpoints.", { environment }));
+        case "summarizing":
+          return m(msg("Reconnect {environment} before summarizing.", { environment }));
+        case "restoring":
+          return m(
+            msg("Reconnect {environment} before restoring the full context.", { environment }),
+          );
+      }
     }
     if (phase === "running" || isSendBusy) {
-      return `Interrupt the current turn before ${action}.`;
+      switch (action) {
+        case "reverting":
+          return m(msg("Interrupt the current turn before reverting checkpoints."));
+        case "summarizing":
+          return m(msg("Interrupt the current turn before summarizing."));
+        case "restoring":
+          return m(msg("Interrupt the current turn before restoring the full context."));
+      }
     }
     return null;
   };
@@ -186,11 +206,15 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     if (!supportsConversationRollback) {
       setThreadError(
         activeThread.id,
-        "This provider does not support reverting conversation history. Start a new thread instead.",
+        m(
+          msg(
+            "This provider does not support reverting conversation history. Start a new thread instead.",
+          ),
+        ),
       );
       return;
     }
-    const blocker = conversationChangeBlocker("reverting checkpoints");
+    const blocker = conversationChangeBlocker("reverting");
     if (blocker !== null) {
       setThreadError(activeThread.id, blocker);
       return;
@@ -297,7 +321,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     await summarize().catch((error: unknown) => {
       setThreadError(
         threadId,
-        error instanceof Error ? error.message : "Failed to summarize the conversation.",
+        error instanceof Error ? error.message : m(msg("Failed to summarize the conversation.")),
       );
     });
   };
@@ -309,7 +333,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
   const onRestoreSummary = async (turnItemId: TurnItemId) => {
     if (!activeThread || !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope))
       return;
-    const blocker = conversationChangeBlocker("restoring the full context");
+    const blocker = conversationChangeBlocker("restoring");
     if (blocker !== null) {
       setThreadError(activeThread.id, blocker);
       return;
@@ -323,7 +347,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
       const failure = squashAtomCommandFailure(result);
       setThreadError(
         activeThread.id,
-        failure instanceof Error ? failure.message : "Failed to restore the full context.",
+        failure instanceof Error ? failure.message : m(msg("Failed to restore the full context.")),
       );
     }
   };
@@ -368,7 +392,7 @@ export function useTimelineRewind(input: TimelineRewindInput) {
         const error = squashAtomCommandFailure(result);
         setThreadError(
           activeThread.id,
-          error instanceof Error ? error.message : "Failed to fork this response.",
+          thrownErrorMessage(error, m) ?? m(msg("Failed to fork this response.")),
         );
       }
       return;
@@ -377,7 +401,11 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     if (!targetThreadReady) {
       setThreadError(
         activeThread.id,
-        "The fork was created, but its thread data did not reach this client. Reconnect and try opening it from the sidebar.",
+        m(
+          msg(
+            "The fork was created, but its thread data did not reach this client. Reconnect and try opening it from the sidebar.",
+          ),
+        ),
       );
       return;
     }

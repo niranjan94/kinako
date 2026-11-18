@@ -12,6 +12,7 @@ export function T3Wordmark(props: {
   const aspectRatio = 1;
   return (
     <Svg
+      // oxlint-disable-next-line t3code/no-untranslated-copy -- product name
       accessibilityLabel="Kinako"
       height={props.height}
       width={props.height * aspectRatio}

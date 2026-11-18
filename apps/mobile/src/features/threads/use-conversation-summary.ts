@@ -15,10 +15,12 @@ import {
   type TurnItemId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+import { msg } from "gt-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform } from "react-native";
 
 import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { flushComposerDrafts, mergeComposerDraftContent } from "../../state/use-composer-drafts";
 import { useThreadProjection } from "../../state/use-thread-detail";
@@ -32,7 +34,7 @@ export interface ConversationSummaryFeedControls {
     direction: OrchestrationV2ConversationSummaryDirection,
   ) => void;
   readonly restore: (turnItemId: TurnItemId) => void;
-  /** Why "from here" is unavailable for a message, or null when it is offered. */
+  /** Why "from here" is unavailable for a message, or null when it is offered. A `msg()` string the caller resolves. */
   readonly fromHereUnavailableReason: (messageId: MessageId) => string | null;
   readonly upToHereUnavailableReason: (messageId: MessageId) => string | null;
   readonly activeProviderThreadId: string | null;
@@ -40,8 +42,8 @@ export interface ConversationSummaryFeedControls {
 }
 
 const TITLES: Record<OrchestrationV2ConversationSummaryDirection, string> = {
-  from_here: "Summarize from here",
-  up_to_here: "Summarize up to here",
+  from_here: msg("Summarize from here"),
+  up_to_here: msg("Summarize up to here"),
 };
 
 function failureMessage(cause: Cause.Cause<unknown>, fallback: string) {
@@ -113,7 +115,7 @@ export function useConversationSummary(input: {
     // oxlint-disable-next-line react/set-state-in-effect -- The outcome arrives in server state; clearing the request keeps its alert and draft restore from repeating.
     setPending(null);
     if (outcome.type === "failed") {
-      Dialog.alert("Could not summarize", outcome.message);
+      Dialog.alert(m(msg("Could not summarize")), outcome.message);
       return;
     }
     const message = projection.messages.find((candidate) => candidate.id === pending.messageId);
@@ -126,8 +128,8 @@ export function useConversationSummary(input: {
       .then(() => {
         if (message.attachments.length > 0) {
           Dialog.alert(
-            "Attachments not restored",
-            "The prompt is back in the composer. Attach its files again before sending.",
+            m(msg("Attachments not restored")),
+            m(msg("The prompt is back in the composer. Attach its files again before sending.")),
           );
         }
       });
@@ -160,7 +162,10 @@ export function useConversationSummary(input: {
       }).then((result) => {
         if (result._tag === "Success") return;
         setPending(null);
-        Dialog.alert("Could not summarize", failureMessage(result.cause, "Please try again."));
+        Dialog.alert(
+          m(msg("Could not summarize")),
+          failureMessage(result.cause, m(msg("Please try again."))),
+        );
       });
     },
     [input.environmentId, input.threadId, summarizeThread],
@@ -170,24 +175,43 @@ export function useConversationSummary(input: {
     (messageId: MessageId, direction: OrchestrationV2ConversationSummaryDirection) => {
       const description =
         direction === "from_here"
-          ? "This message and everything after it are replaced by a summary in the agent's context. The prompt returns to the composer. Files are not changed."
-          : "Everything before this message is replaced by a summary in the agent's context. You can restore the full context later. Files are not changed.";
+          ? m(
+              msg(
+                "This message and everything after it are replaced by a summary in the agent's context. The prompt returns to the composer. Files are not changed.",
+              ),
+            )
+          : m(
+              msg(
+                "Everything before this message is replaced by a summary in the agent's context. You can restore the full context later. Files are not changed.",
+              ),
+            );
       if (Platform.OS === "ios") {
         Alert.prompt(
-          TITLES[direction],
-          `${description}\n\nOptionally, say what the summary should focus on.`,
+          m(TITLES[direction]),
+          m(
+            msg("{description}\n\nOptionally, say what the summary should focus on.", {
+              description,
+            }),
+          ),
           [
-            { text: "Cancel", style: "cancel" },
-            { text: "Summarize", onPress: (value) => start(messageId, direction, value ?? "") },
+            { text: m(msg("Cancel")), style: "cancel" },
+            {
+              text: m(
+                msg("Summarize", { $context: "button, confirms summarizing the conversation" }),
+              ),
+              onPress: (value) => start(messageId, direction, value ?? ""),
+            },
           ],
           "plain-text",
         );
         return;
       }
       Dialog.prompt({
-        title: `${TITLES[direction]}: optional focus`,
+        title: m(msg("{title}: optional focus", { title: m(TITLES[direction]) })),
         initialValue: "",
-        confirmText: "Summarize",
+        confirmText: m(
+          msg("Summarize", { $context: "button, confirms summarizing the conversation" }),
+        ),
         onConfirm: (value) => start(messageId, direction, value),
       });
     },
@@ -206,8 +230,8 @@ export function useConversationSummary(input: {
       }).then((result) => {
         if (result._tag === "Success") return;
         Dialog.alert(
-          "Could not restore the full context",
-          failureMessage(result.cause, "Please try again."),
+          m(msg("Could not restore the full context")),
+          failureMessage(result.cause, m(msg("Please try again."))),
         );
       });
     },
@@ -217,15 +241,15 @@ export function useConversationSummary(input: {
   const fromHereUnavailableReason = useCallback(
     (messageId: MessageId) =>
       !canRewind
-        ? "This provider cannot rewind its conversation."
+        ? msg("This provider cannot rewind its conversation.")
         : fromHere.has(messageId)
           ? null
-          : "There is no checkpoint before this message.",
+          : msg("There is no checkpoint before this message."),
     [canRewind, fromHere],
   );
   const upToHereUnavailableReason = useCallback(
     (messageId: MessageId) =>
-      upToHere.has(messageId) ? null : "There is nothing before this message to summarize.",
+      upToHere.has(messageId) ? null : msg("There is nothing before this message to summarize."),
     [upToHere],
   );
 

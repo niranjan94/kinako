@@ -310,8 +310,6 @@ export const PullRequestCapabilities = Schema.Struct({
   stacks: Schema.optional(Schema.Boolean),
   stackActions: Schema.optional(Schema.Boolean),
   labels: Schema.optional(Schema.Boolean),
-  /** The repository's issues can be listed, read, and commented on. Absent means they cannot. */
-  issues: Schema.optional(Schema.Boolean),
   /** The host searches the repository's users, so composers can complete `@login`. */
   mentions: Schema.optional(Schema.Boolean),
   /** The sigils whose issue and change request references composers can complete. */
@@ -416,8 +414,6 @@ export const PullRequestProviderSummary = Schema.Struct({
   kind: SourceControlProviderKind,
   searchesOnHost: Schema.Boolean,
   actions: Schema.optional(ForwardCompatibleArray(PullRequestAction)),
-  /** The host's issues can be browsed here. Absent from servers older than this field. */
-  issues: Schema.optional(Schema.Boolean),
   projectCount: PositiveInt,
   /** SSH checkouts can resolve to an HTTP authority different from their stored identity. */
   projectIds: Schema.optional(Schema.Array(ProjectId)),
@@ -758,8 +754,8 @@ export const PullRequestDiffFileContentsInput = Schema.Struct({
   ...PullRequestRef.fields,
   commit: Schema.optional(TrimmedNonEmptyString),
   changeType: Schema.Literals(["change", "rename-pure", "rename-changed", "new", "deleted"]),
-  oldPath: TrimmedNonEmptyString,
-  newPath: TrimmedNonEmptyString,
+  oldPath: Schema.NonEmptyString,
+  newPath: Schema.NonEmptyString,
 });
 export type PullRequestDiffFileContentsInput = typeof PullRequestDiffFileContentsInput.Type;
 

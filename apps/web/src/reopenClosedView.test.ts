@@ -11,12 +11,7 @@ import * as previewRuntime from "./browser/previewRuntime";
 import { type ClosedViewEntry, useClosedViewStore } from "./closedViewStore";
 import { __setClientSettingsForTests } from "./hooks/useSettings";
 import { readThreadPreviewState, resetPreviewStateForTests } from "./previewStateStore";
-import {
-  planNextReopen,
-  pullRequestsSearchForRestore,
-  type ReopenOwnerState,
-  reopenClosedView,
-} from "./reopenClosedView";
+import { planNextReopen, type ReopenOwnerState, reopenClosedView } from "./reopenClosedView";
 import {
   hostRightPanel,
   selectThreadRightPanelState,
@@ -306,27 +301,5 @@ describe("planNextReopen", () => {
     );
     expect(plan.drop.map((e) => e.id)).toEqual(dropped);
     expect(plan.restore?.id ?? null).toBe(restored);
-  });
-});
-
-describe("pullRequestsSearchForRestore", () => {
-  it("restores an issue as an issue, and a pull request over it as a pull request", () => {
-    const issue = {
-      kind: "pull-request",
-      id: "pull-request:issue",
-      repository: "owner/repo",
-      number: 7,
-      projectId: "project-1",
-      item: "issue",
-    } as const;
-    expect(pullRequestsSearchForRestore({ kind: "issues" }, issue)).toMatchObject({
-      kind: "issues",
-      number: 7,
-      selectedKind: "issue",
-    });
-    const { item: _item, ...pullRequest } = issue;
-    expect(pullRequestsSearchForRestore({ selectedKind: "issue" }, pullRequest)).not.toHaveProperty(
-      "selectedKind",
-    );
   });
 });

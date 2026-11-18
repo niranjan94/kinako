@@ -5,9 +5,10 @@ import {
   parsePullRequestQuery,
 } from "@t3tools/client-runtime/pull-request-query";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useNavigation } from "@react-navigation/native";
-import { use, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useGT } from "gt-react-native";
+import { use, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { Keyboard, Platform, Pressable, View } from "react-native";
 import { RefreshControl } from "../../components/ui/RefreshControl";
@@ -18,36 +19,25 @@ import { AppText as Text } from "../../components/ui/AppText";
 import { useContentTopInset } from "../../components/ui/useBarInset";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 import { useWorkspaceState } from "../../state/workspace";
 import { useProjects } from "../../state/entities";
 import { environmentServerConfigsAtom } from "../../state/server";
-import { IssueListRow } from "./IssueListRow";
-import {
-  filterIssueList,
-  issueBrowsingEnvironments,
-  issueListRowsAreEqual,
-  issueListState,
-  scopedIssueListKey,
-  type EnvironmentIssueListEntry,
-} from "./issueList";
 import { PullRequestListRow } from "./PullRequestListRow";
 import {
   PullRequestListFilters,
   usePullRequestListFilters,
   type PullRequestFilterMenu,
 } from "./PullRequestListFilters";
+import { SavedViewsMenu } from "../layout/workspace/SavedViewsMenu";
+import { pullRequestViewMatches } from "./pullRequestSavedViews";
 import { usePullRequestList } from "./usePullRequestList";
 import { usePullRequestListControls } from "./usePullRequestListControls";
 import { usePullRequestListActions } from "./usePullRequestListActions";
-import { useIssueList, usePullRequestListHeads } from "./useIssueList";
-import { useIssueListActions, useOpenIssue } from "./useIssueListActions";
 import {
   filterPullRequestList,
   pullRequestListFacets,
-  PR_LIST_PAGE_SIZE,
   pullRequestListInput,
   pullRequestListRowsAreEqual,
   scopedPullRequestListKey as pullRequestKey,
@@ -107,6 +97,7 @@ export function PullRequestsScreen(
   } = {},
 ) {
   const navigation = useNavigation();
+  const gt = useGT();
   const primaryColumn = use(NativePrimaryColumnContext);
   const workspace = useWorkspaceTabs()!;
   const { environments } = useWorkspaceState();
@@ -158,7 +149,7 @@ export function PullRequestsScreen(
     () => withoutScratchProjectScope(savedControls, allProjects),
     [allProjects, savedControls],
   );
-  const baseTargets = useMemo(
+  const targets = useMemo(
     () =>
       environments
         .filter(
@@ -175,60 +166,8 @@ export function PullRequestsScreen(
         })),
     [environments, environmentId, configs, controls, query],
   );
-  // Hosts report whether their issues can be browsed only in the pull request listing.
-  const heads = usePullRequestListHeads(baseTargets);
-  const issueSupport = useMemo(() => issueBrowsingEnvironments(heads), [heads]);
-  const showKindToggle =
-    issueSupport.available || (listControls.kind === "issues" && issueSupport.pending);
-  const kind =
-    listControls.kind === "issues" && (issueSupport.available || issueSupport.pending)
-      ? "issues"
-      : "pullRequests";
-  const viewers = useMemo(() => {
-    const merged: Record<string, string> = {};
-    for (const { environmentId: id, head } of heads)
-      for (const [host, viewer] of Object.entries(head?.viewers ?? {}))
-        merged[`${id} ${host}`] = viewer;
-    return merged;
-  }, [heads]);
-  const targets = useMemo(
-    () =>
-      kind !== "pullRequests"
-        ? []
-        : baseTargets.map((target) =>
-            query ? { ...target, input: { ...target.input, query } } : target,
-          ),
-    [kind, baseTargets, query],
-  );
-  const issueTargets = useMemo(
-    () =>
-      kind !== "issues"
-        ? []
-        : baseTargets
-            .filter((target) => issueSupport.environments.has(target.environmentId))
-            .map((target) => ({
-              environmentId: target.environmentId,
-              input: {
-                state: issueListState(controls.state),
-                limit: PR_LIST_PAGE_SIZE,
-                ...(target.input.projectId ? { projectId: target.input.projectId } : {}),
-                ...(query ? { query } : {}),
-              },
-            })),
-    [kind, baseTargets, issueSupport, controls.state, query],
-  );
   const result = usePullRequestList(targets);
-  const issueResult = useIssueList(issueTargets);
-  const activeTargets: readonly { readonly environmentId: string }[] =
-    kind === "issues" ? issueTargets : targets;
   const connectedTargets = targets.filter((target) =>
-    environments.some(
-      (environment) =>
-        environment.environmentId === target.environmentId &&
-        environment.connectionState === "connected",
-    ),
-  );
-  const connectedActiveTargets = activeTargets.filter((target) =>
     environments.some(
       (environment) =>
         environment.environmentId === target.environmentId &&
@@ -242,7 +181,7 @@ export function PullRequestsScreen(
   const paneRole = usePaneRole();
   const sidebar = props.sidebar === true || (primaryColumn !== null && paneRole === "sidebar");
   const selectedKey = props.selectedPullRequestKey ?? primaryColumn?.selectedPullRequestKey;
-  const connectedKey = connectedActiveTargets.map((target) => target.environmentId).join("\n");
+  const connectedKey = connectedTargets.map((target) => target.environmentId).join("\n");
   const entries = useMemo(
     () =>
       filterPullRequestList(
@@ -255,35 +194,32 @@ export function PullRequestsScreen(
       ),
     [result.entries, controls, query, result.data, connectedKey],
   );
-  const issueEntries = useMemo(
-    () =>
-      filterIssueList(issueResult.entries, controls, viewers, new Set(connectedKey.split("\n"))),
-    [issueResult.entries, controls, viewers, connectedKey],
-  );
-  const facets = useMemo(
-    () => pullRequestListFacets(kind === "issues" ? issueResult.entries : result.entries),
-    [kind, issueResult.entries, result.entries],
-  );
-  const facetScope = `${kind}:${environmentId}`;
-  const [knownFacets, setKnownFacets] = useState({ scope: facetScope, source: facets, ...facets });
-  if (knownFacets.scope !== facetScope || knownFacets.source !== facets) {
+  const facets = pullRequestListFacets(result.entries);
+  const [knownFacets, setKnownFacets] = useState({ environmentId, source: facets, ...facets });
+  if (knownFacets.environmentId !== environmentId || knownFacets.source !== facets) {
     setKnownFacets((previous) => ({
       source: facets,
-      scope: facetScope,
+      environmentId,
       authors: [
-        ...new Set([...(previous.scope === facetScope ? previous.authors : []), ...facets.authors]),
+        ...new Set([
+          ...(previous.environmentId === environmentId ? previous.authors : []),
+          ...facets.authors,
+        ]),
       ].sort(),
       labels: [
-        ...new Set([...(previous.scope === facetScope ? previous.labels : []), ...facets.labels]),
+        ...new Set([
+          ...(previous.environmentId === environmentId ? previous.labels : []),
+          ...facets.labels,
+        ]),
       ].sort(),
       labelColors: {
         ...facets.labelColors,
-        ...(previous.scope === facetScope ? previous.labelColors : {}),
+        ...(previous.environmentId === environmentId ? previous.labelColors : {}),
       },
     }));
   }
   const labelColors =
-    knownFacets.scope === facetScope ? knownFacets.labelColors : facets.labelColors;
+    knownFacets.environmentId === environmentId ? knownFacets.labelColors : facets.labelColors;
   const projects = pullRequestProjectChoices(allProjects, {
     environmentId,
     controls,
@@ -292,65 +228,7 @@ export function PullRequestsScreen(
     ),
     servesPullRequests: (id) => configs.get(id)?.environment.capabilities.pullRequests === true,
   });
-  const openIssue = useOpenIssue();
-  const issueActions = useIssueListActions();
-  const rows: readonly ListRow[] = kind === "issues" ? issueEntries : entries;
-  const renderRow = useCallback(
-    ({ item }: { readonly item: ListRow }) =>
-      isIssueRow(item) ? (
-        <IssueListRow
-          item={item}
-          onSelect={openIssue}
-          getActions={issueActions.actions}
-          onAction={issueActions.select}
-          busy={false}
-          selected={selectedKey === scopedIssueListKey(item)}
-          sidebar={sidebar}
-        />
-      ) : (
-        <PullRequestListRow
-          item={item}
-          onSelect={selectPullRequest}
-          getActions={actions}
-          onAction={select}
-          busy={busyKey === pullRequestKey(item)}
-          selected={selectedKey === pullRequestKey(item)}
-          sidebar={sidebar}
-        />
-      ),
-    [
-      selectPullRequest,
-      openIssue,
-      issueActions.actions,
-      issueActions.select,
-      selectedKey,
-      actions,
-      select,
-      busyKey,
-      sidebar,
-    ],
-  );
-  const { onViewableItemsChanged: onViewablePullRequestsChanged } = result;
-  const onViewablePullRequests = useCallback(
-    ({ viewableItems }: { viewableItems: readonly ViewToken<ListRow>[] }) =>
-      onViewablePullRequestsChanged({
-        viewableItems: viewableItems.flatMap((token) =>
-          isIssueRow(token.item) ? [] : [{ item: token.item, isViewable: token.isViewable }],
-        ),
-      }),
-    [onViewablePullRequestsChanged],
-  );
-  const active =
-    kind === "issues"
-      ? { ...issueResult, onViewableItemsChanged: undefined, noun: "issues" }
-      : {
-          ...result,
-          errors: result.data.errors,
-          onViewableItemsChanged: onViewablePullRequests,
-          noun: "pull requests",
-        };
   const filters = usePullRequestListFilters({
-    kind,
     environments: environments.map((item) => ({
       id: String(item.environmentId),
       label: item.environmentLabel,
@@ -370,8 +248,8 @@ export function PullRequestsScreen(
         animated: false,
       });
     },
-    authors: knownFacets.scope === facetScope ? knownFacets.authors : facets.authors,
-    labels: knownFacets.scope === facetScope ? knownFacets.labels : facets.labels,
+    authors: knownFacets.environmentId === environmentId ? knownFacets.authors : facets.authors,
+    labels: knownFacets.environmentId === environmentId ? knownFacets.labels : facets.labels,
     labelColors,
     projects,
     onSearch: (kind) =>
@@ -379,29 +257,39 @@ export function PullRequestsScreen(
         kind,
         environmentId,
         environmentIds: targets.map((target) => String(target.environmentId)),
-        suggestions: knownFacets.scope === facetScope ? knownFacets[kind] : facets[kind],
+        suggestions: knownFacets.environmentId === environmentId ? knownFacets[kind] : facets[kind],
         labelColors,
       }),
   });
+  const renderPullRequest = ({ item }: { readonly item: EnvironmentPullRequestListEntry }) => (
+    <PullRequestListRow
+      item={item}
+      onSelect={selectPullRequest}
+      getActions={actions}
+      onAction={select}
+      busy={busyKey === pullRequestKey(item)}
+      selected={selectedKey === pullRequestKey(item)}
+      sidebar={sidebar}
+    />
+  );
   const list = (
     <View className={sidebar ? "flex-1 bg-drawer" : "flex-1 bg-screen"}>
       <LegendList
         ref={listRef}
-        data={rows}
-        extraData={`${kind}:${selectedKey}:${busyKey}`}
-        keyExtractor={rowKey}
-        itemsAreEqual={rowsAreEqual}
-        getItemType={(row) => (isIssueRow(row) ? "issue" : "pullRequest")}
+        data={entries}
+        extraData={`${selectedKey}:${busyKey}`}
+        keyExtractor={pullRequestKey}
+        itemsAreEqual={pullRequestListRowsAreEqual}
         estimatedItemSize={88}
         drawDistance={1_000}
-        maintainVisibleContentPosition={active.continued ? maintainVisiblePosition : false}
-        onEndReached={() => void active.loadMore()}
+        maintainVisibleContentPosition={result.continued ? maintainVisiblePosition : false}
+        onEndReached={() => void result.loadMore()}
         onEndReachedThreshold={0.5}
-        onViewableItemsChanged={active.onViewableItemsChanged}
+        onViewableItemsChanged={result.onViewableItemsChanged}
         refreshControl={
           <RefreshControl
-            refreshing={active.refreshing}
-            onRefresh={() => void active.onRefresh()}
+            refreshing={result.refreshing}
+            onRefresh={() => void result.onRefresh()}
             // The list already accounts for the navigation header in its content inset.
             progressViewOffset={Platform.OS === "ios" ? 60 : undefined}
           />
@@ -430,38 +318,54 @@ export function PullRequestsScreen(
         }}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        renderItem={renderRow}
+        renderItem={renderPullRequest}
         // Lifted above the rows so an iOS filter menu's dismissal morph is not covered.
         ListHeaderComponentStyle={{ zIndex: 1 }}
         ListHeaderComponent={
           <>
-            {showKindToggle ? (
-              <View className="px-4 pt-1 pb-2.5">
-                <SegmentedControl
-                  options={[
-                    { value: "pullRequests" as const, label: "Pull requests" },
-                    { value: "issues" as const, label: "Issues" },
-                  ]}
-                  selected={kind}
-                  onSelect={(next) => {
-                    listControls.setKind(next);
+            <PullRequestListFilters
+              sidebar={sidebar}
+              savedViewsMenu={
+                <SavedViewsMenu
+                  read={(preferences) => preferences.pullRequestSavedViews}
+                  write={(pullRequestSavedViews) => ({ pullRequestSavedViews })}
+                  list="pullRequest"
+                  suggestedName={
+                    controls.involvement === "reviewing" ? gt("PRs Requesting My Review") : ""
+                  }
+                  matches={pullRequestViewMatches}
+                  scope={{
+                    environmentId,
+                    controls,
+                    query: tab.searchMode === "resting" ? "" : tab.query,
+                  }}
+                  onApply={async (view) => {
+                    await listControls.applyView(view);
+                    workspace.dispatch(
+                      view.query.trim()
+                        ? { type: "search", tab: "pullRequests" }
+                        : { type: "cancel", tab: "pullRequests", scrollToTop: true },
+                    );
+                    workspace.dispatch({
+                      type: "query",
+                      tab: "pullRequests",
+                      query: view.query.trim(),
+                    });
                     void listRef.current?.scrollToOffset({
                       offset: Platform.OS === "ios" ? -insets.top : 0,
                       animated: false,
                     });
                   }}
-                  role="tab"
-                  size="compact"
                 />
-              </View>
-            ) : null}
-            <PullRequestListFilters sidebar={sidebar} filters={filters} />
-            {active.errors.length ? (
-              <View key={`${kind}:${JSON.stringify(activeTargets)}`}>
-                {active.errors.map((error) => (
+              }
+              filters={filters}
+            />
+            {result.data?.errors.length ? (
+              <View key={JSON.stringify(targets)}>
+                {result.data.errors.map((error) => (
                   <PullRequestListError
                     key={`${error.environmentId} ${error.projectTitle} ${error.message}`}
-                    message={`${error.projectTitle || environments.find((environment) => environment.environmentId === error.environmentId)?.environmentLabel || "Environment"}: ${error.message}`}
+                    message={`${error.projectTitle || environments.find((environment) => environment.environmentId === error.environmentId)?.environmentLabel || gt("Environment", { $context: "fallback name for a server" })}: ${error.message}`}
                   />
                 ))}
               </View>
@@ -469,35 +373,35 @@ export function PullRequestsScreen(
           </>
         }
         ListFooterComponent={
-          active.loadingMore ? (
+          result.loadingMore ? (
             <View className="items-center py-5">
               <AppActivityIndicator
                 colorClassName="accent-icon"
-                accessibilityLabel={`Loading more ${active.noun}`}
+                accessibilityLabel={gt("Loading more pull requests")}
               />
             </View>
-          ) : active.loadMoreError ? (
+          ) : result.loadMoreError ? (
             <View className="items-center gap-2 px-8 py-4">
-              <Text className="text-xs text-foreground-muted">{active.loadMoreError}</Text>
+              <Text className="text-xs text-foreground-muted">{result.loadMoreError}</Text>
               <Button
-                label="Try again"
-                accessibilityLabel={`Retry loading more ${active.noun}`}
-                onPress={() => void active.loadMore(true)}
+                label={gt("Try again")}
+                accessibilityLabel={gt("Retry loading more pull requests")}
+                onPress={() => void result.loadMore(true)}
               />
             </View>
           ) : result.hasMore ? (
             // A filtered page can be too short to scroll, which leaves nothing to reach the end of.
             <View className="items-center py-4">
               <Button
-                label="Load more"
-                accessibilityLabel="Load more pull requests"
+                label={gt("Load more")}
+                accessibilityLabel={gt("Load more pull requests")}
                 onPress={() => void result.loadMore()}
               />
             </View>
           ) : undefined
         }
         ListEmptyComponent={
-          active.isPending && connectedActiveTargets.length > 0 ? (
+          result.isPending && connectedTargets.length > 0 ? (
             <View className="items-center py-12">
               <AppActivityIndicator colorClassName="accent-icon" />
             </View>
@@ -505,23 +409,23 @@ export function PullRequestsScreen(
             <View className="px-8 py-12">
               <EmptyState
                 title={
-                  active.error
-                    ? `Couldn't load ${active.noun}`
-                    : activeTargets.length && connectedActiveTargets.length === 0
-                      ? "Environment offline"
-                      : activeTargets.length
+                  result.error
+                    ? gt("Couldn't load pull requests")
+                    : targets.length && connectedTargets.length === 0
+                      ? gt("Environment offline")
+                      : targets.length
                         ? query
-                          ? "No results"
-                          : `No matching ${active.noun}`
-                        : "Connect an environment"
+                          ? gt("No results")
+                          : gt("No matching pull requests")
+                        : gt("Connect an environment")
                 }
                 detail={
-                  active.error ??
-                  (activeTargets.length && connectedActiveTargets.length === 0
-                    ? `Reconnect to load ${active.noun} that aren't saved on this device.`
-                    : activeTargets.length
-                      ? `${kind === "issues" ? "Issues" : "Pull requests"} from the selected environments' projects appear here.`
-                      : `Add an environment in Settings to browse its ${active.noun}.`)
+                  result.error ??
+                  (targets.length && connectedTargets.length === 0
+                    ? gt("Reconnect to load pull requests that aren't saved on this device.")
+                    : targets.length
+                      ? gt("Pull requests from the selected environments' projects appear here.")
+                      : gt("Add an environment in Settings to browse its pull requests."))
                 }
                 variant="plain"
               />
@@ -533,14 +437,3 @@ export function PullRequestsScreen(
   );
   return props.renderFrame ? props.renderFrame(filters.headerMenu, list) : list;
 }
-
-type ListRow = EnvironmentPullRequestListEntry | EnvironmentIssueListEntry;
-
-const isIssueRow = (row: ListRow): row is EnvironmentIssueListEntry => "commentCount" in row;
-
-const rowKey = (row: ListRow) => (isIssueRow(row) ? scopedIssueListKey(row) : pullRequestKey(row));
-
-const rowsAreEqual = (previous: ListRow, next: ListRow) =>
-  isIssueRow(previous) && isIssueRow(next)
-    ? issueListRowsAreEqual(previous, next)
-    : !isIssueRow(previous) && !isIssueRow(next) && pullRequestListRowsAreEqual(previous, next);

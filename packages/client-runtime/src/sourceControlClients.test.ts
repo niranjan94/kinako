@@ -394,36 +394,6 @@ describe("sourceControlClients.findByPublicDomain", () => {
   });
 });
 
-describe("sourceControlClients.parseIssueUrl", () => {
-  const parseIssue = (url: string) => {
-    const parsed = sourceControlClients.parseIssueUrl(url);
-    if (parsed === null) return null;
-    const { repositoryUrl: _repositoryUrl, ...link } = parsed.link;
-    return link;
-  };
-
-  it("reads a GitHub issue, including on an Enterprise host", () => {
-    expect(parseIssue("https://github.com/T3tools/T3code/issues/42#issuecomment-1")).toEqual({
-      host: "github.com",
-      repository: "t3tools/t3code",
-      number: 42,
-    });
-    expect(parseIssue("https://github.example.com/org/repo/issues/7")?.repository).toBe("org/repo");
-  });
-
-  it("leaves pull requests and other hosts' issues alone", () => {
-    for (const link of [
-      "https://github.com/t3tools/t3code/pull/42",
-      "https://github.com/t3tools/t3code/issues",
-      "https://github.com/t3tools/t3code/issues/0",
-      "https://gitlab.com/t3tools/t3code/-/issues/12",
-      "https://example.com/org/repo/issues/12",
-    ]) {
-      expect(parseIssue(link), link).toBeNull();
-    }
-  });
-});
-
 describe("appSignInTargetForRemote", () => {
   it("names the repository a GitHub remote points at, in the remote's casing", () => {
     for (const remote of [

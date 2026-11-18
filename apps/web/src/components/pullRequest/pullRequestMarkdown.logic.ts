@@ -103,25 +103,6 @@ export function pullRequestMarkdownPlugins(
   return plugins;
 }
 
-const issueMarkdownPlugins = new Map<string, PluggableList>();
-
-export function issueAutolinkPlugins(
-  issue: { readonly provider: string; readonly url: string } | null,
-): PluggableList {
-  if (issue === null) return NO_PLUGINS;
-  const repositoryUrl = sourceControlClients.parseIssueUrl(issue.url)?.link.repositoryUrl;
-  const find = sourceControlClients.get(issue.provider).referenceAutolinks;
-  if (repositoryUrl === undefined || find === undefined) return NO_PLUGINS;
-  const key = `${issue.provider}\u0000${repositoryUrl}`;
-  let plugins = issueMarkdownPlugins.get(key);
-  if (plugins === undefined) {
-    const autolinks = (text: string) => find(text, repositoryUrl);
-    plugins = [[remarkPullRequestAutolinks, { autolinks }]];
-    issueMarkdownPlugins.set(key, plugins);
-  }
-  return plugins;
-}
-
 const commentPreviewProcessor = unified()
   .use(remarkParse)
   .use(CHAT_MARKDOWN_REMARK_PLUGINS)

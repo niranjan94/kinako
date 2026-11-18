@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m } from "../../i18n/messages";
 import { syntaxTree } from "@codemirror/language";
 import { schemaCompletionSource, type SQLNamespace } from "@codemirror/lang-sql";
 import { sqlDialect } from "./sqlDialect";
@@ -225,47 +227,47 @@ export const sqlFunctionCompletion: CompletionSource = (context) => {
       snippetCompletion("COUNT(${column})", {
         label: "COUNT",
         type: "function",
-        detail: "Count rows or non-null values",
+        detail: m(msg("Count rows or non-null values")),
       }),
       snippetCompletion("SUM(${column})", {
         label: "SUM",
         type: "function",
-        detail: "Sum non-null values",
+        detail: m(msg("Sum non-null values")),
       }),
       snippetCompletion("AVG(${column})", {
         label: "AVG",
         type: "function",
-        detail: "Average non-null values",
+        detail: m(msg("Average non-null values")),
       }),
       snippetCompletion("MIN(${column})", {
         label: "MIN",
         type: "function",
-        detail: "Minimum value",
+        detail: m(msg("Minimum value")),
       }),
       snippetCompletion("MAX(${column})", {
         label: "MAX",
         type: "function",
-        detail: "Maximum value",
+        detail: m(msg("Maximum value")),
       }),
       snippetCompletion("COALESCE(${value}, ${fallback})", {
         label: "COALESCE",
         type: "function",
-        detail: "First non-null value",
+        detail: m(msg("First non-null value")),
       }),
       snippetCompletion("LOWER(${text})", {
         label: "LOWER",
         type: "function",
-        detail: "Lowercase text",
+        detail: m(msg("Lowercase text")),
       }),
       snippetCompletion("UPPER(${text})", {
         label: "UPPER",
         type: "function",
-        detail: "Uppercase text",
+        detail: m(msg("Uppercase text")),
       }),
       snippetCompletion("ROUND(${value}, ${digits})", {
         label: "ROUND",
         type: "function",
-        detail: "Round a numeric value",
+        detail: m(msg("Round a numeric value")),
       }),
     ],
     validFor: /^\w*$/,

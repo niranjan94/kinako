@@ -1,5 +1,6 @@
 import { THREAD_GROUP_MAX_LENGTH } from "@t3tools/contracts";
 import { useEffect, useId, useState } from "react";
+import { T, useGT } from "gt-react";
 import { create } from "zustand";
 import { Button } from "./ui/button";
 import {
@@ -47,6 +48,7 @@ export function ThreadGroupDialogHost() {
 }
 
 function ThreadGroupDialog(props: { readonly initialName: string }) {
+  const gt = useGT();
   const id = useId();
   const renaming = props.initialName !== "";
   const [name, setName] = useState(props.initialName);
@@ -67,14 +69,16 @@ function ThreadGroupDialog(props: { readonly initialName: string }) {
           }}
         >
           <DialogHeader>
-            <DialogTitle>{renaming ? "Rename group" : "New group"}</DialogTitle>
+            <DialogTitle>{renaming ? gt("Rename group") : gt("New group")}</DialogTitle>
             <DialogDescription>
-              Threads with the same group name are listed together in the sidebar.
+              <T>Threads with the same group name are listed together in the sidebar.</T>
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${id}-name`}>Name</Label>
+              <Label htmlFor={`${id}-name`}>
+                <T>Name</T>
+              </Label>
               <Input
                 id={`${id}-name`}
                 autoFocus
@@ -86,10 +90,12 @@ function ThreadGroupDialog(props: { readonly initialName: string }) {
           </DialogPanel>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => finish(null)}>
-              Cancel
+              <T>Cancel</T>
             </Button>
             <Button type="submit" disabled={trimmed === "" || trimmed === props.initialName}>
-              {renaming ? "Rename" : "Create"}
+              {renaming
+                ? gt("Rename", { $context: "button that renames a group" })
+                : gt("Create", { $context: "button that creates a group" })}
             </Button>
           </DialogFooter>
         </form>

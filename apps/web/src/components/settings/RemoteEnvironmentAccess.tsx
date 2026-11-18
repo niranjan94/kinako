@@ -7,6 +7,7 @@ import type {
   EnvironmentId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { useGT, useMessages } from "gt-react";
 import { useEffect, useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
@@ -44,6 +45,7 @@ export function useRemotePairingEndpoints(environmentId: EnvironmentId | null): 
   readonly endpointUrl: string | null;
   readonly endpoints: ReadonlyArray<AdvertisedEndpoint>;
 } {
+  const m = useMessages();
   const preparedConnection = usePreparedConnection(environmentId);
   const directEndpoints = useAtomValue(
     serverEnvironment.configValueAtom(environmentId),
@@ -55,7 +57,7 @@ export function useRemotePairingEndpoints(environmentId: EnvironmentId | null): 
     endpoints:
       directEndpoints === undefined
         ? EMPTY_ADVERTISED_ENDPOINTS
-        : advertisedEndpointsFromDirect(directEndpoints),
+        : advertisedEndpointsFromDirect(directEndpoints, m),
   };
 }
 
@@ -82,6 +84,7 @@ export function SshNetworkAccessSetting({
   readonly target: DesktopSshEnvironmentTarget;
   readonly label: string;
 }) {
+  const gt = useGT();
   const desktopBridge = window.desktopBridge;
   const [state, setState] = useState<DesktopSshNetworkAccessState | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -107,8 +110,14 @@ export function SshNetworkAccessSetting({
     if (!desktopBridge) return;
     const confirmed = await requestConfirmDialog(
       enabled
-        ? `Enable network access for ${label}?\nOther devices on its network can connect to it directly once you pair them. Its server will restart.`
-        : `Disable network access for ${label}?\nDevices connected over its network will disconnect. Its server will restart.`,
+        ? gt(
+            "Enable network access for {label}?\nOther devices on its network can connect to it directly once you pair them. Its server will restart.",
+            { label },
+          )
+        : gt(
+            "Disable network access for {label}?\nDevices connected over its network will disconnect. Its server will restart.",
+            { label },
+          ),
     );
     if (confirmed !== true) return;
     setIsUpdating(true);
@@ -120,8 +129,9 @@ export function SshNetworkAccessSetting({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not update network access",
-            description: error instanceof Error ? error.message : "The SSH host did not respond.",
+            title: gt("Could not update network access"),
+            description:
+              error instanceof Error ? error.message : gt("The SSH host did not respond."),
           }),
         );
       })
@@ -134,20 +144,20 @@ export function SshNetworkAccessSetting({
   const external = state.serverKind === "external";
   return (
     <SettingsRow
-      title="Network access"
+      title={gt("Network access")}
       description={
         external
-          ? "This server was started on the host itself, so its network access is set there."
+          ? gt("This server was started on the host itself, so its network access is set there.")
           : state.networkAccess
-            ? "Other devices on its network can reach it."
-            : "Reachable only through SSH from this device."
+            ? gt("Other devices on its network can reach it.")
+            : gt("Reachable only through SSH from this device.")
       }
       control={
         <Switch
           checked={state.networkAccess}
           disabled={external || isUpdating}
           onCheckedChange={(checked) => void handleChange(checked)}
-          aria-label={`Network access for ${label}`}
+          aria-label={gt("Network access for {label}", { label })}
         />
       }
     />

@@ -13,6 +13,7 @@ import {
   AuthSettingsWriteScope,
   type EnvironmentId,
 } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { CopyIcon } from "lucide-react";
 
 import { readModelPreferences } from "../../hooks/useSettings";
@@ -32,6 +33,7 @@ export function CopyModelSettingsAction({
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
 }) {
+  const gt = useGT();
   const { environments } = useEnvironments();
   const canWriteSettings = useEnvironmentScope(environmentId, AuthSettingsWriteScope);
   const canManageProviders = useEnvironmentScope(environmentId, AuthProvidersManageScope);
@@ -54,12 +56,17 @@ export function CopyModelSettingsAction({
   }
 
   const copyFrom = async (sourceId: EnvironmentId, sourceLabel: string) => {
-    const scope = canManageProviders
-      ? "Favorites, hidden models, model order, and custom models"
-      : "Favorites, hidden models, and model order";
     const confirmed = await settlePromise(() =>
       ensureLocalApi().dialogs.confirm(
-        `Replace ${environmentLabel}'s model settings with ${sourceLabel}'s?\n${scope} are replaced for providers set up the same way on both.`,
+        canManageProviders
+          ? gt(
+              "Replace {target}''s model settings with {source}''s?\nFavorites, hidden models, model order, and custom models are replaced for providers set up the same way on both.",
+              { target: environmentLabel, source: sourceLabel },
+            )
+          : gt(
+              "Replace {target}''s model settings with {source}''s?\nFavorites, hidden models, and model order are replaced for providers set up the same way on both.",
+              { target: environmentLabel, source: sourceLabel },
+            ),
       ),
     );
     if (confirmed._tag !== "Success" || !confirmed.value) return;
@@ -69,8 +76,10 @@ export function CopyModelSettingsAction({
     if (!sourceSettings || !targetSettings) {
       toastManager.add({
         type: "error",
-        title: "Model settings not copied",
-        description: `${sourceSettings ? environmentLabel : sourceLabel} disconnected. Reconnect it and try again.`,
+        title: gt("Model settings not copied"),
+        description: gt("{label} disconnected. Reconnect it and try again.", {
+          label: sourceSettings ? environmentLabel : sourceLabel,
+        }),
       });
       return;
     }
@@ -87,15 +96,18 @@ export function CopyModelSettingsAction({
     if (result._tag === "Success") {
       toastManager.add({
         type: "success",
-        title: "Model settings copied",
-        description: `${environmentLabel} now uses ${sourceLabel}'s model settings.`,
+        title: gt("Model settings copied"),
+        description: gt("{target} now uses {source}''s model settings.", {
+          target: environmentLabel,
+          source: sourceLabel,
+        }),
       });
     } else if (!isAtomCommandInterrupted(result)) {
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Model settings not copied",
-        description: error instanceof Error ? error.message : "The settings update failed.",
+        title: gt("Model settings not copied"),
+        description: error instanceof Error ? error.message : gt("The settings update failed."),
       });
     }
   };
@@ -107,16 +119,16 @@ export function CopyModelSettingsAction({
           <Button
             size="xs"
             variant="ghost-muted"
-            aria-label={`Copy model settings to ${environmentLabel}`}
+            aria-label={gt("Copy model settings to {label}", { label: environmentLabel })}
           />
         }
       >
         <CopyIcon />
-        <span className="hidden sm:inline">Copy models from</span>
+        <span className="hidden sm:inline">{gt("Copy models from")}</span>
       </MenuTrigger>
       <MenuPopup align="end">
         <MenuGroup>
-          <MenuGroupLabel>Copy model settings from</MenuGroupLabel>
+          <MenuGroupLabel>{gt("Copy model settings from")}</MenuGroupLabel>
           {sources.map((source) => (
             <MenuItem
               key={source.environmentId}

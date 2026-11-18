@@ -43,7 +43,7 @@ export function selectWorkspaceDetail(
 const IDENTITY = {
   Thread: ["environmentId", "threadId"],
   PullRequest: ["environmentId", "projectId", "repository", "number", "host"],
-  Issue: ["environmentId", "projectId", "repository", "number", "host"],
+  Issue: ["environmentId", "projectId", "tracker", "host", "scope", "issueKey"],
 } as const;
 
 type RouteLike = { readonly name: string; readonly key?: string; readonly params?: object };
@@ -104,13 +104,14 @@ export function workspaceDetailRouter<Action extends NavigationAction>(
   };
 }
 
-/** A link to a single thread or pull request selects it, like its list row would. */
+/** A link to a single thread, pull request or issue selects it, like its list row would. */
 export function workspaceDetailLinkAction(
   state: PartialState<NavigationState> | NavigationState,
 ): SelectWorkspaceDetailAction | undefined {
   const pages = state.routes.filter((route) => route.name !== "Home");
   const [page] = pages;
   if (pages.length !== 1 || !page || page.state) return undefined;
-  if (page.name !== "Thread" && page.name !== "PullRequest") return undefined;
+  if (page.name !== "Thread" && page.name !== "PullRequest" && page.name !== "Issue")
+    return undefined;
   return selectWorkspaceDetail({ name: page.name, params: page.params } as WorkspaceDetail);
 }

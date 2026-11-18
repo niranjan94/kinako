@@ -3,6 +3,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { useGT } from "gt-react";
 import { lazy, Suspense, useState } from "react";
 
 import { ADDITIONAL_DIRECTORIES_CAVEAT, directoryName } from "../../lib/additionalDirectories";
@@ -26,6 +27,7 @@ export function ProjectAdditionalDirectoriesSettings(props: {
   readonly members: ReadonlyArray<SidebarProjectGroupMember>;
   readonly editableEnvironmentIds: ReadonlySet<EnvironmentId>;
 }) {
+  const gt = useGT();
   const [pickerMember, setPickerMember] = useState<SidebarProjectGroupMember | null>(null);
   const updateProject = useOrchestrationCommand(projectEnvironment.update, {
     reportFailure: false,
@@ -44,17 +46,19 @@ export function ProjectAdditionalDirectoriesSettings(props: {
     const error = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: "Could not update additional directories",
-      description: error instanceof Error ? error.message : "An error occurred.",
+      title: gt("Could not update additional directories"),
+      description: error instanceof Error ? error.message : gt("An error occurred."),
     });
   };
 
   return (
-    <SettingsSection title="Additional directories">
+    <SettingsSection title={gt("Additional directories")}>
       {props.members.flatMap((member) => {
         const directories = member.additionalDirectories ?? [];
         const editable = props.editableEnvironmentIds.has(member.environmentId);
-        const prefix = showEnvironment ? `${member.environmentLabel ?? "Environment"} · ` : "";
+        const prefix = showEnvironment
+          ? gt("{label} · ", { label: member.environmentLabel ?? gt("Environment") })
+          : "";
         return [
           ...directories.map((directory, index) => (
             <SettingsRow
@@ -78,7 +82,9 @@ export function ProjectAdditionalDirectoriesSettings(props: {
                   >
                     <SelectTrigger
                       size="sm"
-                      aria-label={`How threads use ${directoryName(directory.path)}`}
+                      aria-label={gt("How threads use {name}", {
+                        name: directoryName(directory.path),
+                      })}
                     >
                       <SelectValue>
                         {(value: ThreadEnvMode | null) => resolveEnvModeLabel(value ?? "local")}
@@ -93,7 +99,7 @@ export function ProjectAdditionalDirectoriesSettings(props: {
                     size="sm"
                     variant="outline"
                     disabled={!editable}
-                    aria-label={`Remove ${directory.path}`}
+                    aria-label={gt("Remove {path}", { path: directory.path })}
                     onClick={() =>
                       void save(
                         member,
@@ -101,7 +107,7 @@ export function ProjectAdditionalDirectoriesSettings(props: {
                       )
                     }
                   >
-                    Remove
+                    {gt("Remove")}
                   </Button>
                 </div>
               }
@@ -111,10 +117,13 @@ export function ProjectAdditionalDirectoriesSettings(props: {
             key={`${member.physicalProjectKey}:add`}
             title={
               showEnvironment
-                ? `Add to ${member.environmentLabel ?? "this checkout"}`
-                : "Add a directory"
+                ? gt("Add to {label}", { label: member.environmentLabel ?? gt("this checkout") })
+                : gt("Add a directory")
             }
-            description={`Folders threads in this project can also read and edit, such as a sibling repository. ${ADDITIONAL_DIRECTORIES_CAVEAT}`}
+            description={gt(
+              "Folders threads in this project can also read and edit, such as a sibling repository. {caveat}",
+              { caveat: ADDITIONAL_DIRECTORIES_CAVEAT },
+            )}
             control={
               <Button
                 size="sm"
@@ -122,7 +131,7 @@ export function ProjectAdditionalDirectoriesSettings(props: {
                 disabled={!editable}
                 onClick={() => setPickerMember(member)}
               >
-                Add…
+                {gt("Add…")}
               </Button>
             }
           />,

@@ -21,7 +21,6 @@ import {
   toReviewerCandidates,
   toReviewThreadCommentsPage,
   toCanWrite,
-  toIssueDetailPage,
   toReviewThreadPage,
   toViewerPermissions,
 } from "./gitHubPullRequestJson.ts";
@@ -697,33 +696,6 @@ describe("pull request detail decoding", () => {
       expect(detail.comments.map((comment) => comment.id)).toContain("r6");
     },
   );
-});
-
-describe("issue detail decoding", () => {
-  it("leaves out the issue comments a maintainer hid", () => {
-    const page = toIssueDetailPage(
-      {
-        repository: {
-          issue: {
-            number: 7,
-            title: "Crash on launch",
-            url: "https://github.com/acme/app/issues/7",
-            createdAt: "2026-07-01T00:00:00Z",
-            updatedAt: "2026-07-02T00:00:00Z",
-            comments: {
-              nodes: [
-                { id: "c1", body: "kept", createdAt: "2026-07-03T00:00:00Z" },
-                { id: "c2", body: "spam", createdAt: "2026-07-04T00:00:00Z", isMinimized: true },
-              ],
-            },
-          },
-        },
-      },
-      "acme/app",
-    );
-
-    expect(page?.comments.map((comment) => comment.id)).toEqual(["c1"]);
-  });
 });
 
 describe("review thread decoding", () => {

@@ -1,5 +1,6 @@
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { ProjectAdditionalDirectory } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages } from "gt-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -10,7 +11,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsSection } from "./components/SettingsSection";
 import type { SettingsTarget } from "./settings-environment-filter";
 
-const MODE_LABELS = { local: "Current checkout", worktree: "New worktree" } as const;
+const MODE_LABELS = { local: msg("Current checkout"), worktree: msg("New worktree") } as const;
 const SUGGESTION_LIMIT = 5;
 
 function directoryName(path: string): string {
@@ -22,11 +23,14 @@ export function ProjectAdditionalDirectoriesSection(props: {
   readonly members: readonly EnvironmentProject[];
   readonly environments: readonly SettingsTarget[];
 }) {
+  const gt = useGT();
   return (
-    <SettingsSection title="Additional directories">
+    <SettingsSection title={gt("Additional directories")}>
       <Text className="px-4 pt-4 text-sm leading-normal text-foreground-muted">
-        Folders threads in this project can also read and edit. Edits there are not checkpointed,
-        shown in diffs, or undone by rollback, and git actions stay on this project.
+        <T>
+          Folders threads in this project can also read and edit. Edits there are not checkpointed,
+          shown in diffs, or undone by rollback, and git actions stay on this project.
+        </T>
       </Text>
       {props.members.map((member) => (
         <MemberDirectories
@@ -35,7 +39,7 @@ export function ProjectAdditionalDirectoriesSection(props: {
           label={
             props.members.length > 1
               ? (props.environments.find((entry) => entry.environmentId === member.environmentId)
-                  ?.label ?? "Environment")
+                  ?.label ?? gt("Environment"))
               : null
           }
         />
@@ -49,6 +53,8 @@ function MemberDirectories(props: {
   readonly label: string | null;
 }) {
   const { member } = props;
+  const gt = useGT();
+  const resolve = useMessages();
   const directories = member.additionalDirectories ?? [];
   const [draftPath, setDraftPath] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -117,9 +123,10 @@ function MemberDirectories(props: {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Use ${directoryName(directory.path)} as ${
-              directory.mode === "local" ? MODE_LABELS.worktree : MODE_LABELS.local
-            }`}
+            accessibilityLabel={gt("Use {name} as {mode}", {
+              name: directoryName(directory.path),
+              mode: resolve(directory.mode === "local" ? MODE_LABELS.worktree : MODE_LABELS.local),
+            })}
             disabled={isSaving}
             onPress={() =>
               save(
@@ -132,22 +139,22 @@ function MemberDirectories(props: {
             }
             className="rounded-full bg-subtle-strong px-3 py-1.5 active:opacity-70"
           >
-            <Text className="text-sm text-foreground">{MODE_LABELS[directory.mode]}</Text>
+            <Text className="text-sm text-foreground">{resolve(MODE_LABELS[directory.mode])}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Remove ${directory.path}`}
+            accessibilityLabel={gt("Remove {path}", { path: directory.path })}
             disabled={isSaving}
             onPress={() => save(directories.filter((_, entryIndex) => entryIndex !== index))}
             className="px-1 py-1.5 active:opacity-70"
           >
-            <Text className="text-sm text-destructive">Remove</Text>
+            <Text className="text-sm text-destructive">{gt("Remove")}</Text>
           </Pressable>
         </View>
       ))}
       <View className="flex-row items-center gap-3">
         <AppTextInput
-          accessibilityLabel="Folder path"
+          accessibilityLabel={gt("Folder path")}
           className="min-h-11 min-w-0 flex-1 rounded-xl border-continuous bg-card px-3 text-base text-foreground"
           placeholder="/path/to/folder"
           autoCapitalize="none"
@@ -163,23 +170,23 @@ function MemberDirectories(props: {
         {trimmedPath ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Add folder"
+            accessibilityLabel={gt("Add folder")}
             disabled={isSaving}
             onPress={() => add(trimmedPath, () => setDraftPath(""))}
             className="rounded-full bg-subtle-strong px-4 py-2 active:opacity-70"
           >
-            <Text className="text-sm font-t3-medium text-foreground">Add</Text>
+            <Text className="text-sm font-t3-medium text-foreground">{gt("Add")}</Text>
           </Pressable>
         ) : null}
       </View>
       {suggestions.length > 0 ? (
         <View className="gap-2">
-          <Text className="text-sm font-t3-medium text-foreground-muted">Projects</Text>
+          <Text className="text-sm font-t3-medium text-foreground-muted">{gt("Projects")}</Text>
           {suggestions.map((project) => (
             <Pressable
               key={project.id}
               accessibilityRole="button"
-              accessibilityLabel={`Add ${project.title}`}
+              accessibilityLabel={gt("Add {name}", { name: project.title })}
               disabled={isSaving}
               onPress={() => add(project.workspaceRoot)}
               className="active:opacity-70"

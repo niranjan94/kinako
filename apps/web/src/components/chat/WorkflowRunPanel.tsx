@@ -10,9 +10,11 @@ import {
 import { NodeId, type ScopedThreadRef, type ServerProvider, ThreadId } from "@t3tools/contracts";
 import { formatTokens } from "@t3tools/shared/usageFormat";
 import { LoaderCircleIcon, SquareIcon } from "lucide-react";
+import { msg, T, useGT } from "gt-react";
 import { useState } from "react";
 
 import ChatMarkdown from "../ChatMarkdown";
+import { m } from "../../i18n/messages";
 import { orchestrationEnvironment } from "../../state/orchestration";
 import { environmentThreadDetails } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -41,14 +43,23 @@ function MemberTable({
   provider: ServerProvider | undefined;
   onOpenThread: (threadId: ThreadId) => void;
 }) {
+  const gt = useGT();
   return (
     <table className="w-full table-fixed border-collapse text-xs">
       <thead className="text-2xs text-muted-foreground/70">
         <tr>
-          <th className="ps-8 text-left font-normal">Agent</th>
-          <th className="w-28 text-left font-normal">Model</th>
-          <th className="w-16 text-right font-normal">Tokens</th>
-          <th className="w-16 pe-2.5 text-right font-normal">Time</th>
+          <th className="ps-8 text-left font-normal">
+            <T>Agent</T>
+          </th>
+          <th className="w-28 text-left font-normal">
+            <T>Model</T>
+          </th>
+          <th className="w-16 text-right font-normal">
+            <T>Tokens</T>
+          </th>
+          <th className="w-16 pe-2.5 text-right font-normal">
+            <T>Time</T>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -61,7 +72,7 @@ function MemberTable({
                 <button
                   type="button"
                   disabled={threadId === null}
-                  aria-label={`Open ${member.title} chat`}
+                  aria-label={gt("Open {title} chat", { title: member.title })}
                   onClick={() => threadId !== null && onOpenThread(threadId)}
                   className="flex w-full min-w-0 items-center gap-2 rounded-sm text-left text-foreground/85 enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
                 >
@@ -102,6 +113,7 @@ function PhaseSection({
   provider: ServerProvider | undefined;
   onOpenThread: (threadId: ThreadId) => void;
 }) {
+  const gt = useGT();
   // Every phase starts open: the panel is the run's whole report, not a summary.
   const [open, setOpen] = useState(true);
   return (
@@ -110,7 +122,11 @@ function PhaseSection({
         variant="panel"
         tone={phase.state === "running" ? "emphasized" : "muted"}
         expanded={open}
-        aria-label={`${open ? "Collapse" : "Expand"} ${phase.title} phase`}
+        aria-label={
+          open
+            ? gt("Collapse {title} phase", { title: phase.title })
+            : gt("Expand {title} phase", { title: phase.title })
+        }
         onClick={() => setOpen((value) => !value)}
         accessory={
           <span className="shrink-0 text-2xs font-normal tabular-nums">
@@ -143,6 +159,7 @@ export function WorkflowRunPanel({
   markdownCwd: string | undefined;
   onOpenThread: (threadId: ThreadId) => void;
 }) {
+  const gt = useGT();
   const providerStatuses = useEnvironmentProviders().get(parentRef.environmentId) ?? [];
   const coordinator = useAtomValue(environmentThreadDetails.threadAtom(parentRef), (thread) =>
     findWorkflowCoordinator(thread?.projection.subagents, threadId),
@@ -169,29 +186,33 @@ export function WorkflowRunPanel({
     });
     setStopping(false);
     if (result._tag === "Failure") {
-      toastManager.add({ type: "error", title: "Could not stop workflow" });
+      toastManager.add({ type: "error", title: m(msg("Could not stop workflow")) });
     }
   };
 
   return (
     <section
-      aria-label={`Workflow ${name}`}
+      aria-label={gt("Workflow {name}", { name })}
       className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card/40 p-3"
     >
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-medium text-foreground">{name}</h2>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-            <span>Workflow</span>
+            <span>
+              <T>Workflow</T>
+            </span>
             <span className="tabular-nums empty:hidden">
               <AgentElapsed agent={workflow} />
             </span>
             <span className="tabular-nums">
-              {group.memberCount} {group.memberCount === 1 ? "agent" : "agents"}
+              {gt("{count, plural, one {{count} agent} other {{count} agents}}", {
+                count: group.memberCount,
+              })}
             </span>
             {workflow.usage === null ? null : (
               <span className="tabular-nums">
-                {formatTokens(workflow.usage.totalTokens)} tokens
+                {gt("{count} tokens", { count: formatTokens(workflow.usage.totalTokens) })}
               </span>
             )}
           </p>
@@ -203,7 +224,7 @@ export function WorkflowRunPanel({
                 <Button
                   size="icon-xs"
                   variant="ghost-destructive"
-                  aria-label={`Stop workflow ${name}`}
+                  aria-label={gt("Stop workflow {name}", { name })}
                   disabled={stopping}
                   onClick={stop}
                 />
@@ -215,7 +236,7 @@ export function WorkflowRunPanel({
                 <SquareIcon aria-hidden className="size-3 fill-current" />
               )}
             </TooltipTrigger>
-            <TooltipPopup side="left">Stop entire workflow</TooltipPopup>
+            <TooltipPopup side="left">{gt("Stop entire workflow")}</TooltipPopup>
           </Tooltip>
         ) : null}
       </header>
@@ -239,17 +260,21 @@ export function WorkflowRunPanel({
           </li>
         ) : null}
         {phases.length === 0 && group.unphasedMembers.length === 0 ? (
-          <li className="px-2 py-1.5 text-xs text-muted-foreground/70">No agents yet</li>
+          <li className="px-2 py-1.5 text-xs text-muted-foreground/70">
+            <T>No agents yet</T>
+          </li>
         ) : null}
         {script.length === 0 ? null : (
           <li>
             <CollapsibleSectionHeader
               variant="panel"
               expanded={scriptOpen}
-              aria-label={`${scriptOpen ? "Collapse" : "Expand"} workflow script`}
+              aria-label={
+                scriptOpen ? gt("Collapse workflow script") : gt("Expand workflow script")
+              }
               onClick={() => setScriptOpen((value) => !value)}
             >
-              Script
+              <T>Script</T>
             </CollapsibleSectionHeader>
             {scriptOpen ? (
               <ChatMarkdown

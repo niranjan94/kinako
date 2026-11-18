@@ -12,6 +12,7 @@ import {
 } from "@t3tools/client-runtime/state/context-window";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
+import { useGT, useMessages } from "gt-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -68,7 +69,9 @@ function useThreadContextWindow(
 
 function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) {
   const { usage } = props;
-  const breakdown = deriveContextWindowBreakdown(usage);
+  const gt = useGT();
+  const resolve = useMessages();
+  const breakdown = deriveContextWindowBreakdown(usage, resolve);
   const windowTokens = breakdown?.segments.reduce((sum, segment) => sum + segment.tokens, 0) ?? 0;
   const share = (tokens: number) => (windowTokens > 0 ? (tokens / windowTokens) * 100 : 0);
   let usedIndex = 0;
@@ -141,7 +144,7 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
       ) : null}
       {usage.totalProcessedTokens != null && usage.totalProcessedTokens > 0 ? (
         <View className="flex-row justify-between">
-          <Text className="text-sm text-foreground-muted">Total processed</Text>
+          <Text className="text-sm text-foreground-muted">{gt("Total processed")}</Text>
           <Text className="text-sm tabular-nums text-foreground-muted">
             {formatContextWindowTokens(usage.totalProcessedTokens)}
           </Text>
@@ -150,8 +153,10 @@ function ContextWindowDetails(props: { readonly usage: ContextWindowSnapshot }) 
       {usage.compactsAutomatically ? (
         <Text className="text-sm text-foreground-muted">
           {typeof usage.autoCompactThreshold === "number" && usage.autoCompactThreshold > 0
-            ? `Compacts automatically at ${usage.autoCompactThreshold.toLocaleString("en-US")} tokens.`
-            : "Context compacts automatically when needed."}
+            ? gt("Compacts automatically at {threshold} tokens.", {
+                threshold: usage.autoCompactThreshold.toLocaleString("en-US"),
+              })
+            : gt("Context compacts automatically when needed.")}
         </Text>
       ) : null}
     </ScrollView>
@@ -173,6 +178,7 @@ export function ComposerContextWindowMeter(props: ComposerContextWindowMeterProp
 }
 
 function ContextWindowRing(props: ComposerContextWindowMeterProps) {
+  const gt = useGT();
   const usage = useThreadContextWindow(props.environmentId, props.threadId);
   const { scale } = useAndroidControlSizing();
   const [open, setOpen] = useState(false);
@@ -183,8 +189,12 @@ function ContextWindowRing(props: ComposerContextWindowMeterProps) {
   const size = Math.round(20 * scale);
   const label =
     usage.usedPercentage !== null
-      ? `Context window ${formatPercentage(usage.usedPercentage)} used`
-      : `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used`;
+      ? gt("Context window {percentage} used", {
+          percentage: formatPercentage(usage.usedPercentage),
+        })
+      : gt("Context window {tokens} tokens used", {
+          tokens: formatContextWindowTokens(usage.usedTokens),
+        });
 
   return (
     <>
@@ -225,7 +235,7 @@ function ContextWindowRing(props: ComposerContextWindowMeterProps) {
         </ThemedSvg>
       </Pressable>
       {open ? (
-        <Sheet title="Context Window" onClose={() => setOpen(false)}>
+        <Sheet title={gt("Context Window")} onClose={() => setOpen(false)}>
           <ContextWindowDetails usage={usage} />
         </Sheet>
       ) : null}

@@ -1,9 +1,4 @@
 import {
-  ASK_ABOUT_ISSUE_INSTRUCTIONS,
-  issueContextText,
-  type HandoffIssue,
-} from "@t3tools/client-runtime/issue-handoff";
-import {
   collectComposerModelMentions,
   type ComposerModelMentionOccurrence,
 } from "@t3tools/client-runtime/composer-model-mentions";
@@ -11,6 +6,8 @@ import { isProviderSkillUserInvocable } from "@t3tools/client-runtime/providerSk
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { filePreviewKind } from "@t3tools/shared/filePreview";
 import { videoMimeType } from "@t3tools/shared/video";
+import { msg } from "gt-react-native";
+import { m } from "../i18n/messages";
 import {
   COMPOSER_CONTEXT_MAX_RECORDS,
   COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
@@ -19,9 +16,7 @@ import {
   OrchestrationMessageContext,
   type PullRequestContextMetadata,
   type ReviewCommentContextRecord,
-  type ScopedThreadRef,
   type ServerProviderSkill,
-  type ThreadContextRecord,
   type EnvironmentContextRecord,
   type EnvironmentId,
 } from "@t3tools/contracts";
@@ -33,7 +28,6 @@ import {
   isImageReferencesOnly,
   replaceComposerContextReferences,
   sanitizeComposerContextLabel,
-  toKindScopedComposerContextId,
 } from "@t3tools/shared/composerContextReferences";
 import {
   collectComposerInlineTokens,
@@ -49,10 +43,14 @@ export function composerContextSendBlockReason(
 ): string | null {
   if (!context) return null;
   if (context.records.length > COMPOSER_CONTEXT_MAX_RECORDS) {
-    return `Remove context items until there are at most ${COMPOSER_CONTEXT_MAX_RECORDS}.`;
+    return m(
+      msg("Remove context items until there are at most {max}.", {
+        max: COMPOSER_CONTEXT_MAX_RECORDS,
+      }),
+    );
   }
   return !isMessageContext(context) || decodeMessageContext(context)._tag === "None"
-    ? "This draft has too much context to send. Remove some context items and try again."
+    ? m(msg("This draft has too much context to send. Remove some context items and try again."))
     : null;
 }
 
@@ -112,20 +110,6 @@ export function createComposerContextHistory() {
   };
 }
 
-/** Same identity as web: one record per thread, so re-attaching reuses the chip. */
-export function threadComposerContext(ref: ScopedThreadRef, title: string): ThreadContextRecord {
-  const label = sanitizeComposerContextLabel(title, "thread");
-  return {
-    version: 1,
-    kind: "thread",
-    contextId: toKindScopedComposerContextId("thread", ref.threadId),
-    label,
-    environmentId: ref.environmentId,
-    threadId: ref.threadId,
-    title: label,
-  };
-}
-
 /** Same identity as web: one record per machine, so mentioning it again reuses the chip. */
 export function environmentComposerContext(
   environmentId: EnvironmentId,
@@ -164,6 +148,7 @@ export function pullRequestComposerContext(
       ? sanitizeComposerContextLabel(path.split("/").at(-1) ?? path, "file")
       : `#${metadata.number}`,
     sectionId: `pull-request:${metadata.number}`,
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- context record sent to the agent
     sectionTitle: `PR #${metadata.number}`,
     filePath: path || `PR #${metadata.number}`,
     startIndex: 0,
@@ -175,27 +160,6 @@ export function pullRequestComposerContext(
     ),
     diff: "",
     pullRequest: metadata,
-  };
-}
-
-/** An issue travels as review context without pull request metadata, which it has none of. */
-export function issueComposerContext(issue: HandoffIssue, id: string): ReviewCommentContextRecord {
-  return {
-    version: 1,
-    kind: "review-comment",
-    contextId: ComposerContextId.make(id),
-    label: `#${issue.number}`,
-    sectionId: `issue:${issue.number}`,
-    sectionTitle: `Issue #${issue.number}`,
-    filePath: `Issue #${issue.number}`,
-    startIndex: 0,
-    endIndex: 0,
-    rangeLabel: issue.title.slice(0, 2048),
-    text: issueContextText(issue, ASK_ABOUT_ISSUE_INSTRUCTIONS).slice(
-      0,
-      COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
-    ),
-    diff: "",
   };
 }
 

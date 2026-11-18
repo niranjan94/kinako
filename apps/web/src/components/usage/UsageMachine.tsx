@@ -12,6 +12,7 @@ import {
 import type { EnvironmentId, HostResourcesHistory } from "@t3tools/contracts";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ContextType, useContext, useEffect } from "react";
+import { T, useGT, useMessages } from "gt-react";
 
 import { cn } from "../../lib/utils";
 import { formatBytes } from "../../lib/formatBytes";
@@ -49,7 +50,9 @@ export function UsageMachineSection({
           {environment.isConnected ? (
             <MachineMeters environmentId={environment.environmentId} />
           ) : (
-            <p className="text-sm text-muted-foreground">This environment is not connected.</p>
+            <p className="text-sm text-muted-foreground">
+              <T>This environment is not connected.</T>
+            </p>
           )}
         </section>
       ))}
@@ -58,6 +61,8 @@ export function UsageMachineSection({
 }
 
 function MachineMeters({ environmentId }: { readonly environmentId: EnvironmentId }) {
+  const resolve = useMessages();
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const result = useAtomValue(hostResourcesAtom(environmentId));
   const historyResult = useAtomValue(hostResourcesHistoryAtom(environmentId));
@@ -84,14 +89,14 @@ function MachineMeters({ environmentId }: { readonly environmentId: EnvironmentI
   if (snapshot === null && result._tag === "Failure") {
     return (
       <p className="text-sm text-muted-foreground">
-        This environment could not report machine usage.
+        <T>This environment could not report machine usage.</T>
       </p>
     );
   }
   return (
     <div className="grid gap-3 md:grid-cols-3">
       {snapshot !== null
-        ? hostResourceMeters(snapshot).map((meter) => (
+        ? hostResourceMeters(snapshot, resolve).map((meter) => (
             <MeterCard
               key={meter.kind}
               label={meter.label}
@@ -103,7 +108,7 @@ function MachineMeters({ environmentId }: { readonly environmentId: EnvironmentI
               loading={false}
             />
           ))
-        : ["CPU", "Memory", "Disk"].map((label) => (
+        : ["CPU", gt("Memory"), gt("Disk")].map((label) => (
             <MeterCard
               key={label}
               label={label}
@@ -142,6 +147,7 @@ function MeterCard({
   readonly kind?: HostResourceMeter["kind"];
   readonly loading: boolean;
 }) {
+  const gt = useGT();
   const percent = usedFraction === null ? null : Math.round(usedFraction * 100);
   const tone = toneOf(percent);
   return (
@@ -157,7 +163,7 @@ function MeterCard({
           >
             {percent === null ? "–" : `${percent}%`}
           </span>
-          <span className="text-sm text-muted-foreground">used</span>
+          <span className="text-sm text-muted-foreground">{gt("used")}</span>
         </span>
         <span className="min-h-4 truncate text-xs text-muted-foreground tabular-nums">
           {detail}
@@ -165,7 +171,7 @@ function MeterCard({
       </div>
       <div
         role="meter"
-        aria-label={`${label} used`}
+        aria-label={gt("{label} used", { label })}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent ?? undefined}
@@ -199,6 +205,7 @@ function HistoryGraph({
   readonly kind: HostResourceMeter["kind"] | undefined;
   readonly className: string;
 }) {
+  const gt = useGT();
   const series =
     history === null || kind === undefined ? null : hostResourceHistorySeries(history, kind);
   const average = series === null ? null : hostResourceHistoryPaths(series.average);
@@ -209,7 +216,7 @@ function HistoryGraph({
     <figure className="flex flex-col gap-1">
       <svg
         role="img"
-        aria-label={`${label} use over the past ${hours} hours`}
+        aria-label={gt("{label} use over the past {hours} hours", { label, hours })}
         viewBox={`0 0 ${steps} 100`}
         preserveAspectRatio="none"
         className={cn("h-14 w-full overflow-visible", className)}
@@ -240,8 +247,10 @@ function HistoryGraph({
         ) : null}
       </svg>
       <figcaption className="flex justify-between text-2xs text-muted-foreground">
-        <span>{hours}h ago</span>
-        <span>now</span>
+        <span>{gt("{hours}h ago", { hours })}</span>
+        <span>
+          <T>now</T>
+        </span>
       </figcaption>
     </figure>
   );

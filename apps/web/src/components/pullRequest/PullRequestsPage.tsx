@@ -1,7 +1,9 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { heldPullRequestListEntriesAtom } from "@t3tools/client-runtime/state/pull-requests";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { applyPullRequestDraftFilterChange } from "@t3tools/client-runtime/pull-request-query";
+import { APP_BASE_NAME } from "~/branding";
 import { Spinner } from "~/components/ui/spinner";
 import type { PullRequestSpeedActionResult } from "~/components/pullRequest/PullRequestSpeedActions";
 import { usePullRequestCloseBatch } from "~/components/pullRequest/usePullRequestActions";
@@ -23,6 +25,9 @@ import type {
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowDownUpIcon, LayersIcon, Plug2Icon } from "lucide-react";
+import { msg, T, useGT, useMessages } from "gt-react";
+
+import { m } from "~/i18n/messages";
 import { useEffect, useEffectEvent, useRef, useState, type ComponentProps } from "react";
 
 import {
@@ -54,8 +59,10 @@ import {
   type PullRequestListPreferencePatch,
   writePullRequestListPreferences,
 } from "./pullRequestListPreferences";
+import { SavedViewsMenu } from "../SavedViewsMenu";
+import { PULL_REQUEST_SAVED_VIEWS, pullRequestSavedViewPatch } from "./pullRequestSavedViews";
 import { environmentMachineIcon } from "../EnvironmentMachineIcon";
-import { PullRequestOrIssueDetailPanel } from "./PullRequestOrIssueDetailPanel";
+import { PullRequestDetailPanel } from "./PullRequestDetailPanel";
 import {
   PullRequestFiltersMenu,
   PullRequestSearchInput,
@@ -66,7 +73,7 @@ import {
 import { PullRequestCompactFilterMenu } from "./PullRequestCompactFilterMenu";
 import {
   INVOLVEMENT_TABS,
-  ISSUE_STATE_TABS,
+  resolveFilterOptions,
   SORT_OPTIONS,
   STATE_TABS,
 } from "./pullRequestListOptions";
@@ -75,23 +82,11 @@ import { PullRequestListGroups } from "./PullRequestListGroups";
 import { pullRequestPanelReference } from "./usePullRequestDetail";
 import { usePullRequestIntentPrefetch } from "./usePullRequestIntentPrefetch";
 import {
-  SEARCH_DEBOUNCE_MS,
   usePullRequestDisplayGroups,
   usePullRequestQueryFilters,
   usePullRequestScope,
   type PullRequestsSearch,
 } from "./usePullRequestListView";
-import {
-  collectIssueListFacets,
-  issueEntryKey,
-  issueListStateOf,
-  issueReference,
-  matchesIssueFilters,
-  matchesIssueQuery,
-  type EnvironmentIssueEntry,
-} from "./issue.logic";
-import { IssueListBody } from "./IssueList";
-import { useIssueListView } from "./useIssueListView";
 import { pullRequestGroups, pullRequestListEntryId } from "./pullRequestListGroups.logic";
 import { PullRequestListEmptyState } from "./PullRequestListEmptyState";
 import { PullRequestListGhost } from "./PullRequestGhosts";
@@ -105,7 +100,6 @@ import { registerCommands } from "~/shortcuts/dispatcher";
 import { isTerminalFocused } from "~/lib/terminalFocus";
 import { PanelLayoutControls, RightPanelMaximizeControl } from "../chat/PanelLayoutControls";
 import { Button } from "../ui/button";
-import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { SidebarInset, useMobileSidebarSheetMounted } from "../ui/sidebar";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
 import { useStableCallback } from "~/hooks/useStableCallback";
@@ -135,13 +129,13 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
-import { useDebouncedValue } from "~/state/queries";
-import { APP_BASE_NAME } from "~/branding";
 import {
   rememberPullRequestHosts,
   resetPullRequestHosts,
   type PullRequestHostRead,
 } from "./pullRequestProjectAssignment.logic";
+
+import { changeRequestTermKind } from "./changeRequestTerm";
 
 function getShortcutContext() {
   return {
@@ -199,14 +193,12 @@ function usePendingListEntries(
 }
 
 export function PullRequestsPage() {
+  const gt = useGT();
+  const resolve = useMessages();
   const search = useSearch({ from: "/_chat/pull-requests" });
-  const issuesMode = search.kind === "issues";
   const sort = search.sort ?? "ready";
-  // Eager reads would fetch line counts for pull request rows nobody is looking at.
   const statsPolicy: PullRequestStatsPolicy =
-    !issuesMode && (sort === "ready" || sort === "largest" || sort === "smallest")
-      ? "eager"
-      : "visible";
+    sort === "ready" || sort === "largest" || sort === "smallest" ? "eager" : "visible";
   const navigate = useNavigate({ from: "/pull-requests" });
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const [hostReads, setHostReads] = useState<ReadonlyMap<EnvironmentId, PullRequestHostRead>>(
@@ -279,8 +271,6 @@ export function PullRequestsPage() {
       search: (previous: PullRequestsSearch): PullRequestsSearch => {
         const next = { ...previous, ...patch };
         return {
-          ...(next.kind ? { kind: next.kind } : {}),
-          ...(next.selectedKind ? { selectedKind: next.selectedKind } : {}),
           involvement: next.involvement ?? previous.involvement,
           state: next.state ?? previous.state,
           ...(next.sort && next.sort !== "ready" ? { sort: next.sort } : {}),
@@ -311,7 +301,6 @@ export function PullRequestsPage() {
     selectedProjectId: undefined,
     selectedEnvironmentId: undefined,
     selectedHost: undefined,
-    selectedKind: undefined,
   };
   const updateListScope = (patch: PullRequestListPreferencePatch) => {
     const currentPreferences = pullRequestListPreferences({
@@ -324,12 +313,8 @@ export function PullRequestsPage() {
     updateSearch(patch);
   };
 
-  const rawQuery = (search.q ?? "").trim();
+  const typedQuery = (search.q ?? "").trim();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const sentRawQuery = useDebouncedValue(rawQuery, SEARCH_DEBOUNCE_MS);
-  // The search box and the author and label filters are shared by both kinds. The pull request
-  // reads ignore them while issues are shown, so the hosts are not searched for rows off screen.
-  const typedQuery = issuesMode ? "" : rawQuery;
   const {
     sentQuery,
     submitQuery,
@@ -342,7 +327,7 @@ export function PullRequestsPage() {
     hasFilters,
     localFilters,
     hasLocalFilters,
-  } = usePullRequestQueryFilters(search, typedQuery, issuesMode);
+  } = usePullRequestQueryFilters(search, typedQuery);
   const turnRefreshes = usePullRequestTurnRefreshes([
     ...new Set(environmentQueries.map(({ environmentId }) => environmentId)),
   ]);
@@ -404,14 +389,6 @@ export function PullRequestsPage() {
     });
   const listTargets = listTargetsFor(environmentQueries);
   const listQuery = usePullRequestHostList(listTargets);
-  const issueView = useIssueListView({
-    enabled: issuesMode && pullRequestsSupported,
-    environmentQueries,
-    state: issueListStateOf(search.state),
-    projectId: scopedProjectId,
-    host: search.host,
-    query: sentRawQuery,
-  });
 
   /**
    * Kept as its own read rather than remembered from an earlier answer because an answer cannot
@@ -444,7 +421,7 @@ export function PullRequestsPage() {
     !baselineQuery.isPending &&
     baselineQuery.error === null;
   const facetTargets = (() => {
-    if (!filtersOpen || issuesMode) return NO_LIST_TARGETS;
+    if (!filtersOpen) return NO_LIST_TARGETS;
     return environmentQueries.map(({ environmentId, projectIds }) => ({
       environmentId,
       input: {
@@ -466,7 +443,7 @@ export function PullRequestsPage() {
       ...(search.host ? { host: search.host } : {}),
     },
   }));
-  const partitionsWanted = !issuesMode && search.involvement === "all" && typedQuery.length === 0;
+  const partitionsWanted = search.involvement === "all" && typedQuery.length === 0;
   const partitionTargets = (() => {
     // The main list goes first. Besides putting the visible rows on screen sooner, it proves
     // which repositories the host search indexes, so an empty partition does not trigger the
@@ -498,7 +475,7 @@ export function PullRequestsPage() {
   const invalidate = useAtomCommand(pullRequestEnvironment.invalidate, { reportFailure: false });
   const [detailRefreshToken, setDetailRefreshToken] = useState(0);
   const [invalidating, setInvalidating] = useState(false);
-  const refreshing = invalidating || (issuesMode ? issueView.isPending : listQuery.isPending);
+  const refreshing = invalidating || listQuery.isPending;
 
   const [loaded, setLoaded] = useState<{
     environmentKey: string;
@@ -759,16 +736,12 @@ export function PullRequestsPage() {
   useLiveRefresh(
     () => {
       refreshList(true);
-      // A continued list would fall back to its first page, so only an unpaged one is re-read.
-      if (issuesMode && !issueView.paged) issueView.refresh();
     },
     { enabled: pullRequestsSupported },
   );
 
   const viewers = baselineQuery.data?.viewers ?? listData?.viewers ?? EMPTY_VIEWERS;
-  const listErrors = issuesMode
-    ? issueView.errors
-    : (baselineQuery.data?.errors ?? listData?.errors ?? []);
+  const listErrors = baselineQuery.data?.errors ?? listData?.errors ?? [];
   const facets = collectPullRequestListFacets(
     [
       ...(facetQuery.data?.entries ?? []),
@@ -1019,7 +992,6 @@ export function PullRequestsPage() {
     setHostReads(resetPullRequestHosts);
     setInvalidating(false);
     refreshListAndStats(requestedStatsScope);
-    if (issuesMode) issueView.refresh();
     setDetailRefreshToken((token) => token + 1);
   };
   const {
@@ -1044,8 +1016,6 @@ export function PullRequestsPage() {
     involvement: search.involvement,
   });
   const showProvider = hosts.length > 1;
-  // Kept while issues are shown, so a link that opened on them can always find its way back.
-  const showKindToggle = issuesMode || hosts.some((provider) => provider.issues === true);
   const [closeSweepKeys, setCloseSweepKeys] = useState<ReadonlySet<string>>(() => new Set());
   const closeSensorRef = useRef<SidebarPointerSensor | null>(null);
   // A sweep spans many renders; each step reads the rows on screen at that moment.
@@ -1189,7 +1159,6 @@ export function PullRequestsPage() {
             number: surface.number,
             selectedProjectId: surface.projectId as ProjectId,
             selectedHost: surface.host,
-            selectedKind: surface.item,
             ...(surface.environmentId === undefined
               ? {}
               : { selectedEnvironmentId: surface.environmentId as EnvironmentId }),
@@ -1230,60 +1199,15 @@ export function PullRequestsPage() {
       selectedProjectId: entry.projectId,
       selectedEnvironmentId: entry.environmentId,
       selectedHost: entry.host,
-      selectedKind: undefined,
     });
   };
-  const selectIssue = (entry: EnvironmentIssueEntry) => {
-    if (rightPanelRef === null) return;
-    useRightPanelStore.getState().openPullRequest(rightPanelRef, {
-      environmentId: entry.environmentId,
-      projectId: entry.projectId,
-      host: entry.host,
-      repository: entry.repository,
-      number: entry.number,
-      url: entry.url,
-      item: "issue",
-    });
-    updateSearch({
-      repository: entry.repository,
-      number: entry.number,
-      selectedProjectId: entry.projectId,
-      selectedEnvironmentId: entry.environmentId,
-      selectedHost: entry.host,
-      selectedKind: "issue",
-    });
-  };
-  const issueFilters = (() => ({ author: search.author, labels: search.labels }))();
-  // The hosts search titles and bodies once the text reaches them; until then the rows on
-  // screen are narrowed here so typing is answered at once.
-  const issueEntries = (() =>
-    issueView.entries.filter(
-      (entry) =>
-        matchesIssueFilters(entry, issueFilters) &&
-        (rawQuery === sentRawQuery || matchesIssueQuery(entry, rawQuery)),
-    ))();
-  const issueFacets = (() => collectIssueListFacets(issueView.entries))();
-  const selectedIssueKey =
-    activePullRequestSurface?.item === "issue" &&
-    activePullRequestSurface.environmentId !== undefined &&
-    activePullRequestSurface.host !== undefined
-      ? issueEntryKey({
-          environmentId: activePullRequestSurface.environmentId as EnvironmentId,
-          host: activePullRequestSurface.host,
-          repository: activePullRequestSurface.repository,
-          number: activePullRequestSurface.number,
-        })
-      : null;
 
   const searchInput = (
     <PullRequestSearchInput
-      issues={issuesMode}
       value={search.q ?? ""}
-      busy={
-        issuesMode
-          ? rawQuery.length > 0 && (rawQuery !== sentRawQuery || issueView.isPending)
-          : typedQuery.length > 0 && (!querySettled || showingCarried)
-      }
+      label={gt("Search pull requests")}
+      placeholder={gt("Search pull requests, or label:bug")}
+      busy={typedQuery.length > 0 && (!querySettled || showingCarried)}
       onChange={(query) => updateListScope({ q: query || undefined })}
       onSubmit={submitQuery}
     />
@@ -1302,9 +1226,7 @@ export function PullRequestsPage() {
       rightPanelAvailable={rightPanelAvailable}
       rightPanelOpen={rightPanelState.isOpen}
       rightPanelShortcutLabel={shortcutLabelForCommand(keybindings, "rightPanel.toggle")}
-      rightPanelUnavailableLabel={
-        issuesMode ? "Select an issue first" : "Select a pull request first"
-      }
+      rightPanelUnavailableLabel={gt("Select a pull request first")}
       onToggleTerminal={() => undefined}
       onToggleRightPanel={toggleRightPanel}
     />
@@ -1327,23 +1249,23 @@ export function PullRequestsPage() {
     </div>
   );
   const listError = listQuery.error
-    ? `${environmentLabels.get(listQuery.error.environmentId) || "Environment"}: ${listQuery.error.message}`
+    ? `${environmentLabels.get(listQuery.error.environmentId) || gt("Environment")}: ${listQuery.error.message}`
     : null;
   const carriedToNothing =
     shownCount === 0 &&
     typedQuery.length === 0 &&
     (!querySettled || (showingCarried && listQuery.isPending));
-  const pullRequestListBody = (
+  const listBody = (
     <>
       {!capabilityKnown ? (
-        <PullRequestListGhost rows={7} caption="Loading pull requests…" />
+        <PullRequestListGhost rows={7} caption={gt("Loading pull requests…")} />
       ) : !pullRequestsSupported ? (
         <PullRequestsUnavailableState
-          title="Pull requests unavailable"
-          error={`Update your ${APP_BASE_NAME} servers to browse pull requests.`}
+          title={gt("Pull requests unavailable")}
+          error={gt("Update your {app} servers to browse pull requests.", { app: APP_BASE_NAME })}
         />
       ) : firstLoad ? (
-        <PullRequestListGhost rows={7} caption="Loading pull requests…" />
+        <PullRequestListGhost rows={7} caption={gt("Loading pull requests…")} />
       ) : listError && shownCount === 0 ? (
         <PullRequestsUnavailableState
           error={listError}
@@ -1391,9 +1313,9 @@ export function PullRequestsPage() {
 
       {listError && shownCount > 0 ? (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning-surface px-3 py-2 text-xs">
-          <span>{listError} Showing the last pull requests loaded.</span>
+          <span>{gt("{error} Showing the last pull requests loaded.", { error: listError })}</span>
           <Button size="xs" variant="outline" onClick={() => listQuery.refresh()}>
-            Retry
+            <T>Retry</T>
           </Button>
         </div>
       ) : null}
@@ -1402,7 +1324,7 @@ export function PullRequestsPage() {
           {loadingMore ? (
             <span className="flex items-center gap-2">
               <Spinner aria-hidden size="sm" />
-              {sentCursors === null ? "Updating pull requests" : "Loading more"}
+              {sentCursors === null ? gt("Updating pull requests") : gt("Loading more")}
             </span>
           ) : canContinue || pageSize < MAX_PAGE_SIZE ? (
             <Button
@@ -1411,62 +1333,20 @@ export function PullRequestsPage() {
               onClick={loadMore}
               disabled={listQuery.isPending || showingCarried}
             >
-              Load more pull requests
+              <T>Load more pull requests</T>
             </Button>
           ) : (
-            <span>Narrow your search to find more pull requests.</span>
+            <span>
+              <T>Narrow your search to find more pull requests.</T>
+            </span>
           )}
         </div>
       ) : null}
     </>
   );
-  const listBody =
-    issuesMode && capabilityKnown && pullRequestsSupported ? (
-      <IssueListBody
-        entries={issueEntries}
-        firstLoad={issueView.firstLoad}
-        error={
-          issueView.error
-            ? `${environmentLabels.get(issueView.error.environmentId) || "Environment"}: ${issueView.error.message}`
-            : null
-        }
-        refreshing={refreshing}
-        filtered={
-          search.state !== "open" ||
-          scopedProjectId !== undefined ||
-          search.host !== undefined ||
-          search.author !== undefined ||
-          (search.labels?.length ?? 0) > 0 ||
-          rawQuery.length > 0
-        }
-        truncated={issueView.truncated}
-        canLoadMore={issueView.canLoadMore}
-        loadingMore={issueView.loadingMore}
-        selectedKey={selectedIssueKey}
-        environmentLabels={capableEnvironments.length > 1 ? environmentLabels : null}
-        onSelect={selectIssue}
-        onRetry={issueView.refresh}
-        onLoadMore={issueView.loadMore}
-      />
-    ) : (
-      pullRequestListBody
-    );
-  const kindToggle = showKindToggle ? (
-    <ToggleGroup
-      aria-label="Show pull requests or issues"
-      value={[issuesMode ? "issues" : "pull-requests"]}
-      onValueChange={(next) => {
-        if (next[0] === undefined) return;
-        updateListScope({ kind: next[0] === "issues" ? "issues" : undefined });
-      }}
-    >
-      <Toggle value="pull-requests">Pull requests</Toggle>
-      <Toggle value="issues">Issues</Toggle>
-    </ToggleGroup>
-  ) : null;
   const hostEntries = hosts.length > 0 ? hosts : expectedHosts;
   const hostMenuOptions: ReadonlyArray<PullRequestFilterOption<string>> = [
-    { value: "", label: "All", Icon: Plug2Icon },
+    { value: "", label: gt("All", { $context: "all hosts" }), Icon: Plug2Icon },
     ...hostEntries.map((entry) => {
       const summary = hosts.find((host) => host.host === entry.host);
       return {
@@ -1475,57 +1355,44 @@ export function PullRequestsPage() {
         Icon: getSourceControlPresentationForKind(entry.kind).Icon,
         ...(summary === undefined || summary.configured
           ? {}
-          : { unavailable: summary.detail ?? "This host could not be read." }),
+          : { unavailable: summary.detail ?? gt("This host could not be read.") }),
       };
     }),
   ];
   const serverMenuOptions: ReadonlyArray<PullRequestFilterOption<string>> = [
-    { value: "", label: "All servers", Icon: LayersIcon },
+    { value: "", label: gt("All servers"), Icon: LayersIcon },
     ...capableEnvironments.map((environment) => ({
       value: environment.environmentId,
       label: environment.label,
       Icon: environmentMachineIcon(resolveEnvironmentMachineKind(environment.serverConfig)),
     })),
   ];
-  const sortMenu = issuesMode ? null : (
+  const sortMenu = (
     <PullRequestCompactFilterMenu
-      label="Sort pull requests"
+      label={gt("Sort pull requests")}
       triggerIcon={<ArrowDownUpIcon aria-hidden className="size-4" />}
-      triggerLabel="Sort"
+      triggerLabel={gt("Sort", { $context: "verb, sort a list" })}
       outlined
       value={sort}
-      options={SORT_OPTIONS}
+      options={resolveFilterOptions(SORT_OPTIONS, resolve)}
       onChange={(next) => updateListScope({ sort: next })}
     />
   );
   const filtersMenu = (
     <PullRequestFiltersMenuInSidebarOrder
-      issues={issuesMode}
       onOpenChange={setFiltersOpen}
-      state={issuesMode ? issueListStateOf(search.state) : search.state}
-      stateOptions={issuesMode ? ISSUE_STATE_TABS : STATE_TABS}
+      state={search.state}
+      stateOptions={resolveFilterOptions(STATE_TABS, resolve)}
       onState={(state) => updateListScope({ state })}
       involvement={search.involvement}
-      involvementOptions={INVOLVEMENT_TABS}
+      involvementOptions={resolveFilterOptions(INVOLVEMENT_TABS, resolve)}
       onInvolvement={(involvement) => updateListScope({ involvement })}
       filters={
-        issuesMode
-          ? {
-              ...(search.author ? { author: search.author } : {}),
-              ...(search.labels ? { labels: search.labels.map((label) => [label]) } : {}),
-            }
-          : typedParsed.filters.draft
-            ? { ...menuFilters, draft: typedParsed.filters.draft }
-            : menuFilters
+        typedParsed.filters.draft
+          ? { ...menuFilters, draft: typedParsed.filters.draft }
+          : menuFilters
       }
       onFilters={(value) => {
-        if (issuesMode) {
-          updateListScope({
-            author: value.author,
-            labels: value.labels?.flatMap((group) => group),
-          });
-          return;
-        }
         const { query, filters: next } = applyPullRequestDraftFilterChange(
           typedQuery,
           menuFilters,
@@ -1540,8 +1407,8 @@ export function PullRequestsPage() {
           labels: next.labels?.flatMap((group) => group),
         });
       }}
-      authorOptions={issuesMode ? issueFacets.authors : facets.authors}
-      labelOptions={issuesMode ? issueFacets.labels : facets.labels}
+      authorOptions={facets.authors}
+      labelOptions={facets.labels}
       optionScope={filterOptionScope}
       host={search.host}
       hostOptions={hostMenuOptions}
@@ -1559,13 +1426,11 @@ export function PullRequestsPage() {
     />
   );
   const columnProps = {
-    issues: issuesMode,
-    kindToggle,
     refreshing,
     onRefresh: () => void refreshFromHost(),
     searchValue: search.q ?? "",
     involvement: search.involvement,
-    state: issuesMode ? issueListStateOf(search.state) : search.state,
+    state: search.state,
     host: search.host,
     hostMenuOptions,
     onInvolvement: (involvement: PullRequestInvolvement) => updateListScope({ involvement }),
@@ -1574,6 +1439,13 @@ export function PullRequestsPage() {
     searchInput,
     sortMenu,
     filtersMenu,
+    savedViewsMenu: (
+      <SavedViewsMenu
+        kind={PULL_REQUEST_SAVED_VIEWS}
+        preferences={search}
+        onApply={(preferences) => updateListScope(pullRequestSavedViewPatch(preferences))}
+      />
+    ),
     rightPanelControl: !pullRequestsSupported ? null : (
       <span
         aria-hidden
@@ -1649,20 +1521,30 @@ export function PullRequestsPage() {
     event.stopPropagation();
     if (event.repeat) return;
     const url = openPanelPullRequestUrl;
-    const issue = activePullRequestSurface?.item === "issue";
-    const { shortLabel, singular } = (
+    const terminology = (
       sourceControlClients.findByChangeRequestUrl(url) ?? sourceControlClients.get(undefined)
     ).changeRequest;
-    void writeTextToClipboard(url, issue ? "issue link" : `${singular} link`).then(
-      undefined,
-      (error) => {
-        toastManager.add({
-          type: "error",
-          title: issue ? "Failed to copy issue link" : `Failed to copy ${shortLabel} link`,
-          description: error instanceof Error ? error.message : "An error occurred.",
-        });
-      },
-    );
+    void writeTextToClipboard(url, {
+      target: `${terminology.singular} link`,
+      unavailableMessage: msg(
+        "Clipboard API is unavailable while copying {term, select, mr {merge request} cr {change request} other {pull request}} link.",
+        { term: changeRequestTermKind(terminology) },
+      ),
+      failureMessage: msg(
+        "Failed to copy {term, select, mr {merge request} cr {change request} other {pull request}} link to the clipboard.",
+        { term: changeRequestTermKind(terminology) },
+      ),
+    }).then(undefined, (error) => {
+      toastManager.add({
+        type: "error",
+        title: m(
+          msg("Failed to copy {term, select, mr {MR} cr {change request} other {PR}} link", {
+            term: changeRequestTermKind(terminology),
+          }),
+        ),
+        description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
+      });
+    });
   });
   const closeActiveSurfaceFromShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (activePullRequestSurface === null) return;
@@ -1755,12 +1637,7 @@ export function PullRequestsPage() {
             deviceAvailable={false}
             pullRequestStatusSeeds={listedPullRequestTabStatuses}
           >
-            <PullRequestOrIssueDetailPanel
-              issue={
-                renderedPullRequestSurface.item === "issue"
-                  ? issueReference(renderedPullRequestSurface)
-                  : null
-              }
+            <PullRequestDetailPanel
               getShortcutContext={getShortcutContext}
               shortcutsEnabled={activePullRequestSurface?.id === renderedPullRequestSurface.id}
               key={renderedPullRequestSurface.id}
@@ -1788,7 +1665,6 @@ export function PullRequestsPage() {
                   selectedHost: reference.host,
                   selectedProjectId: reference.projectId,
                   selectedEnvironmentId: panelEnvironmentId,
-                  selectedKind: undefined,
                 });
               }}
               reference={pullRequestPanelReference({

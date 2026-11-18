@@ -5,6 +5,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { AuthOrchestrationOperateScope, type ScopedProjectRef } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
+import { T, useGT, useMessages, Var } from "gt-react";
 import { useId, useState } from "react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
@@ -60,6 +61,8 @@ export function ProjectPathDialogHost() {
 }
 
 function ProjectPathDialog(props: { readonly projectRef: ScopedProjectRef }) {
+  const gt = useGT();
+  const m = useMessages();
   const { environmentId } = props.projectRef;
   const id = useId();
   const project = useProject(props.projectRef);
@@ -104,14 +107,16 @@ function ProjectPathDialog(props: { readonly projectRef: ScopedProjectRef }) {
       closeProjectPathDialog();
       toastManager.add({
         type: "success",
-        title: "Project path changed",
+        title: gt("Project path changed"),
         description: result.value.workspaceRoot,
       });
       return;
     }
     if (isAtomCommandInterrupted(result)) return;
     const failure = squashAtomCommandFailure(result);
-    setError(failure instanceof Error ? failure.message : "The project path could not be changed.");
+    setError(
+      failure instanceof Error ? failure.message : gt("The project path could not be changed."),
+    );
   };
 
   return (
@@ -130,15 +135,17 @@ function ProjectPathDialog(props: { readonly projectRef: ScopedProjectRef }) {
           }}
         >
           <DialogHeader>
-            <DialogTitle>Change project path</DialogTitle>
+            <DialogTitle>{gt("Change project path")}</DialogTitle>
             <DialogDescription>
-              Point {project.title} at the folder it now lives in. Threads and their history stay
-              with the project. Nothing is moved on disk.
+              <T>
+                Point <Var>{project.title}</Var> at the folder it now lives in. Threads and their
+                history stay with the project. Nothing is moved on disk.
+              </T>
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${id}-path`}>Folder on the machine running the server</Label>
+              <Label htmlFor={`${id}-path`}>{gt("Folder on the machine running the server")}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id={`${id}-path`}
@@ -165,19 +172,22 @@ function ProjectPathDialog(props: { readonly projectRef: ScopedProjectRef }) {
                         .finally(() => setIsPicking(false));
                     }}
                   >
-                    {`Open in ${getLocalFileManagerName(clientPlatform)}`}
+                    {gt("Open in {fileManager}", {
+                      fileManager: getLocalFileManagerName(clientPlatform, m),
+                    })}
                   </Button>
                 ) : null}
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Stop running turns first. Worktrees linked to the project are repaired automatically
-              when git allows it.
+              {gt(
+                "Stop running turns first. Worktrees linked to the project are repaired automatically when git allows it.",
+              )}
             </p>
             {hasUnsavedEdits ? (
               <Alert variant="warning">
                 <AlertDescription>
-                  Save or discard open file edits in this project before changing its path.
+                  {gt("Save or discard open file edits in this project before changing its path.")}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -188,13 +198,13 @@ function ProjectPathDialog(props: { readonly projectRef: ScopedProjectRef }) {
             ) : null}
             {!canChange ? (
               <p className="text-xs text-muted-foreground">
-                This connection cannot change projects.
+                {gt("This connection cannot change projects.")}
               </p>
             ) : null}
           </DialogPanel>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeProjectPathDialog}>
-              Cancel
+              {gt("Cancel")}
             </Button>
             <Button
               type="submit"
@@ -206,7 +216,7 @@ function ProjectPathDialog(props: { readonly projectRef: ScopedProjectRef }) {
                 trimmed === project.workspaceRoot
               }
             >
-              Change path
+              {gt("Change path")}
             </Button>
           </DialogFooter>
         </form>

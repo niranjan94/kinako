@@ -22,6 +22,7 @@ import {
 import { sql, keywordCompletionSource } from "@codemirror/lang-sql";
 import { sqlDialect } from "./sqlDialect";
 import type { DatabaseEngine } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, type Ref } from "react";
 import { sqlStatementRanges, type SqlStatement } from "./sqlStatements";
 import { sqlFunctionCompletion } from "./sqlCompletion";
@@ -74,6 +75,7 @@ export function DatabaseSqlEditor({
   onRun: (statements: SqlStatement[]) => void;
   onCancel: () => void;
 }) {
+  const gt = useGT();
   const parent = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const language = useRef(new Compartment());
@@ -91,6 +93,12 @@ export function DatabaseSqlEditor({
     }))();
   const initial = useEffectEvent(() => ({ value, completion }));
   const suggestions = useRef(new Compartment());
+  const accessibleText = useEffectEvent(() => ({
+    label: gt("SQL query"),
+    description: gt(
+      "Ctrl Space for SQL suggestions. Ctrl or Command Enter runs the current statement or selection; add Shift to run the whole script.",
+    ),
+  }));
   const runSelection = useEffectEvent((view: EditorView) => {
     const selection = view.state.selection.main;
     run(
@@ -120,9 +128,8 @@ export function DatabaseSqlEditor({
           drawSelection(),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({
-            "aria-label": "SQL query",
-            "aria-description":
-              "Ctrl Space for SQL suggestions. Ctrl or Command Enter runs the current statement or selection; add Shift to run the whole script.",
+            "aria-label": accessibleText().label,
+            "aria-description": accessibleText().description,
           }),
           history(),
           errorMarkField,
@@ -268,7 +275,7 @@ export function DatabaseSqlEditor({
       ref={parent}
       data-database-sql-editor
       className="h-full min-h-28"
-      aria-label="SQL editor"
+      aria-label={gt("SQL editor")}
     />
   );
 }

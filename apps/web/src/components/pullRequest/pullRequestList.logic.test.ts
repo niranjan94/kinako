@@ -411,13 +411,6 @@ describe("remembered pull request list controls", () => {
     };
   };
 
-  it("remembers that the list was showing issues", () => {
-    const storage = makeStorage();
-    const preferences = { kind: "issues", involvement: "all", state: "closed" } as const;
-    writePullRequestListPreferences(preferences, storage);
-    expect(readPullRequestListPreferences(storage)).toEqual(preferences);
-  });
-
   // regression: #9188 corrupt stored list controls broke the page
   it("falls back to the default controls when storage is corrupt", () => {
     const storage = makeStorage();

@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
+import { useLocale, useMessages } from "gt-react-native";
 import { useContext, useLayoutEffect, useMemo, useState } from "react";
 
 import { composerPullRequests } from "../../state/pull-requests";
@@ -33,10 +34,7 @@ export type PullRequestParams = {
 
 export type PullRequestDiffParams = PullRequestParams & { readonly commit?: string };
 
-/** What addresses a pull request or an issue on its host, without the list row it came from. */
-export type PullRequestReferenceParams = Omit<PullRequestParams, "initialSummary">;
-
-export function pullRequestTarget(params: PullRequestReferenceParams) {
+export function pullRequestTarget(params: PullRequestParams) {
   return {
     environmentId: EnvironmentId.make(params.environmentId),
     input: {
@@ -121,6 +119,8 @@ export function usePullRequestDiff(
     input: { ...reference.input, ...(params.commit ? { commit: params.commit } : {}) },
   };
   const key = JSON.stringify(target);
+  const messages = useMessages();
+  const locale = useLocale();
   const firstPageAtom = composerPullRequests.diff(target);
   const refreshFirstPage = useAtomRefresh(firstPageAtom);
   const { refreshing, onRefresh } = usePullToRefresh(firstPageAtom);
@@ -176,12 +176,19 @@ export function usePullRequestDiff(
     );
   });
   const pagesParsed = useMemo(
-    () => getCachedPullRequestDiffPages(pages, key, terminology),
-    [key, pages, terminology],
+    () => getCachedPullRequestDiffPages(pages, key, terminology, messages, locale),
+    [key, pages, terminology, messages, locale],
   );
   // The server says whether a withheld file can be read alone; GitHub may refuse the whole diff.
   const withheldFilesReadable = pages[0]?.result.withheldFilesReadable === true;
-  const parsed = withWithheldFiles(pagesParsed, loads, withheldFilesReadable, key);
+  const parsed = withWithheldFiles(
+    pagesParsed,
+    loads,
+    withheldFilesReadable,
+    key,
+    messages,
+    locale,
+  );
   const patch = useMemo(() => pages.map((page) => page.result.patch).join("\n"), [pages]);
   const nextCursor = pages.at(-1)?.result.nextCursor ?? null;
   const canLoadMore =

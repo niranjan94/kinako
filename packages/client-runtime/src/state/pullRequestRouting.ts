@@ -1,3 +1,5 @@
+import { msg } from "gt-i18n";
+import { translatableMessage } from "../errors/translatable.ts";
 import {
   WS_METHODS,
   PullRequestRef,
@@ -44,7 +46,6 @@ const reads = new Set<string>([
   WS_METHODS.pullRequestsChangeBreakdown,
   WS_METHODS.pullRequestsReviewerCandidates,
   WS_METHODS.pullRequestsLabelCandidates,
-  WS_METHODS.issuesDetail,
 ]);
 // Review guides are not routed: each server keeps its own, so another server answering would
 // report none, or start a run nobody on the pull request's own server can see.
@@ -60,10 +61,7 @@ const writes = new Set<string>([
   WS_METHODS.pullRequestsSetThreadResolution,
   WS_METHODS.pullRequestsRequestReviewers,
   WS_METHODS.pullRequestsSetLabels,
-  WS_METHODS.issuesComment,
 ]);
-// An issue shares a pull request's reference and number sequence, but its state is not one.
-const issueMethods = new Set<string>([WS_METHODS.issuesDetail, WS_METHODS.issuesComment]);
 const isRef = Schema.is(PullRequestRef);
 const hasState = Schema.is(
   Schema.Struct({ state: PullRequestState, isDraft: Schema.optional(Schema.Boolean) }),
@@ -76,7 +74,7 @@ const readTimeout = (environmentId: EnvironmentId) =>
       Effect.fail(
         new EnvironmentRpcUnavailableError({
           environmentId,
-          message: "The environment did not respond to the PR request.",
+          ...translatableMessage(msg("The environment did not respond to the PR request.")),
         }),
       ),
   });
@@ -384,7 +382,7 @@ export function createPullRequestRouter() {
         : registry.run(id, request(tag, routedInput))
       ).pipe(
         Effect.tap((result) =>
-          id !== origin.target.environmentId && !issueMethods.has(tag) && hasState(result)
+          id !== origin.target.environmentId && hasState(result)
             ? reportState(ref, result)
             : Effect.void,
         ),
@@ -407,7 +405,7 @@ export function createPullRequestRouter() {
           isUnregistered(error)
             ? new EnvironmentRpcUnavailableError({
                 environmentId: id,
-                message: "The environment was removed.",
+                ...translatableMessage(msg("The environment was removed.")),
               })
             : error,
         ),
@@ -464,7 +462,7 @@ export function createPullRequestRouter() {
               ? {
                   ...result,
                   projectId: ref.projectId,
-                  ...(tag === WS_METHODS.pullRequestsDetail || tag === WS_METHODS.issuesDetail
+                  ...(tag === WS_METHODS.pullRequestsDetail
                     ? { projectTitle: identity.projectTitle, workspaceRoot: identity.workspaceRoot }
                     : {}),
                 }
@@ -509,9 +507,7 @@ export function createPullRequestRouter() {
     ).pipe(
       Effect.catch((error) =>
         input.allowStale !== false &&
-        (tag === WS_METHODS.pullRequestsSummary ||
-          tag === WS_METHODS.pullRequestsDetail ||
-          tag === WS_METHODS.issuesDetail)
+        (tag === WS_METHODS.pullRequestsSummary || tag === WS_METHODS.pullRequestsDetail)
           ? request(tag, input)
           : Effect.fail(error),
       ),

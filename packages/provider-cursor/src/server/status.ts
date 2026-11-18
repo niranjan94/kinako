@@ -28,7 +28,7 @@ import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 
 const CURSOR_PRESENTATION = {
   displayName: "Cursor",
-  supportsConversationRollback: false,
+  supportsConversationRollback: true,
   showInteractionModeToggle: true,
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({

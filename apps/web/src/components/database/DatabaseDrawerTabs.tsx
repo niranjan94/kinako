@@ -2,6 +2,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ProjectId, ScopedThreadRef } from "@t3tools/contracts";
 import { SquareTerminalIcon, Table2Icon, TerminalSquareIcon, XIcon } from "lucide-react";
+import { useGT } from "gt-react";
 import { useContext, useEffect, type ReactNode } from "react";
 import { databaseState } from "../../state/database";
 import { DatabaseConsoleView } from "./DatabaseConsoleView";
@@ -60,6 +61,7 @@ export function DatabaseDrawerTabs({
   projectId: ProjectId;
   threadRef: ScopedThreadRef;
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const threadKey = scopedThreadKey(threadRef);
   const workspaceAtom = databaseState.workspaces(threadKey);
@@ -74,7 +76,7 @@ export function DatabaseDrawerTabs({
   return (
     <div
       role="tablist"
-      aria-label="Bottom panel"
+      aria-label={gt("Bottom panel")}
       data-terminal-owner={NOT_TERMINAL}
       data-database-drawer-tabs
       className="relative flex h-8 shrink-0 overflow-x-auto bg-muted/20 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border"
@@ -82,7 +84,7 @@ export function DatabaseDrawerTabs({
       <DrawerTab
         active={shownId === null}
         icon={<TerminalSquareIcon className="size-3.5 shrink-0" />}
-        label="Terminal"
+        label={gt("Terminal")}
         onSelect={() => showDatabaseTab(registry, threadRef, null)}
       />
       {workspace.tabs.map((tab) => (
@@ -99,13 +101,21 @@ export function DatabaseDrawerTabs({
           label={tab.title}
           {...(tab.database || (!tab.table && tab.sql.trim() && tab.sql !== tab.savedSql)
             ? {
-                hint: `${tab.database ? `${tab.database} · ` : ""}${tab.title}${!tab.table && tab.sql.trim() && tab.sql !== tab.savedSql ? " · Not saved to a file" : ""}`,
+                hint: [
+                  tab.database,
+                  tab.title,
+                  !tab.table && tab.sql.trim() && tab.sql !== tab.savedSql
+                    ? gt("Not saved to a file")
+                    : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
               }
             : {})}
           onSelect={() => showDatabaseTab(registry, threadRef, tab.id)}
         >
           <DatabaseToolbarButton
-            label={`Close ${tab.title}`}
+            label={gt("Close {title}", { title: tab.title })}
             onClick={() => void closeDatabaseTab(scope, tab)}
           >
             <XIcon />

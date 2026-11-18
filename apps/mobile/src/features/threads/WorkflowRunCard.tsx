@@ -19,12 +19,14 @@ import {
 import { formatTokens } from "@t3tools/shared/usageFormat";
 import * as DateTime from "effect/DateTime";
 import { Atom } from "effect/reactivity";
+import { msg, useGT } from "gt-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, View, type ColorValue } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { orchestrationEnvironment } from "../../state/orchestration";
 import { serverEnvironment } from "../../state/server";
@@ -65,6 +67,7 @@ function MemberRow(props: {
   readonly provider: ServerProvider | undefined;
 }) {
   const navigation = useNavigation();
+  const gt = useGT();
   const { member } = props;
   const threadId = member.childThreadId;
   const modelLabel =
@@ -73,7 +76,9 @@ function MemberRow(props: {
       : resolveSubagentMetadata({ model: member.model, provider: props.provider }).modelLabel;
   const detail = [
     modelLabel,
-    member.usage === null ? null : `${formatTokens(member.usage.totalTokens)} tokens`,
+    member.usage === null
+      ? null
+      : gt("{tokens} tokens", { tokens: formatTokens(member.usage.totalTokens) }),
   ]
     .filter((part) => part !== null)
     .join(" · ");
@@ -81,8 +86,8 @@ function MemberRow(props: {
     <Pressable
       accessible
       accessibilityRole={threadId === null ? undefined : "link"}
-      accessibilityLabel={`${member.title}, ${member.status}`}
-      accessibilityHint={threadId === null ? undefined : "Opens this agent's thread"}
+      accessibilityLabel={gt("{title}, {status}", { title: member.title, status: member.status })}
+      accessibilityHint={threadId === null ? undefined : gt("Opens this agent's thread")}
       disabled={threadId === null}
       onPress={() => {
         // Push, not navigate: navigate reuses this Thread route, so back would
@@ -119,13 +124,18 @@ function PhaseSection(props: {
   readonly provider: ServerProvider | undefined;
   readonly iconColor: ColorValue;
 }) {
+  const gt = useGT();
   const [open, setOpen] = useState(true);
   const { phase } = props;
   return (
     <View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${phase.title} phase, ${phase.settledCount} of ${phase.members.length} done`}
+        accessibilityLabel={gt("{title} phase, {done} of {total} done", {
+          title: phase.title,
+          done: phase.settledCount,
+          total: phase.members.length,
+        })}
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen((value) => !value)}
         className="min-h-9 flex-row items-center gap-2 rounded-lg px-3 active:bg-subtle"
@@ -170,6 +180,7 @@ export function WorkflowRunCard(props: {
   readonly iconColor: ColorValue;
 }) {
   const { coordinator } = props;
+  const gt = useGT();
   const run = useMemo(() => deriveWorkflowRun(coordinator), [coordinator]);
   const config = useAtomValue(serverEnvironment.configValueAtom(props.environmentId));
   const stopWorkflow = useAtomCommand(orchestrationEnvironment.stopWorkflow);
@@ -185,8 +196,10 @@ export function WorkflowRunCard(props: {
     (entry) => entry.instanceId === coordinator.providerInstanceId,
   );
   const summary = [
-    `${run.memberCount} ${run.memberCount === 1 ? "agent" : "agents"}`,
-    workflow.usage === null ? null : `${formatTokens(workflow.usage.totalTokens)} tokens`,
+    gt("{count, plural, one {{count} agent} other {{count} agents}}", { count: run.memberCount }),
+    workflow.usage === null
+      ? null
+      : gt("{tokens} tokens", { tokens: formatTokens(workflow.usage.totalTokens) }),
   ]
     .filter((part) => part !== null)
     .join(" · ");
@@ -199,7 +212,7 @@ export function WorkflowRunCard(props: {
     });
     setStopping(false);
     if (result._tag === "Failure") {
-      Dialog.alert("Could not stop workflow", "Try again.");
+      Dialog.alert(m(msg("Could not stop workflow")), m(msg("Try again.")));
     }
   };
 
@@ -211,7 +224,7 @@ export function WorkflowRunCard(props: {
             {name}
           </Text>
           <View className="flex-row items-center gap-2">
-            <Text className="text-xs text-foreground-muted">Workflow</Text>
+            <Text className="text-xs text-foreground-muted">{gt("Workflow")}</Text>
             <SubagentElapsed agents={[timing(workflow)]} />
             <Text className="text-xs tabular-nums text-foreground-muted">{summary}</Text>
           </View>
@@ -219,7 +232,7 @@ export function WorkflowRunCard(props: {
         {canStop && workflow.status === "running" ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Stop workflow ${name}`}
+            accessibilityLabel={gt("Stop workflow {name}", { name })}
             disabled={stopping}
             onPress={stop}
             className="h-8 w-8 items-center justify-center rounded-lg active:bg-subtle"
@@ -249,19 +262,19 @@ export function WorkflowRunCard(props: {
         />
       ))}
       {phases.length === 0 && run.unphasedMembers.length === 0 ? (
-        <Text className="px-3 py-1 text-sm text-foreground-muted">No agents yet</Text>
+        <Text className="px-3 py-1 text-sm text-foreground-muted">{gt("No agents yet")}</Text>
       ) : null}
       {script.length === 0 ? null : (
         <View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Workflow script"
+            accessibilityLabel={gt("Workflow script")}
             accessibilityState={{ expanded: scriptOpen }}
             onPress={() => setScriptOpen((value) => !value)}
             className="min-h-9 flex-row items-center gap-2 rounded-lg px-3 active:bg-subtle"
           >
             <Text className="min-w-0 flex-1 font-t3-medium text-sm text-foreground-muted">
-              Script
+              {gt("Script", { $context: "heading, source code of a workflow" })}
             </Text>
             <SymbolView
               name={scriptOpen ? "chevron.up" : "chevron.down"}

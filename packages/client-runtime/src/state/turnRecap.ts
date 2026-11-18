@@ -6,6 +6,8 @@ import type {
   RunId,
 } from "@t3tools/contracts";
 
+import { msg } from "gt-i18n";
+
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 
 import type { ThreadRunSummary, ThreadRuntimeSummary } from "./models.ts";
@@ -34,14 +36,14 @@ export interface TurnRecap {
 }
 
 export const TURN_RECAP_OUTCOME_LABELS: Record<TurnRecapOutcome, string> = {
-  completed: "Completed",
-  progress: "Progress made",
-  waiting: "Waiting",
-  blocked: "Blocked",
-  input: "Needs input",
-  approval: "Needs approval",
-  failed: "Failed",
-  limited: "Usage limit reached",
+  completed: msg("Completed"),
+  progress: msg("Progress made"),
+  waiting: msg("Waiting"),
+  blocked: msg("Blocked"),
+  input: msg("Needs input"),
+  approval: msg("Needs approval"),
+  failed: msg("Failed"),
+  limited: msg("Usage limit reached"),
 };
 
 const APPROVAL_KIND_LABELS: Record<ProviderRequestKind, string> = {

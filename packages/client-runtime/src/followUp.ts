@@ -1,4 +1,6 @@
 import type { OrchestrationV2TurnItem, ThreadId } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 export type FollowUpItem = Extract<OrchestrationV2TurnItem, { readonly type: "follow_up" }>;
 
@@ -25,7 +27,10 @@ export function followUpDisplay(
 
 const USER_FACING_FAILURE_TAGS = new Set(["FollowUpError", "EnvironmentAuthorizationError"]);
 
-export function followUpFailureMessage(failure: unknown): string {
+export function followUpFailureMessage(
+  failure: unknown,
+  resolve: MFunctionType = mFallback,
+): string {
   if (
     typeof failure === "object" &&
     failure !== null &&
@@ -38,5 +43,5 @@ export function followUpFailureMessage(failure: unknown): string {
   ) {
     return failure.message;
   }
-  return "Could not update the follow-up. Try again.";
+  return resolve(msg("Could not update the follow-up. Try again."));
 }

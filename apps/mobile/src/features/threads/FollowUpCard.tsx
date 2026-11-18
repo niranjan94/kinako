@@ -14,6 +14,7 @@ import type {
   FollowUpStartInput,
   OrchestrationV2ProjectedTurnItem,
 } from "@t3tools/contracts";
+import { useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, View, type ColorValue } from "react-native";
 
@@ -31,6 +32,7 @@ export function FollowUpCard(props: {
   readonly iconColor: ColorValue;
 }) {
   const navigation = useNavigation();
+  const gt = useGT();
   const { item, visibility } = props.projectedItem;
   if (item.type !== "follow_up") return null;
   const display = followUpDisplay(item, visibility);
@@ -62,10 +64,9 @@ export function FollowUpCard(props: {
         type="monochrome"
       />
       <Text className="flex-1 font-sans text-sm text-foreground-muted" numberOfLines={2}>
-        {item.label} ·{" "}
         {display.kind === "started"
-          ? "Started in a new thread"
-          : "Suggested in the original thread"}
+          ? gt("{label} · Started in a new thread", { label: item.label })
+          : gt("{label} · Suggested in the original thread", { label: item.label })}
       </Text>
     </View>
   );
@@ -91,6 +92,7 @@ export function FollowUpCard(props: {
 }
 
 function useFollowUpAction(environmentId: EnvironmentId) {
+  const resolve = useMessages();
   const canOperate = useAtomValue(serverEnvironment.startFollowUp.permissionAtom(environmentId));
   const start = useAtomCommand(serverEnvironment.startFollowUp, { label: "start follow-up" });
   const setDismissed = useAtomCommand(serverEnvironment.setFollowUpDismissed, {
@@ -103,7 +105,7 @@ function useFollowUpAction(environmentId: EnvironmentId) {
     setError(null);
     const result = await action().finally(() => setBusy(false));
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      setError(followUpFailureMessage(squashAtomCommandFailure(result)));
+      setError(followUpFailureMessage(squashAtomCommandFailure(result), resolve));
     }
   };
   return { start, setDismissed, disabled: busy || !canOperate, error, run };
@@ -114,6 +116,7 @@ function SuggestedFollowUp(props: {
   readonly item: FollowUpItem;
   readonly iconColor: ColorValue;
 }) {
+  const gt = useGT();
   const { item, environmentId } = props;
   const { start, setDismissed, disabled, error, run } = useFollowUpAction(environmentId);
   // Omitting the workspace follows the project's default for new threads.
@@ -154,7 +157,12 @@ function SuggestedFollowUp(props: {
           {error}
         </Text>
       ) : null}
-      <Button label="Start thread" tone="primary" disabled={disabled} onPress={() => startIn()} />
+      <Button
+        label={gt("Start thread")}
+        tone="primary"
+        disabled={disabled}
+        onPress={() => startIn()}
+      />
       <View className="flex-row items-center justify-between gap-2">
         <View className="flex-row items-center gap-3">
           <Pressable
@@ -165,7 +173,9 @@ function SuggestedFollowUp(props: {
             className="px-1 py-1 active:opacity-60 disabled:opacity-50"
             onPress={() => startIn("current")}
           >
-            <Text className="font-sans text-xs text-foreground-muted">This checkout</Text>
+            <Text className="font-sans text-xs text-foreground-muted">
+              {gt("This checkout", { $context: "start the follow-up in the current checkout" })}
+            </Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -175,7 +185,7 @@ function SuggestedFollowUp(props: {
             className="px-1 py-1 active:opacity-60 disabled:opacity-50"
             onPress={() => startIn("worktree")}
           >
-            <Text className="font-sans text-xs text-foreground-muted">New worktree</Text>
+            <Text className="font-sans text-xs text-foreground-muted">{gt("New worktree")}</Text>
           </Pressable>
         </View>
         <Pressable
@@ -193,7 +203,7 @@ function SuggestedFollowUp(props: {
             )
           }
         >
-          <Text className="font-sans text-xs text-foreground-muted">Dismiss</Text>
+          <Text className="font-sans text-xs text-foreground-muted">{gt("Dismiss")}</Text>
         </Pressable>
       </View>
     </View>
@@ -205,13 +215,16 @@ function DismissedFollowUp(props: {
   readonly item: FollowUpItem;
   readonly iconColor: ColorValue;
 }) {
+  const gt = useGT();
   const { item, environmentId } = props;
   const { setDismissed, disabled, error, run } = useFollowUpAction(environmentId);
   return (
     <View className="mb-3 min-h-9 flex-row items-center gap-2 px-1">
       <SymbolView name="minus" size={13} tintColor={props.iconColor} type="monochrome" />
       <Text className="flex-1 font-sans text-sm text-foreground-muted" numberOfLines={2}>
-        {item.label} · {error ?? "Dismissed"}
+        {error === null
+          ? gt("{label} · Dismissed", { label: item.label })
+          : gt("{label} · {error}", { label: item.label, error })}
       </Text>
       <Pressable
         accessibilityRole="button"
@@ -228,7 +241,7 @@ function DismissedFollowUp(props: {
           )
         }
       >
-        <Text className="font-sans text-xs text-foreground-muted">Restore</Text>
+        <Text className="font-sans text-xs text-foreground-muted">{gt("Restore")}</Text>
       </Pressable>
     </View>
   );

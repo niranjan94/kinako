@@ -6,6 +6,7 @@ import type {
   OrchestrationV2TurnItem,
   ThreadId,
 } from "@t3tools/contracts";
+import { msg, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, View, type ColorValue } from "react-native";
 
@@ -32,8 +33,8 @@ const DIRECTIONS: ReadonlyArray<{
   readonly id: OrchestrationV2ConversationSummaryDirection;
   readonly title: string;
 }> = [
-  { id: "from_here", title: "Summarize from here" },
-  { id: "up_to_here", title: "Summarize up to here" },
+  { id: "from_here", title: msg("Summarize from here") },
+  { id: "up_to_here", title: msg("Summarize up to here") },
 ];
 
 /** Opens the summarize choices for a sent user message. */
@@ -42,6 +43,8 @@ export function UserMessageSummarizeButton(props: {
   readonly controls: ConversationSummaryFeedControls;
   readonly tintColor: ColorValue;
 }) {
+  const gt = useGT();
+  const resolve = useMessages();
   const actions = DIRECTIONS.map((direction) => {
     const reason =
       direction.id === "from_here"
@@ -49,8 +52,8 @@ export function UserMessageSummarizeButton(props: {
         : props.controls.upToHereUnavailableReason(props.messageId);
     return {
       id: direction.id,
-      title: direction.title,
-      ...(reason === null ? {} : { subtitle: reason, attributes: { disabled: true } }),
+      title: resolve(direction.title),
+      ...(reason === null ? {} : { subtitle: resolve(reason), attributes: { disabled: true } }),
     };
   });
   return (
@@ -63,7 +66,7 @@ export function UserMessageSummarizeButton(props: {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Summarize conversation"
+        accessibilityLabel={gt("Summarize conversation")}
         disabled={props.controls.busy}
         hitSlop={8}
         className="size-7 items-center justify-center"
@@ -83,11 +86,12 @@ function SummarizedTurns(props: {
   readonly threadId: ThreadId;
   readonly runIds: ConversationSummaryItem["range"]["coveredRunIds"];
 }) {
+  const gt = useGT();
   const history = useRunHistory(props);
   if (history.data === null) {
     return (
       <Text className="text-xs text-foreground-muted">
-        {history.error ?? "Loading summarized turns…"}
+        {history.error ?? gt("Loading summarized turns…")}
       </Text>
     );
   }
@@ -97,10 +101,10 @@ function SummarizedTurns(props: {
         <View key={message.itemId} className="gap-1">
           <Text className="font-t3-medium text-xs text-foreground-secondary">
             {message.kind === "user_message"
-              ? "You"
+              ? gt("You")
               : message.kind === "assistant_message"
-                ? "Agent"
-                : `Agent · ${message.kind.replaceAll("_", " ")}`}
+                ? gt("Agent")
+                : gt("Agent · {kind}", { kind: message.kind.replaceAll("_", " ") })}
           </Text>
           <Text selectable className="text-xs text-foreground-muted">
             {message.text}
@@ -120,6 +124,7 @@ export function ConversationSummaryDivider(props: {
   readonly threadId: ThreadId;
   readonly iconColor: ColorValue;
 }) {
+  const gt = useGT();
   const { item } = props;
   const [open, setOpen] = useState<"summary" | "turns" | null>(null);
   const toggle = (panel: "summary" | "turns") => setOpen(open === panel ? null : panel);
@@ -137,12 +142,16 @@ export function ConversationSummaryDivider(props: {
         iconColor={props.iconColor}
       >
         <Pressable accessibilityRole="button" hitSlop={8} onPress={() => toggle("summary")}>
-          <Text className="font-t3-medium text-xs text-foreground-secondary">Summary</Text>
+          <Text className="font-t3-medium text-xs text-foreground-secondary">
+            {gt("Summary", { $context: "toggle, shows the conversation summary text" })}
+          </Text>
         </Pressable>
         {item.range.direction === "from_here" ? (
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => toggle("turns")}>
             <Text className="font-t3-medium text-xs text-foreground-secondary">
-              {turnCount === 1 ? "1 turn" : `${turnCount} turns`}
+              {gt("{count, plural, one {{count} turn} other {{count} turns}}", {
+                count: turnCount,
+              })}
             </Text>
           </Pressable>
         ) : null}
@@ -154,7 +163,7 @@ export function ConversationSummaryDivider(props: {
             onPress={() => props.controls?.restore(item.id)}
           >
             <Text className="font-t3-medium text-xs text-foreground-secondary">
-              Restore full context
+              {gt("Restore full context")}
             </Text>
           </Pressable>
         ) : null}
@@ -165,7 +174,7 @@ export function ConversationSummaryDivider(props: {
             <>
               {item.range.instructions === undefined ? null : (
                 <Text className="text-xs italic text-foreground-muted">
-                  Focus: {item.range.instructions}
+                  {gt("Focus: {instructions}", { instructions: item.range.instructions })}
                 </Text>
               )}
               <Text selectable className="text-xs text-foreground-muted">

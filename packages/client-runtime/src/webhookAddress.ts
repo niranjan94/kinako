@@ -1,8 +1,8 @@
 import type { ScheduledTaskWebhookEndpoint } from "@t3tools/contracts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
-
-const PUBLIC_ROUTE_HINT = `Turn on a public route from the ${FORK_DISPLAY_NAME} desktop app for a public URL.`;
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 export interface WebhookAddress {
   readonly address: string;
@@ -13,6 +13,7 @@ export interface WebhookAddress {
 export function webhookAddress(
   endpoint: ScheduledTaskWebhookEndpoint,
   httpBaseUrl: string | null,
+  resolve: MFunctionType = mFallback,
 ): WebhookAddress {
   if (endpoint.url !== null) {
     return { address: endpoint.url, copyable: true, note: null };
@@ -21,7 +22,11 @@ export function webhookAddress(
     return {
       address: endpoint.path,
       copyable: false,
-      note: PUBLIC_ROUTE_HINT,
+      note: resolve(
+        msg("Turn on a public route from the {app} desktop app for a public URL.", {
+          app: FORK_DISPLAY_NAME,
+        }),
+      ),
     };
   }
   const url = new URL(endpoint.path, httpBaseUrl);
@@ -29,7 +34,17 @@ export function webhookAddress(
     address: url.href,
     copyable: true,
     note: isLocalLoopbackHost(url.hostname)
-      ? `Only this computer can call this address. ${PUBLIC_ROUTE_HINT}`
-      : `Works wherever this environment's address is reachable, for example over Tailscale or your own proxy. ${PUBLIC_ROUTE_HINT}`,
+      ? resolve(
+          msg(
+            "Only this computer can call this address. Turn on a public route from the {app} desktop app for a public URL.",
+            { app: FORK_DISPLAY_NAME },
+          ),
+        )
+      : resolve(
+          msg(
+            "Works wherever this environment's address is reachable, for example over Tailscale or your own proxy. Turn on a public route from the {app} desktop app for a public URL.",
+            { app: FORK_DISPLAY_NAME },
+          ),
+        ),
   };
 }

@@ -521,6 +521,9 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
   localOrigin = false,
   onAnswer: Parameters<typeof createPullRequestEnvironmentAtoms>[1] = {},
   queryStore: typeof EnvironmentQueryStore.Service = null,
+  diffLoader: PullRequestDiffLoader.PullRequestDiffLoader["Service"] = {
+    load: () => Effect.die("unused"),
+  },
 ) {
   const originTarget = localOrigin
     ? new PrimaryConnectionTarget({
@@ -588,10 +591,7 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
   const runtime = Atom.runtime(
     Layer.mergeAll(
       Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-      Layer.succeed(
-        PullRequestDiffLoader.PullRequestDiffLoader,
-        PullRequestDiffLoader.PullRequestDiffLoader.of({ load: () => Effect.die("unused") }),
-      ),
+      Layer.succeed(PullRequestDiffLoader.PullRequestDiffLoader, diffLoader),
       Layer.succeed(EnvironmentQueryStore, queryStore),
     ),
   );
@@ -875,54 +875,6 @@ it.effect.each([undefined, true, false])(
         ...(isDraft === undefined ? {} : { isDraft }),
       });
     }),
-);
-
-it.effect("keeps source workspace metadata when an alternate answers an issue read", () =>
-  Effect.gen(function* () {
-    const clientFor = (local: boolean) =>
-      ({
-        [local ? WS_METHODS.pullRequestsRoutingIdentity : WS_METHODS.pullRequestsRouting]: () =>
-          Effect.succeed({
-            host: "github.com",
-            provider: "github",
-            viewer: "maria-rcks",
-            accountId: "123",
-            projectTitle: local ? "local project" : "source project",
-            workspaceRoot: local ? "/Users/local/repo" : "/srv/source/repo",
-          }),
-        [WS_METHODS.issuesDetail]: () =>
-          local
-            ? Effect.succeed({
-                projectId: "local-project",
-                projectTitle: "local project",
-                workspaceRoot: "/Users/local/repo",
-                title: "Crash on launch",
-                state: "open",
-              })
-            : Effect.never,
-      }) as unknown as WsRpcProtocolClient;
-    const { environmentRegistry, supervisor } = yield* makeTestRuntime(
-      clientFor(false),
-      clientFor(true),
-    );
-    const result = yield* createPullRequestRouter()(WS_METHODS.issuesDetail, {
-      projectId: ProjectId.make("project-1"),
-      repository: "acme/web",
-      number: 9,
-    }).pipe(
-      Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-      Effect.provideService(PullRequestRoutingPermissions, trustedRouting),
-      Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
-      Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-    );
-    expect(result).toEqual({
-      projectId: "project-1",
-      projectTitle: "source project",
-      workspaceRoot: "/srv/source/repo",
-      title: "Crash on launch",
-      state: "open",
-    });
-  }),
 );
 
 it.effect(
@@ -3027,4 +2979,45 @@ it.effect("paints a saved stack answer at once while the host read is out", () =
       expect(waiting.registry.get(waitingStacks.answered(target))).toBe(false);
     }),
   ),
+);
+
+it.effect("loads the diff again for a new guide head without sending the head", () =>
+  Effect.gen(function* () {
+    const inputs: unknown[] = [];
+    const { atoms, registry, supervisor } = yield* makeTestRuntime(
+      {} as WsRpcProtocolClient,
+      undefined,
+      false,
+      {},
+      null,
+      {
+        load: (_prepared, input) =>
+          Effect.sync(() => {
+            inputs.push(input);
+            return { patch: "", truncated: false, nextCursor: null };
+          }),
+      },
+    );
+    yield* SubscriptionRef.set(
+      supervisor.prepared,
+      Option.some({
+        environmentId: TARGET.environmentId,
+        label: TARGET.label,
+        httpBaseUrl: "https://example.test",
+        socketUrl: "wss://example.test",
+        httpAuthorization: null,
+        target: TARGET,
+      }),
+    );
+    const reference = { projectId: ProjectId.make("project-1"), repository: "acme/web", number: 1 };
+    for (const cacheHeadSha of ["old-head", "new-head"]) {
+      const query = atoms.diff({
+        environmentId: TARGET.environmentId,
+        input: { ...reference, cacheHeadSha },
+      });
+      registry.mount(query);
+      yield* AtomRegistry.getResult(registry, query, { suspendOnWaiting: true });
+    }
+    expect(inputs).toEqual([reference, reference]);
+  }),
 );

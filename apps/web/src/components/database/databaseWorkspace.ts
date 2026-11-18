@@ -12,6 +12,8 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import { msg } from "gt-react";
+import { m } from "../../i18n/messages";
 import { randomUUID } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
 import { databaseState } from "../../state/database";
@@ -126,6 +128,7 @@ export async function newDatabaseConsole(
     id,
     connectionId: connection.id,
     database,
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- the persisted tab title is matched by the numbering regex above, so it stays English
     title: `Console ${Math.max(0, ...consoleNumbers) + 1}`,
     sql: "",
     loading: true,
@@ -192,7 +195,11 @@ export async function closeDatabaseTab(scope: DatabaseWorkspaceScope, tab: Datab
     tab.sql.trim() &&
     tab.sql !== tab.savedSql &&
     !(await ensureLocalApi().dialogs.confirm(
-      `Close ${tab.title}?\nIts SQL is not saved to a file and will be discarded.`,
+      m(
+        msg("Close {title}?\nIts SQL is not saved to a file and will be discarded.", {
+          title: tab.title,
+        }),
+      ),
       { variant: "destructive" },
     ))
   )

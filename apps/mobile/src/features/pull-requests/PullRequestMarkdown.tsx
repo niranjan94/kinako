@@ -6,7 +6,7 @@ import { markdownTaskMarkerOffset } from "@t3tools/shared/markdownTaskList";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 import { useProject } from "../../state/entities";
-import { pullRequestTarget, type PullRequestReferenceParams } from "./usePullRequestDiff";
+import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 import {
   PullRequestMedia,
   PullRequestMediaContext,
@@ -48,7 +48,7 @@ const ChangeRequestUrlContext = createContext<string | null>(null);
 export function PullRequestMarkdownRepository(props: {
   /** The change request the markdown belongs to, whose host decides what its text links. */
   readonly changeRequest: { readonly provider: string; readonly url: string } | null | undefined;
-  readonly params: PullRequestReferenceParams;
+  readonly params: PullRequestParams;
   readonly children: ReactNode;
 }) {
   const provider = props.changeRequest?.provider;

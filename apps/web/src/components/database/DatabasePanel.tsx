@@ -7,6 +7,7 @@ import type {
   ProjectId,
   ScopedThreadRef,
 } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../../rightPanelLayout";
@@ -33,6 +34,7 @@ export default function DatabasePanel({
   projectId: ProjectId;
   threadRef: ScopedThreadRef;
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const key = scopedThreadKey(threadRef);
   const workspaceAtom = databaseState.workspaces(key);
@@ -99,7 +101,7 @@ export default function DatabasePanel({
   const newConsole =
     connections.length > 1 ? (
       <Menu>
-        <MenuTrigger render={<DatabaseToolbarButton label="New query console" />}>
+        <MenuTrigger render={<DatabaseToolbarButton label={gt("New query console")} />}>
           <SquareTerminalIcon />
         </MenuTrigger>
         <MenuPopup align="end">
@@ -113,7 +115,7 @@ export default function DatabasePanel({
       </Menu>
     ) : (
       <DatabaseToolbarButton
-        label="New query console"
+        label={gt("New query console")}
         disabled={!selected}
         onClick={() => selected && newQuery(selected)}
       >
@@ -123,25 +125,25 @@ export default function DatabasePanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {!allowed ? (
-        <p className="p-3 text-sm">Database access requires terminal permission.</p>
+        <p className="p-3 text-sm">{gt("Database access requires terminal permission.")}</p>
       ) : (
-        <aside className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Connections">
+        <aside className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={gt("Connections")}>
           {error && (
             <p role="alert" className="border-b p-2 text-xs text-destructive-foreground">
               {error}
             </p>
           )}
           <div className="flex h-8 shrink-0 items-center gap-1 border-b px-2">
-            <h2 className="mr-auto text-xs font-medium">Connections</h2>
+            <h2 className="mr-auto text-xs font-medium">{gt("Connections")}</h2>
             {newConsole}
             <DatabaseToolbarButton
-              label="New connection"
+              label={gt("New connection")}
               disabled={!canSave}
               onClick={() => setEditing("new")}
             >
               <PlusIcon />
             </DatabaseToolbarButton>
-            <DatabaseToolbarButton label="Refresh schemas" onClick={refresh}>
+            <DatabaseToolbarButton label={gt("Refresh schemas")} onClick={refresh}>
               <RefreshCwIcon />
             </DatabaseToolbarButton>
           </div>
@@ -151,8 +153,8 @@ export default function DatabasePanel({
               ref={findTable}
               size="compact"
               unstyled
-              aria-label="Find table in loaded connections"
-              placeholder="Find table…"
+              aria-label={gt("Find table in loaded connections")}
+              placeholder={gt("Find table…")}
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
               onKeyDown={(event) => {

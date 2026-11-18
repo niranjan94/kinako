@@ -3,6 +3,8 @@ import type {
   HostResourcesHistoryBucket,
   HostResourcesSnapshot,
 } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 export const HOST_RESOURCES_REFRESH_MS = 5_000;
 export const HOST_RESOURCES_HISTORY_REFRESH_MS = 30_000;
@@ -17,17 +19,22 @@ export type HostResourceMeter =
     }
   | {
       readonly kind: "memory" | "disk";
-      readonly label: "Memory" | "Disk";
+      readonly label: string;
       readonly usedFraction: number;
       readonly usedBytes: number;
       readonly totalBytes: number;
     };
 
-function byteMeter(kind: "memory" | "disk", availableBytes: number, totalBytes: number) {
+function byteMeter(
+  kind: "memory" | "disk",
+  availableBytes: number,
+  totalBytes: number,
+  resolve: MFunctionType,
+) {
   const usedBytes = Math.max(0, totalBytes - availableBytes);
   return {
     kind,
-    label: kind === "memory" ? "Memory" : "Disk",
+    label: kind === "memory" ? resolve(msg("Memory")) : resolve(msg("Disk")),
     usedFraction: totalBytes > 0 ? Math.min(1, usedBytes / totalBytes) : 0,
     usedBytes,
     totalBytes,
@@ -35,7 +42,10 @@ function byteMeter(kind: "memory" | "disk", availableBytes: number, totalBytes: 
 }
 
 /** CPU, memory, and (when the server reports it) disk usage of an environment's machine. */
-export function hostResourceMeters(snapshot: HostResourcesSnapshot): readonly HostResourceMeter[] {
+export function hostResourceMeters(
+  snapshot: HostResourcesSnapshot,
+  resolve: MFunctionType = mFallback,
+): readonly HostResourceMeter[] {
   const meters: HostResourceMeter[] = [
     {
       kind: "cpu",
@@ -43,10 +53,10 @@ export function hostResourceMeters(snapshot: HostResourcesSnapshot): readonly Ho
       usedFraction: snapshot.cpuUtilization,
       cpuCount: snapshot.cpuCount,
     },
-    byteMeter("memory", snapshot.availableMemoryBytes, snapshot.totalMemoryBytes),
+    byteMeter("memory", snapshot.availableMemoryBytes, snapshot.totalMemoryBytes, resolve),
   ];
   if (snapshot.diskAvailableBytes !== undefined && snapshot.diskTotalBytes !== undefined) {
-    meters.push(byteMeter("disk", snapshot.diskAvailableBytes, snapshot.diskTotalBytes));
+    meters.push(byteMeter("disk", snapshot.diskAvailableBytes, snapshot.diskTotalBytes, resolve));
   }
   return meters;
 }

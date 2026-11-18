@@ -17,6 +17,7 @@ import {
 } from "@t3tools/client-runtime/state/database";
 import * as Schema from "effect/Schema";
 import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
+import { useGT } from "gt-react";
 import { useContext, useId, useState } from "react";
 import { databaseState } from "../../state/database";
 import { useEnvironments } from "../../state/environments";
@@ -56,6 +57,7 @@ export function DatabaseConnectionDialog({
   copyTo?: EnvironmentId;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const registry = useContext(RegistryContext);
   const { environments } = useEnvironments();
   const canSave = useAtomValue(
@@ -189,7 +191,10 @@ export function DatabaseConnectionDialog({
       );
       setMessage(
         result.ok
-          ? { tone: "success", text: `Connected (${result.serverVersion})` }
+          ? {
+              tone: "success",
+              text: gt("Connected ({version})", { version: result.serverVersion }),
+            }
           : { tone: "error", text: result.message },
       );
     })()
@@ -215,7 +220,7 @@ export function DatabaseConnectionDialog({
               .map((item) => item.environmentId)
           : [environmentId];
       if (targets.length === 0)
-        throw new Error("Connect an environment before saving a connection.");
+        throw new Error(gt("Connect an environment before saving a connection."));
       if (
         level === "global" &&
         connection?.hasPassword &&
@@ -228,7 +233,9 @@ export function DatabaseConnectionDialog({
           );
           if (!list.connections.some((item) => item.id === globalId && item.hasPassword))
             throw new Error(
-              "Set the password again to create a missing global copy, or explicitly clear it. This device cannot read the stored password.",
+              gt(
+                "Set the password again to create a missing global copy, or explicitly clear it. This device cannot read the stored password.",
+              ),
             );
         }
       }
@@ -240,7 +247,12 @@ export function DatabaseConnectionDialog({
       const failures = results.flatMap((result, index) =>
         !result.ok
           ? [
-              `${environments.find((item) => item.environmentId === targets[index])?.label ?? targets[index]}: ${databaseErrorMessage(result.error)}`,
+              gt("{environment}: {reason}", {
+                environment:
+                  environments.find((item) => item.environmentId === targets[index])?.label ??
+                  targets[index],
+                reason: databaseErrorMessage(result.error),
+              }),
             ]
           : [],
       );
@@ -268,14 +280,15 @@ export function DatabaseConnectionDialog({
         <DialogHeader>
           <DialogTitle>
             {copyTo
-              ? "Copy database connection"
+              ? gt("Copy database connection")
               : connection
-                ? "Edit database connection"
-                : "New database connection"}
+                ? gt("Edit database connection")
+                : gt("New database connection")}
           </DialogTitle>
           <DialogDescription>
-            Connections open on the selected environment. Stored passwords are never sent back to
-            this device.
+            {gt(
+              "Connections open on the selected environment. Stored passwords are never sent back to this device.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -288,7 +301,7 @@ export function DatabaseConnectionDialog({
           <DialogPanel>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label id={`${id}-engine`}>Engine</Label>
+                <Label id={`${id}-engine`}>{gt("Engine")}</Label>
                 <ToggleGroup
                   aria-labelledby={`${id}-engine`}
                   className="w-full *:flex-1"
@@ -306,12 +319,13 @@ export function DatabaseConnectionDialog({
                   }}
                 >
                   <Toggle value="postgres">PostgreSQL</Toggle>
+                  {/* oxlint-disable-next-line t3code/no-untranslated-copy -- product name */}
                   <Toggle value="sqlite">SQLite</Toggle>
                   <Toggle value="clickhouse">ClickHouse</Toggle>
                 </ToggleGroup>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`${id}-name`}>Name</Label>
+                <Label htmlFor={`${id}-name`}>{gt("Name")}</Label>
                 <Input
                   id={`${id}-name`}
                   value={name}
@@ -321,7 +335,7 @@ export function DatabaseConnectionDialog({
               </div>
               {engine === "sqlite" ? (
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`${id}-path`}>File path</Label>
+                  <Label htmlFor={`${id}-path`}>{gt("File path")}</Label>
                   <Input
                     id={`${id}-path`}
                     font="mono"
@@ -330,14 +344,14 @@ export function DatabaseConnectionDialog({
                     onChange={(event) => setPath(event.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    An absolute path on the environment, not on this device.
+                    {gt("An absolute path on the environment, not on this device.")}
                   </p>
                 </div>
               ) : (
                 <>
                   <div className="grid grid-cols-[1fr_6rem] gap-3">
                     <div className="flex min-w-0 flex-col gap-1.5">
-                      <Label htmlFor={`${id}-host`}>Host</Label>
+                      <Label htmlFor={`${id}-host`}>{gt("Host")}</Label>
                       <Input
                         id={`${id}-host`}
                         value={host}
@@ -345,7 +359,7 @@ export function DatabaseConnectionDialog({
                       />
                     </div>
                     <div className="flex min-w-0 flex-col gap-1.5">
-                      <Label htmlFor={`${id}-port`}>Port</Label>
+                      <Label htmlFor={`${id}-port`}>{gt("Port")}</Label>
                       <Input
                         id={`${id}-port`}
                         type="number"
@@ -358,10 +372,10 @@ export function DatabaseConnectionDialog({
                     <div className="flex min-w-0 flex-col gap-1.5">
                       <Label htmlFor={`${id}-database`}>
                         {engine === "clickhouse"
-                          ? "Default database"
+                          ? gt("Default database")
                           : databaseMode === "single"
-                            ? "Database"
-                            : "Initial database"}
+                            ? gt("Database")
+                            : gt("Initial database")}
                       </Label>
                       <Input
                         id={`${id}-database`}
@@ -370,7 +384,7 @@ export function DatabaseConnectionDialog({
                       />
                     </div>
                     <div className="flex min-w-0 flex-col gap-1.5">
-                      <Label htmlFor={`${id}-user`}>User</Label>
+                      <Label htmlFor={`${id}-user`}>{gt("User")}</Label>
                       <Input
                         id={`${id}-user`}
                         autoComplete="off"
@@ -381,52 +395,59 @@ export function DatabaseConnectionDialog({
                   </div>
                   {engine === "postgres" && (
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor={`${id}-database-mode`}>Databases to show</Label>
+                      <Label htmlFor={`${id}-database-mode`}>{gt("Databases to show")}</Label>
                       <DatabaseSelect
                         id={`${id}-database-mode`}
-                        label="Databases to show"
+                        label={gt("Databases to show")}
                         value={databaseMode}
                         options={[
-                          { value: "single", label: "Only the initial database" },
-                          { value: "all", label: "All databases" },
-                          { value: "selected", label: "Selected databases" },
+                          { value: "single", label: gt("Only the initial database") },
+                          { value: "all", label: gt("All databases") },
+                          { value: "selected", label: gt("Selected databases") },
                         ]}
                         onChange={setDatabaseMode}
                       />
                       {databaseMode !== "single" && (
                         <p className="text-xs text-muted-foreground">
-                          The initial database is used to connect to the server. All databases lists
-                          those your user can connect to.
+                          {gt(
+                            "The initial database is used to connect to the server. All databases lists those your user can connect to.",
+                          )}
                         </p>
                       )}
                     </div>
                   )}
                   {engine === "postgres" && databaseMode === "selected" && (
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor={`${id}-selected-databases`}>Database names</Label>
+                      <Label htmlFor={`${id}-selected-databases`}>{gt("Database names")}</Label>
                       <Textarea
                         id={`${id}-selected-databases`}
                         value={selectedDatabases}
                         onChange={(event) => setSelectedDatabases(event.target.value)}
+                        // oxlint-disable-next-line t3code/no-untranslated-copy -- example database identifiers
                         placeholder={"app\nanalytics\nreporting"}
                         rows={3}
                       />
                       <p className="text-xs text-muted-foreground">
-                        Enter one database name per line. New query consoles use the first database.
+                        {gt(
+                          "Enter one database name per line. New query consoles use the first database.",
+                        )}
                       </p>
                     </div>
                   )}
                   {engine === "postgres" && (
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor={`${id}-auth`}>Authentication</Label>
+                      <Label htmlFor={`${id}-auth`}>{gt("Authentication")}</Label>
                       <DatabaseSelect
                         id={`${id}-auth`}
-                        label="Authentication"
+                        label={gt("Authentication")}
                         value={authKind}
                         options={[
-                          { value: "password", label: "Password" },
+                          { value: "password", label: gt("Password") },
+                          // oxlint-disable-next-line t3code/no-untranslated-copy -- AWS product name
                           { value: "aws-iam", label: "AWS IAM" },
+                          // oxlint-disable-next-line t3code/no-untranslated-copy -- AWS product name
                           { value: "aws-secrets-manager", label: "AWS Secrets Manager" },
+                          // oxlint-disable-next-line t3code/no-untranslated-copy -- AWS product name
                           { value: "aws-parameter-store", label: "AWS Parameter Store" },
                         ]}
                         onChange={setAuthKind}
@@ -435,16 +456,16 @@ export function DatabaseConnectionDialog({
                   )}
                   {usesPassword && (
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor={`${id}-password`}>Password</Label>
+                      <Label htmlFor={`${id}-password`}>{gt("Password")}</Label>
                       {storedPassword && (
                         <DatabaseSelect
                           id={`${id}-password-action`}
-                          label="Stored password"
+                          label={gt("Stored password")}
                           value={passwordAction}
                           options={[
-                            { value: "keep", label: "Keep the stored password" },
-                            { value: "replace", label: "Set a new password" },
-                            { value: "clear", label: "Remove the stored password" },
+                            { value: "keep", label: gt("Keep the stored password") },
+                            { value: "replace", label: gt("Set a new password") },
+                            { value: "clear", label: gt("Remove the stored password") },
                           ]}
                           onChange={setPasswordAction}
                         />
@@ -454,7 +475,9 @@ export function DatabaseConnectionDialog({
                           id={`${id}-password`}
                           type="password"
                           autoComplete="new-password"
-                          placeholder={storedPassword ? "New password" : "Leave empty for none"}
+                          placeholder={
+                            storedPassword ? gt("New password") : gt("Leave empty for none")
+                          }
                           value={password}
                           onChange={(event) => setPassword(event.target.value)}
                         />
@@ -465,21 +488,21 @@ export function DatabaseConnectionDialog({
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex min-w-0 flex-col gap-1.5">
-                          <Label htmlFor={`${id}-aws-profile`}>AWS profile</Label>
+                          <Label htmlFor={`${id}-aws-profile`}>{gt("AWS profile")}</Label>
                           <Input
                             id={`${id}-aws-profile`}
                             autoComplete="off"
-                            placeholder="Default credentials"
+                            placeholder={gt("Default credentials")}
                             value={awsProfile}
                             onChange={(event) => setAwsProfile(event.target.value)}
                           />
                         </div>
                         <div className="flex min-w-0 flex-col gap-1.5">
-                          <Label htmlFor={`${id}-aws-region`}>Region</Label>
+                          <Label htmlFor={`${id}-aws-region`}>{gt("Region")}</Label>
                           <Input
                             id={`${id}-aws-region`}
                             autoComplete="off"
-                            placeholder="From the profile"
+                            placeholder={gt("From the profile")}
                             value={awsRegion}
                             onChange={(event) => setAwsRegion(event.target.value)}
                           />
@@ -488,7 +511,7 @@ export function DatabaseConnectionDialog({
                       {authKind === "aws-secrets-manager" && (
                         <>
                           <div className="flex flex-col gap-1.5">
-                            <Label htmlFor={`${id}-secret-id`}>Secret name or ARN</Label>
+                            <Label htmlFor={`${id}-secret-id`}>{gt("Secret name or ARN")}</Label>
                             <Input
                               id={`${id}-secret-id`}
                               font="mono"
@@ -500,10 +523,12 @@ export function DatabaseConnectionDialog({
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex flex-col gap-1">
                               <Label htmlFor={`${id}-secret-host`}>
-                                Use host and port from the secret
+                                {gt("Use host and port from the secret")}
                               </Label>
                               <p className="text-xs text-muted-foreground">
-                                Falls back to the host and port above when the secret has none.
+                                {gt(
+                                  "Falls back to the host and port above when the secret has none.",
+                                )}
                               </p>
                             </div>
                             <Switch
@@ -516,7 +541,7 @@ export function DatabaseConnectionDialog({
                       )}
                       {authKind === "aws-parameter-store" && (
                         <div className="flex flex-col gap-1.5">
-                          <Label htmlFor={`${id}-parameter`}>Parameter name</Label>
+                          <Label htmlFor={`${id}-parameter`}>{gt("Parameter name")}</Label>
                           <Input
                             id={`${id}-parameter`}
                             font="mono"
@@ -529,34 +554,42 @@ export function DatabaseConnectionDialog({
                       )}
                       <p className="text-xs text-muted-foreground">
                         {authKind === "aws-iam"
-                          ? "Signs a token with the environment's AWS credentials. The user needs the rds_iam role, and RDS requires TLS."
-                          : "Read with the environment's AWS credentials on each connect. A JSON value may supply username, password, host and port; any other value is the password."}
+                          ? gt(
+                              "Signs a token with the environment's AWS credentials. The user needs the rds_iam role, and RDS requires TLS.",
+                            )
+                          : gt(
+                              "Read with the environment's AWS credentials on each connect. A JSON value may supply username, password, host and port; any other value is the password.",
+                            )}
                       </p>
                     </>
                   )}
                   {engine === "clickhouse" ? (
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex flex-col gap-1">
-                        <Label htmlFor={`${id}-secure`}>HTTPS</Label>
+                        <Label htmlFor={`${id}-secure`}>{gt("HTTPS")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Connects to ClickHouse's HTTP interface, usually port 8443 with HTTPS or
-                          8123 without.
+                          {gt(
+                            "Connects to ClickHouse's HTTP interface, usually port 8443 with HTTPS or 8123 without.",
+                          )}
                         </p>
                       </div>
                       <Switch id={`${id}-secure`} checked={secure} onCheckedChange={setSecure} />
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor={`${id}-tls`}>TLS</Label>
+                      <Label htmlFor={`${id}-tls`}>{gt("TLS")}</Label>
                       <DatabaseSelect
                         id={`${id}-tls`}
-                        label="TLS"
+                        label={gt("TLS")}
                         value={sslMode}
                         options={[
-                          { value: "disable", label: "Disable" },
-                          { value: "prefer", label: "Prefer (use TLS when the server offers it)" },
-                          { value: "require", label: "Require" },
-                          { value: "verify-full", label: "Require and verify the certificate" },
+                          { value: "disable", label: gt("Disable") },
+                          {
+                            value: "prefer",
+                            label: gt("Prefer (use TLS when the server offers it)"),
+                          },
+                          { value: "require", label: gt("Require") },
+                          { value: "verify-full", label: gt("Require and verify the certificate") },
                         ]}
                         onChange={setSslMode}
                       />
@@ -565,35 +598,37 @@ export function DatabaseConnectionDialog({
                 </>
               )}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`${id}-level`}>Available in</Label>
+                <Label htmlFor={`${id}-level`}>{gt("Available in")}</Label>
                 <DatabaseSelect
                   id={`${id}-level`}
-                  label="Available in"
+                  label={gt("Available in")}
                   value={level}
                   disabled={!!copyTo}
                   options={[
                     ...(projectId || connection?.projectId
-                      ? [{ value: "project" as const, label: "This project" }]
+                      ? [{ value: "project" as const, label: gt("This project") }]
                       : []),
-                    { value: "environment", label: "Every project on this environment" },
+                    { value: "environment", label: gt("Every project on this environment") },
                     ...(engine === "postgres"
-                      ? [{ value: "global" as const, label: "Every connected environment" }]
+                      ? [{ value: "global" as const, label: gt("Every connected environment") }]
                       : []),
                   ]}
                   onChange={setLevel}
                 />
                 {level === "global" && loopback && (
                   <p role="note" className="text-xs text-warning-foreground">
-                    {host} points to a different database on each environment. Use a hostname every
-                    environment can reach.
+                    {gt(
+                      "{host} points to a different database on each environment. Use a hostname every environment can reach.",
+                      { host },
+                    )}
                   </p>
                 )}
               </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex flex-col gap-1">
-                  <Label htmlFor={`${id}-read-only`}>Read-only</Label>
+                  <Label htmlFor={`${id}-read-only`}>{gt("Read-only")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    Statements that change data are rejected.
+                    {gt("Statements that change data are rejected.")}
                   </p>
                 </div>
                 <Switch id={`${id}-read-only`} checked={readOnly} onCheckedChange={setReadOnly} />
@@ -610,7 +645,7 @@ export function DatabaseConnectionDialog({
           </DialogPanel>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
-              Cancel
+              {gt("Cancel")}
             </Button>
             <Button
               type="button"
@@ -618,10 +653,10 @@ export function DatabaseConnectionDialog({
               disabled={busy || !canSave}
               onClick={() => void test()}
             >
-              Test connection
+              {gt("Test connection")}
             </Button>
             <Button type="submit" disabled={!canSubmit}>
-              {busy ? "Saving…" : "Save"}
+              {busy ? gt("Saving…") : gt("Save")}
             </Button>
           </DialogFooter>
         </form>

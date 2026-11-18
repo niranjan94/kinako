@@ -36,6 +36,7 @@ import {
 } from "@t3tools/contracts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as Haptics from "expo-haptics";
+import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -50,6 +51,7 @@ import { ListToggleRow } from "../../components/ui/ListToggleRow";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { Toolbar } from "../../components/ui/Toolbar";
+import { m } from "../../i18n/messages";
 import { uuidv4 } from "../../lib/uuid";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { appAtomRegistry } from "../../state/atom-registry";
@@ -62,8 +64,6 @@ import { useAtomCommand } from "../../state/use-atom-command";
 type ImportCliHistoryRouteParams = {
   readonly environmentId?: string | string[];
 };
-
-const SCREEN_TITLE = "Import CLI history";
 
 type ScanState =
   | { readonly status: "error"; readonly message: string }
@@ -88,23 +88,25 @@ export function ImportCliHistoryRouteScreen({
   const insets = useSafeAreaInsets();
   const environmentId = firstParam(route.params?.environmentId);
   const isSheetRoot = useNavigationState((state) => state.index === 0);
+  const gt = useGT();
+  const screenTitle = gt("Import CLI history");
 
   return (
     <View className="flex-1 bg-sheet" collapsable={false}>
       <NativeStackScreenOptions
-        options={{ headerShown: Platform.OS !== "android", title: SCREEN_TITLE }}
+        options={{ headerShown: Platform.OS !== "android", title: screenTitle }}
       />
       {isSheetRoot ? (
         <Toolbar placement="left">
           <Toolbar.Button
-            accessibilityLabel="Close import"
-            label="Close"
+            accessibilityLabel={gt("Close import")}
+            label={gt("Close")}
             onPress={() => (navigation.getParent() ?? navigation).goBack()}
           />
         </Toolbar>
       ) : null}
       {Platform.OS === "android" ? (
-        <AppBar embedded title={SCREEN_TITLE} hideBottomBorder onBack={() => navigation.goBack()} />
+        <AppBar embedded title={screenTitle} hideBottomBorder onBack={() => navigation.goBack()} />
       ) : null}
       <ScreenContent>
         <ScrollView
@@ -121,8 +123,8 @@ export function ImportCliHistoryRouteScreen({
             <HistoryImport environmentId={EnvironmentId.make(environmentId)} />
           ) : (
             <EmptyState
-              title="Environment unavailable"
-              detail="Choose a connected environment first."
+              title={gt("Environment unavailable")}
+              detail={gt("Choose a connected environment first.")}
             />
           )}
         </ScrollView>
@@ -133,12 +135,14 @@ export function ImportCliHistoryRouteScreen({
 
 function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
   const { environmentId } = props;
+  const gt = useGT();
+  const resolve = useMessages();
   const serverConfig = useEnvironmentServerConfig(environmentId);
   const supported = supportsAgentSessionHistoryImport(serverConfig);
   const environmentLabel =
     useEnvironments().environments.find(
       (environment) => environment.environmentId === environmentId,
-    )?.label ?? "this environment";
+    )?.label ?? gt("this environment");
   const canImport = useAtomValue(
     serverEnvironment.importAgentSession.permissionAtom(environmentId),
   );
@@ -187,10 +191,10 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
             : {
                 status: "error",
                 message: isAtomCommandInterrupted(result)
-                  ? "Scanning was interrupted."
+                  ? m(msg("Scanning was interrupted."))
                   : failureMessage(
                       squashAtomCommandFailure(result),
-                      "The folders could not be scanned.",
+                      m(msg("The folders could not be scanned.")),
                     ),
               },
       });
@@ -227,7 +231,7 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
         if (result._tag === "Success") return;
         if (isAtomCommandInterrupted(result)) throw new AgentSessionProjectCreateInterrupted();
         throw new Error(
-          failureMessage(squashAtomCommandFailure(result), "Could not add the project."),
+          failureMessage(squashAtomCommandFailure(result), m(msg("Could not add the project."))),
         );
       },
     });
@@ -255,8 +259,8 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
         if (result._tag === "Success") return result.value;
         throw new Error(
           isAtomCommandInterrupted(result)
-            ? "Listing sessions was interrupted."
-            : failureMessage(squashAtomCommandFailure(result), "Could not list sessions."),
+            ? m(msg("Listing sessions was interrupted."))
+            : failureMessage(squashAtomCommandFailure(result), m(msg("Could not list sessions."))),
         );
       },
       ensureProject: ensureProject(),
@@ -272,11 +276,15 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
         if (result._tag === "Success") return result.value;
         throw new Error(
           isAtomCommandInterrupted(result)
-            ? "The import was interrupted."
-            : failureMessage(squashAtomCommandFailure(result), "Could not import the session."),
+            ? m(msg("The import was interrupted."))
+            : failureMessage(
+                squashAtomCommandFailure(result),
+                m(msg("Could not import the session.")),
+              ),
         );
       },
       shouldStop: () => stopRef.current,
+      resolve: m,
       onEvent: (event) =>
         setProgress((current) =>
           applyAgentSessionImportEvent(current ?? EMPTY_AGENT_SESSION_IMPORT_PROGRESS, event),
@@ -289,12 +297,14 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
     });
   };
 
-  if (serverConfig === null) return <LoadingState label="Loading..." />;
+  if (serverConfig === null) return <LoadingState label={gt("Loading...")} />;
   if (!supported) {
     return (
       <EmptyState
-        title="Not available on this environment"
-        detail={`Update ${FORK_DISPLAY_NAME} on this environment to import CLI history.`}
+        title={gt("Not available on this environment")}
+        detail={gt("Update {appName} on this environment to import CLI history.", {
+          appName: FORK_DISPLAY_NAME,
+        })}
       />
     );
   }
@@ -307,7 +317,7 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
       title: group.label,
       items: group.candidates,
     })),
-    ...(other.length > 0 ? [{ key: "other", title: "Other folders", items: other }] : []),
+    ...(other.length > 0 ? [{ key: "other", title: gt("Other folders"), items: other }] : []),
   ];
   const plan: ReadonlyArray<AgentSessionImportFolder> = candidates
     .filter((candidate) => selectedPaths.has(candidate.path))
@@ -333,7 +343,10 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
               ? [
                   {
                     key: agentSessionKey(session),
-                    label: `${session.title.trim() || "Untitled session"} (${folder.title})`,
+                    label: gt("{title} ({folder})", {
+                      title: session.title.trim() || gt("Untitled session"),
+                      folder: folder.title,
+                    }),
                     reason: result.reason,
                   },
                 ]
@@ -352,13 +365,15 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
   return (
     <>
       <Text className="text-sm text-foreground-muted">
-        Claude Code and Codex sessions found on {environmentLabel}. Folders without a project are
-        added as projects. Sessions that may still be open in a terminal are left out.
+        <T>
+          Claude Code and Codex sessions found on <Var>{environmentLabel}</Var>. Folders without a
+          project are added as projects. Sessions that may still be open in a terminal are left out.
+        </T>
       </Text>
       <SegmentedControl
         options={AGENT_SESSION_AGE_WINDOWS.map((option) => ({
           value: option.key,
-          label: option.label,
+          label: resolve(option.label),
         }))}
         selected={ageWindow.key}
         onSelect={(key) => {
@@ -371,12 +386,21 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
       />
       {summary !== null ? (
         <ListSection
-          title={running ? (stopping ? "Stopping after current" : "Importing") : "Import results"}
+          title={
+            running
+              ? stopping
+                ? gt("Stopping after current")
+                : gt("Importing")
+              : gt("Import results")
+          }
         >
           <View className="gap-2 px-4 py-3">
             <Text className="text-sm text-foreground">
-              {summary.imported} imported, {summary.alreadyImported} already imported,{" "}
-              {summary.failed} failed.
+              {gt("{imported} imported, {alreadyImported} already imported, {failed} failed.", {
+                imported: summary.imported,
+                alreadyImported: summary.alreadyImported,
+                failed: summary.failed,
+              })}
             </Text>
             {failures.map((failure) => (
               <View key={failure.key}>
@@ -390,7 +414,7 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
       <View className="gap-2">
         {running ? (
           <Button
-            label="Stop after current"
+            label={gt("Stop after current")}
             tone="secondary"
             disabled={stopping}
             onPress={() => {
@@ -401,13 +425,16 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
         ) : (
           <>
             <Button
-              label={`Import ${plan.length} ${plan.length === 1 ? "folder" : "folders"}`}
+              label={gt(
+                "{count, plural, one {Import {count} folder} other {Import {count} folders}}",
+                { count: plan.length },
+              )}
               disabled={!canImport || plan.length === 0}
               onPress={() => void runImport(plan)}
             />
             {retryPlan.length > 0 ? (
               <Button
-                label="Retry failed"
+                label={gt("Retry failed")}
                 tone="secondary"
                 disabled={!canImport}
                 onPress={() => void runImport(retryPlan)}
@@ -417,24 +444,24 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
         )}
       </View>
       {scanState === null ? (
-        <LoadingState label="Looking for sessions..." />
+        <LoadingState label={gt("Looking for sessions...")} />
       ) : scanState.status === "error" ? (
         <EmptyState
-          title="Could not scan folders"
+          title={gt("Could not scan folders")}
           detail={scanState.message}
-          actionLabel="Try again"
+          actionLabel={gt("Try again")}
           onAction={() => setScanAttempt((attempt) => attempt + 1)}
         />
       ) : candidates.length === 0 ? (
         <EmptyState
-          title="No sessions"
-          detail="No Claude Code or Codex sessions found in this period."
+          title={gt("No sessions")}
+          detail={gt("No Claude Code or Codex sessions found in this period.")}
         />
       ) : (
         <>
           {scanState.scan.truncated ? (
             <Text className="text-xs text-foreground-muted">
-              Scan limit reached. Some folders or sessions may be missing.
+              <T>Scan limit reached. Some folders or sessions may be missing.</T>
             </Text>
           ) : null}
           {sections.map((section) => (
@@ -443,7 +470,10 @@ function HistoryImport(props: { readonly environmentId: EnvironmentId }) {
                 <ListToggleRow
                   key={candidate.path}
                   label={candidate.title}
-                  description={`${candidate.path} · ${candidate.threadCount} ${candidate.threadCount === 1 ? "session" : "sessions"}`}
+                  description={gt(
+                    "{path} · {count, plural, one {{count} session} other {{count} sessions}}",
+                    { path: candidate.path, count: candidate.threadCount },
+                  )}
                   disabled={running}
                   value={selectedPaths.has(candidate.path)}
                   onValueChange={(checked) => toggleFolder(candidate, checked)}

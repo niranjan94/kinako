@@ -47,17 +47,15 @@ export interface PullRequestsSearch extends PullRequestListPreferences {
   readonly selectedUrl?: string;
   readonly environmentId?: EnvironmentId;
   readonly projectId?: ProjectId;
-  readonly host?: string;
+  readonly host?: string | undefined;
   readonly repository?: string;
   readonly number?: number;
-  readonly selectedProjectId?: ProjectId;
-  readonly selectedHost?: string;
-  readonly selectedEnvironmentId?: EnvironmentId;
-  /** The selection is an issue. Separate from `kind`, which only says what the list shows. */
-  readonly selectedKind?: "issue" | undefined;
+  readonly selectedProjectId?: ProjectId | undefined;
+  readonly selectedHost?: string | undefined;
+  readonly selectedEnvironmentId?: EnvironmentId | undefined;
 }
 
-export const SEARCH_DEBOUNCE_MS = 250;
+const SEARCH_DEBOUNCE_MS = 250;
 const UNREACHABLE_PHASES: ReadonlySet<EnvironmentConnectionPhase> = new Set([
   "offline",
   "reconnecting",
@@ -170,7 +168,6 @@ export function usePullRequestScope(
           projectId: selectedProject.id,
           ...(selectedUrl ? { url: selectedUrl, revealUrl: selectedUrl } : {}),
           ...(selectedHost ? { host: selectedHost } : {}),
-          ...(search.selectedKind === "issue" ? { item: "issue" as const } : {}),
         }
       : null;
   const expectedHosts = (() => {
@@ -206,11 +203,7 @@ export function usePullRequestScope(
   };
 }
 
-export function usePullRequestQueryFilters(
-  search: PullRequestsSearch,
-  typedQuery: string,
-  issuesMode: boolean,
-) {
+export function usePullRequestQueryFilters(search: PullRequestsSearch, typedQuery: string) {
   const [sentQuery, setSentQuery] = useState(typedQuery);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- debounce timer that sends the typed query after SEARCH_DEBOUNCE_MS
   useEffect(() => {
@@ -220,15 +213,13 @@ export function usePullRequestQueryFilters(
   const typedParsed = parsePullRequestQuery(typedQuery);
   const sentParsed = parsePullRequestQuery(sentQuery);
 
-  const menuFilters: PullRequestListFilters = issuesMode
-    ? {}
-    : {
-        ...(search.draft ? { draft: search.draft } : {}),
-        ...(search.review ? { review: search.review } : {}),
-        ...(search.checks ? { checks: search.checks } : {}),
-        ...(search.author ? { author: search.author } : {}),
-        ...(search.labels ? { labels: search.labels.map((label) => [label]) } : {}),
-      };
+  const menuFilters = {
+    ...(search.draft ? { draft: search.draft } : {}),
+    ...(search.review ? { review: search.review } : {}),
+    ...(search.checks ? { checks: search.checks } : {}),
+    ...(search.author ? { author: search.author } : {}),
+    ...(search.labels ? { labels: search.labels.map((label) => [label]) } : {}),
+  };
   const menuFiltered = Object.keys(menuFilters).length > 0;
   const filters = { ...menuFilters, ...sentParsed.filters };
   const hasFilters = Object.keys(filters).length > 0;

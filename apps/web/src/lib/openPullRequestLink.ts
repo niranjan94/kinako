@@ -1,8 +1,10 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
 import { type MouseEvent } from "react";
+import { msg } from "gt-react";
 
 import {
   resolveChangeRequestLinkTarget,
@@ -15,6 +17,7 @@ import { canOpenLinksInApp } from "../browser/browserLinkTarget";
 import { useOpenLink } from "../browser/useOpenLink";
 import { useClientSettings } from "../hooks/useSettings";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
+import { m } from "../i18n/messages";
 import { useRightPanelStore } from "../rightPanelStore";
 import {
   selectThreadBranchBaseRef,
@@ -104,7 +107,7 @@ export function useOpenChangeRequestLink(
         lendHostProject: resolvedPanelRef !== undefined,
       });
       if (target === null) return false;
-      const { project, repository, number, host, item } = target;
+      const { project, repository, number, host } = target;
       const revealUrl = parsePullRequestAnchor(targetUrl) === null ? undefined : targetUrl;
       const pullRequestsSearch = {
         repository,
@@ -112,7 +115,6 @@ export function useOpenChangeRequestLink(
         ...(host === undefined ? {} : { selectedHost: host }),
         selectedProjectId: project.id,
         selectedEnvironmentId: project.environmentId,
-        ...(item === undefined ? {} : { selectedKind: item }),
       };
       if (resolvedPanelRef) {
         useRightPanelStore.getState().openPullRequest(resolvedPanelRef, {
@@ -126,7 +128,6 @@ export function useOpenChangeRequestLink(
           url: targetUrl,
           ...(revealUrl === undefined ? {} : { revealUrl }),
           number,
-          ...(item === undefined ? {} : { item }),
         });
         if (!resolvedThreadRef) {
           void navigate({
@@ -230,9 +231,9 @@ export function useOpenChangeRequestLink(
             const toastId = toastManager.add(
               stackedThreadToast({
                 type: "info",
-                title: "This commit is not in the thread's workspace",
+                title: m(msg("This commit is not in the thread's workspace")),
                 actionProps: {
-                  children: "Open link",
+                  children: m(msg("Open link")),
                   onClick: () => {
                     toastManager.close(toastId);
                     window.open(targetUrl, "_blank", "noopener,noreferrer");
@@ -277,8 +278,8 @@ export function useOpenPrLink(threadRef?: ScopedThreadRef) {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to open pull request link",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: m(msg("Unable to open pull request link")),
+          description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
         }),
       );
     });

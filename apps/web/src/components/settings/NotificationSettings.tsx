@@ -2,6 +2,7 @@ import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { NotificationSoundTheme } from "@t3tools/contracts/settings";
 import * as Schema from "effect/Schema";
 import { PlayIcon } from "lucide-react";
+import { T, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
 import {
@@ -16,13 +17,16 @@ import { NOTIFICATION_SOUND_THEMES } from "../../notificationSounds";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsRow } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { APP_BASE_NAME } from "~/branding";
 
 const isNotificationSoundTheme = Schema.is(NotificationSoundTheme);
 
 export function NotificationSettings() {
+  const searchableSetting = useSearchableSetting();
+  const gt = useGT();
+  const m = useMessages();
   const mode = useScopedSettings((settings) => settings.notificationMode);
   const theme = useScopedSettings((settings) => settings.notificationSoundTheme);
   const updateSettings = useUpdateScopedSettings();
@@ -35,7 +39,10 @@ export function NotificationSettings() {
         {...searchableSetting("thread-notifications")}
         description={
           permissionMessage ??
-          `System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while ${APP_BASE_NAME} is open.`
+          gt(
+            "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while {app} is open.",
+            { app: APP_BASE_NAME },
+          )
         }
         control={
           <Select
@@ -54,7 +61,9 @@ export function NotificationSettings() {
               if (hasDesktopNotifications(value)) {
                 if (typeof Notification === "undefined" || !window.isSecureContext) {
                   setPermissionMessage(
-                    "Notifications need a supported browser over HTTPS, or the desktop app. Sound only is still available.",
+                    gt(
+                      "Notifications need a supported browser over HTTPS, or the desktop app. Sound only is still available.",
+                    ),
                   );
                   return;
                 }
@@ -63,13 +72,17 @@ export function NotificationSettings() {
                 setRequesting(false);
                 if (permission._tag === "Failure") {
                   setPermissionMessage(
-                    "Notifications are unavailable in this browser. Sound only is still available.",
+                    gt(
+                      "Notifications are unavailable in this browser. Sound only is still available.",
+                    ),
                   );
                   return;
                 }
                 if (permission.value !== "granted") {
                   setPermissionMessage(
-                    "Allow notifications in your browser or system settings, then choose this option again. Sound only is still available.",
+                    gt(
+                      "Allow notifications in your browser or system settings, then choose this option again. Sound only is still available.",
+                    ),
                   );
                   return;
                 }
@@ -77,13 +90,17 @@ export function NotificationSettings() {
               updateSettings({ notificationMode: value });
             }}
           >
-            <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Thread notifications">
-              <SelectValue>{NOTIFICATION_MODE_LABELS[mode]}</SelectValue>
+            <SelectTrigger
+              size="sm"
+              className="w-full sm:w-56"
+              aria-label={gt("Thread notifications")}
+            >
+              <SelectValue>{m(NOTIFICATION_MODE_LABELS[mode])}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               {Object.entries(NOTIFICATION_MODE_LABELS).map(([value, label]) => (
                 <SelectItem key={value} hideIndicator value={value}>
-                  {label}
+                  {m(label)}
                 </SelectItem>
               ))}
             </SelectPopup>
@@ -92,9 +109,9 @@ export function NotificationSettings() {
       />
       {hasNotificationSound(mode) && (
         <SettingsRow
-          title="Sound theme"
+          title={gt("Sound theme")}
           description={
-            <>
+            <T>
               Choose a pair for completed threads and threads needing attention. Additional themes
               from{" "}
               <a
@@ -106,7 +123,7 @@ export function NotificationSettings() {
                 sounds.sh
               </a>
               .
-            </>
+            </T>
           }
           control={
             <div className="flex w-full flex-col gap-2 sm:w-56">
@@ -118,13 +135,13 @@ export function NotificationSettings() {
                   updateSettings({ notificationSoundTheme: value });
                 }}
               >
-                <SelectTrigger size="sm" aria-label="Notification sound theme">
-                  <SelectValue>{NOTIFICATION_SOUND_THEMES[theme].label}</SelectValue>
+                <SelectTrigger size="sm" aria-label={gt("Notification sound theme")}>
+                  <SelectValue>{m(NOTIFICATION_SOUND_THEMES[theme].label)}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {Object.entries(NOTIFICATION_SOUND_THEMES).map(([value, soundTheme]) => (
                     <SelectItem key={value} hideIndicator value={value}>
-                      {soundTheme.label}
+                      {m(soundTheme.label)}
                     </SelectItem>
                   ))}
                 </SelectPopup>
@@ -135,7 +152,11 @@ export function NotificationSettings() {
                     key={kind}
                     variant="outline"
                     size="xs"
-                    aria-label={`Preview ${kind === "completion" ? "completion" : "attention"} sound`}
+                    aria-label={
+                      kind === "completion"
+                        ? gt("Preview completion sound")
+                        : gt("Preview attention sound")
+                    }
                     onClick={async () => {
                       await unlockNotificationAudio(theme);
                       void playNotificationSound(
@@ -152,7 +173,9 @@ export function NotificationSettings() {
                     }}
                   >
                     <PlayIcon aria-hidden="true" />
-                    {kind === "completion" ? "Completed" : "Attention"}
+                    {kind === "completion"
+                      ? gt("Completed", { $context: "sound preview button" })
+                      : gt("Attention", { $context: "sound preview button" })}
                   </Button>
                 ))}
               </div>

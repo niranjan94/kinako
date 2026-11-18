@@ -1,4 +1,5 @@
 import type { RunId, ScopedThreadRef } from "@t3tools/contracts";
+import { useGT } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -7,6 +8,7 @@ import { SymbolView } from "../../components/ui/AppSymbol";
 import { useThreadVisibleTurnItems } from "../../state/use-thread-detail";
 
 export function ComposerTasks(props: { readonly target: ScopedThreadRef; readonly runId: RunId }) {
+  const gt = useGT();
   const items = useThreadVisibleTurnItems(props.target);
   const [expanded, setExpanded] = useState(false);
   const plan = items.findLast(
@@ -30,12 +32,16 @@ export function ComposerTasks(props: { readonly target: ScopedThreadRef; readonl
     <View className="mx-4 mb-2 overflow-hidden rounded-2xl border border-border bg-card">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Tasks: ${completed} of ${plan.steps.length} complete. Current task: ${current.text}`}
+        accessibilityLabel={gt("Tasks: {completed} of {total} complete. Current task: {task}", {
+          completed,
+          total: plan.steps.length,
+          task: current.text,
+        })}
         accessibilityState={{ expanded }}
         onPress={() => setExpanded((value) => !value)}
         className="min-h-11 flex-row items-center gap-2 px-3 py-2 active:opacity-70"
       >
-        <Text className="text-xs text-foreground-muted">Tasks</Text>
+        <Text className="text-xs text-foreground-muted">{gt("Tasks")}</Text>
         <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
           {current.text}
         </Text>

@@ -56,10 +56,9 @@ export function planNextReopen(
 type PullRequestsSearchLike = Partial<PullRequestListPreferences> & {
   repository?: string;
   number?: number;
-  selectedProjectId?: ProjectId;
-  selectedHost?: string;
-  selectedEnvironmentId?: EnvironmentId;
-  selectedKind?: "issue" | undefined;
+  selectedProjectId?: ProjectId | undefined;
+  selectedHost?: string | undefined;
+  selectedEnvironmentId?: EnvironmentId | undefined;
 };
 
 export function pullRequestsSearchForRestore<S extends PullRequestsSearchLike>(
@@ -72,7 +71,6 @@ export function pullRequestsSearchForRestore<S extends PullRequestsSearchLike>(
     selectedProjectId: _projectId,
     selectedHost: _host,
     selectedEnvironmentId: _environmentId,
-    selectedKind: _selectedKind,
     ...filters
   } = previous;
   return {
@@ -88,7 +86,6 @@ export function pullRequestsSearchForRestore<S extends PullRequestsSearchLike>(
           ...(selected.environmentId === undefined
             ? {}
             : { selectedEnvironmentId: selected.environmentId as EnvironmentId }),
-          ...(selected.item === "issue" ? { selectedKind: "issue" as const } : {}),
         }
       : {}),
   } as S & PullRequestListPreferences;
@@ -160,6 +157,9 @@ export async function reopenClosedView(
       break;
     case "pull-request":
       panels.openPullRequest(ref, surface);
+      break;
+    case "issue":
+      panels.openIssue(ref, surface);
       break;
     case "side-chat":
       panels.openSideChat(ref, surface.threadId);

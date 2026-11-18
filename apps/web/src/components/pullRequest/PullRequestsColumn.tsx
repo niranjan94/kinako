@@ -1,4 +1,5 @@
 import type { PullRequestInvolvement, PullRequestListState } from "@t3tools/contracts";
+import { T, useGT, useMessages } from "gt-react";
 import { Plug2Icon, SearchIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
@@ -16,7 +17,7 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { PullRequestCompactFilterMenu } from "./PullRequestCompactFilterMenu";
 import type { PullRequestFilterOption } from "./PullRequestListFilters";
-import { INVOLVEMENT_TABS, ISSUE_STATE_TABS, STATE_TABS } from "./pullRequestListOptions";
+import { INVOLVEMENT_TABS, resolveFilterOptions, STATE_TABS } from "./pullRequestListOptions";
 
 function ExpandableSearch({
   searchInput,
@@ -35,6 +36,7 @@ function ExpandableSearch({
    */
   onFocusWithin?: (focused: boolean) => void;
 }) {
+  const gt = useGT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- focuses the search input DOM node when the topbar search opens
   useEffect(() => {
@@ -60,7 +62,7 @@ function ExpandableSearch({
     <Button
       size="icon-sm"
       variant="ghost"
-      aria-label="Search pull requests"
+      aria-label={gt("Search pull requests")}
       onClick={() => onOpenChange(true)}
     >
       <SearchIcon className="size-4" />
@@ -69,8 +71,6 @@ function ExpandableSearch({
 }
 
 export function PullRequestsColumn({
-  issues,
-  kindToggle,
   refreshing,
   onRefresh,
   searchValue,
@@ -84,6 +84,7 @@ export function PullRequestsColumn({
   searchInput,
   sortMenu,
   filtersMenu,
+  savedViewsMenu,
   rightPanelControl,
   titlebarControls,
   rightPanelOpen,
@@ -91,10 +92,6 @@ export function PullRequestsColumn({
   listBody,
   scrollRef,
 }: {
-  /** The list shows issues, which have no involvement and their own states. */
-  issues: boolean;
-  /** Switches between pull requests and issues, where some host can list issues. */
-  kindToggle: ReactNode;
   refreshing: boolean;
   onRefresh: () => void;
   searchValue: string;
@@ -108,6 +105,7 @@ export function PullRequestsColumn({
   searchInput: ReactNode;
   sortMenu: ReactNode;
   filtersMenu: ReactNode;
+  savedViewsMenu: ReactNode;
   rightPanelControl: ReactNode;
   titlebarControls: ReactNode;
   rightPanelOpen: boolean;
@@ -115,8 +113,9 @@ export function PullRequestsColumn({
   listBody: ReactNode;
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
-  const title = issues ? "Issues" : "Pull requests";
-  const contentArea = workspaceAreaProps("pull-requests", 1, title);
+  const gt = useGT();
+  const resolve = useMessages();
+  const contentArea = workspaceAreaProps("pull-requests", 1, gt("Pull requests"));
   const markerRef = useRef<HTMLDivElement | null>(null);
   const [condensed, setCondensed] = useState(false);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the scroll marker condenses the topbar
@@ -181,30 +180,30 @@ export function PullRequestsColumn({
       >
         {titlebarControls}
         {condensed ? (
-          <WorkspaceBreadcrumb ariaLabel="Pull request scope" className="overflow-hidden">
+          <WorkspaceBreadcrumb ariaLabel={gt("Pull request scope")} className="overflow-hidden">
             <WorkspaceBreadcrumbItem current className={cn(searchExpanded && "sr-only")}>
-              <h1 className="truncate">{title}</h1>
+              <h1 className="truncate">
+                <T>Pull requests</T>
+              </h1>
             </WorkspaceBreadcrumbItem>
             {searchExpanded ? null : <WorkspaceBreadcrumbSeparator />}
             <WorkspaceBreadcrumbItem className="shrink gap-1.5">
               <PullRequestCompactFilterMenu
-                label="Filter by state"
+                label={gt("Filter by state")}
                 value={state}
-                options={issues ? ISSUE_STATE_TABS : STATE_TABS}
+                options={resolveFilterOptions(STATE_TABS, resolve)}
                 onChange={onState}
                 className="shrink-0"
               />
-              {issues ? null : (
-                <PullRequestCompactFilterMenu
-                  label="Filter by involvement"
-                  value={involvement}
-                  options={INVOLVEMENT_TABS}
-                  onChange={onInvolvement}
-                />
-              )}
+              <PullRequestCompactFilterMenu
+                label={gt("Filter by involvement")}
+                value={involvement}
+                options={resolveFilterOptions(INVOLVEMENT_TABS, resolve)}
+                onChange={onInvolvement}
+              />
               {hostMenuOptions.length > 2 ? (
                 <PullRequestCompactFilterMenu
-                  label="Filter by host"
+                  label={gt("Filter by host")}
                   value={host ?? ""}
                   options={hostMenuOptions}
                   onChange={(next) => onHost(next === "" ? undefined : next)}
@@ -213,9 +212,11 @@ export function PullRequestsColumn({
             </WorkspaceBreadcrumbItem>
           </WorkspaceBreadcrumb>
         ) : (
-          <WorkspaceBreadcrumb ariaLabel="Pull requests breadcrumb">
+          <WorkspaceBreadcrumb ariaLabel={gt("Pull requests breadcrumb")}>
             <WorkspaceBreadcrumbItem current>
-              <h1 className="truncate">{title}</h1>
+              <h1 className="truncate">
+                <T>Pull requests</T>
+              </h1>
             </WorkspaceBreadcrumbItem>
           </WorkspaceBreadcrumb>
         )}
@@ -244,18 +245,18 @@ export function PullRequestsColumn({
         <WorkspacePageContainer width="expanded" className="min-h-full gap-4">
           <div className="flex flex-col gap-3">
             <div ref={inFlowSearchRef} className="flex flex-wrap items-center gap-2">
-              {kindToggle}
               <div className="min-w-0 basis-full @lg/pr-list:basis-0 @lg/pr-list:flex-1">
                 {searchInput}
               </div>
               {sortMenu}
               {filtersMenu}
+              {savedViewsMenu}
               <PullRequestCompactFilterMenu
-                label="Filter by provider"
+                label={gt("Filter by provider")}
                 outlined
                 iconOnly={host !== undefined}
                 triggerIcon={<Plug2Icon aria-hidden className="size-4" />}
-                triggerLabel="All"
+                triggerLabel={gt("All", { $context: "all providers" })}
                 value={host ?? ""}
                 options={hostMenuOptions}
                 onChange={(next) => onHost(next === "" ? undefined : next)}
@@ -283,11 +284,12 @@ function PullRequestRefreshControl({
   refreshing: boolean;
   onRefresh: () => void;
 }) {
+  const gt = useGT();
   return (
     <Button
       size={compact ? "icon-sm" : "icon"}
       variant={compact ? "ghost" : "outline"}
-      aria-label="Refresh pull requests"
+      aria-label={gt("Refresh pull requests")}
       onClick={onRefresh}
       disabled={refreshing}
     >
