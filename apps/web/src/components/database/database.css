@@ -8,7 +8,7 @@
   font-size: 12px;
   --rdg-background-color: var(--background);
   --rdg-color: var(--foreground);
-  --rdg-header-background-color: var(--muted);
+  --rdg-header-background-color: var(--background);
   --database-selection-background: color-mix(in oklab, var(--foreground) 6%, var(--background));
   --database-selection-border: color-mix(in oklab, var(--muted-foreground) 48%, transparent);
   --rdg-row-hover-background-color: color-mix(in oklab, var(--foreground) 3%, var(--background));
@@ -18,6 +18,10 @@
   --rdg-selection-width: 1px;
   --rdg-selection-color: var(--database-selection-border);
   --rdg-summary-border-color: var(--border);
+}
+[data-database-results] [role="columnheader"],
+[data-database-results] .database-row-number {
+  background: linear-gradient(var(--muted), var(--muted)) var(--background);
 }
 [data-database-results] .database-range-cell {
   background: var(--database-selection-background);
@@ -32,7 +36,6 @@
 }
 [data-database-results] .database-row-number {
   color: var(--muted-foreground);
-  background: var(--muted);
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-size: 12px;
