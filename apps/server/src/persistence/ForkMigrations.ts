@@ -6,6 +6,7 @@ import ForkMigration0001 from "./Migrations/fork/001_ProjectionProjectsAdditiona
 import ForkMigration0002 from "./Migrations/fork/002_DatabaseConnections.ts";
 import ForkMigration0003 from "./Migrations/fork/003_SnoozeWakeIndex.ts";
 import ForkMigration0004 from "./Migrations/fork/004_GuardSnoozeWakeIndex.ts";
+import ForkMigration0005 from "./Migrations/fork/005_UsageQuotaHistory.ts";
 
 // Fork-only migrations keep their own ledger so upstream migrations keep upstream's ids.
 // They run after every upstream migration, so they may depend on upstream's latest schema.
@@ -16,6 +17,7 @@ const forkMigrationEntries = [
   [2, "DatabaseConnections", ForkMigration0002],
   [3, "SnoozeWakeIndex", ForkMigration0003],
   [4, "GuardSnoozeWakeIndex", ForkMigration0004],
+  [5, "UsageQuotaHistory", ForkMigration0005],
 ] as const;
 
 export const forkMigrationManifest = forkMigrationEntries.map(([id, name]) => [id, name] as const);
