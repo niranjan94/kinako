@@ -12,6 +12,34 @@ const savedSecret = {
 } as const;
 
 describe("ProviderEnvironmentSection saved secrets", () => {
+  it("keeps hub credentials read-only while allowing another variable to be edited", async () => {
+    const onChange = vi.fn();
+    await using screen = await render(
+      <ProviderEnvironmentSection
+        claudeHubManaged
+        environment={[
+          { name: "ANTHROPIC_BASE_URL", value: "https://hub.test", sensitive: false },
+          { ...savedSecret, name: "ANTHROPIC_AUTH_TOKEN" },
+          { name: "CUSTOM_VAR", value: "old", sensitive: false },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    await expect.element(screen.getByText("ANTHROPIC_BASE_URL", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("ANTHROPIC_AUTH_TOKEN", { exact: true })).toBeVisible();
+    await expect
+      .element(screen.getByLabelText("Environment variable value 1"))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByLabelText("Environment variable value 2"))
+      .not.toBeInTheDocument();
+    await userEvent.fill(screen.getByLabelText("Environment variable value 3"), "new");
+    await userEvent.tab();
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.arrayContaining([expect.objectContaining({ name: "CUSTOM_VAR", value: "new" })]),
+    );
+  });
+
   it("requires a replacement before renaming or unlocking a stored secret", async () => {
     const onChange = vi.fn();
     await using screen = await render(

@@ -447,6 +447,7 @@ function makeMutableServerSettingsService(
           yield* PubSub.publish(changes, next);
           return next;
         }),
+      configureClaudeFromHub: () => Effect.die("Unexpected Claude hub setup"),
       withSettingsSnapshot: (use) => Ref.get(settingsRef).pipe(Effect.flatMap(use)),
       get streamChanges() {
         return Stream.fromPubSub(changes);
@@ -4589,14 +4590,21 @@ it.layer(
         label: "Claude API Key",
       },
       {
+        settings: { env: { ANTHROPIC_BASE_URL: "https://api.anthropic.com" } },
+        baseUrl: "https://proxy.example",
+        hostManaged: true,
+        type: "customEndpoint",
+        label: "Custom API endpoint",
+      },
+      {
         settings: {},
         baseUrl: "https://proxy.example",
         type: "customEndpoint",
         label: "Custom API endpoint",
       },
     ])(
-      "uses the settings endpoint before the process endpoint: $type / $baseUrl",
-      ({ settings, baseUrl, type, label }) =>
+      "resolves the effective Claude endpoint: $type / $baseUrl",
+      ({ settings, baseUrl, hostManaged, type, label }) =>
         Effect.gen(function* () {
           const fileSystem = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
@@ -4620,7 +4628,10 @@ it.layer(
               apiKeySource: "none",
               apiProvider: "firstParty",
             }),
-            { ANTHROPIC_BASE_URL: baseUrl },
+            {
+              ANTHROPIC_BASE_URL: baseUrl,
+              ...(hostManaged ? { CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: "1" } : {}),
+            },
             stateDir,
           );
           assert.strictEqual(status.status, "ready");

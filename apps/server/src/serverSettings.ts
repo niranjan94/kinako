@@ -1,4 +1,5 @@
 import {
+  CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES,
   DEFAULT_SERVER_SETTINGS,
   ModelSelection,
   ProjectId,
@@ -20,6 +21,8 @@ import {
   globalIdleCompaction,
   isSecretReference,
   type SecretReference,
+  type UsageLimitSourceConfig,
+  type UsageLimitSourceId,
   withIdleCompaction,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
@@ -37,6 +40,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Semaphore from "effect/Semaphore";
@@ -197,6 +201,147 @@ export function applyProviderInstanceMutation(
   return { ...settings, providerInstances };
 }
 
+interface ClaudeHubSetup {
+  readonly sourceId: UsageLimitSourceId;
+  readonly sourceUrl: string;
+  readonly sourceManagementKey: Redacted.Redacted<UsageLimitSourceConfig["managementKey"]>;
+  readonly instanceId: ProviderInstanceId;
+  readonly endpoint: string;
+  readonly label: string;
+  readonly apiKey: Redacted.Redacted<string> | undefined;
+}
+
+function isClaudeHubVariable(name: string): boolean {
+  return CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES.has(name.toUpperCase());
+}
+
+function isClaudeHubInstanceId(id: ProviderInstanceId): boolean {
+  return /^claude-hub-[0-9a-f]{24}$/.test(id);
+}
+
+function visibleClaudeHubProviders(settings: ServerSettings): ServerSettings {
+  const entries = Object.entries(settings.providerInstances);
+  const visible = entries.filter(([, instance]) => {
+    const hub = instance.claudeHub;
+    if (!hub) return true;
+    const source = settings.usageLimitSources[hub.sourceId];
+    return hub.available && source?.enabled && source.url === hub.sourceUrl;
+  });
+  return visible.length === entries.length
+    ? settings
+    : { ...settings, providerInstances: Object.fromEntries(visible) };
+}
+
+function preserveClaudeHubProviders(current: ServerSettings, next: ServerSettings): ServerSettings {
+  const providerInstances = { ...next.providerInstances };
+  for (const [rawId, instance] of Object.entries(providerInstances)) {
+    const id = ProviderInstanceId.make(rawId);
+    if (isClaudeHubInstanceId(id) && current.providerInstances[id] === undefined) {
+      delete providerInstances[id];
+    } else if (instance.claudeHub && !current.providerInstances[id]?.claudeHub) {
+      const { claudeHub: _claudeHub, ...rest } = instance;
+      providerInstances[id] = rest;
+    }
+  }
+  for (const [rawId, stored] of Object.entries(current.providerInstances)) {
+    const hub = stored.claudeHub;
+    if (!hub) continue;
+    const id = ProviderInstanceId.make(rawId);
+    const source = next.usageLimitSources[hub.sourceId];
+    if (source === undefined) {
+      delete providerInstances[id];
+      continue;
+    }
+    const desired = providerInstances[id] ?? stored;
+    const available = hub.available && source.enabled && source.url === hub.sourceUrl;
+    providerInstances[id] = {
+      ...desired,
+      driver: stored.driver,
+      claudeHub: { ...hub, available },
+      environment: [
+        ...(desired.environment ?? []).filter(({ name }) => !isClaudeHubVariable(name)),
+        ...(stored.environment ?? []).filter(
+          ({ name }) => isClaudeHubVariable(name) && (available || name !== "ANTHROPIC_AUTH_TOKEN"),
+        ),
+      ],
+    };
+  }
+  return { ...next, providerInstances };
+}
+
+function applyClaudeHubSetup(
+  settings: ServerSettings,
+  setup: ClaudeHubSetup,
+  homePath: string,
+  currentManagementKey: UsageLimitSourceConfig["managementKey"] | undefined,
+  currentInstance: ProviderInstanceConfig | undefined,
+): ServerSettings {
+  const source = settings.usageLimitSources[setup.sourceId];
+  const stored = settings.providerInstances[setup.instanceId];
+  if (
+    !source?.enabled ||
+    source.url !== setup.sourceUrl ||
+    !Equal.equals(currentManagementKey, Redacted.value(setup.sourceManagementKey)) ||
+    (stored !== undefined && stored.claudeHub?.sourceId !== setup.sourceId)
+  ) {
+    return settings;
+  }
+  const apiKey = setup.apiKey === undefined ? undefined : Redacted.value(setup.apiKey);
+  const claudeHub = {
+    sourceId: setup.sourceId,
+    sourceUrl: setup.sourceUrl,
+    available: apiKey !== undefined,
+  };
+  if (apiKey === undefined && (stored === undefined || !stored.claudeHub?.available))
+    return settings;
+  if (
+    currentInstance &&
+    Equal.equals(currentInstance.claudeHub, claudeHub) &&
+    currentInstance.environment?.find(({ name }) => name === "ANTHROPIC_BASE_URL")?.value ===
+      setup.endpoint &&
+    currentInstance.environment?.find(({ name }) => name === "ANTHROPIC_AUTH_TOKEN")?.value ===
+      apiKey
+  )
+    return settings;
+
+  const defaults: ProviderInstanceConfig = {
+    driver: ProviderDriverKind.make("claudeAgent"),
+    displayName: `Claude (${setup.label})`,
+    config: { homePath },
+    environment: [
+      { name: "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST", value: "1", sensitive: false },
+      // Clear inherited credentials and provider switches so only the hub's client key is used.
+      ...[
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_CUSTOM_HEADERS",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+        "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_FOUNDRY",
+        "CLAUDE_CODE_USE_MANTLE",
+        "CLAUDE_CODE_USE_VERTEX",
+      ].map((name) => ({ name, value: "", sensitive: false })),
+    ],
+  };
+  const instance = stored ?? defaults;
+  return applyProviderInstanceMutation(settings, {
+    operation: "upsert",
+    instanceId: setup.instanceId,
+    instance: {
+      ...instance,
+      claudeHub,
+      environment: [
+        ...(instance.environment ?? []).filter(({ name }) => !isClaudeHubVariable(name)),
+        { name: "ANTHROPIC_BASE_URL", value: setup.endpoint, sensitive: false },
+        ...(apiKey === undefined
+          ? []
+          : [{ name: "ANTHROPIC_AUTH_TOKEN", value: apiKey, sensitive: true }]),
+      ],
+    },
+  });
+}
+
 const secretProviderConfigGuards = new Map(
   secretProviderDefinitions.definitions.map((definition) => [
     definition.kind as string,
@@ -236,6 +381,20 @@ function ensureProviderInstanceMutationAllowed(
   mutation: ProviderInstanceMutation,
   settingsPath: string,
 ): Effect.Effect<void, ServerSettingsError> {
+  const existing = settings.providerInstances[mutation.instanceId];
+  if (
+    (existing?.claudeHub && mutation.operation === "remove") ||
+    (existing === undefined && isClaudeHubInstanceId(mutation.instanceId))
+  ) {
+    return Effect.fail(
+      new ServerSettingsError({
+        settingsPath,
+        operation: "write-managed-setting",
+        managedSetting: `providerInstances.${mutation.instanceId}`,
+        managedBy: "CLIProxyAPI",
+      }),
+    );
+  }
   if (
     mutation.operation === "create" &&
     Object.hasOwn(settings.providerInstances, mutation.instanceId)
@@ -272,6 +431,10 @@ export class ServerSettingsService extends Context.Service<
       patch?: ServerSettingsPatch,
     ) => Effect.Effect<ServerSettings, ServerSettingsError>;
 
+    readonly configureClaudeFromHub: (
+      setup: ClaudeHubSetup,
+    ) => Effect.Effect<void, ServerSettingsError>;
+
     readonly withSettingsSnapshot: <A, E, R>(
       use: (settings: ServerSettings) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ServerSettingsError, R>;
@@ -306,16 +469,27 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
   });
   const currentSettingsRef = yield* Ref.make<ServerSettings>(initialSettings);
   const writeSemaphore = yield* Semaphore.make(1);
-  const getSettings = Ref.get(currentSettingsRef).pipe(Effect.map(resolveTextGenerationProvider));
+  const getSettings = Ref.get(currentSettingsRef).pipe(
+    Effect.map(visibleClaudeHubProviders),
+    Effect.map(resolveTextGenerationProvider),
+  );
 
   const updateTestSettings = (
     update: (current: ServerSettings) => Effect.Effect<ServerSettings, ServerSettingsError>,
+    syncClaudeHub = false,
   ): Effect.Effect<ServerSettings, ServerSettingsError> =>
     writeSemaphore.withPermits(1)(
       Ref.get(currentSettingsRef).pipe(
-        Effect.flatMap(update),
+        Effect.flatMap((current) =>
+          update(current).pipe(
+            Effect.map((next) =>
+              syncClaudeHub ? next : preserveClaudeHubProviders(current, next),
+            ),
+          ),
+        ),
         Effect.flatMap(normalizeServerSettings),
         Effect.tap((nextSettings) => Ref.set(currentSettingsRef, nextSettings)),
+        Effect.map(visibleClaudeHubProviders),
         Effect.map(resolveTextGenerationProvider),
       ),
     );
@@ -337,6 +511,20 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
           return applyProviderInstanceMutation(patched, mutation);
         }),
       ),
+    configureClaudeFromHub: (setup) =>
+      updateTestSettings(
+        (current) =>
+          Effect.succeed(
+            applyClaudeHubSetup(
+              current,
+              setup,
+              `claude-homes/${setup.instanceId}`,
+              current.usageLimitSources[setup.sourceId]?.managementKey,
+              current.providerInstances[setup.instanceId],
+            ),
+          ),
+        true,
+      ).pipe(Effect.asVoid),
     withSettingsSnapshot: (use) =>
       writeSemaphore.withPermits(1)(getSettings.pipe(Effect.flatMap(use))),
     streamChanges: Stream.empty,
@@ -669,7 +857,7 @@ function foldLegacyProjectSettings(
 }
 
 const make = Effect.gen(function* () {
-  const { settingsPath } = yield* ServerConfig.ServerConfig;
+  const { settingsPath, stateDir } = yield* ServerConfig.ServerConfig;
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
@@ -682,7 +870,7 @@ const make = Effect.gen(function* () {
   // Locks are laid over every settings value that leaves this service, never persisted.
   const toEffective = (settings: ServerSettings) =>
     resolveTextGenerationProvider(
-      managedProviders.applyLimits(managed.applyLocks(settings)),
+      managedProviders.applyLimits(visibleClaudeHubProviders(managed.applyLocks(settings))),
       managedProviders.isDriverAllowed,
     );
   const writeSemaphore = yield* Semaphore.make(1);
@@ -1191,6 +1379,7 @@ const make = Effect.gen(function* () {
   const updateAndPersistSettings = (
     patch: ServerSettingsPatch,
     update: (current: ServerSettings) => Effect.Effect<ServerSettings, ServerSettingsError>,
+    syncClaudeHub = false,
   ): Effect.Effect<ServerSettings, ServerSettingsError> =>
     writeSemaphore.withPermits(1)(
       Effect.gen(function* () {
@@ -1204,9 +1393,14 @@ const make = Effect.gen(function* () {
         }
         // An older client echoes a reference as the redacted marker; restore it before vetting so
         // a removed provider's reference is cleared below rather than restored by persistence.
+        const proposed = yield* update(current);
+        if (proposed === current) return yield* getMaterializedSettings;
         const updated = withoutRedirectedSimlockTokens(
           current,
-          withEchoedSecretReferences(current, yield* update(current)),
+          withEchoedSecretReferences(
+            current,
+            syncClaudeHub ? proposed : preserveClaudeHubProviders(current, proposed),
+          ),
         );
         // Vet before secrets: a variable the policy hides from clients is not one they removed.
         const vetted = managed.vetWrite(current, yield* normalizeServerSettings(updated), patch);
@@ -1390,6 +1584,23 @@ const make = Effect.gen(function* () {
           return applyProviderInstanceMutation(patched, mutation);
         }),
       ),
+    configureClaudeFromHub: (setup) =>
+      updateAndPersistSettings(
+        {},
+        (current) =>
+          getMaterializedSettings.pipe(
+            Effect.map(({ usageLimitSources, providerInstances }) =>
+              applyClaudeHubSetup(
+                current,
+                setup,
+                pathService.join(stateDir, "claude-homes", setup.instanceId),
+                usageLimitSources[setup.sourceId]?.managementKey,
+                providerInstances[setup.instanceId],
+              ),
+            ),
+          ),
+        true,
+      ).pipe(Effect.asVoid),
     withSettingsSnapshot,
     get streamChanges() {
       return materializeChanges(Stream.fromPubSub(changesPubSub));

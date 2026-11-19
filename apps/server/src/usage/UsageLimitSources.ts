@@ -4,6 +4,7 @@ import {
   type UsageLimitSourceConsumeResetCreditInput,
   type ProviderConsumeResetCreditResult,
   type ProviderDriverKind,
+  ProviderInstanceId,
   type ServerSettings,
   UsageLimitSourceConfig,
   settingsSecretLiteral,
@@ -16,12 +17,16 @@ import {
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import * as Fiber from "effect/Fiber";
+import * as Hex from "effect/encoding/Hex";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
+import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -34,7 +39,7 @@ import * as SecretResolverLayer from "../secrets/SecretResolver.ts";
 import { resolveSettingsSecrets } from "../secrets/settingsSecretValue.ts";
 import * as Settings from "../serverSettings.ts";
 import { windowLimitsModel } from "../provider/claudeUsageLimits.ts";
-import { makeCliproxyApi } from "./cliproxyApi.ts";
+import { cliproxyBaseUrl, makeCliproxyApi } from "./cliproxyApi.ts";
 
 export class UsageLimitSources extends Context.Service<
   UsageLimitSources,
@@ -119,6 +124,8 @@ export const make = Effect.gen(function* () {
   const secrets = yield* SecretResolver.SecretResolver;
   const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
   const sql = yield* SqlClient.SqlClient;
+  const digest = yield* Digest.Digest;
+  const scope = yield* Effect.scope;
   const readManagementKey = Effect.fn("UsageLimitSources.readManagementKey")(function* (
     config: UsageLimitSourceConfig,
   ) {
@@ -131,20 +138,81 @@ export const make = Effect.gen(function* () {
     PubSub.shutdown,
   );
 
+  const configureClaude = Effect.fn("UsageLimitSources.configureClaude")(
+    function* (
+      sourceId: UsageLimitSourceId,
+      config: UsageLimitSourceConfig,
+      endpoint: string,
+      label: string,
+      reachable: boolean,
+    ) {
+      const managementKey = reachable ? yield* readManagementKey(config) : "";
+      const apiKey =
+        managementKey.length === 0
+          ? undefined
+          : yield* api.readClientApiKey({ url: config.url, managementKey });
+      const seed = new TextEncoder().encode(sourceId);
+      const hash = Hex.encode(yield* digest.digest(Digest.sha256, seed));
+      yield* settingsService.configureClaudeFromHub({
+        sourceId,
+        sourceUrl: config.url,
+        sourceManagementKey: Redacted.make(config.managementKey),
+        instanceId: ProviderInstanceId.make(`claude-hub-${hash.slice(0, 24)}`),
+        endpoint,
+        label,
+        apiKey,
+      });
+    },
+    Effect.catch((error) =>
+      Effect.logDebug("CLIProxyAPI Claude setup failed", { errorTag: error._tag }),
+    ),
+  );
+
+  const pendingClaudeSetup = new Map<
+    UsageLimitSourceId,
+    {
+      readonly config: UsageLimitSourceConfig;
+      readonly reachable: boolean;
+      readonly operation: object;
+      readonly fiber: Fiber.Fiber<void>;
+    }
+  >();
+  const scheduleClaudeSetup = Effect.fn("UsageLimitSources.scheduleClaudeSetup")(function* (
+    snapshot: UsageLimitSourceSnapshot,
+    config: UsageLimitSourceConfig | undefined,
+  ) {
+    const { id, endpoint, label, error } = snapshot;
+    if (config === undefined || endpoint === undefined) return;
+    const reachable = error === undefined;
+    const pending = pendingClaudeSetup.get(id);
+    if (pending?.reachable === reachable && Equal.equals(pending.config, config)) return;
+    const operation = {};
+    const fiber = yield* (pending ? Fiber.interrupt(pending.fiber) : Effect.void).pipe(
+      Effect.andThen(configureClaude(id, config, endpoint, label, reachable)),
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (pendingClaudeSetup.get(id)?.operation === operation) pendingClaudeSetup.delete(id);
+        }),
+      ),
+      Effect.forkIn(scope, { uninterruptible: false }),
+    );
+    pendingClaudeSetup.set(id, { config, reachable, operation, fiber });
+  }, Effect.uninterruptible);
+
   const readSource = Effect.fn("UsageLimitSources.readSource")(function* (
     id: UsageLimitSourceId,
     config: UsageLimitSourceConfig,
   ) {
     const checkedAt = DateTime.formatIso(yield* DateTime.now);
-    const url = URL.parse(config.url);
+    const url = cliproxyBaseUrl(config.url);
     const base = {
       id,
       kind: config.kind,
       label: sourceLabel(id, config),
-      ...(url && /^https?:$/.test(url.protocol)
+      ...(url
         ? {
             origin: url.origin,
-            endpoint: `${url.origin}${url.pathname.replace(/(\/management\.html)?\/*$/i, "")}`,
+            endpoint: url.href.slice(0, -1),
           }
         : {}),
       checkedAt,
@@ -265,6 +333,9 @@ export const make = Effect.gen(function* () {
       } else {
         yield* publish(previous.flatMap((source) => (source.id === sourceId ? next : [source])));
       }
+      for (const snapshot of snapshots) {
+        yield* scheduleClaudeSetup(snapshot, settings?.usageLimitSources[snapshot.id]);
+      }
     },
     refreshLock.withPermits(1),
     Effect.ignoreCause({ log: true }),
@@ -301,9 +372,14 @@ export const make = Effect.gen(function* () {
     return result;
   }, refreshLock.withPermits(1));
 
-  yield* settingsService.streamChanges.pipe(
+  const settingsChanges = yield* settingsService.subscribeChanges;
+  const initialSettings = settingsService.getSettings.pipe(Effect.orElseSucceed(() => undefined));
+  yield* Stream.concat(
+    Stream.fromEffect(initialSettings).pipe(Stream.filter((settings) => settings !== undefined)),
+    settingsChanges,
+  ).pipe(
     Stream.map((settings) => settings.usageLimitSources),
-    Stream.changes,
+    Stream.changesWith(Equal.equals),
     Stream.runForEach(() => refresh),
     Effect.forkScoped,
   );
@@ -327,8 +403,6 @@ export const make = Effect.gen(function* () {
       Effect.ignoreCause({ log: true }),
     ),
   ).pipe(Effect.forkScoped);
-
-  yield* refresh.pipe(Effect.forkScoped);
 
   return {
     current: Ref.get(stateRef),

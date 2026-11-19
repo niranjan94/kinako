@@ -13,6 +13,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Hex from "effect/encoding/Hex";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 
@@ -38,6 +39,15 @@ import {
 export interface CliproxyHub {
   readonly url: UsageLimitSourceConfig["url"];
   readonly managementKey: string;
+}
+
+export function cliproxyBaseUrl(url: string): URL | undefined {
+  const base = URL.parse(url);
+  if (!base || !/^https?:$/.test(base.protocol) || base.username || base.password) return;
+  base.pathname = base.pathname.replace(/(\/management\.html)?\/*$/i, "/");
+  base.search = "";
+  base.hash = "";
+  return base;
 }
 
 const AuthFile = Schema.Struct({
@@ -119,6 +129,14 @@ const CreditList = Schema.Struct({
 });
 
 const decodeAuthFiles = Schema.decodeUnknownEffect(AuthFiles);
+const ClientApiKeys = Schema.NullOr(Schema.Array(Schema.String));
+const decodeV8ClientApiKeys = Schema.decodeUnknownEffect(ClientApiKeys);
+const decodeLegacyClientApiKeys = Schema.decodeUnknownEffect(
+  Schema.Struct({ "api-keys": ClientApiKeys }),
+);
+const decodeClaudeModels = Schema.decodeUnknownEffect(
+  Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.String })) }),
+);
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const decodeApiResponse = Schema.decodeUnknownEffect(ApiResponse);
 const decodeCreditList = Schema.decodeUnknownEffect(Schema.fromJsonString(CreditList));
@@ -409,24 +427,24 @@ export const makeCliproxyApi = Effect.gen(function* () {
     hub: CliproxyHub,
     path: string,
     body?: unknown,
+    version: "v0" | "v8" = "v0",
   ) {
-    const url = yield* Effect.try({
-      try: () => {
-        const base = new URL(hub.url);
-        // Users often paste the hub's web panel URL, which ends in management.html.
-        base.pathname = base.pathname.replace(/(\/management\.html)?\/?$/i, "/");
-        return new URL(`v0/management/${path}`, base).toString();
-      },
-      catch: () => new UsageLimitSourceError({ detail: "The hub URL is not valid." }),
-    });
+    const base = cliproxyBaseUrl(hub.url);
+    if (!base) return yield* new UsageLimitSourceError({ detail: "The hub URL is not valid." });
+    const url = new URL(`${version}/management/${path}`, base).toString();
     const request = (
       body === undefined ? HttpClientRequest.get(url) : HttpClientRequest.post(url)
     ).pipe(HttpClientRequest.setHeader("Authorization", `Bearer ${hub.managementKey}`));
     const response = yield* client
       .execute(body === undefined ? request : request.pipe(HttpClientRequest.bodyJsonUnsafe(body)))
       .pipe(
-        Effect.flatMap(HttpClientResponse.filterStatusOk),
-        Effect.flatMap((response) => response.json),
+        Effect.flatMap((response) =>
+          version === "v8" && response.status === 404
+            ? Effect.undefined
+            : HttpClientResponse.filterStatusOk(response).pipe(
+                Effect.flatMap((response) => response.json),
+              ),
+        ),
         Effect.timeout("15 seconds"),
         Effect.mapError(
           (error) => new UsageLimitSourceError({ detail: describeManagementFailure(error) }),
@@ -434,6 +452,46 @@ export const makeCliproxyApi = Effect.gen(function* () {
       );
     return response;
   });
+
+  const verifyClientApiKeys = Effect.fn("CliproxyApi.verifyClientApiKeys")(function* (
+    url: string,
+    keys: readonly string[],
+  ) {
+    for (const key of keys) {
+      if (key.trim() === "") continue;
+      const response = yield* client.execute(
+        HttpClientRequest.get(url).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${key}`,
+            "anthropic-version": "2023-06-01",
+            "user-agent": "claude-cli",
+          }),
+        ),
+      );
+      if (response.status === 401 || response.status === 403) continue;
+      const models = yield* HttpClientResponse.filterStatusOk(response).pipe(
+        Effect.flatMap((response) => response.json),
+        Effect.flatMap(decodeClaudeModels),
+      );
+      if (models.data.length > 0) return Redacted.make(key);
+    }
+  }, Effect.timeout("5 seconds"));
+
+  const readClientApiKey = Effect.fn("CliproxyApi.readClientApiKey")(
+    function* (hub: CliproxyHub) {
+      const base = cliproxyBaseUrl(hub.url);
+      if (!base) return;
+      const response = yield* management(hub, "config/access/api-keys", undefined, "v8");
+      const keys = yield* response === undefined
+        ? management(hub, "api-keys").pipe(
+            Effect.flatMap(decodeLegacyClientApiKeys),
+            Effect.map((body) => body["api-keys"]),
+          )
+        : decodeV8ClientApiKeys(response);
+      return yield* verifyClientApiKeys(new URL("v1/models", base).href, keys ?? []);
+    },
+    Effect.orElseSucceed(() => undefined),
+  );
 
   const authFiles = Effect.fn("CliproxyApi.authFiles")(function* (hub: CliproxyHub) {
     const response = yield* management(hub, "auth-files");
@@ -586,5 +644,5 @@ export const makeCliproxyApi = Effect.gen(function* () {
       ),
     );
   });
-  return { readHub, consume };
+  return { readHub, readClientApiKey, consume };
 });

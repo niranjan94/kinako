@@ -19,6 +19,7 @@ import * as Result from "effect/Result";
 import { Fragment, useState, type ReactElement, type ReactNode } from "react";
 import { T, useGT, useMessages, Var } from "gt-react";
 import {
+  CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES,
   isProviderDriverKind,
   resolveProviderInstanceEnabled,
   type ProviderInstanceConfig,
@@ -359,10 +360,17 @@ export function ProviderEnvironmentSection(props: {
   readonly onChange: (environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>) => void;
   /** Variables an administrator's policy pins: listed by name, never editable or removable. */
   readonly managed?: { readonly names: ReadonlySet<string>; readonly reason: string } | undefined;
+  readonly claudeHubManaged?: boolean;
   readonly secretSources?: ReadonlyArray<SecretSource>;
   readonly environmentId?: EnvironmentId | undefined;
 }) {
   const gt = useGT();
+  const managedReason = (name: string) =>
+    props.claudeHubManaged && CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES.has(name.toUpperCase())
+      ? gt("Managed by {organization}.", { organization: "CLIProxyAPI" })
+      : props.managed?.names.has(name)
+        ? props.managed.reason
+        : undefined;
   const [storedDraft, setDraft] = useState(() =>
     seedRowsDraft(props.environment, toEnvironmentDraftRows),
   );
@@ -412,7 +420,7 @@ export function ProviderEnvironmentSection(props: {
 
   const updateVariable = (id: string, patch: Partial<Omit<EnvironmentDraftRow, "id">>) => {
     // A row named like a pinned variable renders as the policy's, with no way to edit or remove it.
-    if (patch.name !== undefined && props.managed?.names.has(patch.name)) return;
+    if (patch.name !== undefined && managedReason(patch.name)) return;
     const nextRows = rows.map((row) =>
       row.id === id
         ? {
@@ -467,13 +475,14 @@ export function ProviderEnvironmentSection(props: {
       {rows.length > 0 ? (
         <div className="mt-3 min-w-0 space-y-2 pb-2">
           {rows.map((variable, index) => {
-            if (props.managed?.names.has(variable.name)) {
+            const reason = managedReason(variable.name);
+            if (reason) {
               return (
                 <div key={variable.id} className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <code className="min-w-0 truncate text-xs sm:w-44 sm:shrink-0">
                     {variable.name}
                   </code>
-                  <span className="text-xs text-muted-foreground">{props.managed.reason}</span>
+                  <span className="text-xs text-muted-foreground">{reason}</span>
                 </div>
               );
             }
@@ -1279,7 +1288,7 @@ export function ProviderInstanceCard({
         className={cn("inline-flex items-center gap-1 empty:hidden", readOnly && "opacity-50")}
       >
         {titleTailNode}
-        {onDelete ? (
+        {onDelete && !instance.claudeHub ? (
           <Button
             type="button"
             size="icon-xs"
@@ -1421,7 +1430,9 @@ export function ProviderInstanceCard({
                     instanceLocks?.wholeEnvironment ||
                     instanceLocks?.environmentNames.has(field.name)
                       ? instanceLocks.reason
-                      : undefined
+                      : instance.claudeHub && CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES.has(field.name)
+                        ? gt("Managed by {organization}.", { organization: "CLIProxyAPI" })
+                        : undefined
                   }
                   secretSources={secretSources}
                   environmentId={environmentId}
@@ -1473,6 +1484,7 @@ export function ProviderInstanceCard({
             onChange={updateGenericEnvironment}
             secretSources={secretSources}
             environmentId={environmentId}
+            claudeHubManaged={instance.claudeHub !== undefined}
             managed={
               instanceLocks && {
                 names: instanceLocks.environmentNames,
