@@ -412,6 +412,7 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
       expect(edited.providerInstances[id]?.environment).toEqual(
         expect.arrayContaining([
           { name: "ANTHROPIC_BASE_URL", value: "https://hub.test/proxy", sensitive: false },
+          { name: "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST", value: "1", sensitive: false },
         ]),
       );
       expect(token(edited)).toBe("client-key");
@@ -488,7 +489,7 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
               if (path === "/proxy/v1/models") {
                 modelAuthorizations.push(authorization);
                 const response =
-                  authorization === `Bearer ${clientKey}`
+                  reachable && authorization === `Bearer ${clientKey}`
                     ? Response.json({ data: [{ id: "claude-sonnet-4-6" }] })
                     : Response.json({}, { status: 401 });
                 return HttpClientResponse.fromWeb(request, response);
