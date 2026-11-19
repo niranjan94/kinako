@@ -146,18 +146,27 @@ export const make = Effect.gen(function* () {
       label: string,
       reachable: boolean,
     ) {
-      const managementKey = reachable ? yield* readManagementKey(config) : "";
-      const apiKey =
-        managementKey.length === 0
-          ? undefined
-          : yield* api.readClientApiKey({ url: config.url, managementKey });
       const seed = new TextEncoder().encode(sourceId);
       const hash = Hex.encode(yield* digest.digest(Digest.sha256, seed));
+      const instanceId = ProviderInstanceId.make(`claude-hub-${hash.slice(0, 24)}`);
+      const settings = yield* settingsService.getSettings;
+      const instance = settings.providerInstances[instanceId];
+      const existingKey =
+        instance?.claudeHub?.sourceUrl === config.url
+          ? instance.environment?.find(({ name }) => name === "ANTHROPIC_AUTH_TOKEN")?.value
+          : undefined;
+      const managementKey = reachable ? yield* readManagementKey(config) : "";
+      const apiKey = yield* api.readClientApiKey(
+        { url: config.url, managementKey },
+        typeof existingKey === "string" && existingKey !== ""
+          ? Redacted.make(existingKey)
+          : undefined,
+      );
       yield* settingsService.configureClaudeFromHub({
         sourceId,
         sourceUrl: config.url,
         sourceManagementKey: Redacted.make(config.managementKey),
-        instanceId: ProviderInstanceId.make(`claude-hub-${hash.slice(0, 24)}`),
+        instanceId,
         endpoint,
         label,
         apiKey,

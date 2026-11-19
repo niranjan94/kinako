@@ -477,18 +477,36 @@ export const makeCliproxyApi = Effect.gen(function* () {
     }
   }, Effect.timeout("5 seconds"));
 
+  const listClientApiKeys = Effect.fn("CliproxyApi.listClientApiKeys")(function* (
+    hub: CliproxyHub,
+  ) {
+    const response = yield* management(hub, "config/access/api-keys", undefined, "v8");
+    return yield* response === undefined
+      ? management(hub, "api-keys").pipe(
+          Effect.flatMap(decodeLegacyClientApiKeys),
+          Effect.map((body) => body["api-keys"]),
+        )
+      : decodeV8ClientApiKeys(response);
+  });
+
   const readClientApiKey = Effect.fn("CliproxyApi.readClientApiKey")(
-    function* (hub: CliproxyHub) {
+    function* (hub: CliproxyHub, existingKey?: Redacted.Redacted<string>) {
       const base = cliproxyBaseUrl(hub.url);
       if (!base) return;
-      const response = yield* management(hub, "config/access/api-keys", undefined, "v8");
-      const keys = yield* response === undefined
-        ? management(hub, "api-keys").pipe(
-            Effect.flatMap(decodeLegacyClientApiKeys),
-            Effect.map((body) => body["api-keys"]),
-          )
-        : decodeV8ClientApiKeys(response);
-      return yield* verifyClientApiKeys(new URL("v1/models", base).href, keys ?? []);
+      const keys =
+        hub.managementKey === ""
+          ? undefined
+          : yield* listClientApiKeys(hub).pipe(Effect.orElseSucceed(() => undefined));
+      const current = existingKey === undefined ? undefined : Redacted.value(existingKey);
+      const candidates =
+        keys === undefined
+          ? current === undefined
+            ? []
+            : [current]
+          : current !== undefined && keys?.includes(current)
+            ? [current, ...keys.filter((key) => key !== current)]
+            : (keys ?? []);
+      return yield* verifyClientApiKeys(new URL("v1/models", base).href, candidates);
     },
     Effect.orElseSucceed(() => undefined),
   );

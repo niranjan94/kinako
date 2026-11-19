@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
@@ -137,6 +138,29 @@ const unreachableHub = (
   );
 
 describe("CLIProxyAPI hub failures", () => {
+  it.effect.each([200, 503])(
+    "keeps a working Claude key when the key listing returns HTTP %s",
+    (status) =>
+      Effect.gen(function* () {
+        const api = yield* makeCliproxyApi;
+        const result = yield* api.readClientApiKey(config, Redacted.make("current"));
+        expect(result && Redacted.value(result)).toBe("current");
+      }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.sync(() => {
+              const response = new URL(request.url).pathname.endsWith("/api-keys")
+                ? Response.json(["alternate", "current"], { status })
+                : Response.json({ data: [{ id: "claude-sonnet-4-6" }] });
+              return HttpClientResponse.fromWeb(request, response);
+            }),
+          ),
+        ),
+        Effect.provide(NodeCrypto.layer),
+      ),
+  );
+
   it.effect("names the TLS code when the hub's certificate is not trusted", () =>
     Effect.gen(function* () {
       const api = yield* unreachableHub(

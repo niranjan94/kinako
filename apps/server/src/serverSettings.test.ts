@@ -692,6 +692,43 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
+  it.effect("verifies saved Claude hubs again after a restart", () =>
+    Effect.gen(function* () {
+      const settings = yield* ServerSettingsModule.ServerSettingsService;
+      const sourceId = UsageLimitSourceId.make("hub");
+      const instanceId = ProviderInstanceId.make("claude-hub-test");
+      const endpoint = "https://hub.example.test";
+      const managementKey = "management-key";
+      yield* settings.updateSettings({
+        usageLimitSources: {
+          [sourceId]: { kind: "cliproxy", url: endpoint, enabled: true, managementKey },
+        },
+      });
+      const setup = {
+        sourceId,
+        sourceUrl: endpoint,
+        sourceManagementKey: Redacted.make(managementKey),
+        instanceId,
+        endpoint,
+        label: "Hub",
+        apiKey: Redacted.make("client-key"),
+      };
+      yield* settings.configureClaudeFromHub(setup);
+      assert.isDefined((yield* settings.getSettings).providerInstances[instanceId]);
+
+      yield* Effect.gen(function* () {
+        const restarted = yield* ServerSettingsModule.ServerSettingsService;
+        assert.isUndefined((yield* restarted.getSettings).providerInstances[instanceId]);
+        yield* restarted.configureClaudeFromHub(setup);
+        assert.isDefined((yield* restarted.getSettings).providerInstances[instanceId]);
+      }).pipe(
+        Effect.provide(
+          Layer.fresh(ServerSettingsModule.layer.pipe(Layer.provide(ManagedPolicy.layerTest()))),
+        ),
+      );
+    }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
+  );
+
   it.effect("preserves model when switching providers via textGenerationModelSelection", () =>
     Effect.gen(function* () {
       const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
