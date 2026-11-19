@@ -683,6 +683,10 @@ export const readClaudeSettingsEnv = Effect.fn("readClaudeSettingsEnv")(function
     const parsed = yield* decodeSettingsEnv(contents).pipe(Effect.orElseSucceed(() => undefined));
     Object.assign(settingsEnv, parsed?.env);
   }
+  if (environment.CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST === "1") {
+    const { ANTHROPIC_BASE_URL: _baseUrl, ...env } = settingsEnv;
+    return env;
+  }
   return settingsEnv;
 });
 

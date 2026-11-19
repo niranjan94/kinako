@@ -191,9 +191,7 @@ On web and desktop, open **Usage → Limits → Quota forecast** and select a hu
 
 The environment saves 30 days of quota readings from its regular hub checks. The graph starts filling in after you connect the hub, and the forecast appears once the environment has observed enough usage. Missed hub checks leave gaps in the chart.
 
-This connection supplies usage information; configure
-the provider separately to send agent requests through the hub. Remove the hub from the same
-settings section when you no longer need it.
+Once the hub can serve Claude requests, a separate **Claude (hub name)** provider appears. Select it when starting a thread to use the hub. Kinako manages the provider's endpoint and client credential and picks up key rotations on the next hub check. The provider disappears while the hub is unavailable and returns when it recovers. Remove the hub from **Usage providers** to remove both its usage data and its Claude provider.
 
 ## Subscription usage widget
 

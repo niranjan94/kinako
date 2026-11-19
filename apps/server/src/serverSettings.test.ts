@@ -28,6 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SchemaAST from "effect/SchemaAST";
@@ -661,6 +662,34 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         assert.deepStrictEqual(restored.usagePriceOverrides, {});
       }),
     ).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect("discards Claude setup read with a replaced hub credential", () =>
+    Effect.gen(function* () {
+      const settings = yield* ServerSettingsModule.ServerSettingsService;
+      const sourceId = UsageLimitSourceId.make("hub");
+      const instanceId = ProviderInstanceId.make("claude-hub-test");
+      const endpoint = "https://hub.example.test";
+      const source = { kind: "cliproxy" as const, url: endpoint, enabled: true };
+      yield* settings.updateSettings({
+        usageLimitSources: { [sourceId]: { ...source, managementKey: "previous-management-key" } },
+      });
+      const setup = {
+        sourceId,
+        sourceUrl: endpoint,
+        sourceManagementKey: Redacted.make("previous-management-key"),
+        instanceId,
+        endpoint,
+        label: "Hub",
+        apiKey: Redacted.make("previous-client-key"),
+      };
+      yield* settings.updateSettings({
+        usageLimitSources: { [sourceId]: { ...source, managementKey: "current-management-key" } },
+      });
+      yield* settings.configureClaudeFromHub(setup);
+      const current = yield* settings.getSettings;
+      assert.isUndefined(current.providerInstances[instanceId]);
+    }).pipe(Effect.provide(layerServerSettings())),
   );
 
   it.effect("preserves model when switching providers via textGenerationModelSelection", () =>

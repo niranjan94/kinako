@@ -87,6 +87,7 @@ export function ClaudeAccount({
           ? gt("Not installed")
           : null;
   const removable =
+    !instance?.claudeHub &&
     provider.instanceId !== DEFAULT_CLAUDE_INSTANCE_ID &&
     !isManagedSettingPath(
       environment.serverConfig.managedPolicy,

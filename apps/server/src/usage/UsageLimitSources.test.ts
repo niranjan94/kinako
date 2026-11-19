@@ -1,7 +1,9 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
   ProviderDriverKind,
+  ProviderInstanceId,
   SecretProviderId,
   ServerConfigStreamEvent,
   UsageLimitSourceId,
@@ -10,16 +12,21 @@ import {
 } from "@t3tools/contracts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
+import * as ServerConfig from "../config.ts";
 import * as Sqlite from "../persistence/Sqlite.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as UsageLimitSources from "./UsageLimitSources.ts";
 
@@ -167,6 +174,10 @@ it.effect("reads a management key from its secret provider", () => {
         HttpClient.HttpClient,
         HttpClient.make((request) =>
           Effect.sync(() => {
+            if (new URL(request.url).pathname.endsWith("/api-keys")) {
+              expect(request.headers.authorization).toBe("Bearer resolved-key");
+              return HttpClientResponse.fromWeb(request, Response.json([]));
+            }
             authorizations.push(request.headers.authorization);
             return HttpClientResponse.fromWeb(request, Response.json({ files: [] }));
           }),
@@ -297,6 +308,215 @@ it.effect("keeps an account's last good reading when the hub's next read of it i
     ]),
   );
 });
+
+it.effect("keeps managed Claude settings and availability in sync with the hub", () =>
+  Effect.gen(function* () {
+    const sourceId = UsageLimitSourceId.make("hub");
+    const defaultInstanceId = ProviderInstanceId.make("claudeAgent");
+    const keyRequested = yield* Deferred.make<void>();
+    const releaseKeys = yield* Deferred.make<void>();
+    const modelAuthorizations: Array<string | undefined> = [];
+    let reachable = false;
+    let clientKey = "client-key";
+    return yield* Effect.gen(function* () {
+      const settings = yield* ServerSettings.ServerSettingsService;
+      const { settingsPath } = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const sourceConfig = {
+        kind: "cliproxy" as const,
+        label: "Home hub",
+        url: "https://hub.test/proxy/management.html?tab=accounts",
+        managementKey: "management-secret",
+        enabled: true,
+      };
+      const before = yield* settings.updateSettings({
+        providerInstances: {
+          [defaultInstanceId]: {
+            driver: ProviderDriverKind.make("claudeAgent"),
+            displayName: "Personal Claude",
+          },
+        },
+        usageLimitSources: { [sourceId]: sourceConfig },
+      });
+      const sources = yield* UsageLimitSources.make;
+      yield* sources.refresh;
+      expect((yield* settings.getSettings).providerInstances).toEqual(before.providerInstances);
+
+      reachable = true;
+      const changes = yield* settings.subscribeChanges;
+      const refreshed = yield* sources.refresh.pipe(Effect.forkScoped);
+      yield* Deferred.await(keyRequested);
+      expect((yield* sources.current)[0]?.error).toBeUndefined();
+      expect((yield* settings.getSettings).providerInstances).toEqual(before.providerInstances);
+      yield* Deferred.succeed(releaseKeys, undefined);
+      yield* Fiber.join(refreshed);
+      const configured = yield* changes.pipe(
+        Stream.filter((next) =>
+          Object.values(next.providerInstances).some(
+            (instance) => instance.claudeHub?.sourceId === sourceId,
+          ),
+        ),
+        Stream.runHead,
+        Effect.flatMap(Effect.fromOption),
+      );
+      expect(configured.providerInstances[defaultInstanceId]).toEqual(
+        before.providerInstances[defaultInstanceId],
+      );
+      const entries = Object.entries(configured.providerInstances).filter(
+        ([id]) => id !== defaultInstanceId,
+      );
+      expect(entries).toHaveLength(1);
+      const [instanceId, instance] = entries[0]!;
+      expect(instance).toMatchObject({ driver: "claudeAgent", displayName: "Claude (Home hub)" });
+      expect(instance.environment).toEqual(
+        expect.arrayContaining([
+          { name: "ANTHROPIC_BASE_URL", value: "https://hub.test/proxy", sensitive: false },
+          { name: "CLAUDE_CODE_USE_ANTHROPIC_AWS", value: "", sensitive: false },
+          { name: "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", value: "", sensitive: false },
+          { name: "CLAUDE_CODE_USE_MANTLE", value: "", sensitive: false },
+          expect.objectContaining({
+            name: "ANTHROPIC_AUTH_TOKEN",
+            value: "client-key",
+            sensitive: true,
+          }),
+        ]),
+      );
+      expect(yield* fs.readFileString(settingsPath)).not.toContain("client-key");
+      expect(
+        JSON.stringify(
+          ServerSettings.redactServerSettingsForClient(configured, {
+            secretReferences: true,
+          }),
+        ),
+      ).not.toContain("client-key");
+      expect(JSON.stringify(yield* sources.current)).not.toContain("client-key");
+
+      const id = ProviderInstanceId.make(instanceId);
+      const token = (settings: typeof configured) =>
+        settings.providerInstances[id]?.environment?.find(
+          (variable) => variable.name === "ANTHROPIC_AUTH_TOKEN",
+        )?.value;
+      const edited = yield* settings.updateProviderInstance({
+        operation: "upsert",
+        instanceId: id,
+        instance: {
+          ...instance,
+          displayName: "Edited Claude",
+          environment: [
+            { name: "ANTHROPIC_BASE_URL", value: "https://other.test", sensitive: false },
+            { name: "anthropic_auth_token", value: "replacement", sensitive: false },
+          ],
+        },
+      });
+      expect(edited.providerInstances[id]?.displayName).toBe("Edited Claude");
+      expect(edited.providerInstances[id]?.environment).toEqual(
+        expect.arrayContaining([
+          { name: "ANTHROPIC_BASE_URL", value: "https://hub.test/proxy", sensitive: false },
+        ]),
+      );
+      expect(token(edited)).toBe("client-key");
+      expect(modelAuthorizations.slice(0, 2)).toEqual([
+        "Bearer stale-client-key",
+        "Bearer client-key",
+      ]);
+
+      clientKey = "rotated-key";
+      const rotation = yield* settings.subscribeChanges;
+      yield* sources.refresh;
+      const rotated = yield* rotation.pipe(
+        Stream.filter((next) => token(next) === clientKey),
+        Stream.runHead,
+        Effect.flatMap(Effect.fromOption),
+      );
+      expect(rotated.providerInstances[id]?.displayName).toBe("Edited Claude");
+      expect(yield* fs.readFileString(settingsPath)).not.toContain(clientKey);
+
+      reachable = false;
+      const outage = yield* settings.subscribeChanges;
+      yield* sources.refresh;
+      yield* outage.pipe(
+        Stream.filter((next) => next.providerInstances[id] === undefined),
+        Stream.runHead,
+        Effect.flatMap(Effect.fromOption),
+      );
+      expect((yield* settings.getSettings).providerInstances[id]).toBeUndefined();
+
+      reachable = true;
+      const recovery = yield* settings.subscribeChanges;
+      yield* sources.refresh;
+      const recovered = yield* recovery.pipe(
+        Stream.filter((next) => token(next) === clientKey),
+        Stream.runHead,
+        Effect.flatMap(Effect.fromOption),
+      );
+      expect(recovered.providerInstances[id]?.displayName).toBe("Edited Claude");
+      const removed = yield* settings.updateSettings({ usageLimitSources: { [sourceId]: null } });
+      expect(removed.providerInstances).toEqual(before.providerInstances);
+      const rejected = yield* settings
+        .updateProviderInstance({
+          operation: "upsert",
+          instanceId: id,
+          instance,
+        })
+        .pipe(Effect.flip);
+      expect(rejected.operation).toBe("write-managed-setting");
+    }).pipe(
+      Effect.provide([
+        ServerSettings.layer.pipe(
+          Layer.provide(Layer.merge(ServerSecretStore.layer, ManagedPolicy.layerTest())),
+          Layer.provideMerge(Sqlite.layerMemory),
+          Layer.provideMerge(
+            ServerConfig.layerTest(process.cwd(), { prefix: "t3code-claude-hub-" }),
+          ),
+          Layer.provideMerge(NodeServices.layer),
+          Layer.provideMerge(NodeCrypto.layer),
+        ),
+        Layer.mock(BackgroundPolicy.BackgroundPolicy)({
+          shouldRunScopeWork: () => Effect.succeed(false),
+        }),
+        Layer.succeed(SecretResolver.SecretResolver, {
+          label: (provider) => Effect.succeed(provider),
+          read: (references) => Effect.succeed(references.map(() => undefined)),
+          invalidate: () => Effect.void,
+        }),
+        Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.gen(function* () {
+              const path = new URL(request.url).pathname;
+              const authorization = request.headers.authorization;
+              if (path === "/proxy/v1/models") {
+                modelAuthorizations.push(authorization);
+                const response =
+                  authorization === `Bearer ${clientKey}`
+                    ? Response.json({ data: [{ id: "claude-sonnet-4-6" }] })
+                    : Response.json({}, { status: 401 });
+                return HttpClientResponse.fromWeb(request, response);
+              }
+              expect(authorization).toBe("Bearer management-secret");
+              if (path.endsWith("/auth-files")) {
+                return HttpClientResponse.fromWeb(
+                  request,
+                  Response.json({ files: [] }, { status: reachable ? 200 : 503 }),
+                );
+              }
+              if (path === "/proxy/v8/management/config/access/api-keys") {
+                return HttpClientResponse.fromWeb(request, Response.json({}, { status: 404 }));
+              }
+              expect(path).toBe("/proxy/v0/management/api-keys");
+              yield* Deferred.succeed(keyRequested, undefined);
+              yield* Deferred.await(releaseKeys);
+              const response = Response.json({
+                "api-keys": ["", "stale-client-key", clientKey],
+              });
+              return HttpClientResponse.fromWeb(request, response);
+            }),
+          ),
+        ),
+      ]),
+    );
+  }),
+);
 
 const NOW = Date.parse("2026-11-13T12:00:00.000Z");
 const at = (hours: number) => DateTime.formatIso(DateTime.makeUnsafe(NOW + hours * 3_600_000));
