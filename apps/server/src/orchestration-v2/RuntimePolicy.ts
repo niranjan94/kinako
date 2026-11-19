@@ -99,7 +99,7 @@ function additionalDirectoriesOf(thread: OrchestrationV2AppThread): {
     : { additionalDirectories: directories.map(resolveThreadAdditionalDirectoryPath) };
 }
 
-function providerRuntimeMode(
+export function providerRuntimeMode(
   runtimeMode: RuntimeMode,
   supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined,
 ): RuntimeMode {

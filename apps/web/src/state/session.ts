@@ -3,6 +3,7 @@ import { createEnvironmentSessionAtoms } from "@t3tools/client-runtime/state/ses
 import {
   type AuthEnvironmentScope,
   type AuthSessionState,
+  AuthRelayConfigureScope,
   type EnvironmentId,
   sessionGrantsScope,
 } from "@t3tools/contracts";
@@ -45,6 +46,20 @@ export function useEnvironmentSessionScopes(
   );
   const session = Option.getOrNull(AsyncResult.value(result));
   return session?.authenticated ? (session.permissions ?? session.scopes ?? null) : null;
+}
+
+export function useEnvironmentCanConfigureRelay(environmentId: EnvironmentId | null): boolean {
+  return useAtomValue(
+    environmentId === null
+      ? EMPTY_SESSION_STATE_ATOM
+      : environmentSession.sessionStateAtom(environmentId),
+    (result) => sessionHasScope(result, AuthRelayConfigureScope),
+  );
+}
+
+export function readEnvironmentCanConfigureRelay(environmentId: EnvironmentId): boolean {
+  const result = appAtomRegistry.get(environmentSession.sessionStateAtom(environmentId));
+  return sessionHasScope(result, AuthRelayConfigureScope);
 }
 
 export function sessionHasScope(

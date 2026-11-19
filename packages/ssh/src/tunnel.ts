@@ -66,6 +66,7 @@ const SSH_TUNNEL_READY_PROBE_TIMEOUT_MS = 5_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const TUNNEL_STDERR_TAIL_CHARS = 16_384;
 const REMOTE_READY_TIMEOUT_MS = 60_000;
+const REMOTE_RUNTIME_RECORD_WAIT_SECONDS = 10;
 const REMOTE_LAUNCH_BASE_TIMEOUT_MS = 90_000;
 // Matches the node-script launch command's ssh run without the launch lock wait.
 const SSH_TUNNEL_CONNECT_TIMEOUT_MS = REMOTE_LAUNCH_BASE_TIMEOUT_MS;
@@ -95,13 +96,13 @@ const REMOTE_UPDATE_WAIT_MS =
 const REMOTE_OWNER_WAIT_MS =
   REMOTE_READY_TIMEOUT_MS + REMOTE_REUSE_READY_TIMEOUT_MS + SSH_READY_PROBE_TIMEOUT_MS;
 // A launch holds the home lock through an owned server's readiness, a fresh start's readiness,
-// a reuse probe, two server stops, the update wait and the owner wait; each probe may overrun
-// by one request.
+// a reuse probe, two server stops, the update and owner waits, and a runtime record read.
 const REMOTE_LAUNCH_LOCK_WAIT_SECONDS = Math.ceil(
   (2 * REMOTE_READY_TIMEOUT_MS +
     REMOTE_REUSE_READY_TIMEOUT_MS +
     2 * REMOTE_STOP_WAIT_TICKS * 100 +
     4 * SSH_READY_PROBE_TIMEOUT_MS +
+    REMOTE_RUNTIME_RECORD_WAIT_SECONDS * 1000 +
     REMOTE_UPDATE_WAIT_MS +
     REMOTE_OWNER_WAIT_MS) /
     1000,
@@ -506,8 +507,14 @@ if [ -z "$T3_ARCHIVE_VERSION" ]; then
   printf 'No t3 release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
+T3_SYSTEM_EXECUTABLE="$(command -v ${FORK_CLI_NAME} 2>/dev/null || true)"
+if [ -n "$T3_SYSTEM_EXECUTABLE" ] && T3_SYSTEM_VERSION="$("$T3_SYSTEM_EXECUTABLE" --version 2>/dev/null)" && [ "$T3_SYSTEM_VERSION" = "${FORK_CLI_NAME} v$T3_ARCHIVE_VERSION" ]; then
+  # A matching host-provided runtime supports platforms such as musl Linux,
+  # where the portable release archive cannot run.
+  exec "$T3_SYSTEM_EXECUTABLE" "$@"
+fi
 # Self-contained release archive: no Node, npm, or compiler on the remote.
-# Unpacked into the pinned-runtime layout so \`t3 service install\` reuses it.
+# Unpacked into the pinned-runtime layout so \`${FORK_CLI_NAME} service install\` reuses it.
 T3_RELEASE_BASE_URL=@@T3_RELEASE_BASE_URL@@
 T3_RUNTIME_DIR="$HOME/${FORK_HOME_DIR_NAME}/runtime/versions/$T3_ARCHIVE_VERSION"
 t3_runtime_ready() {
@@ -993,6 +1000,30 @@ if [ -z "$REMOTE_PORT" ]; then
     rm -f "$PORT_FILE"
     exit 1
   fi
+  # A host wrapper can spawn the server instead of replacing itself. Launcher mode owns the supervisor.
+  if [ "$SERVER_MODE" = "serve" ] && [ -n "$PS_USABLE" ]; then
+    RECORD_WAITED=0
+    while :; do
+      RUNTIME_INFO="$(resolve_default_runtime_port 2>/dev/null || true)"
+      if [ -n "$RUNTIME_INFO" ] && [ "\${RUNTIME_INFO#* }" = "$REMOTE_PORT" ]; then
+        RUNTIME_PID="\${RUNTIME_INFO%% *}"
+        RUNTIME_ANCESTOR="$RUNTIME_PID"
+        while [ -n "$RUNTIME_ANCESTOR" ] && [ "$RUNTIME_ANCESTOR" != "1" ] && [ "$RUNTIME_ANCESTOR" != "$OWNED_PID" ]; do
+          RUNTIME_ANCESTOR="$(ps -o ppid= -p "$RUNTIME_ANCESTOR" 2>/dev/null | tr -d '[:space:]')"
+        done
+        if [ "$RUNTIME_ANCESTOR" = "$OWNED_PID" ]; then
+          if [ "$RUNTIME_PID" != "$OWNED_PID" ]; then
+            printf '%s\\n' "$RUNTIME_PID" >"$PID_FILE"
+            record_process_start "$RUNTIME_PID" "$START_FILE"
+          fi
+          break
+        fi
+      fi
+      [ "$T3_ARCHIVE_MODE" = "1" ] && [ "$RECORD_WAITED" -lt @@T3_RUNTIME_RECORD_WAIT_SECONDS@@ ] || break
+      sleep 1
+      RECORD_WAITED=$((RECORD_WAITED + 1))
+    done
+  fi
   REMOTE_MANAGED="managed"
 fi
 NETWORK_ACCESS=false
@@ -1148,6 +1179,7 @@ function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
     T3_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
     T3_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
     T3_READY_TIMEOUT_SECONDS: String(REMOTE_READY_TIMEOUT_MS / 1000),
+    T3_RUNTIME_RECORD_WAIT_SECONDS: String(REMOTE_RUNTIME_RECORD_WAIT_SECONDS),
     T3_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
     T3_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
     T3_STOP_WAIT_TICKS: String(REMOTE_STOP_WAIT_TICKS),
@@ -1176,6 +1208,16 @@ export function buildRemoteStopScript(stateKey: string): string {
   });
 }
 
+// Shells known to take `-l -c` with a POSIX-style `exec` read their own login
+// profiles first; any other shell (csh, pwsh, ...) keeps the plain `sh -l` launch.
+const remoteLoginShellArgs = (args = "") => [
+  "sh",
+  "-c",
+  shellSingleQuote(
+    `case "\${SHELL##*/}" in bash|zsh|ksh|fish|nu) exec "$SHELL" -l -c "exec sh -s${args ? ` -- ${args}` : ""}" ;; *) exec sh -l -s${args ? ` -- ${args}` : ""} ;; esac`,
+  ),
+];
+
 export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemoteServer")(
   function* (
     target: DesktopSshEnvironmentTarget,
@@ -1203,15 +1245,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
       stateKey,
     });
     const result = yield* runSshCommand(target, {
-      // Shells known to take `-l -c` with a POSIX-style `exec` read their own login
-      // profiles first; any other shell (csh, pwsh, ...) keeps the plain `sh -l` launch.
-      remoteCommandArgs: [
-        "sh",
-        "-c",
-        shellSingleQuote(
-          `case "\${SHELL##*/}" in bash|zsh|ksh|fish|nu) exec "$SHELL" -l -c "exec sh -s -- ${launchArgs}" ;; *) exec sh -l -s -- ${launchArgs} ;; esac`,
-        ),
-      ],
+      remoteCommandArgs: remoteLoginShellArgs(launchArgs),
       stdin: buildRemoteLaunchScript(runner),
       timeoutMs: isNodeScriptRunner(runner)
         ? REMOTE_LAUNCH_TIMEOUT_MS
@@ -1273,7 +1307,7 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
     stateKey,
   });
   const result = yield* runSshCommand(target, {
-    remoteCommandArgs: ["sh", "-s"],
+    remoteCommandArgs: remoteLoginShellArgs(),
     stdin: buildRemotePairingScript(stateKey, runner),
     ...(isNodeScriptRunner(runner) ? {} : { timeoutMs: REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS }),
     ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),

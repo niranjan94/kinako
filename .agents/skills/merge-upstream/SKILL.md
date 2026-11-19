@@ -65,6 +65,8 @@ With more than about 30 open files, delegate by tier: read [DELEGATION.md](DELEG
 
 If a conflict is a real product decision rather than a mechanical one (upstream redesigns something the fork deliberately diverged on, such as telemetry, pairing origins or the release flow), stop and ask instead of guessing.
 
+The remote SSH runner may reuse a host-installed executable at the exact requested version. Look up `FORK_CLI_NAME` in that check, and retain the launcher's ownership in service mode. In serve mode, record the actual child and its start time when a host wrapper starts it.
+
 Done when `git diff --name-only --diff-filter=U` is empty and no file the merge touched contains a conflict marker.
 
 ### Known cases

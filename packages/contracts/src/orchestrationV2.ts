@@ -66,6 +66,7 @@ import {
   ThreadPullRequestSnapshot,
   ThreadPullRequestStack,
   ThreadPullRequestWatch,
+  PullRequestWatchUntil,
 } from "./threadPullRequest.ts";
 import {
   ProviderApprovalDecision,
@@ -3500,6 +3501,8 @@ export const OrchestrationV2Command = Schema.Union([
      * keeps the watch's current setting.
      */
     autoFix: Schema.optional(Schema.Boolean),
+    /** With `watching`, sets how long the watch holds its thread; absent keeps the current one. */
+    until: Schema.optional(PullRequestWatchUntil),
     link: Schema.optional(
       Schema.Struct({
         url: TrimmedNonEmptyString,

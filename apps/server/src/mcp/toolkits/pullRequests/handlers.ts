@@ -207,7 +207,13 @@ const make = Effect.gen(function* () {
     const threadId = input.threadId ?? scope.thread?.threadId;
     if (threadId === undefined) return yield* new PullRequestThreadRequiredError();
     return yield* watches
-      .setWatching({ threadId, target: input, watching, autoFix: input.autoFix })
+      .setWatching({
+        threadId,
+        target: input,
+        watching,
+        autoFix: input.autoFix,
+        until: input.until,
+      })
       .pipe(
         Effect.catchTags({
           PullRequestWatchThreadNotFoundError: (error) =>

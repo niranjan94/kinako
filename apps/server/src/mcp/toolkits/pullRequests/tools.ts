@@ -8,6 +8,7 @@ import {
   PullRequestReviewGuideRun,
   PullRequestState,
   PullRequestUnavailableError,
+  PullRequestWatchUntil,
   ThreadPullRequestLinkSource,
   TrimmedNonEmptyString,
   ThreadId,
@@ -72,6 +73,12 @@ export type PullRequestTargetInput = typeof PullRequestTargetInput.Type;
 
 export const WatchPullRequestInput = Schema.Struct({
   ...PullRequestTargetInput.fields,
+  until: Schema.optional(
+    PullRequestWatchUntil.annotate({
+      description:
+        'How long this thread stays working. Omit it to keep the current value; a new watch starts at "checks". "checks": until checks finish, for a PR you hand to the user. "merged": until it merges or closes or you unwatch it, when you will act on it yourself, such as merging after someone else approves.',
+    }),
+  ),
   autoFix: Schema.optional(
     Schema.Boolean.annotate({
       description:

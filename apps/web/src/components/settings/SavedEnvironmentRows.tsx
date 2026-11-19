@@ -52,7 +52,6 @@ import {
   supportsDesktopAppUpdate,
 } from "~/versionSkew";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
-import { isElectron } from "~/env";
 import { useT3ConnectTurnOn } from "~/cloud/useT3ConnectTurnOn";
 import { useCloudLinkController } from "~/cloud/useCloudLinkController";
 import { useManagedTunnelUsage } from "~/cloud/managedRelayState";
@@ -583,6 +582,7 @@ function ConfiguredCloudLinkRow({
     holdWebhooksWhileOffline,
     operationError,
     tunnelLimit,
+    needsRelayConfiguration,
     reconcileCloudState,
   } = useCloudLinkController(environmentId);
   const { openAuthPrompt } = useT3ConnectAuthPrompt();
@@ -594,8 +594,8 @@ function ConfiguredCloudLinkRow({
     messages,
   );
   const turnOn = useT3ConnectTurnOn(environmentId);
-  // Turning on links from this desktop's own backend only; turning off works from anywhere.
-  const showSwitch = isElectron && (turnOn.kind !== "on-host" || managedTunnelActive);
+  // Turning on needs relay configuration permission; turning off works from anywhere.
+  const showSwitch = turnOn.kind !== "on-host" || managedTunnelActive;
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUpdatingPreference, setIsUpdatingPreference] = useState(false);
 
@@ -609,6 +609,17 @@ function ConfiguredCloudLinkRow({
     cloudLinkState.data === null ||
     cloudLinkState.isPending ||
     isBusy;
+  const configureReason = gt(
+    "This connection needs the relay configuration permission to configure T3 Connect.",
+  );
+  const tunnelNeedsConfigure = needsRelayConfiguration({
+    managedTunnel: !managedTunnelActive,
+    publish: publishAgentActivity,
+  });
+  const publishNeedsConfigure = needsRelayConfiguration({
+    managedTunnel: managedTunnelActive,
+    publish: !publishAgentActivity,
+  });
   // `isSignedIn` is undefined until Clerk loads. Signed out, one row shows a
   // sign-in button instead of its switch; the onboarding dialog that opens after
   // a fresh sign-in offers both linking and publishing.
@@ -745,8 +756,8 @@ function ConfiguredCloudLinkRow({
             ) : (
               <CloudLinkSwitch
                 checked={managedTunnelActive}
-                disabled={switchDisabled}
-                disabledReason={disabledReason}
+                disabled={switchDisabled || tunnelNeedsConfigure}
+                disabledReason={disabledReason ?? (tunnelNeedsConfigure ? configureReason : null)}
                 onCheckedChange={(enabled) => void updateManagedTunnel(enabled)}
               />
             )
@@ -764,7 +775,7 @@ function ConfiguredCloudLinkRow({
             { cli: FORK_CLI_NAME },
           )}
         />
-      ) : isElectron ? (
+      ) : (
         <SettingsRow
           title={setting("t3-connect").title}
           description={gt("Run `{cli} connect link` on the host, then restart {app} there.", {
@@ -772,7 +783,7 @@ function ConfiguredCloudLinkRow({
             app: APP_BASE_NAME,
           })}
         />
-      ) : null}
+      )}
       {signedOut && showSwitch ? null : (
         <SettingsRow
           title={setting("publish-agent-activity").title}
@@ -789,8 +800,8 @@ function ConfiguredCloudLinkRow({
               <CloudLinkSwitch
                 ariaLabel={gt("Publish agent activity to mobile clients")}
                 checked={publishAgentActivity}
-                disabled={switchDisabled}
-                disabledReason={disabledReason}
+                disabled={switchDisabled || publishNeedsConfigure}
+                disabledReason={disabledReason ?? (publishNeedsConfigure ? configureReason : null)}
                 onCheckedChange={(enabled) => void updatePublishAgentActivity(enabled)}
               />
             )

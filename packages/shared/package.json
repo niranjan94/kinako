@@ -383,6 +383,10 @@
       "types": "./src/mdnsHostName.ts",
       "import": "./src/mdnsHostName.ts"
     },
+    "./testing/gitRepositoryEnv": {
+      "types": "./src/testing/gitRepositoryEnv.ts",
+      "import": "./src/testing/gitRepositoryEnv.ts"
+    },
     "./testing/longTempDir": {
       "types": "./src/testing/longTempDir.ts",
       "import": "./src/testing/longTempDir.ts"
