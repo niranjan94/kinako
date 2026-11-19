@@ -1,5 +1,6 @@
 import {
   authScopeRequiredResponse,
+  AuthAccessTokenType,
   AuthAccessWriteScope,
   AuthStandardClientScopes,
   AuthGrantScope,
@@ -24,6 +25,7 @@ import type { AuthEnvironmentScope, DpopFailureReason } from "@t3tools/contracts
 import { parseOAuthScope } from "@t3tools/shared/oauthScope";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as Clock from "effect/Clock";
+import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -34,12 +36,13 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
+import * as ServerSecretStore from "./ServerSecretStore.ts";
 import * as SessionStore from "./SessionStore.ts";
 import { traceAuthenticatedRelayRequest, traceRelayRequest } from "../cloud/traceRelayRequest.ts";
 import { withAuthenticatedBodyLimit } from "../httpBodyLimit.ts";
 import { isForwardedHttps } from "../httpForwardedProto.ts";
 import { deriveAuthClientMetadata } from "./utils.ts";
-import { checkRequestDpopProof } from "./dpop.ts";
+import { checkRequestDpopProof, recordDpopProofUse } from "./dpop.ts";
 import { requestUrl } from "../requestUrl.ts";
 
 const CREDENTIAL_RESPONSE_HEADERS = {
@@ -401,6 +404,25 @@ export const layer = HttpApiBuilder.group(
                 )
               : undefined;
             yield* appendCredentialResponseHeaders;
+            if (args.payload.subject_token_type === AuthAccessTokenType) {
+              if (requestedScopes !== undefined) {
+                return yield* failEnvironmentInvalidRequest("invalid_scope");
+              }
+              if (!dpopProof) {
+                yield* appendDpopChallengeHeader;
+                return yield* failEnvironmentAuthInvalid("invalid_credential");
+              }
+              const secretStore = yield* ServerSecretStore.ServerSecretStore;
+              const digest = yield* Digest.Digest;
+              return yield* serverAuth.renewAccessToken(
+                args.payload.subject_token,
+                dpopProof.thumbprint,
+                recordDpopProofUse(dpopProof).pipe(
+                  Effect.provideService(ServerSecretStore.ServerSecretStore, secretStore),
+                  Effect.provideService(Digest.Digest, digest),
+                ),
+              );
+            }
             return yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
               args.payload.subject_token,
               requestedScopes,
