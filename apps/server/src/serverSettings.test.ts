@@ -1848,12 +1848,21 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         const openCode = ProviderInstanceId.make("opencode");
         const hub = UsageLimitSourceId.make("hub");
         const router = ProviderInstanceId.make("openrouter");
+        const jev = ProviderInstanceId.make("jev");
         const withUsage = yield* serverSettings.updateSettings({
           cloudSpeechCredentials: { openai: usageReference, xai: "literal-fixture" },
           textGenerators: {
             [router]: {
               kind: "openaiCompatible",
               baseUrl: "https://openrouter.ai/api/v1",
+              apiKey: usageReference,
+              enabled: true,
+            },
+          },
+          decisionApis: {
+            [jev]: {
+              kind: "systemOne",
+              baseUrl: "https://api.typesafe.ai",
               apiKey: usageReference,
               enabled: true,
             },
@@ -1911,6 +1920,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         assert.equal(legacy.sourceControlHosts.bitbucket?.accessToken, SECRET_REDACTED);
         assert.equal(legacy.usageLimitSources[hub]?.managementKey, SECRET_REDACTED);
         assert.equal(legacy.textGenerators[router]?.apiKey, SECRET_REDACTED);
+        assert.equal(legacy.decisionApis[jev]?.apiKey, SECRET_REDACTED);
         assert.equal(legacy.easDeviceHosts[0]?.accessToken, SECRET_REDACTED);
         assert.equal(legacy.simlockDeviceHosts[0]?.agentToken, SECRET_REDACTED);
         const configOf = (settings: ServerSettings, id: ProviderInstanceId) =>
@@ -1922,6 +1932,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
           sourceControlHosts: legacy.sourceControlHosts,
           usageLimitSources: legacy.usageLimitSources,
           textGenerators: legacy.textGenerators,
+          decisionApis: legacy.decisionApis,
           easDeviceHosts: legacy.easDeviceHosts,
           simlockDeviceHosts: legacy.simlockDeviceHosts,
           providerInstances: legacy.providerInstances,
@@ -1933,6 +1944,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         });
         assert.deepEqual(echoed.usageLimitSources[hub]?.managementKey, usageReference);
         assert.deepEqual(echoed.textGenerators[router]?.apiKey, usageReference);
+        assert.deepEqual(echoed.decisionApis[jev]?.apiKey, usageReference);
         assert.deepEqual(echoed.cloudSpeechCredentials, {
           openai: usageReference,
           xai: "literal-fixture",
@@ -2057,6 +2069,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         "simlockDeviceHosts.[].agentToken",
         "usageLimitSources.*.managementKey",
         "textGenerators.*.apiKey",
+        "decisionApis.*.apiKey",
       ]);
     }),
   );

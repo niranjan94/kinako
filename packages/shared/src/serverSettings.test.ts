@@ -26,6 +26,7 @@ import {
   resolveReviewGuideModelSelection,
   resolveSourceControlWriterModelSelection,
   resolveSpeechPostProcessingModelSelection,
+  resolveAutoReviewModelSelection,
 } from "./serverSettings.ts";
 
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
@@ -470,6 +471,29 @@ describe("serverSettings helpers", () => {
     );
   });
 
+  it("reviews with a decision API until it is turned off, else follows text generation", () => {
+    const jev = ProviderInstanceId.make("jev");
+    const selection = createModelSelection(jev, "jev-latest");
+    const settings = (enabled: boolean) => ({
+      ...DEFAULT_SERVER_SETTINGS,
+      decisionApis: {
+        [jev]: {
+          kind: "systemOne" as const,
+          baseUrl: "https://api.typesafe.ai",
+          apiKey: "",
+          enabled,
+        },
+      },
+      autoReviewModelSelection: selection,
+    });
+    expect(resolveAutoReviewModelSelection(settings(true), [])).toBe(selection);
+    const off = settings(false);
+    expect(resolveAutoReviewModelSelection(off, [])).toBe(off.textGenerationModelSelection);
+    expect(resolveAutoReviewModelSelection(DEFAULT_SERVER_SETTINGS)).toBe(
+      DEFAULT_SERVER_SETTINGS.textGenerationModelSelection,
+    );
+  });
+
   it("falls back from a writer provider a project turned off, keeping it for other projects", () => {
     const instanceId = ProviderInstanceId.make("codex_writer");
     const projectId = ProjectId.make("project-a");
@@ -680,6 +704,33 @@ describe("serverSettings helpers", () => {
 
     const removed = applyServerSettingsPatch(added, { usageLimitSources: { [hubA]: null } });
     expect(Object.keys(removed.usageLimitSources)).toEqual([hubB]);
+  });
+
+  it("upserts and removes decisionApis per entry, and replaces the auto-review model whole", () => {
+    const jev = ProviderInstanceId.make("jev");
+    const other = ProviderInstanceId.make("jev-work");
+    const api = {
+      kind: "systemOne" as const,
+      baseUrl: "https://api.typesafe.ai",
+      apiKey: "",
+      enabled: true,
+    };
+    const added = applyServerSettingsPatch(
+      { ...DEFAULT_SERVER_SETTINGS, decisionApis: { [jev]: api } },
+      {
+        decisionApis: { [other]: api },
+        autoReviewModelSelection: createModelSelection(jev, "jev-latest", [
+          { id: "reasoningEffort", value: "low" },
+        ]),
+      },
+    );
+    expect(Object.keys(added.decisionApis)).toEqual([jev, other]);
+    const replaced = applyServerSettingsPatch(added, {
+      decisionApis: { [jev]: null },
+      autoReviewModelSelection: createModelSelection(other, "jev-latest"),
+    });
+    expect(Object.keys(replaced.decisionApis)).toEqual([other]);
+    expect(replaced.autoReviewModelSelection).toEqual(createModelSelection(other, "jev-latest"));
   });
 
   it("upserts and removes secretProviders per entry so concurrent edits cannot clobber", () => {
