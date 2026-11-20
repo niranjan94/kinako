@@ -42,9 +42,11 @@ import {
 const fxPresentation = (fullAccess: boolean) => ({
   displayName: "fx",
   showInteractionModeToggle: false,
-  supportedRuntimeModes: fullAccess
-    ? [...FX_SUPPORTED_RUNTIME_MODES, "full-access" as const]
-    : FX_SUPPORTED_RUNTIME_MODES,
+  supportedRuntimeModes: [
+    ...FX_SUPPORTED_RUNTIME_MODES,
+    "host-auto" as const,
+    ...(fullAccess ? ["full-access" as const] : []),
+  ],
 });
 const FX_MODEL_CAPABILITIES = createModelCapabilities({
   optionDescriptors: [FX_EFFORT_OPTION_DESCRIPTOR],

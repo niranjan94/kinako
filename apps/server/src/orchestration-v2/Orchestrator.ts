@@ -80,6 +80,7 @@ import {
   resolveProjectProviderInstanceEnabled,
   type ProviderSessionId,
   RunId,
+  ProviderAdapterRuntimeMode,
   RuntimeMode,
   ThreadLinkedPullRequest,
   ThreadId,
@@ -354,7 +355,7 @@ export class OrchestratorRuntimeModeAboveCeilingError extends Schema.TaggedError
     threadId: ThreadId,
     refused: Schema.Literals(["mode", "turn"]),
     runtimeMode: RuntimeMode,
-    maxRuntimeMode: RuntimeMode,
+    maxRuntimeMode: ProviderAdapterRuntimeMode,
     organization: Schema.String,
   },
 ) {

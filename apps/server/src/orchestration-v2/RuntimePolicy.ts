@@ -1,9 +1,11 @@
 import {
+  hostAutoBaseRuntimeMode,
   isRuntimeModeAbove,
   managedRuntimeModeCeilingMessage,
   ModelSelection,
   OrchestrationV2AppThread,
   ProjectId,
+  ProviderAdapterRuntimeMode,
   ProviderInstanceId,
   RuntimeMode,
   ThreadId,
@@ -43,7 +45,7 @@ export class RuntimePolicyAboveCeilingError extends Schema.TaggedError<RuntimePo
   {
     threadId: ThreadId,
     runtimeMode: RuntimeMode,
-    maxRuntimeMode: RuntimeMode,
+    maxRuntimeMode: ProviderAdapterRuntimeMode,
     organization: Schema.String,
   },
 ) {
@@ -82,20 +84,31 @@ export class RuntimePolicyV2 extends Context.Service<RuntimePolicyV2, RuntimePol
 export const layer: Layer.Layer<RuntimePolicyV2> = Layer.succeed(RuntimePolicyV2, {
   resolve: Effect.fn("RuntimePolicyV2.resolve")(function (input) {
     return Effect.succeed({
-      runtimeMode: input.thread.runtimeMode,
+      runtimeMode: providerRuntimeMode(input.thread.runtimeMode, undefined),
       interactionMode: input.thread.interactionMode,
       cwd: input.thread.worktreePath,
     });
   }),
 });
 
+/** The mode an adapter receives for a thread's mode; host-managed modes become what runs under them. */
 export function providerRuntimeMode(
   runtimeMode: RuntimeMode,
-  supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined,
-): RuntimeMode {
-  return supportedRuntimeModes === undefined ||
-    supportedRuntimeModes.length === 0 ||
-    supportedRuntimeModes.includes(runtimeMode)
+  provider:
+    | {
+        readonly driver: string;
+        readonly supportedRuntimeModes?: ReadonlyArray<RuntimeMode> | undefined;
+      }
+    | undefined,
+): ProviderAdapterRuntimeMode {
+  const supported = provider?.supportedRuntimeModes;
+  if (runtimeMode === "host-auto") {
+    return provider !== undefined &&
+      (supported === undefined || supported.length === 0 || supported.includes("host-auto"))
+      ? hostAutoBaseRuntimeMode(provider.driver, supported)
+      : "approval-required";
+  }
+  return supported === undefined || supported.length === 0 || supported.includes(runtimeMode)
     ? runtimeMode
     : "approval-required";
 }
@@ -158,10 +171,7 @@ export const layerFromProjectStore: Layer.Layer<
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
         yield* refuseAboveCeiling(managedPolicy, input.thread);
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
-        const supportedRuntimeModes =
-          instance === undefined
-            ? undefined
-            : (yield* instance.snapshot.getSnapshot).supportedRuntimeModes;
+        const snapshot = instance === undefined ? undefined : yield* instance.snapshot.getSnapshot;
         const cwd =
           input.thread.worktreePath ??
           (yield* projects.get(input.thread.projectId).pipe(
@@ -201,7 +211,7 @@ export const layerFromProjectStore: Layer.Layer<
             ),
           );
         return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
-          runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
+          runtimeMode: providerRuntimeMode(input.thread.runtimeMode, snapshot),
           interactionMode: input.thread.interactionMode,
           cwd,
           ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),

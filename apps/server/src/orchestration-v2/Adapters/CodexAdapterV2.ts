@@ -84,7 +84,7 @@ import type {
   ProviderThreadId,
   ProviderTurnId,
   ProviderInstanceId,
-  RuntimeMode,
+  ProviderAdapterRuntimeMode,
 } from "@t3tools/contracts";
 import * as CodexClient from "effect-codex-app-server/client";
 import * as CodexErrors from "effect-codex-app-server/errors";
@@ -798,7 +798,7 @@ const isProviderAdapterRuntimeRequestResponseError = Schema.is(
   ProviderAdapter.ProviderAdapterRuntimeRequestResponseError,
 );
 
-function codexRuntimeModeTurnDefaults(runtimeMode: RuntimeMode): {
+function codexRuntimeModeTurnDefaults(runtimeMode: ProviderAdapterRuntimeMode): {
   readonly approvalPolicy: CodexSchema.V2TurnStartParams__AskForApproval;
   readonly approvalsReviewer: CodexSchema.V2TurnStartParams__ApprovalsReviewer;
   readonly sandboxPolicy: CodexSchema.V2TurnStartParams__SandboxPolicy;
@@ -2322,7 +2322,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
         /** Codex acceptForSession covers only the exact command or patch, not future commands. */
         const sessionApprovals = new Map<
           string,
-          { readonly runtimeMode: RuntimeMode; readonly kinds: Set<ProviderRequestKind> }
+          {
+            readonly runtimeMode: ProviderAdapterRuntimeMode;
+            readonly kinds: Set<ProviderRequestKind>;
+          }
         >();
         // `codex resume` and the Codex app list the native name. A failed rename, including on a
         // Codex without thread/name/set, is forgotten so the next turn sends it again.

@@ -47,6 +47,7 @@ import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
+import { providerRuntimeMode } from "../orchestration-v2/RuntimePolicy.ts";
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AgentSessionScanner from "./AgentSessionScanner.ts";
@@ -762,7 +763,7 @@ const make = Effect.gen(function* () {
         providerSessionId,
         modelSelection: thread.modelSelection,
         runtimePolicy: {
-          runtimeMode: thread.runtimeMode,
+          runtimeMode: providerRuntimeMode(thread.runtimeMode, undefined),
           interactionMode: thread.interactionMode,
           cwd: thread.worktreePath ?? input.workspaceRoot,
         },

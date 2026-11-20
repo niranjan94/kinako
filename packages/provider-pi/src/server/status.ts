@@ -60,7 +60,7 @@ import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 const PI_PRESENTATION = {
   displayName: "Pi",
   showInteractionModeToggle: false,
-  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "full-access"],
+  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "host-auto", "full-access"],
   reportsContextWindow: true,
 } as const;
 

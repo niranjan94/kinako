@@ -54,7 +54,8 @@ const GROK_PRESENTATION = {
   displayName: "Grok",
   supportsConversationRollback: false,
   showInteractionModeToggle: false,
-  supportedRuntimeModes: GROK_SUPPORTED_RUNTIME_MODES,
+  // Host review answers what Grok's own Auto hands back.
+  supportedRuntimeModes: [...GROK_SUPPORTED_RUNTIME_MODES, "host-auto"],
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],

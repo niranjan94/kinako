@@ -1,11 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import type { RuntimeMode } from "@t3tools/contracts";
+import type { ProviderAdapterRuntimeMode } from "@t3tools/contracts";
 import type * as EffectAcpSchema from "effect-acp/compat";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 export interface AcpRuntimePolicy {
-  readonly runtimeMode: RuntimeMode;
+  readonly runtimeMode: ProviderAdapterRuntimeMode;
   readonly cwd: string | null;
   readonly approvalPolicy?: unknown;
   readonly sandboxPolicy?: unknown;

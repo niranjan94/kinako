@@ -69,16 +69,54 @@ function makeThread(input: {
 
 const grokInstanceId = ProviderInstanceId.make("grok");
 const antigravityInstanceId = ProviderInstanceId.make("antigravity");
-const supportedRuntimeModesByInstance = new Map<ProviderInstanceId, ReadonlyArray<RuntimeMode>>([
-  [grokInstanceId, ["approval-required", "auto", "full-access"]],
-  [antigravityInstanceId, ["approval-required", "auto-accept-edits", "full-access"]],
+const snapshotsByInstance = new Map<
+  ProviderInstanceId,
+  { readonly driver: string; readonly supportedRuntimeModes?: ReadonlyArray<RuntimeMode> }
+>([
+  [providerInstanceId, { driver: "codex" }],
+  [ProviderInstanceId.make("claude"), { driver: "claudeAgent" }],
+  [
+    grokInstanceId,
+    { driver: "grok", supportedRuntimeModes: ["approval-required", "auto", "full-access"] },
+  ],
+  [
+    ProviderInstanceId.make("grok-host"),
+    {
+      driver: "grok",
+      supportedRuntimeModes: ["approval-required", "auto", "host-auto", "full-access"],
+    },
+  ],
+  [
+    antigravityInstanceId,
+    {
+      driver: "antigravity",
+      supportedRuntimeModes: ["approval-required", "auto-accept-edits", "full-access"],
+    },
+  ],
+  [
+    ProviderInstanceId.make("pi"),
+    {
+      driver: "pi",
+      supportedRuntimeModes: ["approval-required", "auto-accept-edits", "host-auto", "full-access"],
+    },
+  ],
+  [
+    ProviderInstanceId.make("kiro"),
+    { driver: "kiro", supportedRuntimeModes: ["approval-required", "host-auto", "full-access"] },
+  ],
+  [ProviderInstanceId.make("acp"), { driver: "acpRegistry" }],
+  [
+    ProviderInstanceId.make("cursor"),
+    {
+      driver: "cursor",
+      supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
+    },
+  ],
 ]);
 const providerInstanceFor = (instanceId: ProviderInstanceId) =>
   ({
     snapshot: {
-      getSnapshot: Effect.succeed({
-        supportedRuntimeModes: supportedRuntimeModesByInstance.get(instanceId),
-      } as ServerProvider),
+      getSnapshot: Effect.succeed(snapshotsByInstance.get(instanceId) as ServerProvider),
     },
   }) as ProviderInstance;
 
@@ -218,6 +256,33 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
       assert.notProperty(yield* resolve("/work"), "workspace");
     }),
   );
+
+  it.effect("runs host-managed Auto over each provider's own base mode", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const baseFor = (instanceId: string) =>
+        policy
+          .resolve({
+            thread: makeThread({ now, worktreePath: null, runtimeMode: "host-auto" }),
+            modelSelection: {
+              instanceId: ProviderInstanceId.make(instanceId),
+              model: "test-model",
+            },
+          })
+          .pipe(Effect.map((resolved) => resolved.runtimeMode));
+
+      assert.equal(yield* baseFor("codex"), "auto-accept-edits");
+      assert.equal(yield* baseFor("claude"), "auto-accept-edits");
+      assert.equal(yield* baseFor("grok-host"), "auto");
+      assert.equal(yield* baseFor("acp"), "approval-required");
+      assert.equal(yield* baseFor("pi"), "auto-accept-edits");
+      assert.equal(yield* baseFor("kiro"), "approval-required");
+      // Providers that do not advertise host review run Supervised, never wider.
+      assert.equal(yield* baseFor("grok"), "approval-required");
+      assert.equal(yield* baseFor("cursor"), "approval-required");
+    }),
+  );
 });
 
 it.layer(layerTaskFolderPolicy)("RuntimePolicyV2 in a task folder", (it) => {
@@ -281,6 +346,10 @@ it.layer(
       const allowed = yield* resolve("auto-accept-edits");
       assert.equal(allowed.runtimeMode, "auto-accept-edits");
       assert.equal(allowed.maxRuntimeMode, "auto-accept-edits");
+      assert.equal(
+        (yield* resolve("host-auto").pipe(Effect.flip))._tag,
+        "RuntimePolicyAboveCeilingError",
+      );
     }),
   );
 });

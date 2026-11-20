@@ -12,7 +12,7 @@ import {
   type ProviderTurnId,
   RunAttemptId,
   RunId,
-  type RuntimeMode,
+  type ProviderAdapterRuntimeMode,
   type RuntimeRequestId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -303,7 +303,7 @@ const runKiroScript = Effect.fn("runKiroScript")(function* (input: {
   readonly model?: string;
   /** Option selections (e.g. reasoningEffort) for the session and `startTurn`. */
   readonly options?: ModelSelection["options"];
-  readonly runtimeMode?: RuntimeMode;
+  readonly runtimeMode?: ProviderAdapterRuntimeMode;
   /** Holds the script's inbound frames at labels the test releases. */
   readonly replayGate?: ProviderReplayGate;
   readonly testHooks?: Parameters<typeof makeKiroAdapterV2>[0]["testHooks"];
@@ -1409,7 +1409,7 @@ describe("KiroAdapterV2 unknown model", () => {
 
 describe("Kiro permission policy", () => {
   const policy = (input: {
-    readonly runtimeMode: RuntimeMode;
+    readonly runtimeMode: ProviderAdapterRuntimeMode;
     readonly approvalPolicy?: unknown;
     readonly sandboxPolicy?: unknown;
   }) =>

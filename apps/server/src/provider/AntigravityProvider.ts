@@ -181,6 +181,7 @@ interface AntigravityProviderOptions {
 const RUNTIME_MODES_WITHOUT_AUTO = [
   "approval-required",
   "auto-accept-edits",
+  "host-auto",
   "full-access",
 ] as const;
 
@@ -191,7 +192,7 @@ function antigravityRuntimeModes(
   return parseSessionModeState(sessionSetupResult)?.availableModes.some(
     (mode) => mode.id === "auto",
   )
-    ? ["approval-required", "auto-accept-edits", "auto", "full-access"]
+    ? ["approval-required", "auto-accept-edits", "auto", "host-auto", "full-access"]
     : RUNTIME_MODES_WITHOUT_AUTO;
 }
 

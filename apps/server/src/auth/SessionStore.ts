@@ -7,7 +7,7 @@ import {
   type AuthClientSession,
   type AuthEnvironmentScope,
   AuthWebSocketTicketUse,
-  RuntimeMode,
+  ProviderAdapterRuntimeMode,
   type ServerAuthSessionMethod,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -62,7 +62,7 @@ export interface VerifiedSession {
   readonly subject: string;
   readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
   readonly proofKeyThumbprint?: string;
-  readonly runtimeModeCeiling?: RuntimeMode;
+  readonly runtimeModeCeiling?: ProviderAdapterRuntimeMode;
   /** An MCP client that is another T3 Code environment's peer link. */
   readonly peerLink?: true;
 }
@@ -410,7 +410,7 @@ export class SessionStore extends Context.Service<
       readonly scopes?: ReadonlyArray<AuthEnvironmentScope>;
       readonly client?: AuthClientMetadata;
       readonly proofKeyThumbprint?: string;
-      readonly runtimeModeCeiling?: RuntimeMode;
+      readonly runtimeModeCeiling?: ProviderAdapterRuntimeMode;
       readonly peerLink?: boolean;
       readonly replaceActiveForSubjectAndMethod?: boolean;
       readonly replaceSessionId?: AuthSessionId;
@@ -500,7 +500,7 @@ const SessionClaims = Schema.Struct({
   scopes: AuthEnvironmentScopes,
   method: Schema.Literals(["browser-session-cookie", "bearer-access-token", "dpop-access-token"]),
   jkt: Schema.optionalKey(Schema.String),
-  rtc: Schema.optionalKey(RuntimeMode),
+  rtc: Schema.optionalKey(ProviderAdapterRuntimeMode),
   /** Signed, so a client cannot shed its peer link's limits. */
   plk: Schema.optionalKey(Schema.Literal(1)),
   /** Signed, so only sessions issued as renewable can renew. */

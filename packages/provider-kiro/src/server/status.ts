@@ -41,7 +41,8 @@ const KIRO_DRIVER_KIND = ProviderDriverKind.make("kiro");
 const KIRO_PRESENTATION = {
   displayName: "Kiro",
   showInteractionModeToggle: false,
-  supportedRuntimeModes: KIRO_SUPPORTED_RUNTIME_MODES,
+  // Host review runs over Supervised, answering each prompt before the user sees it.
+  supportedRuntimeModes: [...KIRO_SUPPORTED_RUNTIME_MODES, "host-auto"],
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({ optionDescriptors: [] });
 const KIRO_DEFAULT_MODEL_SLUG = "default";

@@ -1,8 +1,10 @@
 import { managedRuntimeModeDenial } from "@t3tools/client-runtime/contract-labels";
 import type { ManagedPolicySummary, RuntimeMode } from "@t3tools/contracts";
 import { msg } from "gt-react";
+import { APP_BASE_NAME } from "~/branding";
 import { m, type MessageResolver } from "~/i18n/messages";
 import {
+  BotIcon,
   type LucideIcon,
   LockIcon,
   PenLineIcon,
@@ -28,6 +30,16 @@ export const runtimeModeConfig: Record<
     label: msg("Auto", { $context: "permission mode, provider approves routine actions" }),
     description: msg("Supported providers approve routine actions; others still ask."),
     icon: ShieldCheckIcon,
+  },
+  "host-auto": {
+    label: msg("{app} Auto", {
+      app: APP_BASE_NAME,
+      $context: "permission mode, the app reviews each request before it runs",
+    }),
+    description: msg("{app} approves routine local actions and asks you about the rest.", {
+      app: APP_BASE_NAME,
+    }),
+    icon: BotIcon,
   },
   "full-access": {
     label: msg("Full access"),

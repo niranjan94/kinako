@@ -33,7 +33,7 @@ const MUSE_PRESENTATION = {
   showInteractionModeToggle: false,
   reportsContextWindow: true,
   // Muse has no accept-edits mode; map only :ask-me and :unrestricted.
-  supportedRuntimeModes: ["approval-required", "full-access"],
+  supportedRuntimeModes: ["approval-required", "host-auto", "full-access"],
 } as const;
 
 const FALLBACK_CAPABILITIES = museModelCapabilities();

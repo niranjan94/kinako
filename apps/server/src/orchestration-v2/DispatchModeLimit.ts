@@ -2,6 +2,7 @@ import {
   isRuntimeModeAbove,
   type OrchestrationV2DomainEvent,
   type ProviderInteractionMode,
+  type ProviderAdapterRuntimeMode,
   type RuntimeMode,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -43,7 +44,7 @@ export const exceededDispatchModeLimit = (
 /** The administrator's `limits.maxRuntimeMode`, which applies to every caller, the user included. */
 export interface RuntimeModeCeiling {
   readonly organization: string;
-  readonly maxRuntimeMode: RuntimeMode;
+  readonly maxRuntimeMode: ProviderAdapterRuntimeMode;
 }
 
 /** A caller's limit, lowered to the ceiling when the caller may otherwise go above it. */
@@ -71,7 +72,7 @@ export interface RuntimeModeCeilingRefusal {
  * start no work, stay open on a thread above the ceiling: they are how its user gets back under.
  */
 export const runtimeModeCeilingRefusal = (
-  maxRuntimeMode: RuntimeMode,
+  maxRuntimeMode: ProviderAdapterRuntimeMode,
   events: ReadonlyArray<OrchestrationV2DomainEvent>,
   runtimeModes: ReadonlyMap<ThreadId, RuntimeMode>,
 ): RuntimeModeCeilingRefusal | undefined => {

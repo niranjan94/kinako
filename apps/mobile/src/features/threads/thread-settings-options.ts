@@ -1,5 +1,6 @@
 import { managedRuntimeModeDenial } from "@t3tools/client-runtime/contract-labels";
 import type { ManagedPolicySummary, RuntimeMode } from "@t3tools/contracts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
@@ -23,6 +24,13 @@ export const RUNTIME_MODE_CHOICES: ReadonlyArray<{
     mode: "auto",
     label: msg("Auto"),
     description: msg("Supported providers approve routine actions; others still ask."),
+  },
+  {
+    mode: "host-auto",
+    label: msg("{app} Auto", { app: FORK_DISPLAY_NAME }),
+    description: msg("{app} approves routine local actions and asks you about the rest.", {
+      app: FORK_DISPLAY_NAME,
+    }),
   },
   {
     mode: "full-access",

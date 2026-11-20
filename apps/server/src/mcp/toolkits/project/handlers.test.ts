@@ -10,6 +10,7 @@ import {
   type Project as ProjectRecord,
   type ModelSelection,
   type ProjectScript,
+  type ProviderAdapterRuntimeMode,
   type RuntimeMode,
   type OrchestrationV2ThreadShell,
   ThreadId,
@@ -49,7 +50,7 @@ import * as ProjectHandlers from "./handlers.ts";
 import { ProjectToolkit } from "./tools.ts";
 
 const clientLaunchHarness = (input: {
-  readonly runtimeModeCeiling: RuntimeMode;
+  readonly runtimeModeCeiling: ProviderAdapterRuntimeMode;
   readonly defaultRuntimeMode?: RuntimeMode;
   readonly newWorktreesStartFromOrigin?: boolean;
   readonly defaultThreadEnvMode?: "local" | "worktree";
@@ -206,7 +207,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const launchWith = Effect.fn("test.launchWith")(function* (
-        runtimeModeCeiling: RuntimeMode,
+        runtimeModeCeiling: ProviderAdapterRuntimeMode,
         defaultRuntimeMode: RuntimeMode,
         params: {
           readonly title: string;
