@@ -31,12 +31,24 @@ export const RuntimeMode = Schema.Literals([
 export type RuntimeMode = typeof RuntimeMode.Type;
 export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 
+/** The modes a provider adapter understands. Host-managed modes resolve to one of these first. */
+export const ProviderAdapterRuntimeMode = Schema.Literals([
+  "approval-required",
+  "auto-accept-edits",
+  "auto",
+  "full-access",
+]);
+export type ProviderAdapterRuntimeMode = typeof ProviderAdapterRuntimeMode.Type;
+
 const RUNTIME_MODE_RANK: Record<RuntimeMode, number> = {
   "approval-required": 0,
   "auto-accept-edits": 1,
   auto: 2,
   "full-access": 3,
 };
+
+/** How much a runtime mode allows, narrowest first. */
+export const runtimeModeRank = (mode: RuntimeMode): number => RUNTIME_MODE_RANK[mode];
 
 /** Whether `mode` grants the agent more than `ceiling`; no ceiling allows every mode. */
 export const isRuntimeModeAbove = (mode: RuntimeMode, ceiling: RuntimeMode | undefined): boolean =>

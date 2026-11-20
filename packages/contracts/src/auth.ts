@@ -8,7 +8,7 @@ import {
   ClientWebDeployment,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
-import { RuntimeMode } from "./providerPolicy.ts";
+import { ProviderAdapterRuntimeMode } from "./providerPolicy.ts";
 
 export const ServerAuthPolicy = Schema.Literals([
   "desktop-managed-local",
@@ -627,7 +627,7 @@ export const AuthMcpApprovalDetails = Schema.Struct({
   oneClickAccess: Schema.optionalKey(Schema.Array(AuthMcpClientAccess)),
   /** A managed policy's runtime-mode ceiling; the page loads without the server's config. */
   runtimeModeCeiling: Schema.optionalKey(
-    Schema.Struct({ organization: Schema.String, maxRuntimeMode: RuntimeMode }),
+    Schema.Struct({ organization: Schema.String, maxRuntimeMode: ProviderAdapterRuntimeMode }),
   ),
 });
 export type AuthMcpApprovalDetails = typeof AuthMcpApprovalDetails.Type;

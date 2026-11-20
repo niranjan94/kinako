@@ -9,6 +9,7 @@ import {
   type ProviderInteractionMode,
   type OrchestrationV2LinkedSender,
   type RuntimeMode,
+  runtimeModeRank,
   type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -84,12 +85,6 @@ export interface ClientModes {
   readonly interactionMode: ProviderInteractionMode;
 }
 
-const runtimeModeRank: Record<RuntimeMode, number> = {
-  "approval-required": 0,
-  "auto-accept-edits": 1,
-  auto: 2,
-  "full-access": 3,
-};
 const interactionModeRank: Record<ProviderInteractionMode, number> = { plan: 0, default: 1 };
 
 /**
@@ -108,7 +103,7 @@ export const clientModeCeiling = (client: McpClientCaller | undefined): ClientMo
   if (asked === undefined) return approved;
   return {
     runtimeMode:
-      runtimeModeRank[asked.runtimeMode] < runtimeModeRank[approved.runtimeMode]
+      runtimeModeRank(asked.runtimeMode) < runtimeModeRank(approved.runtimeMode)
         ? asked.runtimeMode
         : approved.runtimeMode,
     interactionMode:
@@ -134,7 +129,7 @@ export const withRuntimeModeCeiling = (
       ...scope.client,
       narrowedTo: {
         runtimeMode:
-          asked !== undefined && runtimeModeRank[asked.runtimeMode] < runtimeModeRank[ceiling]
+          asked !== undefined && runtimeModeRank(asked.runtimeMode) < runtimeModeRank(ceiling)
             ? asked.runtimeMode
             : ceiling,
         interactionMode: asked?.interactionMode ?? "default",
