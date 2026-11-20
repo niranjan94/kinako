@@ -1453,6 +1453,28 @@ export function isQueuedProviderThreadPlaceholder(
   );
 }
 
+/** What a request asks to do, as the adapter knows it, for reviewers that read no display text. */
+export const OrchestrationV2RuntimeRequestInspection = Schema.Struct({
+  toolName: Schema.optional(Schema.String),
+  command: Schema.optional(Schema.String),
+  paths: Schema.optional(Schema.Array(Schema.String)),
+  /** A bounded rendering of the tool's input, for tools that are neither a command nor a path. */
+  toolInputSummary: Schema.optional(Schema.String),
+});
+export type OrchestrationV2RuntimeRequestInspection =
+  typeof OrchestrationV2RuntimeRequestInspection.Type;
+
+/**
+ * Host review of a request on a `host-auto` thread. `reviewing` holds alerts until a verdict;
+ * `escalated` hands the request to the user with the reviewer's reason.
+ */
+export const OrchestrationV2RuntimeRequestAutoReview = Schema.Struct({
+  state: Schema.Literals(["reviewing", "approved", "escalated"]),
+  reason: Schema.optional(Schema.String),
+});
+export type OrchestrationV2RuntimeRequestAutoReview =
+  typeof OrchestrationV2RuntimeRequestAutoReview.Type;
+
 export const OrchestrationV2RuntimeRequest = Schema.Struct({
   id: RuntimeRequestId,
   nodeId: NodeId,
@@ -1477,8 +1499,19 @@ export const OrchestrationV2RuntimeRequest = Schema.Struct({
   decision: Schema.optional(ProviderApprovalDecision),
   feedback: Schema.optional(Schema.String),
   answers: Schema.optional(ProviderUserInputAnswers),
+  inspection: Schema.optional(OrchestrationV2RuntimeRequestInspection),
+  autoReview: Schema.optional(OrchestrationV2RuntimeRequestAutoReview),
 });
 export type OrchestrationV2RuntimeRequest = typeof OrchestrationV2RuntimeRequest.Type;
+
+/** Approvals a host reviewer may answer; questions and sign-ins always go to the user. */
+export const isHostReviewableRuntimeRequest = (
+  request: Pick<OrchestrationV2RuntimeRequest, "kind" | "responseCapability">,
+): boolean =>
+  request.responseCapability.type === "live" &&
+  request.kind !== "user_input" &&
+  request.kind !== "auth_refresh" &&
+  request.kind !== "dynamic_tool_call";
 
 const SubagentNotificationSource = Schema.Struct({
   kind: Schema.Literal("subagent"),
@@ -2473,6 +2506,7 @@ export const OrchestrationV2PendingRuntimeRequestSummary = Schema.Struct({
   blocking: Schema.optional(Schema.Boolean),
   /** Secret and link cards: only the user can answer them, never a coordinating agent. */
   userOnly: Schema.optional(Schema.Boolean),
+  autoReview: Schema.optional(OrchestrationV2RuntimeRequestAutoReview.fields.state),
 });
 export type OrchestrationV2PendingRuntimeRequestSummary =
   typeof OrchestrationV2PendingRuntimeRequestSummary.Type;
@@ -4164,6 +4198,15 @@ const OrchestrationV2InternalCommand = Schema.Union([
     threadId: ThreadId,
     requestId: CommandId,
     message: TrimmedNonEmptyString,
+  }),
+  /** The host reviewer's verdict on a pending request: accept it once, or hand it to the user. */
+  Schema.Struct({
+    type: Schema.Literal("runtime-request.auto-review"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    requestId: RuntimeRequestId,
+    outcome: Schema.Literals(["approved", "escalated"]),
+    reason: Schema.optional(Schema.String),
   }),
   /** Delivering the answer to request `requestId` failed on its last attempt. */
   Schema.Struct({

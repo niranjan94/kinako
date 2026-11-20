@@ -2899,6 +2899,160 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
     }),
   );
 
+  it.effect("settles host review verdicts once, and only while the request is pending", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("runtime-host-review");
+      const providerSessionId = ProviderSessionId.make("runtime-host-review-session");
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("runtime-host-review-create"),
+        createdBy: "user",
+        creationSource: "web",
+        threadId,
+        projectId: ProjectId.make("runtime-host-review-project"),
+        title: "Host review",
+        modelSelection,
+        runtimeMode: "host-auto",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: process.cwd(),
+      });
+      const held = (name: string) => {
+        const nodeId = NodeId.make(`runtime-host-review-node-${name}`);
+        const requestId = RuntimeRequestId.make(`runtime-host-review-${name}`);
+        return {
+          requestId,
+          events: [
+            {
+              id: EventId.make(`runtime-host-review-node-event-${name}`),
+              type: "node.updated" as const,
+              threadId,
+              nodeId,
+              occurredAt: now,
+              payload: {
+                id: nodeId,
+                threadId,
+                runId: null,
+                parentNodeId: null,
+                rootNodeId: nodeId,
+                kind: "approval_request" as const,
+                status: "waiting" as const,
+                countsForRun: false,
+                providerThreadId: null,
+                providerTurnId: null,
+                nativeItemRef: null,
+                runtimeRequestId: requestId,
+                checkpointScopeId: null,
+                startedAt: now,
+                completedAt: null,
+              },
+            },
+            {
+              id: EventId.make(`runtime-host-review-request-event-${name}`),
+              type: "runtime-request.updated" as const,
+              threadId,
+              nodeId,
+              occurredAt: now,
+              payload: {
+                id: requestId,
+                nodeId,
+                providerTurnId: null,
+                nativeRequestRef: null,
+                kind: "command" as const,
+                status: "pending" as const,
+                responseCapability: { type: "live" as const, providerSessionId },
+                createdAt: now,
+                resolvedAt: null,
+                autoReview: { state: "reviewing" as const },
+              },
+            },
+          ],
+        };
+      };
+      const approved = held("approved");
+      const escalated = held("escalated");
+      yield* eventSink.write({
+        commandId: CommandId.make("runtime-host-review-seed"),
+        events: [
+          {
+            id: EventId.make("runtime-host-review-session-event"),
+            type: "provider-session.attached",
+            threadId,
+            driver,
+            occurredAt: now,
+            payload: {
+              id: providerSessionId,
+              driver,
+              providerInstanceId: modelSelection.instanceId,
+              status: "running",
+              cwd: process.cwd(),
+              model: modelSelection.model,
+              capabilities: CodexProviderCapabilitiesV2,
+              createdAt: now,
+              updatedAt: now,
+              lastError: null,
+            },
+          },
+          ...approved.events,
+          ...escalated.events,
+        ],
+      });
+      const verdict = (
+        name: string,
+        requestId: RuntimeRequestId,
+        outcome: "approved" | "escalated",
+        reason?: string,
+      ) =>
+        orchestrator.dispatch({
+          type: "runtime-request.auto-review",
+          commandId: CommandId.make(`runtime-host-review-verdict-${name}`),
+          threadId,
+          requestId,
+          outcome,
+          ...(reason === undefined ? {} : { reason }),
+        });
+      const requestOf = (requestId: RuntimeRequestId) =>
+        orchestrator
+          .getThreadProjection(threadId)
+          .pipe(
+            Effect.map((projection) =>
+              projection.runtimeRequests.find((request) => request.id === requestId),
+            ),
+          );
+
+      yield* verdict("approve", approved.requestId, "approved", "Runs the test suite.");
+      const accepted = yield* requestOf(approved.requestId);
+      assert.equal(accepted?.status, "resolved");
+      assert.equal(accepted?.decision, "accept");
+      assert.deepEqual(accepted?.autoReview, { state: "approved", reason: "Runs the test suite." });
+      const [delivery] = yield* outbox.listByCommandId(
+        CommandId.make("runtime-host-review-verdict-approve"),
+      );
+      assert.equal(delivery?.request.type, "runtime-request.respond");
+
+      yield* verdict("escalate", escalated.requestId, "escalated", "Pushes to a remote.");
+      const handedOver = yield* requestOf(escalated.requestId);
+      assert.equal(handedOver?.status, "pending");
+      assert.deepEqual(handedOver?.autoReview, {
+        state: "escalated",
+        reason: "Pushes to a remote.",
+      });
+      assert.equal(
+        (yield* orchestrator.getThreadShell(threadId))?.pendingRuntimeRequest?.autoReview,
+        "escalated",
+      );
+
+      // A late verdict on an answered request is refused and changes nothing.
+      const late = yield* verdict("late", approved.requestId, "escalated").pipe(Effect.result);
+      assert.equal(late._tag, "Failure");
+      assert.deepEqual(yield* requestOf(approved.requestId), accepted);
+    }),
+  );
+
   it.effect("dismisses message-capable questions directly and while settling", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
