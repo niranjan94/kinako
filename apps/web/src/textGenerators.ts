@@ -95,18 +95,20 @@ export function textGeneratorBrand(config: Pick<TextGeneratorConfig, "kind" | "b
 }
 
 /**
- * A new text generator id. Selections name a text generator by the same id as a provider
- * instance, so it must not match a configured instance, a driver's default instance, or
- * another text generator.
+ * A new text generator or decision API id. Selections name either by the same id as a provider
+ * instance, so it must not match a configured instance, a driver's default instance, or another
+ * text generator or decision API.
  */
 export function nextTextGeneratorId(
   base: string,
-  settings: Pick<ServerSettings, "providerInstances" | "textGenerators">,
+  settings: Pick<ServerSettings, "providerInstances" | "textGenerators"> &
+    Partial<Pick<ServerSettings, "decisionApis">>,
   providers: ReadonlyArray<Pick<ServerProvider, "instanceId">>,
 ): ProviderInstanceId {
   const taken = new Set<string>([
     ...Object.keys(settings.providerInstances),
     ...Object.keys(settings.textGenerators),
+    ...Object.keys(settings.decisionApis ?? {}),
     ...providers.map((provider) => provider.instanceId),
     ...providerClients.definitions.map((definition) => definition.driverKind),
   ]);

@@ -999,6 +999,48 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("generated thread titles prompt custom style naming rename regenerate")],
   },
   {
+    id: "auto-review-rules-only",
+    title: msg("Rules only"),
+    to: "/settings/threads",
+    scope: "environment-defaults",
+    searchTerms: [
+      msg("{app} Auto permission mode approvals review requests risky actions without a model", {
+        app: APP_BASE_NAME,
+      }),
+    ],
+  },
+  {
+    id: "auto-review-model",
+    title: msg("Reviewer model"),
+    to: "/settings/threads",
+    scope: "project-defaults",
+    searchTerms: [
+      msg("{app} Auto permission mode approvals review requests System One Jev decision API", {
+        app: APP_BASE_NAME,
+      }),
+    ],
+  },
+  {
+    id: "auto-review-confidence",
+    title: msg("Reviewer confidence"),
+    to: "/settings/threads",
+    scope: "environment-defaults",
+    searchTerms: [
+      msg("{app} Auto threshold certainty probability decision API System One approve", {
+        app: APP_BASE_NAME,
+      }),
+    ],
+  },
+  {
+    id: "auto-review-instructions",
+    title: msg("Reviewer instructions"),
+    to: "/settings/threads",
+    scope: "project-defaults",
+    searchTerms: [
+      msg("{app} Auto policy prompt guidance allow always ask approvals", { app: APP_BASE_NAME }),
+    ],
+  },
+  {
     id: "app-version",
     title: msg("Version"),
     to: "/settings/about",
@@ -1135,6 +1177,18 @@ export const SETTINGS_SEARCH_ITEMS = [
       msg(
         "model api api key openai openrouter anthropic ollama lm studio custom endpoint base url thread titles commit messages",
       ),
+    ],
+    providerSettingsOnly: true,
+    textGeneratorsOnly: true,
+  },
+  {
+    id: "decision-apis",
+    title: msg("Decision APIs"),
+    to: "/settings/providers",
+    searchTerms: [
+      msg("System One TypeSafe Jev api key base url {app} Auto approvals reviewer", {
+        app: APP_BASE_NAME,
+      }),
     ],
     providerSettingsOnly: true,
     textGeneratorsOnly: true,

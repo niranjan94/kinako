@@ -24,6 +24,18 @@ describe("nextTextGeneratorId", () => {
     // A driver's default instance id is taken even before it has a snapshot or config.
     expect(nextTextGeneratorId("cursor", settings, [])).toBe("cursor-2");
     expect(nextTextGeneratorId("openrouter", settings, providers)).toBe("openrouter");
+    const withDecisionApi = {
+      ...settings,
+      decisionApis: {
+        [ProviderInstanceId.make("system-one")]: {
+          kind: "systemOne" as const,
+          baseUrl: "https://api.typesafe.ai",
+          apiKey: "",
+          enabled: true,
+        },
+      },
+    };
+    expect(nextTextGeneratorId("system-one", withDecisionApi, providers)).toBe("system-one-2");
   });
 });
 

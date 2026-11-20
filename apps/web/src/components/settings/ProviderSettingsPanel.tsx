@@ -106,6 +106,7 @@ import { IntervalSecondsField } from "./IntervalSecondsField";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { useSecretSources } from "./SecretSourceInput";
 import { TextGeneratorsSettings } from "./TextGeneratorsSettings";
+import { DecisionApisSettings } from "./DecisionApisSettings";
 import { UsageProviderSettings } from "./UsageProviderSettings";
 import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
 import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
@@ -1173,15 +1174,24 @@ export function EnvironmentProviderSettings({
         readOnly={readOnly}
       />
 
-      {/* The server drops text generators under a provider allow-list. */}
+      {/* The server drops text generators and decision APIs under a provider allow-list. */}
       {managedPolicy?.limits?.providers?.allowedDrivers === undefined ? (
-        <TextGeneratorsSettings
-          key={`text-generators:${environmentId}`}
-          environmentId={environmentId}
-          environmentLabel={environmentLabel}
-          providers={serverProviders}
-          readOnly={readOnly}
-        />
+        <>
+          <TextGeneratorsSettings
+            key={`text-generators:${environmentId}`}
+            environmentId={environmentId}
+            environmentLabel={environmentLabel}
+            providers={serverProviders}
+            readOnly={readOnly}
+          />
+          <DecisionApisSettings
+            key={`decision-apis:${environmentId}`}
+            environmentId={environmentId}
+            environmentLabel={environmentLabel}
+            providers={serverProviders}
+            readOnly={readOnly}
+          />
+        </>
       ) : null}
 
       <SettingsSection title={gt("Advanced")}>
