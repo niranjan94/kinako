@@ -23,6 +23,11 @@ import {
 
 export const TranscriptionPostProcessingOutput = Schema.Struct({ transcription: Schema.String });
 
+const ApprovalReviewOutput = Schema.Struct({
+  decision: Schema.Literals(["allow", "escalate"]),
+  reason: Schema.String,
+});
+
 export type Operation = keyof ProviderTextGeneration;
 
 export interface Request<S extends Schema.Top> {
@@ -201,6 +206,17 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
       });
     });
 
+  const generateApprovalReview: NonNullable<ProviderTextGeneration["generateApprovalReview"]> =
+    Effect.fn(`${name}.generateApprovalReview`)(function* (input) {
+      return yield* run({
+        operation: "generateApprovalReview",
+        cwd: input.cwd,
+        prompt: input.prompt,
+        outputSchema: ApprovalReviewOutput,
+        modelSelection: input.modelSelection,
+      });
+    });
+
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = Effect.fn(
     `${name}.generateReviewGuide`,
   )(function* (input) {
@@ -233,5 +249,6 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generateConversationSummary,
     generateReviewGuide,
     generateTranscriptionPostProcessing,
+    generateApprovalReview,
   } satisfies ProviderTextGeneration;
 }

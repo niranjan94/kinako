@@ -50,7 +50,8 @@ type TextGenerationOp =
   | "generateTurnRecap"
   | "generateConversationSummary"
   | "generateReviewGuide"
-  | "generateTranscriptionPostProcessing";
+  | "generateTranscriptionPostProcessing"
+  | "generateApprovalReview";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -241,6 +242,22 @@ export const make = Effect.gen(function* () {
         null,
         (service, modelSelection) =>
           service.generateTranscriptionPostProcessing({ ...input, modelSelection }),
+      );
+    }),
+    generateApprovalReview: Effect.fn("TextGeneration.generateApprovalReview")(function (input) {
+      return generate(
+        "generateApprovalReview",
+        input.modelSelection,
+        null,
+        (service, modelSelection) =>
+          service.generateApprovalReview === undefined
+            ? Effect.fail(
+                new TextGenerationError({
+                  operation: "generateApprovalReview",
+                  detail: "This model's provider cannot review approvals. Choose another model.",
+                }),
+              )
+            : service.generateApprovalReview({ ...input, modelSelection }),
       );
     }),
     generateThreadTitle: Effect.fn("TextGeneration.generateThreadTitle")(function (input) {

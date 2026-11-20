@@ -107,6 +107,8 @@ import * as ResourceCleanupService from "./ResourceCleanupService.ts";
 import * as ThreadLaunchService from "./ThreadLaunchService.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import * as DelegatedTaskQuestionReactor from "./DelegatedTaskQuestionReactor.ts";
+import * as AutoApprovalReactor from "../autoReview/AutoApprovalReactor.ts";
+import * as ApprovalClassifier from "../autoReview/ApprovalClassifier.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
 const layerPlatformTest = Layer.merge(
@@ -3050,6 +3052,123 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
       const late = yield* verdict("late", approved.requestId, "escalated").pipe(Effect.result);
       assert.equal(late._tag, "Failure");
       assert.deepEqual(yield* requestOf(approved.requestId), accepted);
+    }),
+  );
+
+  it.effect("host review approves by rule, escalates red lines, and asks the model otherwise", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("runtime-host-reactor");
+      const providerSessionId = ProviderSessionId.make("runtime-host-reactor-session");
+      const workspace = process.cwd();
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("runtime-host-reactor-create"),
+        createdBy: "user",
+        creationSource: "web",
+        threadId,
+        projectId: ProjectId.make("runtime-host-reactor-project"),
+        title: "Host reactor",
+        modelSelection,
+        runtimeMode: "host-auto",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: workspace,
+      });
+      const held = (
+        name: string,
+        kind: "command" | "file-read",
+        inspection: { readonly command?: string; readonly paths?: ReadonlyArray<string> },
+      ) => ({
+        id: EventId.make(`runtime-host-reactor-request-${name}`),
+        type: "runtime-request.updated" as const,
+        threadId,
+        nodeId: NodeId.make(`runtime-host-reactor-node-${name}`),
+        occurredAt: now,
+        payload: {
+          id: RuntimeRequestId.make(`runtime-host-reactor-${name}`),
+          nodeId: NodeId.make(`runtime-host-reactor-node-${name}`),
+          providerTurnId: null,
+          nativeRequestRef: null,
+          kind,
+          status: "pending" as const,
+          responseCapability: { type: "live" as const, providerSessionId },
+          createdAt: now,
+          resolvedAt: null,
+          inspection,
+          autoReview: { state: "reviewing" as const },
+        },
+      });
+      const requests = [
+        held("read", "file-read", { paths: [`${workspace}/package.json`] }),
+        held("push", "command", { command: "git push origin main" }),
+        held("deploy", "command", { command: "make deploy" }),
+      ];
+      yield* eventSink.write({
+        commandId: CommandId.make("runtime-host-reactor-seed"),
+        events: [
+          {
+            id: EventId.make("runtime-host-reactor-session-event"),
+            type: "provider-session.attached",
+            threadId,
+            driver,
+            occurredAt: now,
+            payload: {
+              id: providerSessionId,
+              driver,
+              providerInstanceId: modelSelection.instanceId,
+              status: "running",
+              cwd: workspace,
+              model: modelSelection.model,
+              capabilities: CodexProviderCapabilitiesV2,
+              createdAt: now,
+              updatedAt: now,
+              lastError: null,
+            },
+          },
+          ...requests,
+        ],
+      });
+      const classified: Array<string | undefined> = [];
+      const reactor = yield* AutoApprovalReactor.AutoApprovalReactor.pipe(
+        Effect.provide(
+          AutoApprovalReactor.layer.pipe(
+            Layer.provide(
+              Layer.succeed(ApprovalClassifier.ApprovalClassifier, {
+                classify: (input) =>
+                  Effect.sync(() => {
+                    classified.push(input.bundle.proposedAction.command);
+                    return { decision: "allow" as const, reason: "Deploys the docs preview." };
+                  }),
+              }),
+            ),
+            Layer.provide(layerTestProviderInstanceRegistry),
+            Layer.provide(NodeServices.layer),
+          ),
+        ),
+      );
+      for (const request of requests) yield* reactor.review(threadId, request.payload.id);
+
+      const projection = yield* orchestrator.getThreadProjection(threadId);
+      const reviewOf = (name: string) =>
+        projection.runtimeRequests.find(
+          (request) => request.id === RuntimeRequestId.make(`runtime-host-reactor-${name}`),
+        );
+      assert.equal(reviewOf("read")?.status, "resolved");
+      assert.deepEqual(reviewOf("read")?.autoReview, {
+        state: "approved",
+        reason: "Reads files in the workspace.",
+      });
+      assert.equal(reviewOf("push")?.status, "pending");
+      assert.deepEqual(reviewOf("push")?.autoReview, {
+        state: "escalated",
+        reason: "Pushes to a remote repository.",
+      });
+      assert.equal(reviewOf("deploy")?.autoReview?.state, "approved");
+      // Only the request no rule settled reached the model.
+      assert.deepEqual(classified, ["make deploy"]);
     }),
   );
 

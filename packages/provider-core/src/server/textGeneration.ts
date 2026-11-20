@@ -139,6 +139,17 @@ export interface TranscriptionPostProcessingResult {
   transcription: string;
 }
 
+export interface ApprovalReviewInput {
+  cwd: string;
+  prompt: string;
+  modelSelection: ModelSelection;
+}
+
+export interface ApprovalReviewResult {
+  decision: "allow" | "escalate";
+  reason: string;
+}
+
 export interface ProviderTextGeneration {
   readonly generateTurnRecap: (
     input: TurnRecapGenerationInput,
@@ -170,4 +181,8 @@ export interface ProviderTextGeneration {
   readonly generateReviewGuide: (
     input: ReviewGuideGenerationInput,
   ) => Effect.Effect<ReviewGuideGenerationResult, TextGenerationError>;
+  /** Judge one pending approval for host review. Absent where a driver cannot run a free prompt. */
+  readonly generateApprovalReview?: (
+    input: ApprovalReviewInput,
+  ) => Effect.Effect<ApprovalReviewResult, TextGenerationError>;
 }
