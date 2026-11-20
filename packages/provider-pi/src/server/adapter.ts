@@ -438,6 +438,29 @@ function piApprovalRequestKind(title: string): "command" | "file-change" {
     : "command";
 }
 
+// T3's Pi extension sends the tool input as pretty JSON, truncated with a suffix when large.
+function piApprovalInspection(
+  title: string,
+  message: string | undefined,
+): OrchestrationV2RuntimeRequest["inspection"] {
+  let toolInput: unknown = message;
+  if (message !== undefined) {
+    try {
+      toolInput = JSON.parse(message);
+    } catch {
+      toolInput = message;
+    }
+  }
+  const command = recordField(toolInput, "command");
+  const path = recordField(toolInput, "path");
+  return ProviderAdapter.runtimeRequestInspection({
+    toolName: /^Allow (\S+)\?$/.exec(title)?.[1] ?? title,
+    ...(typeof command === "string" ? { command } : {}),
+    paths: [typeof path === "string" ? path : undefined],
+    toolInput,
+  });
+}
+
 /** Pi 1.4.0 rejects prompts with this when they race a compaction it already started. */
 const PI_COMPACTING_PROMPT_REJECTION = "Cannot submit a prompt while compaction is in progress";
 
@@ -1881,6 +1904,10 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
           turn?.turnInput.threadId ?? state?.providerThread.appThreadId ?? input.threadId;
         const providerThreadId = state?.providerThread.id ?? null;
         const providerTurnId = turn?.providerTurn.id ?? null;
+        const inspection =
+          method === "confirm"
+            ? piApprovalInspection(title, recordString(event, "message"))
+            : undefined;
         const runtimeRequest: OrchestrationV2RuntimeRequest = {
           id: requestId,
           nodeId,
@@ -1889,6 +1916,7 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
           kind: method === "confirm" ? "command" : "user_input",
           status: "pending",
           responseCapability: { type: "live", providerSessionId: input.providerSessionId },
+          ...(inspection === undefined ? {} : { inspection }),
           createdAt,
           resolvedAt: null,
         };

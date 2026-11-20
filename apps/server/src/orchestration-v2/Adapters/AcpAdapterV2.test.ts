@@ -7100,7 +7100,13 @@ describe("AcpAdapterV2", () => {
       const permissionFiber = yield* requestPermission(
         {
           sessionId: "mock-session-1",
-          toolCall: { toolCallId: "always-allow-tool", title: "Run tests", kind: "execute" },
+          toolCall: {
+            toolCallId: "always-allow-tool",
+            title: "Run tests",
+            kind: "execute",
+            rawInput: { command: "pnpm test" },
+            locations: [{ path: "/workspace/package.json" }],
+          },
           options,
         },
         { requestId: "always-allow-request", method: "session/request_permission" },
@@ -7120,6 +7126,12 @@ describe("AcpAdapterV2", () => {
       ) {
         return yield* Effect.die("Expected an ACP approval request");
       }
+      assert.deepEqual(pending.runtimeRequest.inspection, {
+        toolName: "execute",
+        command: "pnpm test",
+        paths: ["/workspace/package.json"],
+        toolInputSummary: JSON.stringify({ command: "pnpm test" }),
+      });
       const responseFiber = yield* runtime
         .respondToRuntimeRequest({
           requestId: pending.runtimeRequest.id,

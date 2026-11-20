@@ -1330,6 +1330,11 @@ describe("ClaudeAdapterV2 Auto-accept edits", () => {
       if (first.type !== "request") return;
       const event = first.event.find((event) => event.type === "runtime_request.updated");
       assert.equal(event?.runtimeRequest.kind, "command");
+      assert.deepEqual(event?.runtimeRequest.inspection, {
+        toolName: "Bash",
+        command: command.command,
+        toolInputSummary: JSON.stringify(command),
+      });
       const approval = first.event.findLast((event) => event.type === "turn_item.updated");
       assert.equal(
         approval?.turnItem.type === "approval_request" ? approval.turnItem.prompt : undefined,

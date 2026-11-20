@@ -98,7 +98,11 @@ import {
 } from "@t3tools/provider-core/server/subagentProjection";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
-import { OPENCODE_PROVIDER, openCodePermissionRequestKind } from "../adapter.ts";
+import {
+  OPENCODE_PROVIDER,
+  openCodePermissionInspection,
+  openCodePermissionRequestKind,
+} from "../adapter.ts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import {
   openCodeCodeModeHtmlRenders,
@@ -2591,6 +2595,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
               OrchestrationV2TurnItem,
               { type: "approval_request" }
             >["options"];
+            readonly inspection?: OrchestrationV2RuntimeRequest["inspection"];
           }
         | {
             readonly type: "user_input_request";
@@ -2616,6 +2621,9 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
         kind: body.type === "approval_request" ? body.requestKind : "user_input",
         status: "pending",
         responseCapability: { type: "live", providerSessionId: input.providerSessionId },
+        ...(body.type === "approval_request" && body.inspection !== undefined
+          ? { inspection: body.inspection }
+          : {}),
         createdAt: now,
         resolvedAt: null,
       };
@@ -2703,6 +2711,12 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           type: "approval_request",
           requestKind: openCodePermissionRequestKind(data.action, toolName),
           prompt: data.resources.length === 0 ? data.action : data.resources.join("\n"),
+          inspection: openCodePermissionInspection({
+            permission: data.action,
+            toolName,
+            patterns: data.resources,
+            metadata: data.metadata,
+          }),
           options: [
             { decision: "cancel", label: "Cancel" },
             { decision: "decline", label: "Decline" },
