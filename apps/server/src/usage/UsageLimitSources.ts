@@ -156,7 +156,7 @@ export const make = Effect.gen(function* () {
           ? instance.environment?.find(({ name }) => name === "ANTHROPIC_AUTH_TOKEN")?.value
           : undefined;
       const managementKey = reachable ? yield* readManagementKey(config) : "";
-      const apiKey = yield* api.readClientApiKey(
+      const access = yield* api.readClaudeAccess(
         { url: config.url, managementKey },
         typeof existingKey === "string" && existingKey !== ""
           ? Redacted.make(existingKey)
@@ -169,7 +169,8 @@ export const make = Effect.gen(function* () {
         instanceId,
         endpoint,
         label,
-        apiKey,
+        apiKey: access?.apiKey,
+        models: access?.models,
       });
     },
     Effect.catch((error) =>

@@ -793,7 +793,9 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     claudeProviderModels(
       [
         ...resolveClaudeModelsForVersion(modelCatalog, parsedVersion),
-        ...claudeReportedModels(modelCatalog, claudeSettings.customModels, capabilities?.models),
+        ...(claudeSettings.hubModels === undefined
+          ? claudeReportedModels(modelCatalog, claudeSettings.customModels, capabilities?.models)
+          : []),
       ],
       claudeSettings.customModels,
     ),
@@ -901,8 +903,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       status: "ready",
       auth: {
         status: "authenticated",
-        ...(capabilities.email ? { email: capabilities.email } : {}),
-        ...(capabilities.workspaceId ? { workspaceId: capabilities.workspaceId } : {}),
+        ...(claudeSettings.hubModels === undefined && capabilities.email
+          ? { email: capabilities.email }
+          : {}),
+        ...(claudeSettings.hubModels === undefined && capabilities.workspaceId
+          ? { workspaceId: capabilities.workspaceId }
+          : {}),
         ...(authMetadata ? authMetadata : {}),
       },
       ...(versionUpgradeMessage ? { message: versionUpgradeMessage } : {}),

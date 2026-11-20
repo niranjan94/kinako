@@ -408,6 +408,8 @@ export function buildModelOptions(
       ? { driver: provider.driver, updateRequiredModels: provider.updateRequiredModels }
       : undefined;
     const preferences = config?.settings?.providerModelPreferences?.[provider.instanceId];
+    const hubManaged =
+      config?.settings?.providerInstances?.[provider.instanceId]?.claudeHub !== undefined;
     const hiddenModels = new Set(preferences?.hiddenModels ?? []);
     const order = new Map((preferences?.modelOrder ?? []).map((slug, index) => [slug, index]));
     const models = provider.models.filter(
@@ -432,7 +434,7 @@ export function buildModelOptions(
           : { supportedRuntimeModes: provider.supportedRuntimeModes }),
         ...(provider.iconUrl ? { providerIconUrl: provider.iconUrl } : {}),
         isHidden: !model.isCustom && hiddenModels.has(model.slug),
-        canHide: !model.isCustom,
+        canHide: !model.isCustom && !hubManaged,
         isDefault: model.isDefault === true,
         isLegacy: model.isLegacy === true,
         ...(updateRequired ? { providerUpdateRequired: updateRequired } : {}),

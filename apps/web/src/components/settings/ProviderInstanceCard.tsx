@@ -19,7 +19,6 @@ import * as Result from "effect/Result";
 import { Fragment, useState, type ReactElement, type ReactNode } from "react";
 import { T, useGT, useMessages, Var } from "gt-react";
 import {
-  CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES,
   isProviderDriverKind,
   resolveProviderInstanceEnabled,
   type ProviderInstanceConfig,
@@ -360,17 +359,12 @@ export function ProviderEnvironmentSection(props: {
   readonly onChange: (environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>) => void;
   /** Variables an administrator's policy pins: listed by name, never editable or removable. */
   readonly managed?: { readonly names: ReadonlySet<string>; readonly reason: string } | undefined;
-  readonly claudeHubManaged?: boolean;
   readonly secretSources?: ReadonlyArray<SecretSource>;
   readonly environmentId?: EnvironmentId | undefined;
 }) {
   const gt = useGT();
   const managedReason = (name: string) =>
-    props.claudeHubManaged && CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES.has(name.toUpperCase())
-      ? gt("Managed by {organization}.", { organization: "CLIProxyAPI" })
-      : props.managed?.names.has(name)
-        ? props.managed.reason
-        : undefined;
+    props.managed?.names.has(name) ? props.managed.reason : undefined;
   const [storedDraft, setDraft] = useState(() =>
     seedRowsDraft(props.environment, toEnvironmentDraftRows),
   );
@@ -827,6 +821,7 @@ export function ProviderInstanceCard({
 }: ProviderInstanceCardProps) {
   const gt = useGT();
   const m = useMessages();
+  const hubManaged = instance.claudeHub !== undefined;
   const enabled = projectOverride?.effectiveEnabled ?? resolveProviderInstanceEnabled(instance);
   const effectiveProvider = liveProvider && { ...liveProvider, enabled };
   const compatibility = enabled ? liveProvider?.compatibilityAdvisory : undefined;
@@ -866,11 +861,12 @@ export function ProviderInstanceCard({
     compatibility.status !== "supported" &&
     compatibility.status !== "unknown";
   const VersionAdvisoryIcon = hasCompatibilityWarning ? AlertTriangleIcon : ArrowUpCircleIcon;
-  const onRunVersionAction = readOnly
-    ? undefined
-    : versionAdvisory?.targetVersion
-      ? onInstallRecommended
-      : onRunUpdate;
+  const onRunVersionAction =
+    readOnly || hubManaged
+      ? undefined
+      : versionAdvisory?.targetVersion
+        ? onInstallRecommended
+        : onRunUpdate;
   const urlAuthAction = liveProvider?.auth.action;
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
@@ -1243,31 +1239,35 @@ export function ProviderInstanceCard({
             </span>
           </span>
         </div>
-        <span className="pointer-events-none relative flex h-5 shrink-0 items-center gap-1 *:pointer-events-auto">
-          {projectOverride?.value !== undefined ? (
-            <span className="flex items-center">
-              <ProjectOverrideInheritance
-                projectEnabled={projectOverride.value}
-                deviceEnabled={resolveProviderInstanceEnabled(instance)}
+        {hubManaged ? null : (
+          <span className="pointer-events-none relative flex h-5 shrink-0 items-center gap-1 *:pointer-events-auto">
+            {projectOverride?.value !== undefined ? (
+              <span className="flex items-center">
+                <ProjectOverrideInheritance
+                  projectEnabled={projectOverride.value}
+                  deviceEnabled={resolveProviderInstanceEnabled(instance)}
+                />
+                <SettingResetButton
+                  ariaLabel={gt("Reset {provider} enablement to default", {
+                    provider: displayName,
+                  })}
+                  tooltip={gt("Reset to the device setting")}
+                  disabled={readOnly || !canWriteSettings}
+                  onClick={projectOverride.onReset}
+                />
+              </span>
+            ) : null}
+            {/* The policy refuses switching it on; switching it off stays the user's call. */}
+            <ManagedControl reason={enabled ? undefined : managedDriverReason}>
+              <Switch
+                checked={enabled}
+                disabled={readOnly || (projectOverride !== undefined && !canWriteSettings)}
+                onCheckedChange={(checked) => updateEnabled(Boolean(checked))}
+                aria-label={gt("Enable {provider}", { provider: displayName })}
               />
-              <SettingResetButton
-                ariaLabel={gt("Reset {provider} enablement to default", { provider: displayName })}
-                tooltip={gt("Reset to the device setting")}
-                disabled={readOnly || !canWriteSettings}
-                onClick={projectOverride.onReset}
-              />
-            </span>
-          ) : null}
-          {/* The policy refuses switching it on; switching it off stays the user's call. */}
-          <ManagedControl reason={enabled ? undefined : managedDriverReason}>
-            <Switch
-              checked={enabled}
-              disabled={readOnly || (projectOverride !== undefined && !canWriteSettings)}
-              onCheckedChange={(checked) => updateEnabled(Boolean(checked))}
-              aria-label={gt("Enable {provider}", { provider: displayName })}
-            />
-          </ManagedControl>
-        </span>
+            </ManagedControl>
+          </span>
+        )}
       </div>
     );
   }
@@ -1288,7 +1288,7 @@ export function ProviderInstanceCard({
         className={cn("inline-flex items-center gap-1 empty:hidden", readOnly && "opacity-50")}
       >
         {titleTailNode}
-        {onDelete && !instance.claudeHub ? (
+        {onDelete ? (
           <Button
             type="button"
             size="icon-xs"
@@ -1320,7 +1320,7 @@ export function ProviderInstanceCard({
           {restartNotice}
         </p>
       ) : null}
-      {urlAuthAction && onAcceptUrlAuth ? (
+      {!hubManaged && urlAuthAction && onAcceptUrlAuth ? (
         <div className="grid max-w-xl gap-1.5 pt-1 text-xs">
           <p>{urlAuthAction.message}</p>
           <code className="break-all text-2xs">{urlAuthAction.url}</code>
@@ -1345,6 +1345,20 @@ export function ProviderInstanceCard({
       ) : null}
     </>
   );
+
+  if (hubManaged) {
+    return (
+      <SettingsSection title={displayName} icon={titleIconNode}>
+        <SettingsRow
+          title={gt("Status")}
+          status={statusContent}
+          description={
+            <span>{gt("Managed by {organization}.", { organization: "CLIProxyAPI" })}</span>
+          }
+        />
+      </SettingsSection>
+    );
+  }
 
   const runtimeFields = driverOption ? (
     <ProviderSettingsForm
@@ -1430,9 +1444,7 @@ export function ProviderInstanceCard({
                     instanceLocks?.wholeEnvironment ||
                     instanceLocks?.environmentNames.has(field.name)
                       ? instanceLocks.reason
-                      : instance.claudeHub && CLAUDE_HUB_MANAGED_ENVIRONMENT_NAMES.has(field.name)
-                        ? gt("Managed by {organization}.", { organization: "CLIProxyAPI" })
-                        : undefined
+                      : undefined
                   }
                   secretSources={secretSources}
                   environmentId={environmentId}
@@ -1484,7 +1496,6 @@ export function ProviderInstanceCard({
             onChange={updateGenericEnvironment}
             secretSources={secretSources}
             environmentId={environmentId}
-            claudeHubManaged={instance.claudeHub !== undefined}
             managed={
               instanceLocks && {
                 names: instanceLocks.environmentNames,

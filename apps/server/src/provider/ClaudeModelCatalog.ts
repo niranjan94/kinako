@@ -124,6 +124,37 @@ export function resolveClaudeModelCatalog(
 
 export const BUNDLED_CLAUDE_MODEL_CATALOG = resolveClaudeModelCatalog(undefined);
 
+export function scopeClaudeHubModelCatalog(
+  catalog: ClaudeModelCatalog,
+  modelIds: ReadonlyArray<string>,
+): ClaudeModelCatalog {
+  const idsBySlug = new Map<string, string[]>();
+  for (const id of modelIds) {
+    const slug = resolveClaudeReportedModelSlug(catalog, id);
+    const ids = idsBySlug.get(slug);
+    if (ids) ids.push(id);
+    else idsBySlug.set(slug, [id]);
+  }
+  return {
+    models: Array.from(idsBySlug, ([slug, ids]) => {
+      const entry = resolveClaudeCatalogModel(catalog, slug);
+      const aliases = ids.filter((id) => id !== slug);
+      return {
+        model: {
+          slug,
+          name: entry?.model.name ?? slug,
+          ...(aliases.length > 0 ? { aliases } : {}),
+          isCustom: false,
+          capabilities: entry?.model.capabilities ?? null,
+        },
+        runtime: entry?.runtime ?? {},
+        compatibility: entry?.compatibility ?? {},
+        apiModel: ids.find((id) => id === slug) ?? ids[0]!,
+      };
+    }),
+  };
+}
+
 export function scopeClaudeModelCatalog(
   catalog: ClaudeModelCatalog,
   customModels: ReadonlyArray<CustomModelSetting>,

@@ -2,8 +2,10 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
+  ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  resolveProjectProviderInstanceEnabled,
   SecretProviderId,
   ServerConfigStreamEvent,
   UsageLimitSourceId,
@@ -318,6 +320,7 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
     const modelAuthorizations: Array<string | undefined> = [];
     let reachable = false;
     let clientKey = "client-key";
+    let hubModels = ["claude-sonnet-4-6", "hub-only"];
     return yield* Effect.gen(function* () {
       const settings = yield* ServerSettings.ServerSettingsService;
       const { settingsPath } = yield* ServerConfig.ServerConfig;
@@ -334,8 +337,21 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
           [defaultInstanceId]: {
             driver: ProviderDriverKind.make("claudeAgent"),
             displayName: "Personal Claude",
+            config: {
+              binaryPath: "/opt/claude",
+              homePath: "~/.claude-work",
+              customModels: [{ slug: "personal-only", name: "Personal model" }],
+            },
+            environment: [
+              { name: "ANTHROPIC_UNIX_SOCKET", value: "/tmp/personal.sock", sensitive: false },
+              { name: "CLAUDE_CODE_HOST_AUTH_ENV_VAR", value: "PERSONAL_TOKEN", sensitive: false },
+              { name: "CLAUDE_CONFIG_DIR", value: "~/.claude-work", sensitive: false },
+            ],
           },
         },
+        setModelFavorites: [
+          { provider: defaultInstanceId, model: "claude-sonnet-4-6", favorite: true },
+        ],
         usageLimitSources: { [sourceId]: sourceConfig },
       });
       const sources = yield* UsageLimitSources.make;
@@ -368,12 +384,25 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
       expect(entries).toHaveLength(1);
       const [instanceId, instance] = entries[0]!;
       expect(instance).toMatchObject({ driver: "claudeAgent", displayName: "Claude (Home hub)" });
+      expect(instance.config).toMatchObject({
+        binaryPath: "/opt/claude",
+        homePath: "~/.claude-work",
+        hubModels,
+        customModels: [],
+      });
+      expect(configured.favorites).toContainEqual({
+        provider: instanceId,
+        model: "claude-sonnet-4-6",
+      });
       expect(instance.environment).toEqual(
         expect.arrayContaining([
           { name: "ANTHROPIC_BASE_URL", value: "https://hub.test/proxy", sensitive: false },
           { name: "CLAUDE_CODE_USE_ANTHROPIC_AWS", value: "", sensitive: false },
           { name: "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", value: "", sensitive: false },
           { name: "CLAUDE_CODE_USE_MANTLE", value: "", sensitive: false },
+          { name: "ANTHROPIC_UNIX_SOCKET", value: "", sensitive: false },
+          { name: "CLAUDE_CODE_HOST_AUTH_ENV_VAR", value: "", sensitive: false },
+          { name: "CLAUDE_CONFIG_DIR", value: "~/.claude-work", sensitive: false },
           expect.objectContaining({
             name: "ANTHROPIC_AUTH_TOKEN",
             value: "client-key",
@@ -392,23 +421,55 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
       expect(JSON.stringify(yield* sources.current)).not.toContain("client-key");
 
       const id = ProviderInstanceId.make(instanceId);
+      const projectId = ProjectId.make("hub-project");
       const token = (settings: typeof configured) =>
         settings.providerInstances[id]?.environment?.find(
           (variable) => variable.name === "ANTHROPIC_AUTH_TOKEN",
         )?.value;
-      const edited = yield* settings.updateProviderInstance({
-        operation: "upsert",
-        instanceId: id,
-        instance: {
-          ...instance,
-          displayName: "Edited Claude",
-          environment: [
-            { name: "ANTHROPIC_BASE_URL", value: "https://other.test", sensitive: false },
-            { name: "anthropic_auth_token", value: "replacement", sensitive: false },
-          ],
+      const editedInstance = {
+        ...instance,
+        displayName: "Edited Claude",
+        enabled: false,
+        config: { binaryPath: "/opt/other-claude" },
+        environment: [
+          { name: "ANTHROPIC_BASE_URL", value: "https://other.test", sensitive: false },
+          { name: "anthropic_auth_token", value: "replacement", sensitive: false },
+        ],
+      };
+      const editError = yield* settings
+        .updateProviderInstance({ operation: "upsert", instanceId: id, instance: editedInstance })
+        .pipe(Effect.flip);
+      expect(editError.operation).toBe("write-managed-setting");
+      const effort = { id: "effort", value: "high" };
+      const edited = yield* settings.updateSettings({
+        providerInstances: {
+          [id]: editedInstance,
+          [defaultInstanceId]: {
+            driver: instance.driver,
+            config: { binaryPath: "/opt/claude-next" },
+          },
         },
+        projectSettingsOverrides: {
+          [projectId]: {
+            providerInstances: { [defaultInstanceId]: { enabled: false }, [id]: { enabled: true } },
+          },
+        },
+        setModelFavorites: [{ provider: id, model: "claude-sonnet-4-6", favorite: false }],
+        setModelEffortDefaults: [
+          { provider: defaultInstanceId, model: "claude-sonnet-4-6", effort },
+        ],
       });
-      expect(edited.providerInstances[id]?.displayName).toBe("Edited Claude");
+      expect(edited.providerInstances[id]?.displayName).toBe("Claude (Home hub)");
+      expect(edited.providerInstances[id]?.enabled).not.toBe(false);
+      expect(resolveProjectProviderInstanceEnabled(edited, projectId, id)).toBe(false);
+      expect(resolveProjectProviderInstanceEnabled(edited, null, id)).toBe(true);
+      expect(edited.providerInstances[id]?.config).toMatchObject({
+        binaryPath: "/opt/claude-next",
+      });
+      expect(edited.favorites).toEqual([]);
+      expect(edited.providerModelPreferences?.[id]?.defaultEfforts?.["claude-sonnet-4-6"]).toEqual(
+        effort,
+      );
       expect(edited.providerInstances[id]?.environment).toEqual(
         expect.arrayContaining([
           { name: "ANTHROPIC_BASE_URL", value: "https://hub.test/proxy", sensitive: false },
@@ -421,6 +482,29 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
         "Bearer client-key",
       ]);
 
+      const shared = yield* settings.updateSettings({
+        setModelFavorites: [{ provider: id, model: "hub-only", favorite: true }],
+        setModelEffortDefaults: [{ provider: id, model: "claude-sonnet-4-6", effort: null }],
+      });
+      expect(shared.favorites).toEqual([
+        { provider: defaultInstanceId, model: "hub-only" },
+        { provider: id, model: "hub-only" },
+      ]);
+      expect(shared.providerModelPreferences?.[defaultInstanceId]?.defaultEfforts).toEqual({});
+      expect(shared.providerModelPreferences?.[id]?.defaultEfforts).toEqual({});
+
+      const modelChanges = yield* settings.subscribeChanges;
+      hubModels = ["claude-sonnet-4-6", "new-hub-model"];
+      yield* sources.refresh;
+      yield* modelChanges.pipe(
+        Stream.filter(
+          (next) =>
+            next.providerInstances[id]?.claudeHub?.models?.includes("new-hub-model") === true,
+        ),
+        Stream.runHead,
+        Effect.flatMap(Effect.fromOption),
+      );
+
       clientKey = "rotated-key";
       const rotation = yield* settings.subscribeChanges;
       yield* sources.refresh;
@@ -429,7 +513,7 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
         Stream.runHead,
         Effect.flatMap(Effect.fromOption),
       );
-      expect(rotated.providerInstances[id]?.displayName).toBe("Edited Claude");
+      expect(rotated.providerInstances[id]?.displayName).toBe("Claude (Home hub)");
       expect(yield* fs.readFileString(settingsPath)).not.toContain(clientKey);
 
       reachable = false;
@@ -450,9 +534,11 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
         Stream.runHead,
         Effect.flatMap(Effect.fromOption),
       );
-      expect(recovered.providerInstances[id]?.displayName).toBe("Edited Claude");
+      expect(recovered.providerInstances[id]?.displayName).toBe("Claude (Home hub)");
       const removed = yield* settings.updateSettings({ usageLimitSources: { [sourceId]: null } });
-      expect(removed.providerInstances).toEqual(before.providerInstances);
+      expect(removed.providerInstances).toEqual({
+        [defaultInstanceId]: edited.providerInstances[defaultInstanceId],
+      });
       const rejected = yield* settings
         .updateProviderInstance({
           operation: "upsert",
@@ -490,7 +576,7 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
                 modelAuthorizations.push(authorization);
                 const response =
                   reachable && authorization === `Bearer ${clientKey}`
-                    ? Response.json({ data: [{ id: "claude-sonnet-4-6" }] })
+                    ? Response.json({ data: hubModels.map((id) => ({ id })) })
                     : Response.json({}, { status: 401 });
                 return HttpClientResponse.fromWeb(request, response);
               }

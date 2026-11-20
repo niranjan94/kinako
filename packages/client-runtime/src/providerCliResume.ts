@@ -1,6 +1,7 @@
 import {
   ClaudeSettings,
   CodexSettings,
+  isClaudeHubInstanceId,
   type ExecutionEnvironmentPlatformOs,
   type OrchestrationV2ThreadShellNativeThread,
   type ProviderInstanceConfig,
@@ -98,6 +99,7 @@ function resolveResumeInvocation(
   instance: ProviderInstanceConfig | undefined,
 ): ResumeInvocation | null {
   if (nativeThread.driver === "claudeAgent") {
+    if (instance?.claudeHub || isClaudeHubInstanceId(nativeThread.providerInstanceId)) return null;
     // `--resume-session-at` is ignored by the interactive CLI, so a pending
     // rollback would come back with the discarded turns.
     if (nativeThread.conversationHeadId !== null) return null;

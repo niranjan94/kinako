@@ -5727,6 +5727,7 @@ export interface ClaudeAdapterV2Options {
   readonly onUsageLimits?: ManagedServerProvider["applyUsageLimits"];
   /** Claude config directory whose transcripts this instance resumes. */
   readonly configDir?: string;
+  readonly previousConfigDir?: string;
   /**
    * Called with the requested cwd on a process's first init message, after its synchronous
    * SessionStart hooks have run, so cwd-keyed workspace scans can be refreshed.
@@ -14433,9 +14434,21 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 const transcript = yield* claudeTranscriptState(nativeThreadId).pipe(
                   Effect.orElseSucceed(() => "missing" as const),
                 );
+                // Older hub instances stored native history in a separate Claude home.
+                const previousConfigDir = adapterOptions.previousConfigDir;
+                const relocatedHubTranscript =
+                  transcript === "missing" &&
+                  previousConfigDir !== undefined &&
+                  (yield* claudeSessionTranscriptExists({
+                    fileSystem,
+                    path,
+                    configDir: previousConfigDir,
+                    nativeThreadId,
+                  }));
                 // Opening a missing imported session would start an empty one under its id.
                 if (
                   transcript === "empty" ||
+                  relocatedHubTranscript ||
                   (transcript === "missing" && threadInput.importedNativeSession === true)
                 ) {
                   return yield* new ProviderAdapter.ProviderAdapterProtocolError({
@@ -15016,6 +15029,9 @@ export const createClaudeAdapterV2 = Effect.fn("ClaudeAdapterV2Driver.create")(
       settings: { ...config, enabled, binaryPath },
       environment: claudeEnvironment,
       configDir: yield* resolveClaudeHomePath(config, claudeEnvironment),
+      ...(config.hubModels === undefined
+        ? {}
+        : { previousConfigDir: path.join(serverConfig.stateDir, "claude-homes", instanceId) }),
       attachmentsDir: serverConfig.attachmentsDir,
       fileSystem,
       path,

@@ -89,6 +89,7 @@ export const ProviderInstanceConfig = Schema.Struct({
       sourceId: UsageLimitSourceId,
       sourceUrl: Schema.String,
       available: Schema.Boolean,
+      models: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
     }),
   ),
   config: Schema.optionalKey(Schema.Unknown),
@@ -119,3 +120,5 @@ export type ProviderInstanceConfigMap = typeof ProviderInstanceConfigMap.Type;
 /** Driver-kind ids keep stored selections routable without migration. */
 export const defaultInstanceIdForDriver = (driver: ProviderDriverKind): ProviderInstanceId =>
   ProviderInstanceId.make(driver);
+
+export const isClaudeHubInstanceId = (id: string): boolean => /^claude-hub-[0-9a-f]{24}$/.test(id);
