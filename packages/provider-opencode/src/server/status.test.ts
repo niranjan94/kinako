@@ -938,6 +938,7 @@ it.layer(layerTest)("checkOpenCodeProviderStatus", (it) => {
         "approval-required",
         "auto-accept-edits",
         "auto",
+        "host-auto",
         "full-access",
       ]);
       NodeAssert.equal(snapshot.showInteractionModeToggle, true);
@@ -1168,6 +1169,7 @@ it.layer(layerTest)("checkOpenCodeProviderStatus with configured server URL", (i
         "approval-required",
         "auto-accept-edits",
         "auto",
+        "host-auto",
         "full-access",
       ]);
       NodeAssert.equal(runtimeMock.state.sdkClientInputs.length, 0);

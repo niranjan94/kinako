@@ -362,7 +362,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       const supportedModes = harness.provider.snapshot.getSnapshot.pipe(
         Effect.map((snapshot) => snapshot.supportedRuntimeModes),
       );
-      const withoutAuto = ["approval-required", "auto-accept-edits", "full-access"];
+      const withoutAuto = ["approval-required", "auto-accept-edits", "host-auto", "full-access"];
       const startedWithAuto = {
         ...started,
         sessionSetupResult: {
@@ -382,6 +382,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
         "approval-required",
         "auto-accept-edits",
         "auto",
+        "host-auto",
         "full-access",
       ]);
       yield* harness.provider.onSessionStarted(started);
