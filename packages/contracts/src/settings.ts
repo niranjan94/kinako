@@ -1058,7 +1058,7 @@ export class TextGeneratorError extends Schema.TaggedError<TextGeneratorError>()
 export const DecisionApiKind = Schema.Literals(["systemOne"]);
 export type DecisionApiKind = typeof DecisionApiKind.Type;
 
-const DEFAULT_SYSTEM_ONE_BASE_URL = "https://api.typesafe.ai";
+export const DEFAULT_SYSTEM_ONE_BASE_URL = "https://api.typesafe.ai";
 
 export const DecisionApiConfig = Schema.Struct({
   kind: DecisionApiKind,

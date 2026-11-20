@@ -71,6 +71,7 @@ import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeConte
 import { scopedIdleCompaction } from "./scopedSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { ThreadTitleInstructionsSettings } from "./ThreadTitleInstructionsSettings";
+import { AutoReviewSettingsSection } from "./AutoReviewSettings";
 import { SnoozePresetsRow } from "./SnoozePresetsSettings";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import { managedTelemetryOffMessage, usePrimaryManagedPolicy } from "../../state/managedPolicy";
@@ -488,6 +489,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
+  const isAutoReviewModelDirty = settings.autoReviewModelSelection !== null;
 
   const changedSettingLabels = [
     ...(theme !== "system" ? [gt("Theme")] : []),
@@ -644,6 +646,18 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.threadTitleInstructions !== DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions
       ? [gt("Thread title instructions")]
       : []),
+    ...(settings.autoReviewRulesOnly !== DEFAULT_UNIFIED_SETTINGS.autoReviewRulesOnly
+      ? [gt("Rules only")]
+      : []),
+    ...(isAutoReviewModelDirty ? [gt("Reviewer model")] : []),
+    ...(settings.autoReviewConfidenceThreshold !==
+    DEFAULT_UNIFIED_SETTINGS.autoReviewConfidenceThreshold
+      ? [gt("Reviewer confidence")]
+      : []),
+    ...(settings.autoReviewPolicyInstructions !==
+    DEFAULT_UNIFIED_SETTINGS.autoReviewPolicyInstructions
+      ? [gt("Reviewer instructions")]
+      : []),
     ...getChangedBrowserSettingLabels(settings, messages),
     ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
       ? [gt("Agent browser access")]
@@ -759,6 +773,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       threadTitleInstructions: DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions,
+      autoReviewRulesOnly: DEFAULT_UNIFIED_SETTINGS.autoReviewRulesOnly,
+      autoReviewModelSelection: DEFAULT_UNIFIED_SETTINGS.autoReviewModelSelection,
+      autoReviewConfidenceThreshold: DEFAULT_UNIFIED_SETTINGS.autoReviewConfidenceThreshold,
+      autoReviewPolicyInstructions: DEFAULT_UNIFIED_SETTINGS.autoReviewPolicyInstructions,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
       fontFamilyCode: DEFAULT_UNIFIED_SETTINGS.fontFamilyCode,
@@ -2395,6 +2413,8 @@ export function ThreadsSettingsPanel() {
           />
         </AdvancedSettings>
       </SettingsSection>
+
+      <AutoReviewSettingsSection />
     </SettingsPageContainer>
   );
 }
