@@ -336,7 +336,8 @@ const requiredScopesForRpcCall = (
   if (
     (method === WS_METHODS.deviceSimlockIdentity ||
       method === WS_METHODS.deviceEasAccount ||
-      method === WS_METHODS.serverListTextGeneratorModels) &&
+      method === WS_METHODS.serverListTextGeneratorModels ||
+      method === WS_METHODS.serverListDecisionApiModels) &&
     containsSecretReference(payload)
   ) {
     return [AuthSettingsWriteScope, AuthProvidersManageScope];

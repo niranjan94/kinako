@@ -468,6 +468,8 @@ import {
   ClientServerSettingsPatch,
   ListTextGeneratorModelsInput,
   ListTextGeneratorModelsResult,
+  ListDecisionApiModelsInput,
+  ListDecisionApiModelsResult,
   TextGeneratorError,
 } from "./settings.ts";
 import {
@@ -663,6 +665,7 @@ export const WS_METHODS = {
   serverRetryResourceTelemetry: "server.retryResourceTelemetry",
   serverCheckOtlpEndpoint: "server.checkOtlpEndpoint",
   serverListTextGeneratorModels: "server.listTextGeneratorModels",
+  serverListDecisionApiModels: "server.listDecisionApiModels",
   serverPrepareTriage: "server.prepareTriage",
   serverSignalProcess: "server.signalProcess",
   serverReportClientActivity: "server.reportClientActivity",
@@ -1220,6 +1223,12 @@ const WsServerCheckOtlpEndpointRpc = Rpc.make(WS_METHODS.serverCheckOtlpEndpoint
 const WsServerListTextGeneratorModelsRpc = Rpc.make(WS_METHODS.serverListTextGeneratorModels, {
   payload: ListTextGeneratorModelsInput,
   success: ListTextGeneratorModelsResult,
+  error: Schema.Union([TextGeneratorError, EnvironmentAuthorizationError]),
+});
+
+const WsServerListDecisionApiModelsRpc = Rpc.make(WS_METHODS.serverListDecisionApiModels, {
+  payload: ListDecisionApiModelsInput,
+  success: ListDecisionApiModelsResult,
   error: Schema.Union([TextGeneratorError, EnvironmentAuthorizationError]),
 });
 
@@ -2700,6 +2709,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRetryResourceTelemetryRpc,
   WsServerCheckOtlpEndpointRpc,
   WsServerListTextGeneratorModelsRpc,
+  WsServerListDecisionApiModelsRpc,
   WsServerPrepareTriageRpc,
   WsServerGetUsageSummaryRpc,
   WsServerGetUsageQuotaHistoryRpc,
