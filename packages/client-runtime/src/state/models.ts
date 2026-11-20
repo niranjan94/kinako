@@ -328,10 +328,12 @@ export function presentThreadShell(
     ...(thread.latestUserAuthoredMessageAt === undefined
       ? {}
       : { latestUserAuthoredMessageAt: nullableIso(thread.latestUserAuthoredMessageAt) }),
+    // A request the host reviewer still holds does not need the user yet.
     hasPendingApprovals:
       thread.pendingRuntimeRequest !== null &&
       thread.pendingRuntimeRequest.kind !== "user_input" &&
-      thread.pendingRuntimeRequest.kind !== "auth_refresh",
+      thread.pendingRuntimeRequest.kind !== "auth_refresh" &&
+      thread.pendingRuntimeRequest.autoReview !== "reviewing",
     // Async questions count too, so a thread with any open question leaves Working.
     hasPendingUserInput: thread.pendingRuntimeRequest?.kind === "user_input",
     pendingUserInputAt:

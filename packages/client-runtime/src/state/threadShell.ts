@@ -118,6 +118,7 @@ function subagentRequest(thread: OrchestrationV2ThreadShell): PendingSubagentReq
   if (
     kind === undefined ||
     kind === "auth_refresh" ||
+    thread.pendingRuntimeRequest?.autoReview === "reviewing" ||
     (thread.lineage.relationshipToParent !== "subagent" && thread.delegatedFrom === undefined) ||
     isProviderNativeSubagentThread(thread) ||
     !isChildRunLive(thread)
@@ -141,7 +142,12 @@ const rolledUpRequest = (
 /** A side chat asks its user directly, so questions roll up to the parent as well as approvals. */
 function sideChatRequest(thread: OrchestrationV2ThreadShell): PendingSubagentRequest | null {
   const kind = thread.pendingRuntimeRequest?.kind;
-  if (kind === undefined || kind === "auth_refresh" || thread.lineage.sideChat !== true) {
+  if (
+    kind === undefined ||
+    kind === "auth_refresh" ||
+    thread.pendingRuntimeRequest?.autoReview === "reviewing" ||
+    thread.lineage.sideChat !== true
+  ) {
     return null;
   }
   return kind === "user_input" ? "user_input" : "approval";

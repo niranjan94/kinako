@@ -89,6 +89,7 @@ import {
   TrimmedNonEmptyString,
   managedRuntimeModeCeilingMessage,
 } from "@t3tools/contracts";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { modelSelectionsEqual, withModelEffortDefault } from "@t3tools/shared/model";
 import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
@@ -12007,6 +12008,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                       ]),
                     ),
                   },
+                }
+              : {}),
+            // The timeline labels an approval by its title, so a host review shows as the audit.
+            ...(autoReview?.state === "approved" && approvalTurnItem.type === "approval_request"
+              ? {
+                  title: `Approved by ${FORK_DISPLAY_NAME} Auto${autoReview.reason === undefined ? "" : `: ${autoReview.reason}`}`,
                 }
               : {}),
             status: resolvedNodeStatus,

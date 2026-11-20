@@ -95,7 +95,12 @@ function pendingQuestionAt(shell: ThreadSnoozeShell): string | null {
  */
 export function threadRaisedHandWhileSnoozed(shell: ThreadSnoozeShell): boolean {
   const request = shell.source?.pendingRuntimeRequest;
-  if (shell.hasPendingApprovals || (request != null && request.kind !== "user_input")) return true;
+  if (
+    shell.hasPendingApprovals ||
+    (request != null && request.kind !== "user_input" && request.autoReview !== "reviewing")
+  ) {
+    return true;
+  }
   const questionAt = pendingQuestionAt(shell);
   // Snoozing an existing question means "ask me later". Only a new question
   // wakes it early; missing or invalid timestamps keep the request visible.

@@ -2,8 +2,9 @@ import {
   FULL_ACCESS_OVERRIDE_QUESTION,
   fullAccessOverrideExplanation,
 } from "@t3tools/client-runtime/state/thread-requests";
-import { msg, T, useMessages } from "gt-react";
-import { ShieldIcon } from "lucide-react";
+import { msg, T, useMessages, Var } from "gt-react";
+import { BotIcon, ShieldIcon } from "lucide-react";
+import { APP_BASE_NAME } from "~/branding";
 import { memo, use } from "react";
 import { type PendingApproval } from "../../session-logic";
 import { InlineButton } from "../ui/button";
@@ -49,6 +50,9 @@ export const TimelinePendingApprovalRow = memo(function TimelinePendingApprovalR
   const m = useMessages();
   const presentation = APPROVAL_PRESENTATION[approval.requestKind];
   const canRespond = approval.responseCapability === "live";
+  const reviewing = approval.autoReview?.state === "reviewing";
+  const escalationReason =
+    approval.autoReview?.state === "escalated" ? approval.autoReview.reason : undefined;
   return (
     <WorkLogRow
       role="group"
@@ -81,13 +85,33 @@ export const TimelinePendingApprovalRow = memo(function TimelinePendingApprovalR
         {approval.reason ? (
           <span className="text-muted-foreground select-text wrap-anywhere">{approval.reason}</span>
         ) : null}
+        {escalationReason ? (
+          <span className="inline-flex min-w-0 items-start gap-1 text-muted-foreground wrap-anywhere">
+            <BotIcon aria-hidden className="mt-0.5 size-3 shrink-0" />
+            <T>
+              <Var>{APP_BASE_NAME}</Var> Auto asked you:{" "}
+              <span className="select-text">
+                <Var>{escalationReason}</Var>
+              </span>
+            </T>
+          </span>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {canRespond ? (
             <>
-              <span className="inline-flex items-center gap-1 text-warning">
-                <ShieldIcon aria-hidden className="size-3 shrink-0" />
-                <T>Waiting for approval</T>
-              </span>
+              {reviewing ? (
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <BotIcon aria-hidden className="size-3 shrink-0" />
+                  <T>
+                    <Var>{APP_BASE_NAME}</Var> Auto is reviewing
+                  </T>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-warning">
+                  <ShieldIcon aria-hidden className="size-3 shrink-0" />
+                  <T>Waiting for approval</T>
+                </span>
+              )}
               {onRespondToApproval ? (
                 <>
                   <span aria-hidden className="text-muted-foreground">
