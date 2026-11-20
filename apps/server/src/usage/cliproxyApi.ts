@@ -135,7 +135,11 @@ const decodeLegacyClientApiKeys = Schema.decodeUnknownEffect(
   Schema.Struct({ "api-keys": ClientApiKeys }),
 );
 const decodeClaudeModels = Schema.decodeUnknownEffect(
-  Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.String })) }),
+  Schema.Struct({
+    data: Schema.Array(
+      Schema.Struct({ id: Schema.String, owned_by: Schema.optional(Schema.String) }),
+    ),
+  }),
 );
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const decodeApiResponse = Schema.decodeUnknownEffect(ApiResponse);
@@ -473,8 +477,13 @@ export const makeCliproxyApi = Effect.gen(function* () {
         Effect.flatMap((response) => response.json),
         Effect.flatMap(decodeClaudeModels),
       );
-      const modelIds = [...new Set(models.data.map(({ id }) => id.trim()).filter(Boolean))];
-      if (modelIds.length > 0) return { apiKey: Redacted.make(key), models: modelIds };
+      if (!models.data.some(({ id }) => id.trim())) continue;
+      // The hub also lists other vendors' models under Claude-shaped aliases; only Anthropic's belong here.
+      const anthropicIds = models.data
+        .filter(({ owned_by }) => owned_by === "anthropic")
+        .map(({ id }) => id.trim())
+        .filter(Boolean);
+      return { apiKey: Redacted.make(key), models: [...new Set(anthropicIds)] };
     }
   }, Effect.timeout("5 seconds"));
 

@@ -576,7 +576,9 @@ it.effect("keeps managed Claude settings and availability in sync with the hub",
                 modelAuthorizations.push(authorization);
                 const response =
                   reachable && authorization === `Bearer ${clientKey}`
-                    ? Response.json({ data: hubModels.map((id) => ({ id })) })
+                    ? Response.json({
+                        data: hubModels.map((id) => ({ id, owned_by: "anthropic" })),
+                      })
                     : Response.json({}, { status: 401 });
                 return HttpClientResponse.fromWeb(request, response);
               }

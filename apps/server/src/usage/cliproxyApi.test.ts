@@ -153,7 +153,13 @@ describe("CLIProxyAPI hub failures", () => {
             Effect.sync(() => {
               const response = new URL(request.url).pathname.endsWith("/api-keys")
                 ? Response.json(["alternate", "current"], { status })
-                : Response.json({ data: [{ id: "claude-sonnet-4-6" }] });
+                : Response.json({
+                    data: [
+                      { id: "claude-sonnet-4-6", owned_by: "anthropic" },
+                      { id: "claude-sonnet-5-5-high", owned_by: "antigravity" },
+                      { id: "claude-fable-5-dd-los-6-tpg", owned_by: "openai" },
+                    ],
+                  });
               return HttpClientResponse.fromWeb(request, response);
             }),
           ),
