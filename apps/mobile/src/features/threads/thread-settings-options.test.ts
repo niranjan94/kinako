@@ -7,6 +7,7 @@ import {
   type ManagedPolicySummary,
   type ProviderOptionDescriptor,
   type ProviderAdapterRuntimeMode,
+  type RuntimeMode,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -17,6 +18,7 @@ import {
 } from "../../lib/providerOptions";
 import {
   RUNTIME_MODE_CHOICES,
+  compatibleRuntimeModeForChoices,
   resolveNewThreadRuntimeMode,
   selectableChoices,
   withManagedRuntimeModeLimits,
@@ -43,6 +45,7 @@ describe("managed runtime mode limits", () => {
       ["approval-required", undefined],
       ["auto-accept-edits", undefined],
       ["auto", "Narrow Corp limits threads to Auto-accept edits."],
+      ["host-auto", "Narrow Corp limits threads to Auto-accept edits."],
       ["full-access", "Wide Corp limits threads to Auto."],
     ]);
   });
@@ -55,6 +58,25 @@ describe("managed runtime mode limits", () => {
     );
     expect(resolveNewThreadRuntimeMode(undefined, "auto", capped)).toBe("auto");
     expect(resolveNewThreadRuntimeMode("full-access", "auto", undefined)).toBe("full-access");
+  });
+
+  it("keeps a provider switch at the same rank before falling back to the first choice", () => {
+    const choices = (modes: ReadonlyArray<RuntimeMode>) => modes.map((mode) => ({ mode }));
+    expect(
+      compatibleRuntimeModeForChoices(
+        "host-auto",
+        choices(["approval-required", "auto-accept-edits", "auto", "full-access"]),
+      ),
+    ).toBe("auto");
+    expect(
+      compatibleRuntimeModeForChoices(
+        "auto",
+        choices(["approval-required", "auto-accept-edits", "host-auto", "full-access"]),
+      ),
+    ).toBe("host-auto");
+    expect(
+      compatibleRuntimeModeForChoices("host-auto", choices(["approval-required", "full-access"])),
+    ).toBe("approval-required");
   });
 });
 

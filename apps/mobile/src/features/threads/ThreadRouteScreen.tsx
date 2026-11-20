@@ -131,6 +131,7 @@ import { ThreadInspectorHeader, type ThreadInspectorPresentation } from "./threa
 import { InspectorContentScope, ThreadInspectorPreview } from "./thread-inspector-preview";
 import { useStartSideChat } from "./useStartSideChat";
 import { useThreadStatusAnnouncements } from "./useThreadStatusAnnouncements";
+import { approvalNeedingUserRequestId } from "./threadStatusAnnouncement";
 import type { ThreadInspectorMode, ThreadInspectorTarget } from "./thread-inspector-navigation";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 
@@ -407,7 +408,7 @@ function ThreadRouteContent(
       props.inspectorPresentation !== undefined && "onMaximize" in props.inspectorPresentation
         ? (selectedThread?.title ?? null)
         : null,
-    approvalRequestId: requests.activePendingApproval?.requestId ?? null,
+    approvalRequestId: approvalNeedingUserRequestId(requests.activePendingApprovals),
     userInputRequestId: requests.activePendingUserInput?.requestId ?? null,
     shellRequestId: selectedThread?.source.pendingRuntimeRequest?.id ?? null,
     shellPendingUserInput: selectedThread?.hasPendingUserInput === true,

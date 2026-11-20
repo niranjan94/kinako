@@ -8,6 +8,7 @@ import {
   FULL_ACCESS_OVERRIDE_QUESTION,
   fullAccessOverrideExplanation,
 } from "@t3tools/client-runtime/state/thread-requests";
+import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { T, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -40,10 +41,13 @@ export function PendingApprovalCard(props: PendingApprovalCardProps) {
   const canRespond = props.approval.responseCapability === "live";
   const disabled = !canRespond || props.respondingApprovalId === props.approval.requestId;
   const [explanationOpen, setExplanationOpen] = useState(false);
+  const autoReview = props.approval.autoReview;
   return (
     <View className="gap-2.5 rounded-[20px] border border-border bg-card-alt p-4">
       <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-foreground-secondary">
-        <T>Approval needed</T>
+        {autoReview?.state === "reviewing"
+          ? gt("{app} Auto is reviewing", { app: FORK_DISPLAY_NAME })
+          : gt("Approval needed")}
       </Text>
       <Text className="font-t3-bold text-lg text-foreground">
         {props.approval.appName ?? props.approval.requestKind}
@@ -56,6 +60,11 @@ export function PendingApprovalCard(props: PendingApprovalCardProps) {
       {props.approval.reason ? (
         <Text className="font-sans text-xs leading-normal text-warning-foreground">
           {props.approval.reason}
+        </Text>
+      ) : null}
+      {autoReview?.state === "escalated" && autoReview.reason ? (
+        <Text className="font-sans text-xs leading-normal text-foreground-secondary">
+          {gt("{app} Auto: {reason}", { app: FORK_DISPLAY_NAME, reason: autoReview.reason })}
         </Text>
       ) : null}
       {props.approval.fullAccessOverride ? (

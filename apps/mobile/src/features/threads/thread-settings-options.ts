@@ -1,5 +1,5 @@
 import { managedRuntimeModeDenial } from "@t3tools/client-runtime/contract-labels";
-import type { ManagedPolicySummary, RuntimeMode } from "@t3tools/contracts";
+import { runtimeModeRank, type ManagedPolicySummary, type RuntimeMode } from "@t3tools/contracts";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { msg } from "gt-react-native";
 
@@ -87,9 +87,13 @@ export function compatibleRuntimeModeForChoices(
   runtimeMode: RuntimeMode,
   choices: ReadonlyArray<{ readonly mode: RuntimeMode }>,
 ): RuntimeMode {
-  return choices.some((choice) => choice.mode === runtimeMode)
-    ? runtimeMode
-    : (choices[0]?.mode ?? runtimeMode);
+  if (choices.some((choice) => choice.mode === runtimeMode)) return runtimeMode;
+  const rank = runtimeModeRank(runtimeMode);
+  return (
+    choices.find((choice) => runtimeModeRank(choice.mode) === rank)?.mode ??
+    choices[0]?.mode ??
+    runtimeMode
+  );
 }
 
 export { selectableProviderOptionChoices as selectableChoices } from "@t3tools/client-runtime/model-traits";

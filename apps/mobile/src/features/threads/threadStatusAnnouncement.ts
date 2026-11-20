@@ -1,4 +1,5 @@
 import type { ThreadActivitySnapshot } from "@t3tools/client-runtime/state/thread-activity-announcement";
+import type { ThreadPendingApproval } from "@t3tools/client-runtime/state/thread-requests";
 import type { RunId, OrchestrationV2RunStatus } from "@t3tools/contracts";
 
 export interface ThreadActivityInput {
@@ -15,6 +16,15 @@ export interface ThreadActivityMemory {
   readonly snapshot: ThreadActivitySnapshot;
   /** Requests the thread screen has shown as a card. */
   readonly cardRequestIds: ReadonlySet<string>;
+}
+
+/** The first approval waiting on the user; one the host reviewer still holds is not. */
+export function approvalNeedingUserRequestId(
+  approvals: ReadonlyArray<Pick<ThreadPendingApproval, "requestId" | "autoReview">>,
+): string | null {
+  return (
+    approvals.find((approval) => approval.autoReview?.state !== "reviewing")?.requestId ?? null
+  );
 }
 
 /** What the open thread's screen reader status follows, from the same sources the thread screen shows. */
