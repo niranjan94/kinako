@@ -5023,6 +5023,26 @@ describe("OrchestratorMcpService provider resolution", () => {
         assert.equal(yield* resolveRuntimeMode("auto", undefined, muse), "approval-required");
       }),
     );
+
+    it.effect("swaps an inherited Auto for host review, and back, at the same rank", () =>
+      Effect.gen(function* () {
+        const kiro = {
+          modelSelection: { instanceId: ProviderInstanceId.make("kiro"), model: "kiro-model" },
+          supportedRuntimeModes: ["approval-required", "host-auto", "full-access"] as const,
+        };
+        const cursor = {
+          modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "cursor-model" },
+          supportedRuntimeModes: [
+            "approval-required",
+            "auto-accept-edits",
+            "auto",
+            "full-access",
+          ] as const,
+        };
+        assert.equal(yield* resolveRuntimeMode("auto", "inherit", kiro), "host-auto");
+        assert.equal(yield* resolveRuntimeMode("host-auto", "inherit", cursor), "auto");
+      }),
+    );
   });
 });
 

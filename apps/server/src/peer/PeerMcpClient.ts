@@ -194,8 +194,12 @@ const make = Effect.gen(function* () {
       const resolved = yield* links
         .resolve(input.environmentId)
         .pipe(Effect.mapError(fromLinkError));
+      // The header is only a ceiling, and peers built before host review cannot decode
+      // `host-auto`; `auto` ranks the same.
+      const limitRuntimeMode =
+        input.limits.runtimeMode === "host-auto" ? "auto" : input.limits.runtimeMode;
       const limitHeader = {
-        [McpInvocationContext.MODE_LIMIT_HEADER]: `${input.limits.runtimeMode}/${input.limits.interactionMode}`,
+        [McpInvocationContext.MODE_LIMIT_HEADER]: `${limitRuntimeMode}/${input.limits.interactionMode}`,
       };
       const senderHeader =
         input.sender === undefined
