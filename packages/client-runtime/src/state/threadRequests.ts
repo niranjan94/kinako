@@ -62,6 +62,8 @@ export interface ThreadPendingApproval {
   readonly options?: ReadonlyArray<ProviderApprovalOption>;
   readonly responseCapability: "live" | "not_resumable";
   readonly supportsFeedback?: boolean;
+  /** Host review of a `host-auto` thread's request: still deciding, or handed over with why. */
+  readonly autoReview?: OrchestrationV2RuntimeRequest["autoReview"];
 }
 
 export const FULL_ACCESS_OVERRIDE_QUESTION = msg("Why am I being asked this?");
@@ -296,6 +298,7 @@ export function derivePendingThreadRequests(
       ...(request.responseCapability.type === "live" && request.responseCapability.supportsFeedback
         ? { supportsFeedback: true }
         : {}),
+      ...(request.autoReview === undefined ? {} : { autoReview: request.autoReview }),
     });
   }
 

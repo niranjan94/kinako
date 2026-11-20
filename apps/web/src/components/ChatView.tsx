@@ -2713,6 +2713,9 @@ export default function ChatView(props: ChatViewProps) {
   // While a question or approval owns the composer, its text answers that, not the agent.
   const freshSessionCommandAvailable =
     freshSessionAvailable && activePendingApproval === null && pendingUserInputs.length === 0;
+  // Screen readers hear "Needs approval" only once the host reviewer hands a request over.
+  const approvalAwaitingUser =
+    activePendingApproval?.autoReview?.state === "reviewing" ? null : activePendingApproval;
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
   const composerSendHeld = useComposerSendHeld(composerDraftTargetKey);
   const cancelHeldSendStable = useStableCallback(() => {
@@ -3696,7 +3699,7 @@ export default function ChatView(props: ChatViewProps) {
                   runlessWorkActive={runlessWorkStartedAt !== null}
                   isCompacting={isCompacting}
                   awaitingUser={
-                    activePendingApproval !== null
+                    approvalAwaitingUser !== null
                       ? "approval"
                       : activePendingUserInput !== null ||
                           // A secret request has no runtime request; the shell carries it.
@@ -3705,7 +3708,7 @@ export default function ChatView(props: ChatViewProps) {
                         : null
                   }
                   awaitingRequestId={
-                    activePendingApproval?.requestId ?? activePendingUserInput?.requestId ?? null
+                    approvalAwaitingUser?.requestId ?? activePendingUserInput?.requestId ?? null
                   }
                   activeTurnStartedAt={activeWorkStartedAt}
                   providerStartingLabel={

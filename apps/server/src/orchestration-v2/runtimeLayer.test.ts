@@ -3001,6 +3001,33 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
           },
           ...approved.events,
           ...escalated.events,
+          {
+            id: EventId.make("runtime-host-review-card-event"),
+            type: "turn-item.updated",
+            threadId,
+            nodeId: NodeId.make("runtime-host-review-node-approved"),
+            occurredAt: now,
+            payload: {
+              id: TurnItemId.make("runtime-host-review-card"),
+              threadId,
+              runId: null,
+              nodeId: NodeId.make("runtime-host-review-node-approved"),
+              providerThreadId: null,
+              providerTurnId: null,
+              nativeItemRef: null,
+              parentItemId: null,
+              ordinal: 1,
+              status: "waiting",
+              title: null,
+              startedAt: now,
+              completedAt: null,
+              updatedAt: now,
+              type: "approval_request",
+              requestId: approved.requestId,
+              requestKind: "command",
+              prompt: "vp test run",
+            },
+          },
         ],
       });
       const verdict = (
@@ -3031,6 +3058,13 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
       assert.equal(accepted?.status, "resolved");
       assert.equal(accepted?.decision, "accept");
       assert.deepEqual(accepted?.autoReview, { state: "approved", reason: "Runs the test suite." });
+      // The card is relabeled, so the timeline shows who approved it.
+      assert.equal(
+        (yield* orchestrator.getThreadProjection(threadId)).turnItems.find(
+          (item) => item.id === TurnItemId.make("runtime-host-review-card"),
+        )?.title,
+        "Approved by Kinako Auto: Runs the test suite.",
+      );
       const [delivery] = yield* outbox.listByCommandId(
         CommandId.make("runtime-host-review-verdict-approve"),
       );

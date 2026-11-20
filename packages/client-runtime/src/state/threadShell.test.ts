@@ -219,7 +219,10 @@ describe("v2 thread shell lists", () => {
     const disposeNavigation = registry.mount(threads.navigationThreadShellsAtom);
     const withRequest = (
       kind: "user_input" | "command",
-      options: { readonly blocking?: boolean } = {},
+      options: {
+        readonly blocking?: boolean;
+        readonly autoReview?: "reviewing" | "escalated";
+      } = {},
     ) =>
       registry.set(snapshotAtom(environmentId), {
         ...v2ShellSnapshot,
@@ -231,6 +234,7 @@ describe("v2 thread shell lists", () => {
               ...request,
               kind,
               ...(options.blocking === undefined ? {} : { blocking: options.blocking }),
+              ...(options.autoReview === undefined ? {} : { autoReview: options.autoReview }),
             },
           },
         ],
@@ -249,6 +253,16 @@ describe("v2 thread shell lists", () => {
     withRequest("command");
     expect(registry.get(parent)?.pendingSubagentRequest).toBe("approval");
     expect(childThreadInputsTitle(registry.get(inputs))).toBe("Side chat needs approval");
+
+    // An approval the host reviewer still holds raises no hand until it is escalated.
+    withRequest("command", { autoReview: "reviewing" });
+    expect(registry.get(parent)?.pendingSubagentRequest).toBeNull();
+    expect(
+      registry.get(threads.threadShellAtom({ environmentId, threadId: sideChat.id }))
+        ?.hasPendingApprovals,
+    ).toBe(false);
+    withRequest("command", { autoReview: "escalated" });
+    expect(registry.get(parent)?.pendingSubagentRequest).toBe("approval");
 
     const helper = {
       ...sideChat,

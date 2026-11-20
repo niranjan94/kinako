@@ -1,5 +1,5 @@
 import { managedRuntimeModeDenial } from "@t3tools/client-runtime/contract-labels";
-import type { ManagedPolicySummary, RuntimeMode } from "@t3tools/contracts";
+import { type ManagedPolicySummary, type RuntimeMode, runtimeModeRank } from "@t3tools/contracts";
 import { msg } from "gt-react";
 import { APP_BASE_NAME } from "~/branding";
 import { m, type MessageResolver } from "~/i18n/messages";
@@ -60,7 +60,12 @@ export function resolveCompatibleRuntimeMode(
     supportedRuntimeModes && supportedRuntimeModes.length > 0
       ? runtimeModeOptions.filter((mode) => supportedRuntimeModes.includes(mode))
       : runtimeModeOptions;
-  return { modes, mode: modes.includes(runtimeMode) ? runtimeMode : (modes[0] ?? runtimeMode) };
+  // Auto and host review rank the same; switching providers trades one for the other.
+  const sameRank = modes.find((mode) => runtimeModeRank(mode) === runtimeModeRank(runtimeMode));
+  return {
+    modes,
+    mode: modes.includes(runtimeMode) ? runtimeMode : (sameRank ?? modes[0] ?? runtimeMode),
+  };
 }
 
 export function resolveRuntimeModeOption(
