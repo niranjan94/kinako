@@ -13293,5 +13293,75 @@
   "27d76249d09eb69f": "Review-Leitfaden bereit",
   "faa3bb26abb39c93": "Review-Leitfaden fehlgeschlagen",
   "b7df38b7d8792d78": "Leitfaden öffnen",
-  "9e91e9a77b664e4e": "Review-Leitfaden konnte nicht gestartet werden"
+  "9e91e9a77b664e4e": "Review-Leitfaden konnte nicht gestartet werden",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto hat dich gefragt:",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto prüft"
+  ],
+  "049963fb3496f947": "{app} Auto",
+  "703c611b175f91e4": "{app} genehmigt routinemäßige lokale Aktionen und fragt dich beim Rest.",
+  "8c7640bd9a287482": "Diese Entscheidungs-API ist nicht in jeder ausgewählten Umgebung eingerichtet. Wähle eine Umgebung, um ihren Prüfer separat festzulegen.",
+  "cd186d77ae385abc": "Prüfmodell nicht gespeichert",
+  "06e169537474d36b": "{app} Auto",
+  "f2c9defaf1653de1": "In {app} Auto laufen routinemäßige lokale Aktionen, und bei riskanten wirst du zuerst gefragt. Die Sandbox des Anbieters gilt weiterhin. „Nur Regeln“ überspringt das Prüfmodell, sodass du bei allem gefragt wirst, was die Regeln nicht entscheiden.",
+  "82d989ecc0a46510": "Nur Regeln",
+  "179e9c513b1e4a40": "Prüft Anfragen, die die Regeln nicht entscheiden. Entscheidungs-APIs aus „Anbieter“ erscheinen ebenfalls hier. Wenn aus, prüft das Modell für Textgenerierung.",
+  "79b66e6316518ce1": "Prüfmodell",
+  "c49fc0e2bc7294a7": "Separates Prüfmodell verwenden",
+  "f7aea80e63991ecf": "Wie sicher sich die Entscheidungs-API sein muss, dass eine Anfrage ungefährlich ist, bevor sie ausgeführt wird. Bei allem, was unsicherer ist, wirst du gefragt.",
+  "fd319a897600cebe": "Prüferkonfidenz auf Standard zurücksetzen",
+  "6a5afd4b252d3475": "Prüferkonfidenz",
+  "5789e351ce5ca4f9": "Sag dem Prüfer, was diese Arbeit erlaubt oder wobei immer nachgefragt werden soll. Integrierte Sicherheitsregeln gelten weiterhin.",
+  "5b09b8a729987952": "Prüferanweisungen auf Standard zurücksetzen",
+  "f73fa9f53f6cdf1e": "Prüferanweisungen",
+  "90d0ee411fa34939": "Die Testsuite auszuführen und Dev-Abhängigkeiten zu installieren ist in Ordnung. Frag immer, bevor die Datenbank oder irgendetwas außerhalb dieses Repositorys angefasst wird.",
+  "52fe9b861dc069f0": "Verbinde eine Umgebung, um ihr Prüfmodell auszuwählen.",
+  "36c140953ad9ff92": "Noch keine Entscheidungs-APIs",
+  "e6c855ccadf656ad": "Verbinde System One, um Anfragen von {app} Auto mit einem Modell zu prüfen, das für Ja-oder-Nein-Entscheidungen gebaut ist.",
+  "db26ddd183c62b45": "Entscheidungs-API hinzufügen",
+  "cbd29f01b12406dc": "System One beantwortet, ob eine Anfrage ungefährlich aussieht, und wie sicher es sich dabei ist. {app} Auto entscheidet damit, welche Anfragen genehmigt werden. Dein API-Schlüssel wird in dieser Umgebung gespeichert.",
+  "5593f81d681044e9": "{count, plural, one {{name} ist verbunden und listet {count} Modell auf. {model} hat eine Testfrage beantwortet.} other {{name} ist verbunden und listet {count} Modelle auf. {model} hat eine Testfrage beantwortet.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} ist verbunden und listet {count} Modell auf.} other {{name} ist verbunden und listet {count} Modelle auf.}}",
+  "025088336e7e2a52": "Speichern und testen",
+  "b9980bcda59e098b": "Prüft Anfragen von {app} Auto",
+  "c582d7f450dbc3c7": "Für {app} Auto verwenden",
+  "6e7176af0297520d": "Entscheidungs-API hinzufügen",
+  "409eefe94b1ca811": [
+    "Dadurch wird der auf ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " gespeicherte API-Schlüssel gelöscht. Prüfungen, die ihn verwenden, greifen auf das Modell für Textgenerierung zurück."
+  ],
+  "b0900f4938210634": "API-Schlüssel",
+  "907eee6b144e2aba": "{app} Auto berechtigungsmodus genehmigungen anfragen prüfen riskante aktionen ohne modell",
+  "ad3f65bc5ad993e3": "{app} Auto berechtigungsmodus genehmigungen anfragen prüfen System One Jev entscheidungs-api",
+  "6b8e533b54b79b5a": "{app} Auto schwellenwert sicherheit wahrscheinlichkeit entscheidungs-api System One genehmigen",
+  "1f86c7e6b8a0d2b9": "{app} Auto richtlinie prompt anleitung erlauben immer fragen genehmigungen",
+  "1d0a8d68920cccef": "Entscheidungs-APIs",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev api-schlüssel basis-url {app} Auto genehmigungen prüfer"
 }

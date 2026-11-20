@@ -13289,5 +13289,75 @@
   "27d76249d09eb69f": "Guía de revisión lista",
   "faa3bb26abb39c93": "Falló la guía de revisión",
   "b7df38b7d8792d78": "Abrir guía",
-  "9e91e9a77b664e4e": "No se pudo iniciar una guía de revisión"
+  "9e91e9a77b664e4e": "No se pudo iniciar una guía de revisión",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Automático te preguntó:",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Automático está revisando"
+  ],
+  "049963fb3496f947": "{app} Automático",
+  "703c611b175f91e4": "{app} aprueba las acciones locales rutinarias y te pregunta por el resto.",
+  "8c7640bd9a287482": "Esta API de decisión no está configurada en todos los entornos seleccionados. Selecciona un entorno para elegir su revisor por separado.",
+  "cd186d77ae385abc": "No se guardó el modelo revisor",
+  "06e169537474d36b": "{app} Automático",
+  "f2c9defaf1653de1": "En {app} Automático, las acciones locales rutinarias se ejecutan y las arriesgadas te preguntan primero. El sandbox del proveedor sigue aplicándose. «Solo reglas» omite el modelo revisor, así que todo lo que las reglas no resuelvan te pregunta.",
+  "82d989ecc0a46510": "Solo reglas",
+  "179e9c513b1e4a40": "Revisa las solicitudes que las reglas no resuelven. Las API de decisión de Proveedores también aparecen aquí. Si está desactivado, revisa el modelo de generación de texto.",
+  "79b66e6316518ce1": "Modelo revisor",
+  "c49fc0e2bc7294a7": "Usar un modelo revisor aparte",
+  "f7aea80e63991ecf": "Qué tan segura debe estar la API de decisión de que una solicitud es segura antes de ejecutarla. Todo lo que tenga menos certeza te pregunta.",
+  "fd319a897600cebe": "Restablecer la confianza del revisor al valor predeterminado",
+  "6a5afd4b252d3475": "Confianza del revisor",
+  "5789e351ce5ca4f9": "Indica al revisor qué permite este trabajo o sobre qué debe preguntar siempre. Las reglas de seguridad integradas siguen aplicándose.",
+  "5b09b8a729987952": "Restablecer las instrucciones del revisor al valor predeterminado",
+  "f73fa9f53f6cdf1e": "Instrucciones del revisor",
+  "90d0ee411fa34939": "Ejecutar la suite de pruebas e instalar dependencias de desarrollo está bien. Pregunta siempre antes de tocar la base de datos o cualquier cosa fuera de este repositorio.",
+  "52fe9b861dc069f0": "Conecta un entorno para elegir su modelo revisor.",
+  "36c140953ad9ff92": "Aún no hay API de decisión",
+  "e6c855ccadf656ad": "Conecta System One para revisar las solicitudes de {app} Automático con un modelo creado para decisiones de sí o no.",
+  "db26ddd183c62b45": "Añadir una API de decisión",
+  "cbd29f01b12406dc": "System One responde si una solicitud parece segura y con cuánta certeza. {app} Automático lo usa para decidir qué solicitudes aprobar. Tu clave de API se guarda en este entorno.",
+  "5593f81d681044e9": "{count, plural, one {{name} está conectado y muestra {count} modelo. {model} respondió una pregunta de prueba.} other {{name} está conectado y muestra {count} modelos. {model} respondió una pregunta de prueba.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} está conectado y muestra {count} modelo.} other {{name} está conectado y muestra {count} modelos.}}",
+  "025088336e7e2a52": "Guardar y probar",
+  "b9980bcda59e098b": "Revisa las solicitudes de {app} Automático",
+  "c582d7f450dbc3c7": "Usar para {app} Automático",
+  "6e7176af0297520d": "Añadir API de decisión",
+  "409eefe94b1ca811": [
+    "Esto elimina la clave de API guardada en ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Las revisiones configuradas para usarla vuelven al modelo de generación de texto."
+  ],
+  "b0900f4938210634": "Clave de API",
+  "907eee6b144e2aba": "{app} Automático modo de permisos aprobaciones revisar solicitudes acciones arriesgadas sin modelo",
+  "ad3f65bc5ad993e3": "{app} Automático modo de permisos aprobaciones revisar solicitudes System One Jev api de decisión",
+  "6b8e533b54b79b5a": "{app} Automático umbral certeza probabilidad api de decisión System One aprobar",
+  "1f86c7e6b8a0d2b9": "{app} Automático política prompt indicaciones permitir preguntar siempre aprobaciones",
+  "1d0a8d68920cccef": "API de decisión",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev clave de api url base {app} Automático aprobaciones revisor"
 }

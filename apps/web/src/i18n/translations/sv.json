@@ -13301,5 +13301,75 @@
   "27d76249d09eb69f": "Granskningsguiden är klar",
   "faa3bb26abb39c93": "Granskningsguiden misslyckades",
   "b7df38b7d8792d78": "Öppna guiden",
-  "9e91e9a77b664e4e": "Kunde inte starta en granskningsguide"
+  "9e91e9a77b664e4e": "Kunde inte starta en granskningsguide",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto frågade dig:",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto granskar"
+  ],
+  "049963fb3496f947": "{app} Auto",
+  "703c611b175f91e4": "{app} godkänner lokala rutinåtgärder och frågar dig om resten.",
+  "8c7640bd9a287482": "Det här besluts-API:et är inte konfigurerat i alla valda miljöer. Välj en miljö för att välja dess granskare separat.",
+  "cd186d77ae385abc": "Granskningsmodellen sparades inte",
+  "06e169537474d36b": "{app} Auto",
+  "f2c9defaf1653de1": "I {app} Auto körs lokala rutinåtgärder och riskabla frågar dig först. Leverantörens sandlåda gäller fortfarande. ”Endast regler” hoppar över granskningsmodellen, så allt som reglerna inte avgör frågar dig.",
+  "82d989ecc0a46510": "Endast regler",
+  "179e9c513b1e4a40": "Granskar begäranden som reglerna inte avgör. Besluts-API:er från Leverantörer visas också här. När det är av granskar modellen för textgenerering.",
+  "79b66e6316518ce1": "Granskningsmodell",
+  "c49fc0e2bc7294a7": "Använd en separat granskningsmodell",
+  "f7aea80e63991ecf": "Hur säkert besluts-API:et måste vara på att en begäran är ofarlig innan den körs. Allt som är mindre säkert frågar dig.",
+  "fd319a897600cebe": "Återställ granskarens konfidens till standard",
+  "6a5afd4b252d3475": "Granskarens konfidens",
+  "5789e351ce5ca4f9": "Berätta för granskaren vad det här arbetet tillåter eller alltid ska fråga om. Inbyggda säkerhetsregler gäller fortfarande.",
+  "5b09b8a729987952": "Återställ granskarinstruktioner till standard",
+  "f73fa9f53f6cdf1e": "Granskarinstruktioner",
+  "90d0ee411fa34939": "Det går bra att köra testsviten och installera utvecklingsberoenden. Fråga alltid innan databasen eller något utanför det här repot rörs.",
+  "52fe9b861dc069f0": "Anslut en miljö för att välja dess granskningsmodell.",
+  "36c140953ad9ff92": "Inga besluts-API:er än",
+  "e6c855ccadf656ad": "Anslut System One för att granska begäranden från {app} Auto med en modell byggd för ja- eller nej-beslut.",
+  "db26ddd183c62b45": "Lägg till ett besluts-API",
+  "cbd29f01b12406dc": "System One svarar på om en begäran ser ofarlig ut och hur säkert det är. {app} Auto använder det för att avgöra vilka begäranden som ska godkännas. Din API-nyckel lagras i den här miljön.",
+  "5593f81d681044e9": "{count, plural, one {{name} är ansluten och listar {count} modell. {model} svarade på en testfråga.} other {{name} är ansluten och listar {count} modeller. {model} svarade på en testfråga.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} är ansluten och listar {count} modell.} other {{name} är ansluten och listar {count} modeller.}}",
+  "025088336e7e2a52": "Spara och testa",
+  "b9980bcda59e098b": "Granskar begäranden från {app} Auto",
+  "c582d7f450dbc3c7": "Använd för {app} Auto",
+  "6e7176af0297520d": "Lägg till besluts-API",
+  "409eefe94b1ca811": [
+    "Detta tar bort API-nyckeln som lagras på ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Granskningar som är inställda på att använda den faller tillbaka på modellen för textgenerering."
+  ],
+  "b0900f4938210634": "API-nyckel",
+  "907eee6b144e2aba": "{app} Auto behörighetsläge godkännanden granska begäranden riskabla åtgärder utan modell",
+  "ad3f65bc5ad993e3": "{app} Auto behörighetsläge godkännanden granska begäranden System One Jev besluts-api",
+  "6b8e533b54b79b5a": "{app} Auto tröskel säkerhet sannolikhet besluts-api System One godkänna",
+  "1f86c7e6b8a0d2b9": "{app} Auto policy prompt vägledning tillåt fråga alltid godkännanden",
+  "1d0a8d68920cccef": "Besluts-API:er",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev api-nyckel bas-url {app} Auto godkännanden granskare"
 }
