@@ -143,8 +143,9 @@ describe("CLIProxyAPI hub failures", () => {
     (status) =>
       Effect.gen(function* () {
         const api = yield* makeCliproxyApi;
-        const result = yield* api.readClientApiKey(config, Redacted.make("current"));
-        expect(result && Redacted.value(result)).toBe("current");
+        const result = yield* api.readClaudeAccess(config, Redacted.make("current"));
+        expect(result && Redacted.value(result.apiKey)).toBe("current");
+        expect(result?.models).toEqual(["claude-sonnet-4-6"]);
       }).pipe(
         Effect.provideService(
           HttpClient.HttpClient,

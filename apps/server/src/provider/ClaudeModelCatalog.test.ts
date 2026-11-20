@@ -16,6 +16,7 @@ import {
   resolveClaudeModelsForVersion,
   resolveClaudeModelSlug,
   resolveClaudeUpdateRequiredModels,
+  scopeClaudeHubModelCatalog,
   scopeClaudeModelCatalog,
   withClaudeCodeModelRoutes,
 } from "./ClaudeModelCatalog.ts";
@@ -179,6 +180,33 @@ describe("Claude model catalog", () => {
         model: "synthetic",
       }),
       "claude-synthetic-next[large]",
+    );
+  });
+
+  it("uses the default Claude slug for a hub alias while keeping the advertised wire id", () => {
+    const catalog = scopeClaudeHubModelCatalog(catalogFromManifest(manifest()), [
+      "synthetic",
+      "hub-only",
+    ]);
+    assert.deepStrictEqual(
+      catalog.models.map(({ model }) => model.slug),
+      ["claude-synthetic-next", "hub-only"],
+    );
+    assert.strictEqual(normalizeClaudeCatalogEffort(catalog, "extreme", "synthetic"), "high");
+    assert.strictEqual(
+      resolveClaudeCatalogApiModelId(catalog, {
+        instanceId: ProviderInstanceId.make("claude-hub-test"),
+        model: "claude-synthetic-next",
+        options: [{ id: "contextWindow", value: "small" }],
+      }),
+      "synthetic",
+    );
+    assert.strictEqual(
+      resolveClaudeCatalogApiModelId(catalog, {
+        instanceId: ProviderInstanceId.make("claude-hub-test"),
+        model: "hub-only",
+      }),
+      "hub-only",
     );
   });
 

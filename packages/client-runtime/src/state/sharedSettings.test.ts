@@ -4,6 +4,7 @@ import {
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
+  UsageLimitSourceId,
   type ServerSettings,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
@@ -163,6 +164,35 @@ describe("planModelSettingsSync", () => {
       });
     expect(plan((_, scope) => scope !== AuthProvidersManageScope)).toEqual([]);
     expect(plan(() => true).map((entry) => entry.patch)).toEqual([patch]);
+  });
+
+  it("syncs a hub favorite to the default Claude provider on another environment", () => {
+    const hub = ProviderInstanceId.make("claude-hub-test");
+    const plan = planModelSettingsSync({
+      sourceEnvironmentId: sourceId,
+      source: {
+        providerInstances: {
+          [hub]: {
+            driver: claude,
+            claudeHub: {
+              sourceId: UsageLimitSourceId.make("test"),
+              sourceUrl: "https://hub.test",
+              available: true,
+            },
+          },
+        },
+      },
+      patch: { setModelFavorites: [{ provider: hub, model: "sonnet", favorite: true }] },
+      connectedTargets: [environment(targetId, {})],
+      mayWrite: () => true,
+    });
+    expect(plan.map((entry) => entry.patch)).toEqual([
+      {
+        setModelFavorites: [
+          { provider: ProviderInstanceId.make("claudeAgent"), model: "sonnet", favorite: true },
+        ],
+      },
+    ]);
   });
 });
 

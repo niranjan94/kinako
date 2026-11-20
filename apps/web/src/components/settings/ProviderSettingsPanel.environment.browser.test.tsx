@@ -4,6 +4,7 @@ import {
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
+  UsageLimitSourceId,
   type ProviderAuthState,
   type ServerProvider,
   type UnifiedSettings,
@@ -250,6 +251,38 @@ async function setup() {
 }
 
 describe("EnvironmentProviderSettings routing", () => {
+  it("shows a managed Claude hub without provider settings controls", async () => {
+    await setup();
+    const instanceId = ProviderInstanceId.make("claude-hub-test");
+    const driver = ProviderDriverKind.make("claudeAgent");
+    const displayName = "Claude (Home hub)";
+    state.settings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerInstances: {
+        [instanceId]: {
+          driver,
+          displayName,
+          claudeHub: {
+            sourceId: UsageLimitSourceId.make("hub"),
+            sourceUrl: "https://hub.test",
+            available: true,
+          },
+        },
+      },
+    };
+    await setProviders([{ ...provider(), instanceId, driver, displayName }]);
+    await using _screen = await render(panel({ targetInstanceId: instanceId }));
+    await expect.element(page.getByText("Managed by CLIProxyAPI.")).toBeVisible();
+    await expect
+      .element(page.getByRole("switch", { name: "Enable Claude (Home hub)" }))
+      .not.toBeInTheDocument();
+    await expect.element(page.getByText("Display name", { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByText("Add variable", { exact: true })).not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Delete instance claude-hub-test" }))
+      .not.toBeInTheDocument();
+  });
+
   it("does not substitute another account when the requested instance was removed", async () => {
     await setup();
     await setProviders([provider()]);

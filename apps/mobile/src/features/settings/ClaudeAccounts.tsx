@@ -75,6 +75,7 @@ export function ClaudeAccount({
   const [editing, setEditing] = useState(false);
   const { run, pending, error } = useProviderInstanceMutation(environment);
   const instance = environment.serverConfig.settings.providerInstances[provider.instanceId];
+  const hubManaged = instance?.claudeHub !== undefined;
   const configDir = claudeConfigDir(instance);
   const name = provider.displayName ?? "Claude";
   const status = !provider.enabled
@@ -87,7 +88,6 @@ export function ClaudeAccount({
           ? gt("Not installed")
           : null;
   const removable =
-    !instance?.claudeHub &&
     provider.instanceId !== DEFAULT_CLAUDE_INSTANCE_ID &&
     !isManagedSettingPath(
       environment.serverConfig.managedPolicy,
@@ -133,10 +133,17 @@ export function ClaudeAccount({
             {name}
           </Text>
           <Text textRole="footnote" className="text-foreground-muted" numberOfLines={2}>
-            {[status, configDir || gt("Default config folder")].filter(Boolean).join(" · ")}
+            {[
+              status,
+              hubManaged
+                ? gt("Managed by {organization}.", { organization: "CLIProxyAPI" })
+                : configDir || gt("Default config folder"),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </Text>
         </View>
-        {editing ? null : (
+        {hubManaged || editing ? null : (
           <Menu
             accessible
             accessibilityRole="button"
@@ -157,7 +164,7 @@ export function ClaudeAccount({
           </Menu>
         )}
       </View>
-      {editing ? (
+      {!hubManaged && editing ? (
         <ClaudeAccountForm
           environment={environment}
           instanceId={provider.instanceId}

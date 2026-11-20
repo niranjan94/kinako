@@ -38,7 +38,7 @@ import {
 } from "../ClaudeProvider.ts";
 import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
 import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
-import { resolveClaudeModelCatalog } from "../ClaudeModelCatalog.ts";
+import { resolveClaudeModelCatalog, scopeClaudeHubModelCatalog } from "../ClaudeModelCatalog.ts";
 import {
   makeClaudeCodeModelRoutes,
   resolveClaudeModelSettingsKey,
@@ -115,9 +115,13 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
     const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
     const resetCreditCoordinator = yield* ResetCreditCoordinator.ResetCreditCoordinator;
     const catalogService = yield* ModelCatalog.ModelCatalog;
-    const modelCatalog = catalogService
-      .current(DRIVER_KIND)
-      .pipe(Effect.map(resolveClaudeModelCatalog));
+    const hubModels = config.hubModels;
+    const modelCatalog = catalogService.current(DRIVER_KIND).pipe(
+      Effect.map(resolveClaudeModelCatalog),
+      Effect.map((catalog) =>
+        hubModels === undefined ? catalog : scopeClaudeHubModelCatalog(catalog, hubModels),
+      ),
+    );
     const processEnv = yield* mergeClaudeProcessEnvironment(config, environment, process.env);
     const fallbackContinuationIdentity = defaultProviderContinuationIdentity({
       driverKind: DRIVER_KIND,
@@ -137,13 +141,23 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       Effect.provideService(Path.Path, path),
       Effect.provideService(HttpClient.HttpClient, httpClient),
     );
-    const continuationGroupKey = yield* makeClaudeContinuationGroupKey(effectiveConfig, processEnv);
+    const continuationGroupKey =
+      hubModels === undefined
+        ? yield* makeClaudeContinuationGroupKey(effectiveConfig, processEnv)
+        : fallbackContinuationIdentity.continuationKey;
     const configDir = yield* resolveClaudeHomePath(effectiveConfig, processEnv);
-    const accountConfigPath = yield* ClaudeResetCredits.claudeAccountConfigPath(
-      effectiveConfig.homePath.trim() || processEnv.CLAUDE_CONFIG_DIR?.trim()
-        ? configDir
-        : undefined,
-    );
+    const accountConfigPath =
+      hubModels === undefined
+        ? yield* ClaudeResetCredits.claudeAccountConfigPath(
+            effectiveConfig.homePath.trim() || processEnv.CLAUDE_CONFIG_DIR?.trim()
+              ? configDir
+              : undefined,
+          )
+        : undefined;
+    const readWorkspaceId =
+      accountConfigPath === undefined
+        ? Effect.undefined
+        : ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath);
     const stampIdentity = withInstanceIdentity({
       instanceId,
       driverKind: DRIVER_KIND,
@@ -187,7 +201,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
         onUsageLimits: (update) => snapshot.applyUsageLimits(update),
         onSessionInit: (cwd) => Queue.offer(workspaceRescans, cwd).pipe(Effect.asVoid),
         modelCatalog,
-        routeModelCatalog: modelRoutes.route,
+        routeModelCatalog: hubModels === undefined ? modelRoutes.route : Effect.succeed,
       },
     ).pipe(
       Effect.mapError(
@@ -204,7 +218,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       effectiveConfig,
       processEnv,
       modelCatalog,
-      modelRoutes.route,
+      hubModels === undefined ? modelRoutes.route : Effect.succeed,
     );
 
     // Per-instance capabilities cache: keyed on binary + resolved HOME so
@@ -215,7 +229,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       () =>
         probeClaudeCapabilities(effectiveConfig, processEnv, stateDir).pipe(
           Effect.flatMap((capabilities) =>
-            ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
+            readWorkspaceId.pipe(
               Effect.map((workspaceId) => ({
                 _tag: "fresh" as const,
                 capabilities:
@@ -225,7 +239,11 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
           ),
           Effect.tap(({ capabilities }) =>
             Ref.set(lastGoodCapabilities, capabilities).pipe(
-              Effect.andThen(modelRoutes.record(capabilities.models ?? [])),
+              Effect.andThen(
+                hubModels === undefined
+                  ? modelRoutes.record(capabilities.models ?? [])
+                  : Effect.void,
+              ),
             ),
           ),
           Effect.ensuring(modelRoutes.settle),
@@ -234,7 +252,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
               Effect.flatMap((capabilities) =>
                 capabilities === undefined
                   ? Effect.fail(error)
-                  : ClaudeResetCredits.readClaudeOrganizationId(accountConfigPath).pipe(
+                  : readWorkspaceId.pipe(
                       Effect.flatMap((workspaceId) =>
                         workspaceId === capabilities.workspaceId
                           ? Effect.succeed({
@@ -281,12 +299,14 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
               stateDir,
               catalog,
               scopedLimitNames,
-              (version) =>
-                ClaudeResetCredits.readClaudeResetCredits(configDir, version).pipe(
-                  Effect.provideService(HttpClient.HttpClient, httpClient),
-                  Effect.provideService(FileSystem.FileSystem, fileSystem),
-                  Effect.provideService(Path.Path, path),
-                ),
+              accountConfigPath === undefined
+                ? undefined
+                : (version) =>
+                    ClaudeResetCredits.readClaudeResetCredits(configDir, version).pipe(
+                      Effect.provideService(HttpClient.HttpClient, httpClient),
+                      Effect.provideService(FileSystem.FileSystem, fileSystem),
+                      Effect.provideService(Path.Path, path),
+                    ),
             ),
           ),
           Effect.tap((provider) =>
@@ -355,7 +375,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
             : credits?.options?.some((option) => option.creditId === creditId)
               ? creditId
               : undefined;
-        if (!grantId || !current.version) return "noCredit" as const;
+        if (!grantId || !current.version || accountConfigPath === undefined)
+          return "noCredit" as const;
         const version = current.version;
         return yield* resetCreditCoordinator.redeem(
           configDir,
@@ -430,7 +451,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
         ),
       orchestrationAdapter,
       textGeneration,
-      consumeResetCredit,
+      ...(accountConfigPath === undefined ? {} : { consumeResetCredit }),
     } satisfies ProviderInstance;
   }),
 };

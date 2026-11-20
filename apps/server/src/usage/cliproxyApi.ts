@@ -473,7 +473,8 @@ export const makeCliproxyApi = Effect.gen(function* () {
         Effect.flatMap((response) => response.json),
         Effect.flatMap(decodeClaudeModels),
       );
-      if (models.data.length > 0) return Redacted.make(key);
+      const modelIds = [...new Set(models.data.map(({ id }) => id.trim()).filter(Boolean))];
+      if (modelIds.length > 0) return { apiKey: Redacted.make(key), models: modelIds };
     }
   }, Effect.timeout("5 seconds"));
 
@@ -489,7 +490,7 @@ export const makeCliproxyApi = Effect.gen(function* () {
       : decodeV8ClientApiKeys(response);
   });
 
-  const readClientApiKey = Effect.fn("CliproxyApi.readClientApiKey")(
+  const readClaudeAccess = Effect.fn("CliproxyApi.readClaudeAccess")(
     function* (hub: CliproxyHub, existingKey?: Redacted.Redacted<string>) {
       const base = cliproxyBaseUrl(hub.url);
       if (!base) return;
@@ -662,5 +663,5 @@ export const makeCliproxyApi = Effect.gen(function* () {
       ),
     );
   });
-  return { readHub, readClientApiKey, consume };
+  return { readHub, readClaudeAccess, consume };
 });

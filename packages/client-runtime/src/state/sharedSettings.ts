@@ -1,5 +1,6 @@
 import {
   type AuthEnvironmentScope,
+  defaultInstanceIdForDriver,
   type EnvironmentId,
   requiredScopesForServerSettingsPatch,
   type ModelPreferences,
@@ -123,9 +124,19 @@ function modelSettingsPatchForEnvironment(
 ): ServerSettingsPatch {
   const matches = (change: { readonly provider: ProviderInstanceId }) =>
     sameInstance(source, target, change.provider);
-  const setModelFavorites = patch.setModelFavorites?.filter(matches) ?? [];
+  const forPreferenceProvider = <T extends { readonly provider: ProviderInstanceId }>(
+    change: T,
+  ) => {
+    const instance = source.providerInstances[change.provider];
+    return instance?.claudeHub
+      ? { ...change, provider: defaultInstanceIdForDriver(instance.driver) }
+      : change;
+  };
+  const setModelFavorites =
+    patch.setModelFavorites?.map(forPreferenceProvider).filter(matches) ?? [];
   const setModelsHidden = patch.setModelsHidden?.filter(matches) ?? [];
-  const setModelEffortDefaults = patch.setModelEffortDefaults?.filter(matches) ?? [];
+  const setModelEffortDefaults =
+    patch.setModelEffortDefaults?.map(forPreferenceProvider).filter(matches) ?? [];
   const setProviderCustomModels = patch.setProviderCustomModels?.filter(matches) ?? [];
   return {
     ...(setModelFavorites.length > 0 ? { setModelFavorites } : {}),

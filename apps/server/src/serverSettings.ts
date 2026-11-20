@@ -10,6 +10,7 @@ import {
   type ProviderInstanceMutation,
   defaultInstanceIdForDriver,
   isProviderDriverKind,
+  isClaudeHubInstanceId,
   ProviderDriverKind,
   ProviderInstanceId,
   resolveProviderInstanceEnabled,
@@ -168,9 +169,7 @@ export function redactServerSettingsForClient(
         instance.claudeHub && instance.environment
           ? {
               ...instance,
-              environment: instance.environment.filter(
-                ({ name }) => !isClaudeHubLaunchVariable(name),
-              ),
+              environment: instance.environment.filter(({ name }) => isClaudeHubVariable(name)),
             }
           : instance,
       ]),
@@ -226,6 +225,7 @@ interface ClaudeHubSetup {
   readonly endpoint: string;
   readonly label: string;
   readonly apiKey: Redacted.Redacted<string> | undefined;
+  readonly models?: ReadonlyArray<string> | undefined;
 }
 
 function isClaudeHubVariable(name: string): boolean {
@@ -237,11 +237,15 @@ const claudeHubLaunchDefaults = {
   CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: "1",
   ANTHROPIC_API_KEY: "",
   ANTHROPIC_CUSTOM_HEADERS: "",
+  ANTHROPIC_UNIX_SOCKET: "",
+  CLAUDE_CODE_HOST_AUTH_ENV_VAR: "",
+  CLAUDE_CODE_HOST_CREDS_FILE: "",
   CLAUDE_CODE_OAUTH_TOKEN: "",
   CLAUDE_CODE_USE_ANTHROPIC_AWS: "",
   CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD: "",
   CLAUDE_CODE_USE_BEDROCK: "",
   CLAUDE_CODE_USE_FOUNDRY: "",
+  CLAUDE_CODE_USE_GATEWAY: "",
   CLAUDE_CODE_USE_MANTLE: "",
   CLAUDE_CODE_USE_VERTEX: "",
 };
@@ -256,29 +260,142 @@ function isClaudeHubLaunchVariable(name: string): boolean {
   return Object.hasOwn(claudeHubLaunchDefaults, name.toUpperCase());
 }
 
-function isClaudeHubInstanceId(id: ProviderInstanceId): boolean {
-  return /^claude-hub-[0-9a-f]{24}$/.test(id);
-}
+const CLAUDE_DRIVER = ProviderDriverKind.make("claudeAgent");
+const DEFAULT_CLAUDE_INSTANCE_ID = defaultInstanceIdForDriver(CLAUDE_DRIVER);
 
-function visibleClaudeHubProviders(
+function withEffectiveClaudeHubProviders(
   settings: ServerSettings,
   confirmed?: ReadonlySet<string>,
 ): ServerSettings {
   const entries = Object.entries(settings.providerInstances);
-  const visible = entries.filter(([id, instance]) => {
+  if (!entries.some(([, instance]) => instance.claudeHub)) return settings;
+
+  const clean = withoutClaudeHubPreferences(settings);
+  const main = clean.providerInstances[DEFAULT_CLAUDE_INSTANCE_ID];
+  const config =
+    main?.config && typeof main.config === "object" && !Array.isArray(main.config)
+      ? main.config
+      : {};
+  const inheritedEnvironment = main?.environment?.filter(
+    ({ name }) => !isClaudeHubVariable(name) && !isClaudeHubLaunchVariable(name),
+  );
+  const defaultEfforts =
+    clean.providerModelPreferences?.[DEFAULT_CLAUDE_INSTANCE_ID]?.defaultEfforts;
+  const providerModelPreferences =
+    defaultEfforts === undefined ? undefined : { ...clean.providerModelPreferences };
+  const favorites = clean.favorites === null ? null : [...clean.favorites];
+  const claudeFavorites = favorites?.filter(
+    ({ provider }) => provider === DEFAULT_CLAUDE_INSTANCE_ID,
+  );
+  const providerInstances = { ...clean.providerInstances };
+  const visibleHubIds: ProviderInstanceId[] = [];
+
+  for (const [rawId, instance] of entries) {
     const hub = instance.claudeHub;
-    if (!hub) return true;
-    const source = settings.usageLimitSources[hub.sourceId];
-    return (
-      hub.available &&
-      source?.enabled &&
-      source.url === hub.sourceUrl &&
-      confirmed?.has(id) !== false
-    );
+    if (!hub) continue;
+    const source = clean.usageLimitSources[hub.sourceId];
+    const id = ProviderInstanceId.make(rawId);
+    if (
+      !hub.available ||
+      !source?.enabled ||
+      source.url !== hub.sourceUrl ||
+      confirmed?.has(id) === false
+    ) {
+      delete providerInstances[id];
+      continue;
+    }
+    visibleHubIds.push(id);
+    providerInstances[id] = {
+      driver: CLAUDE_DRIVER,
+      displayName: instance.displayName ?? `Claude (${source.label ?? hub.sourceUrl})`,
+      ...(main?.enabled === undefined ? {} : { enabled: main.enabled }),
+      ...(main?.accentColor === undefined ? {} : { accentColor: main.accentColor }),
+      claudeHub: hub,
+      config: { ...config, customModels: [], hubModels: hub.models ?? [] },
+      environment: [
+        ...(inheritedEnvironment ?? []),
+        ...claudeHubLaunchEnvironment,
+        ...(instance.environment ?? []).filter(({ name }) => isClaudeHubVariable(name)),
+      ],
+    };
+    if (providerModelPreferences && defaultEfforts) {
+      providerModelPreferences[id] = { defaultEfforts, hiddenModels: [], modelOrder: [] };
+    }
+    if (claudeFavorites) {
+      for (const { model } of claudeFavorites) favorites?.push({ provider: id, model });
+    }
+  }
+
+  return {
+    ...clean,
+    providerInstances,
+    favorites,
+    providerModelPreferences: providerModelPreferences ?? clean.providerModelPreferences,
+    projectSettingsOverrides: Object.fromEntries(
+      Object.entries(clean.projectSettingsOverrides).map(([projectId, entry]) => {
+        const inherited = entry.providerInstances?.[DEFAULT_CLAUDE_INSTANCE_ID];
+        return [
+          projectId,
+          inherited && visibleHubIds.length > 0
+            ? {
+                ...entry,
+                providerInstances: {
+                  ...entry.providerInstances,
+                  ...Object.fromEntries(visibleHubIds.map((id) => [id, inherited])),
+                },
+              }
+            : entry,
+        ];
+      }),
+    ),
+  };
+}
+
+function withoutClaudeHubPreferences(settings: ServerSettings): ServerSettings {
+  const managedIds = new Set(
+    Object.entries(settings.providerInstances)
+      .filter(([, instance]) => instance.claudeHub)
+      .map(([id]) => id),
+  );
+  const isHub = (id: string) => managedIds.has(id) || isClaudeHubInstanceId(id);
+  const withoutHubs = <T>(values: Readonly<Record<string, T>>) =>
+    Object.fromEntries(Object.entries(values).filter(([id]) => !isHub(id)));
+  return {
+    ...settings,
+    favorites: settings.favorites?.filter(({ provider }) => !isHub(provider)) ?? null,
+    providerModelPreferences:
+      settings.providerModelPreferences === null
+        ? null
+        : withoutHubs(settings.providerModelPreferences),
+    projectSettingsOverrides: Object.fromEntries(
+      Object.entries(settings.projectSettingsOverrides).map(([id, entry]) => [
+        id,
+        entry.providerInstances
+          ? { ...entry, providerInstances: withoutHubs(entry.providerInstances) }
+          : entry,
+      ]),
+    ),
+  };
+}
+
+function applySettingsPatch(current: ServerSettings, patch: ServerSettingsPatch): ServerSettings {
+  const modelPreferenceProvider = (provider: ProviderInstanceId) =>
+    current.providerInstances[provider]?.claudeHub ? DEFAULT_CLAUDE_INSTANCE_ID : provider;
+  return applyServerSettingsPatch(current, {
+    ...patch,
+    ...(patch.setModelFavorites && {
+      setModelFavorites: patch.setModelFavorites.map((change) => ({
+        ...change,
+        provider: modelPreferenceProvider(change.provider),
+      })),
+    }),
+    ...(patch.setModelEffortDefaults && {
+      setModelEffortDefaults: patch.setModelEffortDefaults.map((change) => ({
+        ...change,
+        provider: modelPreferenceProvider(change.provider),
+      })),
+    }),
   });
-  return visible.length === entries.length
-    ? settings
-    : { ...settings, providerInstances: Object.fromEntries(visible) };
 }
 
 function preserveClaudeHubProviders(current: ServerSettings, next: ServerSettings): ServerSettings {
@@ -301,30 +418,22 @@ function preserveClaudeHubProviders(current: ServerSettings, next: ServerSetting
       delete providerInstances[id];
       continue;
     }
-    const desired = providerInstances[id] ?? stored;
     const available = hub.available && source.enabled && source.url === hub.sourceUrl;
     providerInstances[id] = {
-      ...desired,
-      driver: stored.driver,
+      driver: CLAUDE_DRIVER,
+      ...(stored.displayName === undefined ? {} : { displayName: stored.displayName }),
       claudeHub: { ...hub, available },
-      environment: [
-        ...(desired.environment ?? []).filter(
-          ({ name }) => !isClaudeHubVariable(name) && !isClaudeHubLaunchVariable(name),
-        ),
-        ...claudeHubLaunchEnvironment,
-        ...(stored.environment ?? []).filter(
-          ({ name }) => isClaudeHubVariable(name) && (available || name !== "ANTHROPIC_AUTH_TOKEN"),
-        ),
-      ],
+      environment: (stored.environment ?? []).filter(
+        ({ name }) => isClaudeHubVariable(name) && (available || name !== "ANTHROPIC_AUTH_TOKEN"),
+      ),
     };
   }
-  return { ...next, providerInstances };
+  return withoutClaudeHubPreferences({ ...next, providerInstances });
 }
 
 function applyClaudeHubSetup(
   settings: ServerSettings,
   setup: ClaudeHubSetup,
-  homePath: string,
   currentManagementKey: UsageLimitSourceConfig["managementKey"] | undefined,
   currentInstance: ProviderInstanceConfig | undefined,
 ): ServerSettings {
@@ -343,11 +452,12 @@ function applyClaudeHubSetup(
     sourceId: setup.sourceId,
     sourceUrl: setup.sourceUrl,
     available: apiKey !== undefined,
+    ...(setup.models === undefined ? {} : { models: setup.models }),
   };
   if (apiKey === undefined && (stored === undefined || !stored.claudeHub?.available))
     return settings;
   if (
-    currentInstance &&
+    currentInstance?.displayName === `Claude (${setup.label})` &&
     Equal.equals(currentInstance.claudeHub, claudeHub) &&
     currentInstance.environment?.find(({ name }) => name === "ANTHROPIC_BASE_URL")?.value ===
       setup.endpoint &&
@@ -356,23 +466,14 @@ function applyClaudeHubSetup(
   )
     return settings;
 
-  const defaults: ProviderInstanceConfig = {
-    driver: ProviderDriverKind.make("claudeAgent"),
-    displayName: `Claude (${setup.label})`,
-    config: { homePath },
-  };
-  const instance = stored ?? defaults;
   return applyProviderInstanceMutation(settings, {
     operation: "upsert",
     instanceId: setup.instanceId,
     instance: {
-      ...instance,
+      driver: CLAUDE_DRIVER,
+      displayName: `Claude (${setup.label})`,
       claudeHub,
       environment: [
-        ...(instance.environment ?? []).filter(
-          ({ name }) => !isClaudeHubVariable(name) && !isClaudeHubLaunchVariable(name),
-        ),
-        ...claudeHubLaunchEnvironment,
         { name: "ANTHROPIC_BASE_URL", value: setup.endpoint, sensitive: false },
         ...(apiKey === undefined
           ? []
@@ -423,7 +524,7 @@ function ensureProviderInstanceMutationAllowed(
 ): Effect.Effect<void, ServerSettingsError> {
   const existing = settings.providerInstances[mutation.instanceId];
   if (
-    (existing?.claudeHub && mutation.operation === "remove") ||
+    existing?.claudeHub ||
     (existing === undefined && isClaudeHubInstanceId(mutation.instanceId))
   ) {
     return Effect.fail(
@@ -510,7 +611,7 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
   const currentSettingsRef = yield* Ref.make<ServerSettings>(initialSettings);
   const writeSemaphore = yield* Semaphore.make(1);
   const getSettings = Ref.get(currentSettingsRef).pipe(
-    Effect.map((settings) => visibleClaudeHubProviders(settings)),
+    Effect.map((settings) => withEffectiveClaudeHubProviders(settings)),
     Effect.map(resolveTextGenerationProvider),
   );
 
@@ -529,7 +630,7 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
         ),
         Effect.flatMap(normalizeServerSettings),
         Effect.tap((nextSettings) => Ref.set(currentSettingsRef, nextSettings)),
-        Effect.map((settings) => visibleClaudeHubProviders(settings)),
+        Effect.map((settings) => withEffectiveClaudeHubProviders(settings)),
         Effect.map(resolveTextGenerationProvider),
       ),
     );
@@ -541,13 +642,13 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
     getSettings,
     updateSettings: (patch) =>
       updateTestSettings((currentSettings) =>
-        Effect.succeed(applyServerSettingsPatch(currentSettings, patch)),
+        Effect.succeed(applySettingsPatch(currentSettings, patch)),
       ),
     updateProviderInstance: (mutation, patch = {}) =>
       updateTestSettings((currentSettings) =>
         Effect.gen(function* () {
           yield* ensureProviderInstanceMutationAllowed(currentSettings, mutation, "test settings");
-          const patched = applyServerSettingsPatch(currentSettings, patch);
+          const patched = applySettingsPatch(currentSettings, patch);
           return applyProviderInstanceMutation(patched, mutation);
         }),
       ),
@@ -558,7 +659,6 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
             applyClaudeHubSetup(
               current,
               setup,
-              `claude-homes/${setup.instanceId}`,
               current.usageLimitSources[setup.sourceId]?.managementKey,
               current.providerInstances[setup.instanceId],
             ),
@@ -897,7 +997,7 @@ function foldLegacyProjectSettings(
 }
 
 const make = Effect.gen(function* () {
-  const { settingsPath, stateDir } = yield* ServerConfig.ServerConfig;
+  const { settingsPath } = yield* ServerConfig.ServerConfig;
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
@@ -912,7 +1012,7 @@ const make = Effect.gen(function* () {
   const toEffective = (settings: ServerSettings) =>
     resolveTextGenerationProvider(
       managedProviders.applyLimits(
-        visibleClaudeHubProviders(managed.applyLocks(settings), confirmedClaudeHubs),
+        withEffectiveClaudeHubProviders(managed.applyLocks(settings), confirmedClaudeHubs),
       ),
       managedProviders.isDriverAllowed,
     );
@@ -1664,7 +1764,7 @@ const make = Effect.gen(function* () {
     updateSettings: (patch) =>
       updateAndPersistSettings(patch, (current) =>
         ensureSecretProviderWritesAllowed(patch, settingsPath).pipe(
-          Effect.as(applyServerSettingsPatch(current, patch)),
+          Effect.as(applySettingsPatch(current, patch)),
         ),
       ),
     updateProviderInstance: (mutation, patch = {}) =>
@@ -1672,7 +1772,7 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           yield* ensureSecretProviderWritesAllowed(patch, settingsPath);
           yield* ensureProviderInstanceMutationAllowed(current, mutation, settingsPath);
-          const patched = applyServerSettingsPatch(current, patch);
+          const patched = applySettingsPatch(current, patch);
           return applyProviderInstanceMutation(patched, mutation);
         }),
       ),
@@ -1685,7 +1785,6 @@ const make = Effect.gen(function* () {
               applyClaudeHubSetup(
                 current,
                 setup,
-                pathService.join(stateDir, "claude-homes", setup.instanceId),
                 usageLimitSources[setup.sourceId]?.managementKey,
                 providerInstances[setup.instanceId],
               ),

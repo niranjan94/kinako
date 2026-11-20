@@ -1823,106 +1823,124 @@ describe("ClaudeAdapterV2 executable path", () => {
 });
 
 describe("ClaudeAdapterV2 resumeThread", () => {
-  it.effect("fails for a transcript without messages so a fresh session replaces it", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const configDir = yield* fileSystem.makeTempDirectoryScoped({
-          prefix: "t3-claude-empty-session-",
-        });
-        const projectDir = path.join(configDir, "projects", "-workspace");
-        yield* fileSystem.makeDirectory(projectDir, { recursive: true });
-        yield* fileSystem.writeFileString(
-          path.join(projectDir, "native-thread-empty.jsonl"),
-          [
-            `{"type":"last-prompt","lastPrompt":"hello","sessionId":"native-thread-empty"}`,
-            `{"type":"atis-latch","atis":"","sessionId":"native-thread-empty"}`,
-            `{"type":"cost-state","sessionId":"native-thread-empty","totalCostUSD":0}`,
-            "",
-          ].join("\n"),
-        );
-        yield* fileSystem.writeFileString(
-          path.join(projectDir, "native-thread-saved.jsonl"),
-          `{"type":"user","message":{"role":"user","content":"hello"},"sessionId":"native-thread-saved"}\n`,
-        );
-        const adapter = yield* ClaudeAdapterV2.makeClaudeAdapterV2({
-          instanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
-          settings: DEFAULT_CLAUDE_SETTINGS,
-          environment: { CLAUDE_CONFIG_DIR: configDir },
-          attachmentsDir: configDir,
-          fileSystem,
-          path,
-          random: yield* SecureRandom.SecureRandom,
-          idAllocator: yield* IdAllocator.IdAllocatorV2,
-          queryRunner: {
-            allocateSessionId: Effect.succeed("native-thread-empty"),
-            open: () => Effect.die("unused"),
-            forkSession: () => Effect.die("unused"),
-            subagentLaunchToolUseId: () => Effect.succeed(null),
-            subagentModel: () => Effect.succeed(null),
-            assertComplete: Effect.void,
-          },
-        });
-        const threadId = ThreadId.make("thread-claude-empty-session");
-        const runtime = yield* adapter.openSession({
-          threadId,
-          providerSessionId: ProviderSessionId.make("provider-session-claude-empty-session"),
-          modelSelection: CLAUDE_TEST_MODEL_SELECTION,
-          runtimePolicy: CLAUDE_TEST_RUNTIME_POLICY,
-        });
-        const providerThread = yield* runtime.ensureThread({
-          threadId,
-          modelSelection: CLAUDE_TEST_MODEL_SELECTION,
-          runtimePolicy: CLAUDE_TEST_RUNTIME_POLICY,
-        });
-
-        const error = yield* Effect.flip(runtime.resumeThread({ providerThread }));
-        assert.equal(error._tag, "ProviderAdapterResumeThreadError");
-
-        const saved = yield* runtime.resumeThread({
-          providerThread: {
-            ...providerThread,
-            nativeThreadRef: {
-              driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
-              nativeId: "native-thread-saved",
-              strength: "strong",
+  it.effect.each([false, true])(
+    "falls back for an empty or relocated hub transcript (hub: %s)",
+    (hub) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const configDir = yield* fileSystem.makeTempDirectoryScoped({
+            prefix: "t3-claude-empty-session-",
+          });
+          const projectDir = path.join(configDir, "projects", "-workspace");
+          yield* fileSystem.makeDirectory(projectDir, { recursive: true });
+          yield* fileSystem.writeFileString(
+            path.join(projectDir, "native-thread-empty.jsonl"),
+            [
+              `{"type":"last-prompt","lastPrompt":"hello","sessionId":"native-thread-empty"}`,
+              `{"type":"atis-latch","atis":"","sessionId":"native-thread-empty"}`,
+              `{"type":"cost-state","sessionId":"native-thread-empty","totalCostUSD":0}`,
+              "",
+            ].join("\n"),
+          );
+          yield* fileSystem.writeFileString(
+            path.join(projectDir, "native-thread-saved.jsonl"),
+            `{"type":"user","message":{"role":"user","content":"hello"},"sessionId":"native-thread-saved"}\n`,
+          );
+          const previousConfigDir = path.join(configDir, "old-hub-home");
+          if (hub) {
+            const previousProjectDir = path.join(previousConfigDir, "projects", "-workspace");
+            yield* fileSystem.makeDirectory(previousProjectDir, { recursive: true });
+            yield* fileSystem.writeFileString(
+              path.join(previousProjectDir, "native-thread-missing.jsonl"),
+              `{"type":"user","message":{"role":"user","content":"hello"},"sessionId":"native-thread-missing"}\n`,
+            );
+          }
+          const adapter = yield* ClaudeAdapterV2.makeClaudeAdapterV2({
+            instanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
+            settings: DEFAULT_CLAUDE_SETTINGS,
+            environment: { CLAUDE_CONFIG_DIR: configDir },
+            ...(hub ? { previousConfigDir } : {}),
+            attachmentsDir: configDir,
+            fileSystem,
+            path,
+            random: yield* SecureRandom.SecureRandom,
+            idAllocator: yield* IdAllocator.IdAllocatorV2,
+            queryRunner: {
+              allocateSessionId: Effect.succeed("native-thread-empty"),
+              open: () => Effect.die("unused"),
+              forkSession: () => Effect.die("unused"),
+              subagentLaunchToolUseId: () => Effect.succeed(null),
+              subagentModel: () => Effect.succeed(null),
+              assertComplete: Effect.void,
             },
-          },
-        });
-        assert.equal(saved.nativeThreadRef?.nativeId, "native-thread-saved");
+          });
+          const threadId = ThreadId.make("thread-claude-empty-session");
+          const runtime = yield* adapter.openSession({
+            threadId,
+            providerSessionId: ProviderSessionId.make("provider-session-claude-empty-session"),
+            modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+            runtimePolicy: CLAUDE_TEST_RUNTIME_POLICY,
+          });
+          const providerThread = yield* runtime.ensureThread({
+            threadId,
+            modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+            runtimePolicy: CLAUDE_TEST_RUNTIME_POLICY,
+          });
 
-        const missing = yield* runtime.resumeThread({
-          providerThread: {
+          const error = yield* Effect.flip(runtime.resumeThread({ providerThread }));
+          assert.equal(error._tag, "ProviderAdapterResumeThreadError");
+
+          const saved = yield* runtime.resumeThread({
+            providerThread: {
+              ...providerThread,
+              nativeThreadRef: {
+                driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
+                nativeId: "native-thread-saved",
+                strength: "strong",
+              },
+            },
+          });
+          assert.equal(saved.nativeThreadRef?.nativeId, "native-thread-saved");
+
+          const missing = {
             ...providerThread,
             nativeThreadRef: {
               driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
               nativeId: "native-thread-missing",
-              strength: "strong",
+              strength: "strong" as const,
             },
-          },
-        });
-        assert.equal(missing.nativeThreadRef?.nativeId, "native-thread-missing");
+          };
+          const resumeMissing = runtime.resumeThread({ providerThread: missing });
+          if (hub) {
+            assert.equal(
+              (yield* Effect.flip(resumeMissing))._tag,
+              "ProviderAdapterResumeThreadError",
+            );
+          } else {
+            assert.equal((yield* resumeMissing).nativeThreadRef?.nativeId, "native-thread-missing");
+          }
 
-        // An imported session's history lives only in its transcript.
-        const missingImport = yield* Effect.flip(
-          runtime.resumeThread({
-            providerThread: { ...missing, id: providerThread.id },
-            importedNativeSession: true,
-          }),
-        );
-        assert.equal(missingImport._tag, "ProviderAdapterResumeThreadError");
-      }),
-    ).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          IdAllocator.layer,
-          McpProviderSessions.layer,
-          NodeServices.layer,
-          NodeCrypto.layer,
+          // An imported session's history lives only in its transcript.
+          const missingImport = yield* Effect.flip(
+            runtime.resumeThread({
+              providerThread: { ...missing, id: providerThread.id },
+              importedNativeSession: true,
+            }),
+          );
+          assert.equal(missingImport._tag, "ProviderAdapterResumeThreadError");
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
         ),
       ),
-    ),
   );
 });
 

@@ -1,6 +1,7 @@
 import {
   ProviderDriverKind,
   ProviderInstanceId,
+  UsageLimitSourceId,
   type OrchestrationV2ThreadShellNativeThread,
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
@@ -77,6 +78,30 @@ describe("buildProviderCliResumeCommand", () => {
       }),
     ).toBeNull();
   });
+
+  it.each([true, false])(
+    "omits CLI resume for a managed Claude hub (available: %s)",
+    (available) => {
+      expect(
+        buildProviderCliResumeCommand({
+          nativeThread: nativeThread("claudeAgent", {
+            providerInstanceId: ProviderInstanceId.make("claude-hub-0123456789abcdef01234567"),
+          }),
+          cwd: "/srv/app",
+          platform: "linux",
+          instance: available
+            ? instance("claudeAgent", {
+                claudeHub: {
+                  sourceId: UsageLimitSourceId.make("test"),
+                  sourceUrl: "https://hub.test",
+                  available: true,
+                },
+              })
+            : undefined,
+        }),
+      ).toBeNull();
+    },
+  );
 
   it("resumes Codex in the shadow home the thread ran in", () => {
     expect(
