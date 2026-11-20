@@ -1680,8 +1680,17 @@ export function presentThreadShellFromProjection(
   const { updatedAt, lastVisitedAt } = live;
   const latestRun = deriveLatestThreadRun(projection);
   const runtime = deriveThreadRuntime({ ...projection, updatedAt });
+  const pending = projection.runtimeRequests.findLast((request) => request.status === "pending");
   const pendingRuntimeRequest =
-    projection.runtimeRequests.findLast((request) => request.status === "pending") ?? null;
+    pending === undefined
+      ? null
+      : {
+          id: pending.id,
+          kind: pending.kind,
+          createdAt: pending.createdAt,
+          blocking: pending.responseCapability.type !== "message",
+          ...(pending.autoReview === undefined ? {} : { autoReview: pending.autoReview.state }),
+        };
   // Direct links can hydrate detail before the thread enters the shell index.
   return {
     ...presentThreadShell(environmentId, {

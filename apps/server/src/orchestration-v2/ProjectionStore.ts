@@ -1833,6 +1833,7 @@ function pendingRuntimeRequestSummary(
     kind: request.kind,
     createdAt: request.createdAt,
     blocking: request.responseCapability.type !== "message",
+    ...(request.autoReview === undefined ? {} : { autoReview: request.autoReview.state }),
   };
 }
 
@@ -1902,6 +1903,8 @@ export function threadShellFromProjection(
       .filter((request) => request.status === "pending")
       .toSorted(
         (left, right) =>
+          Number(left.autoReview?.state === "reviewing") -
+            Number(right.autoReview?.state === "reviewing") ||
           Number(left.kind === "user_input") - Number(right.kind === "user_input") ||
           DateTime.toEpochMillis(right.createdAt) - DateTime.toEpochMillis(left.createdAt),
       )[0] ?? null,
@@ -8610,7 +8613,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 FROM orchestration_v2_projection_runtime_requests request
                 WHERE request.thread_id = t.thread_id
                   AND request.status = 'pending'
-                ORDER BY (request.kind = 'user_input') ASC,
+                -- A request the host reviewer still holds sorts after one waiting on the user.
+                ORDER BY (json_extract(request.payload_json, '$.autoReview.state') IS 'reviewing') ASC,
+                  (request.kind = 'user_input') ASC,
                   request.created_at DESC, request.runtime_request_id DESC
                 LIMIT 1
               ) AS pending_request_payload_json,

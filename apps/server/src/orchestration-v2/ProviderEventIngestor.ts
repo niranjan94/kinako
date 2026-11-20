@@ -17,6 +17,8 @@ import {
   RunId,
   type RuntimeRequestId,
   ThreadId,
+  isHostReviewableRuntimeRequest,
+  type OrchestrationV2RuntimeRequest,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -260,6 +262,34 @@ export const layer: Layer.Layer<
     const usageLimitResets = yield* UsageLimitResetFallback;
     const scope = yield* Effect.scope;
     const completedTurnAnalytics = new Set<string>();
+
+    // Host review state lives on the request, so an adapter's later copy keeps it, and a new
+    // approval on a `host-auto` thread starts held for review instead of alerting the user.
+    // Per-event work under the ingest span.
+    const withHostReview = Effect.fnUntraced(function* (
+      threadId: ThreadId,
+      request: OrchestrationV2RuntimeRequest,
+    ) {
+      const thread = yield* projections.findThread(threadId);
+      if (thread === null) return request;
+      const existing = yield* projections.getRuntimeRequest(threadId, request.id);
+      if (existing !== undefined) {
+        return {
+          ...request,
+          ...(request.inspection === undefined && existing.inspection !== undefined
+            ? { inspection: existing.inspection }
+            : {}),
+          ...(request.autoReview === undefined && existing.autoReview !== undefined
+            ? { autoReview: existing.autoReview }
+            : {}),
+        };
+      }
+      return thread.runtimeMode === "host-auto" &&
+        request.status === "pending" &&
+        isHostReviewableRuntimeRequest(request)
+        ? { ...request, autoReview: { state: "reviewing" as const } }
+        : request;
+    });
 
     const makeDomainEvent =
       /* This helper runs for individual orchestration events; the enclosing operation owns the span. */
@@ -622,7 +652,10 @@ export const layer: Layer.Layer<
                 yield* makeDomainEvent(input, {
                   type: "runtime-request.updated",
                   ...(input.event.threadId === undefined ? {} : { threadId: input.event.threadId }),
-                  payload: input.event.runtimeRequest,
+                  payload: yield* withHostReview(
+                    input.event.threadId ?? input.threadId,
+                    input.event.runtimeRequest,
+                  ),
                   nodeId: input.event.runtimeRequest.nodeId,
                 }),
               ];

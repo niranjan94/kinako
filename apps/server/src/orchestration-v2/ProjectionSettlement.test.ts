@@ -203,6 +203,16 @@ it.effect.each([["sql", layerSql]] as const)(
       yield* assertPending(approval.id, false);
       yield* setRequest(newerApproval);
       yield* assertPending(newerApproval.id, false);
+      // An approval the host reviewer still holds stays behind one that waits on the user.
+      const reviewing = {
+        ...newerApproval,
+        id: RuntimeRequestId.make("reviewing-approval"),
+        createdAt: now,
+        autoReview: { state: "reviewing" as const },
+      };
+      yield* setRequest(reviewing);
+      yield* assertPending(newerApproval.id, false);
+      yield* setRequest({ ...reviewing, status: "resolved", resolvedAt: now });
       yield* setRequest({ ...newerApproval, status: "resolved", resolvedAt: now });
       yield* assertPending(approval.id, false);
       yield* setRequest({ ...approval, status: "resolved", resolvedAt: now });

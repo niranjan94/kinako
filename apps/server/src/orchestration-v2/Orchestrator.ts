@@ -40,6 +40,7 @@ import {
   type OrchestrationV2LimitRecoveryUpdate,
   type OrchestrationV2Notification,
   type OrchestrationV2ServerCommand,
+  type OrchestrationV2RuntimeRequestAutoReview,
   type ThreadPullRequestLink,
   type ThreadPullRequestWatch,
   type PullRequestWatchUntil,
@@ -710,6 +711,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "queued-run.edit":
     case "runtime-request.respond":
     case "runtime-request.delivery.fail":
+    case "runtime-request.auto-review":
     case "thread.user-input.dismiss":
     case "checkpoint.rollback":
     case "checkpoint.rollback.fail":
@@ -11669,11 +11671,67 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchRuntimeRequestAutoReview = Effect.fn(
+    "Orchestrator.dispatchRuntimeRequestAutoReview",
+  )(function* (
+    command: Extract<
+      OrchestrationV2ServerCommand,
+      { readonly type: "runtime-request.auto-review" }
+    >,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) {
+    const request = yield* projectionStore
+      .getRuntimeRequest(command.threadId, command.requestId)
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    // The user or the run ending can settle a request while its review is still running.
+    if (request?.status !== "pending" || request.responseCapability.type === "not_resumable") {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Runtime request ${command.requestId} is no longer pending.`,
+      });
+    }
+    const autoReview = {
+      state: command.outcome,
+      ...(command.reason === undefined ? {} : { reason: command.reason }),
+    } as const;
+    if (command.outcome === "approved") {
+      return yield* dispatchRuntimeRequestRespond(
+        {
+          type: "runtime-request.respond",
+          commandId: command.commandId,
+          threadId: command.threadId,
+          requestId: command.requestId,
+          decision: "accept",
+        },
+        events,
+        effects,
+        autoReview,
+      );
+    }
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "runtime-request.updated",
+      threadId: command.threadId,
+      nodeId: request.nodeId,
+      occurredAt: yield* DateTime.now,
+      payload: { ...request, autoReview },
+    });
+  });
+
   const dispatchRuntimeRequestRespond = Effect.fn("Orchestrator.dispatchRuntimeRequestRespond")(
     function* (
       command: Extract<OrchestrationV2Command, { readonly type: "runtime-request.respond" }>,
       events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
       effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+      autoReview?: OrchestrationV2RuntimeRequestAutoReview,
     ) {
       const context = yield* projectionStore
         .getRuntimeResponseContext(command.threadId, command.requestId)
@@ -11820,6 +11878,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         ...(command.decision === undefined ? {} : { decision: command.decision }),
         ...(command.feedback === undefined ? {} : { feedback: command.feedback }),
         ...(answers === undefined ? {} : { answers }),
+        ...(autoReview === undefined ? {} : { autoReview }),
       };
       const emitEvent = emit(events, command);
       const requestNode = context.node;
@@ -17236,6 +17295,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "runtime-request.delivery.fail":
         yield* dispatchRuntimeRequestDeliveryFail(command, events);
+        break;
+      case "runtime-request.auto-review":
+        yield* dispatchRuntimeRequestAutoReview(command, events, effects);
         break;
       case "thread.background-work.settle":
         yield* dispatchBackgroundWorkSettle(command, events, effects);

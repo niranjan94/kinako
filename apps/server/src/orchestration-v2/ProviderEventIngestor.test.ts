@@ -175,6 +175,7 @@ const isProviderEvent = Schema.is(ProviderAdapter.ProviderAdapterV2Event);
 
 function threadCreatedEvent(
   now: DateTime.Utc,
+  overrides: Partial<OrchestrationV2AppThread> = {},
 ): Effect.Effect<
   OrchestrationV2DomainEvent,
   IdAllocator.IdAllocatorV2Error,
@@ -221,6 +222,7 @@ function threadCreatedEvent(
       settledAt: null,
       lastVisitedAt: null,
       deletedAt: null,
+      ...overrides,
     };
 
     return {
@@ -1808,6 +1810,66 @@ layer("ProviderEventIngestorV2", (it) => {
       assert.deepInclude(yield* projected, { status: "pending", completedAt: null });
       yield* steerUpdated("completed");
       assert.equal((yield* projected)?.status, "completed");
+    }),
+  );
+
+  it.effect("holds a host-auto approval for review and keeps the review on later copies", () =>
+    Effect.gen(function* () {
+      const now = yield* DateTime.now;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+      const ingestor = yield* ProviderEventIngestor.ProviderEventIngestorV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const threadEvent = yield* threadCreatedEvent(now, { runtimeMode: "host-auto" });
+      const threadId = threadEvent.threadId;
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      yield* eventSink.write({ events: [threadEvent] });
+      const ingest = (runtimeRequest: OrchestrationV2RuntimeRequest) =>
+        ingestor.ingestNormalized({
+          providerSessionId,
+          providerInstanceId: modelSelection.instanceId,
+          threadId,
+          event: {
+            type: "runtime_request.updated",
+            driver: CODEX_DRIVER,
+            threadId,
+            runtimeRequest,
+          },
+        });
+      const approval: OrchestrationV2RuntimeRequest = {
+        id: RuntimeRequestId.make("request:host-review"),
+        nodeId: NodeId.make("node:host-review"),
+        providerTurnId: null,
+        nativeRequestRef: null,
+        kind: "command",
+        status: "pending",
+        responseCapability: { type: "live", providerSessionId },
+        createdAt: now,
+        resolvedAt: null,
+        inspection: { command: "vp test run" },
+      };
+      const question: OrchestrationV2RuntimeRequest = {
+        ...approval,
+        id: RuntimeRequestId.make("request:host-review-question"),
+        kind: "user_input",
+      };
+      const stored = (id: RuntimeRequestId) => projectionStore.getRuntimeRequest(threadId, id);
+
+      yield* ingest(approval);
+      yield* ingest(question);
+      assert.deepEqual((yield* stored(approval.id))?.autoReview, { state: "reviewing" });
+      assert.isUndefined((yield* stored(question.id))?.autoReview);
+
+      const { inspection: _dropped, ...withdrawn } = approval;
+      yield* ingest({ ...withdrawn, status: "cancelled" });
+      assert.deepInclude(yield* stored(approval.id), {
+        status: "cancelled",
+        inspection: { command: "vp test run" },
+        autoReview: { state: "reviewing" },
+      });
     }),
   );
 
