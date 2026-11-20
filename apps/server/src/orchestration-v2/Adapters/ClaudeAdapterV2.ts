@@ -3919,6 +3919,22 @@ function firstStringInputField(
   return undefined;
 }
 
+function claudeApprovalInspection(
+  toolName: string,
+  input: ClaudeNativeToolInput,
+): OrchestrationV2RuntimeRequest["inspection"] {
+  const command = inputRecordValue(input, "command");
+  return ProviderAdapter.runtimeRequestInspection({
+    toolName,
+    ...(typeof command === "string" ? { command } : {}),
+    paths: ["file_path", "notebook_path", "path"].map((key) => {
+      const value = inputRecordValue(input, key);
+      return typeof value === "string" ? value : undefined;
+    }),
+    toolInput: claudeNativeToolInputValue(input),
+  });
+}
+
 function jsonStringifyForTool(value: unknown): string {
   if (typeof value === "string") {
     return value;
@@ -9292,7 +9308,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           readonly appName?: string;
           readonly options?: ReadonlyArray<ProviderApprovalOption>;
           readonly presentation?: ReturnType<typeof claudeApprovalPresentation>;
-
+          readonly inspection?: OrchestrationV2RuntimeRequest["inspection"];
           readonly questions?: ReadonlyArray<OrchestrationV2UserInputQuestion>;
         }) {
           const createdAt = yield* DateTime.now;
@@ -9358,6 +9374,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 ? { supportsFeedback: true }
                 : {}),
             },
+            ...(input.inspection === undefined ? {} : { inspection: input.inspection }),
             createdAt,
             resolvedAt: null,
           };
@@ -12941,6 +12958,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               prompt,
               callbackOptions,
             }),
+            inspection: claudeApprovalInspection(toolName, nativeToolInput),
           });
           const decision = yield* Deferred.make<ClaudeApprovalResponse, never>();
           yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -13045,6 +13063,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             prompt: request.message,
             appName: request.displayName ?? request.title ?? request.serverName,
             options: CLAUDE_MCP_ELICITATION_OPTIONS,
+            inspection: ProviderAdapter.runtimeRequestInspection({
+              toolName: request.serverName,
+              toolInput: request.requestedSchema ?? request.url,
+            }),
           });
           const decision = yield* Deferred.make<ClaudeApprovalResponse>();
           yield* Ref.update(pendingRuntimeRequests, (current) => {

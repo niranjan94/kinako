@@ -6380,6 +6380,26 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             context,
             `${context.nativeTurnId}:approval:${nativeRequestId}`,
           );
+          const inspection = ProviderAdapter.runtimeRequestInspection({
+            toolName:
+              params.toolCall.name ?? params.toolCall.kind ?? params.toolCall.title ?? undefined,
+            command: parsed.toolCall?.command,
+            paths: [
+              ...(params.toolCall.locations ?? []).map((location) => location.path),
+              ...(params.toolCall.content ?? []).flatMap((content) =>
+                content.type !== "diff"
+                  ? []
+                  : "changes" in content
+                    ? content.changes.flatMap((change) =>
+                        [Reflect.get(change, "path"), Reflect.get(change, "oldPath")].filter(
+                          (path): path is string => typeof path === "string",
+                        ),
+                      )
+                    : [content.path],
+              ),
+            ],
+            toolInput: params.toolCall.rawInput,
+          });
           const runtimeRequest: OrchestrationV2RuntimeRequest = {
             id: requestId,
             nodeId,
@@ -6391,6 +6411,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               type: "live",
               providerSessionId: input.providerSessionId,
             },
+            ...(inspection === undefined ? {} : { inspection }),
             createdAt: now,
             resolvedAt: null,
           };

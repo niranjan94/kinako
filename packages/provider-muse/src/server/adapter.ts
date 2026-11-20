@@ -1229,6 +1229,18 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
               : subject.access === "read"
                 ? "file-read"
                 : "file-change";
+        const inspection =
+          native.type === "approval" && subject
+            ? ProviderAdapter.runtimeRequestInspection({
+                toolName: native.value.toolName ?? subject.kind,
+                command: subject.command,
+                paths: [subject.path],
+                toolInput:
+                  native.value.rawArgs === undefined
+                    ? subject
+                    : { ...subject, rawArgs: native.value.rawArgs },
+              })
+            : undefined;
         const runtimeRequest: OrchestrationV2RuntimeRequest = {
           id: requestId,
           nodeId,
@@ -1237,6 +1249,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
           kind,
           status: "pending",
           responseCapability: { type: "live", providerSessionId: input.providerSessionId },
+          ...(inspection === undefined ? {} : { inspection }),
           createdAt: previous?.request.createdAt ?? time,
           resolvedAt: null,
         };

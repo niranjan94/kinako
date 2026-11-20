@@ -628,6 +628,37 @@ export function openCodePermissionRequestKind(
   return "command";
 }
 
+export function openCodePermissionInspection(input: {
+  readonly permission: string;
+  readonly toolName?: string | undefined;
+  readonly patterns: ReadonlyArray<string>;
+  readonly metadata?: Readonly<Record<string, unknown>> | undefined;
+}): OrchestrationV2RuntimeRequest["inspection"] {
+  const requestKind = openCodePermissionRequestKind(input.permission, input.toolName);
+  const isShell =
+    input.permission.toLowerCase() === "bash" || input.toolName?.toLowerCase() === "bash";
+  const metadataString = (key: string) => {
+    const value = input.metadata?.[key];
+    return typeof value === "string" ? value : undefined;
+  };
+  const isFileRequest = requestKind === "file-read" || requestKind === "file-change";
+  return ProviderAdapter.runtimeRequestInspection({
+    toolName: input.permission,
+    ...(isShell ? { command: metadataString("command") ?? input.patterns.join("\n") } : {}),
+    ...(isFileRequest
+      ? {
+          paths: [
+            metadataString("filepath"),
+            metadataString("filePath"),
+            metadataString("path"),
+            ...input.patterns,
+          ],
+        }
+      : {}),
+    toolInput: { patterns: input.patterns, metadata: input.metadata },
+  });
+}
+
 const OPENCODE_ALWAYS_ALLOWED_PERMISSIONS = [
   "question",
   "read",
@@ -2091,6 +2122,15 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
           };
           pendingRequests.set(String(requestId), pending);
           pendingRequestsByNativeId.set(nativeRequestId, pending);
+          const inspection =
+            request.type === "permission"
+              ? openCodePermissionInspection({
+                  permission: request.value.permission,
+                  toolName: permissionToolName,
+                  patterns: request.value.patterns,
+                  metadata: request.value.metadata,
+                })
+              : undefined;
           const runtimeRequest: OrchestrationV2RuntimeRequest = {
             id: requestId,
             nodeId,
@@ -2102,6 +2142,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
               type: "live",
               providerSessionId: inputProviderSessionId,
             },
+            ...(inspection === undefined ? {} : { inspection }),
             createdAt: now,
             resolvedAt: null,
           };

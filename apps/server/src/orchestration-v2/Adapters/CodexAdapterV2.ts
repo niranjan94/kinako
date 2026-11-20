@@ -229,6 +229,36 @@ function codexFileChangeApprovalPrompt(input: {
   return input.grantRoot?.trim() || undefined;
 }
 
+function codexFileChangeInspectionPaths(input: {
+  readonly grantRoot?: string | null | undefined;
+  readonly fileChanges?: CodexFileChangeKinds;
+}): ReadonlyArray<string | null | undefined> {
+  return [
+    ...Object.entries(input.fileChanges ?? {}).flatMap(([path, change]) => [
+      path,
+      change.type === "update" ? change.move_path : undefined,
+    ]),
+    input.grantRoot,
+  ];
+}
+
+function codexPermissionsInspectionPaths(
+  permissions: CodexSchema.PermissionsRequestApprovalParams["permissions"],
+): ReadonlyArray<string> {
+  const fileSystem = permissions.fileSystem;
+  return [
+    ...(fileSystem?.read ?? []),
+    ...(fileSystem?.write ?? []),
+    ...(fileSystem?.entries ?? []).flatMap((entry) =>
+      entry.path.type === "path"
+        ? [entry.path.path]
+        : entry.path.type === "glob_pattern"
+          ? [entry.path.pattern]
+          : [],
+    ),
+  ];
+}
+
 export function normalizeCodexThreadLoadModelSelection(selection: ModelSelection): ModelSelection {
   // Codex applies effort on turn/start; resume discards its pinned request effort.
   const { options, ...rest } = selection;
@@ -4831,6 +4861,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           readonly prompt?: string | null;
           readonly appName?: string;
           readonly options?: ReadonlyArray<ProviderApprovalOption>;
+          readonly inspection?: OrchestrationV2RuntimeRequest["inspection"];
         }) {
           const createdAt = yield* DateTime.now;
           const { owner, subagent } = approvalOwnerCodexTurn(input.context);
@@ -4888,6 +4919,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               type: "live",
               providerSessionId,
             },
+            ...(input.inspection === undefined ? {} : { inspection: input.inspection }),
             createdAt,
             resolvedAt: null,
           };
@@ -6081,6 +6113,16 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               ...((payload.reason ?? payload.command) === undefined
                 ? {}
                 : { prompt: payload.reason ?? payload.command }),
+              inspection: ProviderAdapter.runtimeRequestInspection({
+                toolName: "commandExecution",
+                command: payload.command ?? undefined,
+                paths: [
+                  payload.cwd,
+                  ...(payload.commandActions ?? []).map((action) =>
+                    action.type === "unknown" ? undefined : action.path,
+                  ),
+                ],
+              }),
             });
             const decision = yield* Deferred.make<ProviderApprovalDecision, never>();
             yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -6153,6 +6195,13 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   ...payload,
                   fileChanges: context.fileChangeKindsByItem.get(payload.itemId) ?? {},
                 }) ?? null,
+              inspection: ProviderAdapter.runtimeRequestInspection({
+                toolName: "fileChange",
+                paths: codexFileChangeInspectionPaths({
+                  grantRoot: payload.grantRoot,
+                  fileChanges: context.fileChangeKindsByItem.get(payload.itemId) ?? {},
+                }),
+              }),
             });
             const decision = yield* Deferred.make<ProviderApprovalDecision, never>();
             yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -6216,6 +6265,11 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               nativeRequestId: payload.itemId,
               requestKind,
               ...(payload.reason === undefined ? {} : { prompt: payload.reason }),
+              inspection: ProviderAdapter.runtimeRequestInspection({
+                toolName: "permissions",
+                paths: [payload.cwd, ...codexPermissionsInspectionPaths(payload.permissions)],
+                toolInput: payload.permissions,
+              }),
             });
             const decision = yield* Deferred.make<ProviderApprovalDecision, never>();
             yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -6303,6 +6357,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               prompt: payload.message,
               appName: described.appName,
               options: described.options,
+              inspection: ProviderAdapter.runtimeRequestInspection({
+                toolName: payload.serverName,
+                toolInput: payload._meta,
+              }),
             });
             const decision = yield* Deferred.make<ProviderApprovalDecision, never>();
             yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -6367,6 +6425,11 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               nativeRequestId,
               requestKind: "command",
               prompt: payload.reason ?? payload.command.join(" "),
+              inspection: ProviderAdapter.runtimeRequestInspection({
+                toolName: "execCommand",
+                command: payload.command,
+                paths: [payload.cwd],
+              }),
             });
             const decision = yield* Deferred.make<ProviderApprovalDecision, never>();
             yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -6435,6 +6498,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               nativeRequestId: payload.callId,
               requestKind: "file-change",
               prompt: codexFileChangeApprovalPrompt(payload) ?? null,
+              inspection: ProviderAdapter.runtimeRequestInspection({
+                toolName: "applyPatch",
+                paths: codexFileChangeInspectionPaths(payload),
+              }),
             });
             const decision = yield* Deferred.make<ProviderApprovalDecision, never>();
             yield* Ref.update(pendingRuntimeRequests, (current) => {

@@ -3961,7 +3961,9 @@ describe("CodexAdapterV2 post-settle continuation", () => {
               turnId: input.turnId,
               itemId: input.itemId,
               startedAtMs: 1782622441000,
-              ...(input.kind === "commandExecution" ? { command: `cat ${input.itemId}` } : {}),
+              ...(input.kind === "commandExecution"
+                ? { command: `cat ${input.itemId}`, reason: "Read the file", cwd: "/workspace" }
+                : {}),
             },
           },
         },
@@ -4060,6 +4062,13 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           yield* harness.until(() => requests().length === count);
           const request = requests()[count - 1]!;
           assert.equal(request.kind, kind);
+          if (kind === "command") {
+            assert.deepEqual(request.inspection, {
+              toolName: "commandExecution",
+              command: `cat ${request.nativeRequestRef?.nativeId}`,
+              paths: ["/workspace"],
+            });
+          }
           yield* harness.runtime.respondToRuntimeRequest({ requestId: request.id, decision });
         });
 

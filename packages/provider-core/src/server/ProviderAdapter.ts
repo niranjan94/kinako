@@ -898,3 +898,55 @@ export class ProviderAdapterV2 extends Context.Service<
     ) => Effect.Effect<ProviderAdapterV2SessionRuntime, ProviderAdapterV2Error, Scope.Scope>;
   }
 >()("@t3tools/provider-core/server/ProviderAdapter/ProviderAdapterV2") {}
+
+const INSPECTION_COMMAND_MAX_CHARS = 4_000;
+const INSPECTION_SUMMARY_MAX_CHARS = 1_000;
+const INSPECTION_MAX_PATHS = 50;
+
+const boundedText = (value: string | undefined, max: number): string | undefined => {
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed.length === 0) return undefined;
+  return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`;
+};
+
+/**
+ * The structured `inspection` an adapter attaches to an approval request, bounded so a large
+ * tool input never rides the wire. `toolInput` is summarized as JSON when it is not a string.
+ */
+export function runtimeRequestInspection(input: {
+  readonly toolName?: string | undefined;
+  readonly command?: string | ReadonlyArray<string> | undefined;
+  readonly paths?: ReadonlyArray<string | null | undefined> | undefined;
+  readonly toolInput?: unknown;
+}): OrchestrationV2RuntimeRequest["inspection"] {
+  const toolName = boundedText(input.toolName, 200);
+  const command = boundedText(
+    typeof input.command === "string" ? input.command : input.command?.join(" "),
+    INSPECTION_COMMAND_MAX_CHARS,
+  );
+  const paths = [
+    ...new Set(
+      (input.paths ?? []).flatMap((path) => {
+        const trimmed = path?.trim();
+        return trimmed === undefined || trimmed.length === 0 ? [] : [trimmed];
+      }),
+    ),
+  ].slice(0, INSPECTION_MAX_PATHS);
+  let rendered: string | undefined;
+  if (typeof input.toolInput === "string") rendered = input.toolInput;
+  else if (input.toolInput !== undefined && input.toolInput !== null) {
+    try {
+      rendered = JSON.stringify(input.toolInput);
+    } catch {
+      rendered = undefined;
+    }
+  }
+  const toolInputSummary = boundedText(rendered, INSPECTION_SUMMARY_MAX_CHARS);
+  const inspection = {
+    ...(toolName === undefined ? {} : { toolName }),
+    ...(command === undefined ? {} : { command }),
+    ...(paths.length === 0 ? {} : { paths }),
+    ...(toolInputSummary === undefined ? {} : { toolInputSummary }),
+  };
+  return Object.keys(inspection).length === 0 ? undefined : inspection;
+}
