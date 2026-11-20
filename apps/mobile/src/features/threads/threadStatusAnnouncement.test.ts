@@ -2,10 +2,11 @@ import {
   nextThreadAnnouncement,
   type ThreadAnnouncementMemory,
 } from "@t3tools/client-runtime/state/thread-activity-announcement";
-import { RunId } from "@t3tools/contracts";
+import { RunId, RuntimeRequestId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  approvalNeedingUserRequestId,
   nextThreadActivitySnapshot,
   type ThreadActivityInput,
   type ThreadActivityMemory,
@@ -78,5 +79,23 @@ describe("nextThreadActivitySnapshot", () => {
       null,
       "Done",
     ]);
+  });
+
+  it("waits for the host reviewer's verdict before announcing an approval", () => {
+    const request = RuntimeRequestId.make("approval-1");
+    const approval = (state: "reviewing" | "escalated") =>
+      approvalNeedingUserRequestId([{ requestId: request, autoReview: { state } }]);
+    const approvalFrame = (approvalRequestId: string | null): ThreadActivityInput => ({
+      ...frame(null, request),
+      shellPendingUserInput: false,
+      approvalRequestId,
+    });
+    expect(
+      announcements([
+        idle,
+        approvalFrame(approval("reviewing")),
+        approvalFrame(approval("escalated")),
+      ]),
+    ).toEqual([null, "Working", "Needs approval"]);
   });
 });
