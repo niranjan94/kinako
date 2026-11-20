@@ -10,7 +10,7 @@ import {
   type OrchestrationV2RuntimeRequest,
   ProviderInstanceId,
   ProviderSessionId,
-  type RuntimeMode,
+  type ProviderAdapterRuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
 import { GrokSettings } from "@t3tools/provider-grok/settings";
@@ -76,7 +76,7 @@ function permissionRequest(
 }
 
 function runtimePolicy(input: {
-  readonly runtimeMode: RuntimeMode;
+  readonly runtimeMode: ProviderAdapterRuntimeMode;
   readonly approvalPolicy?: unknown;
   readonly sandboxPolicy?: unknown;
 }) {
@@ -280,7 +280,7 @@ describe("Grok launch permission mode", () => {
     }).pipe(Effect.provideService(HostProcess.Platform, "darwin"), Effect.provide(layerTest));
 
   const policy = (
-    runtimeMode: RuntimeMode,
+    runtimeMode: ProviderAdapterRuntimeMode,
     override: Partial<ProviderAdapter.ProviderAdapterV2RuntimePolicy> = {},
   ) =>
     ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({

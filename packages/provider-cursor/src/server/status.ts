@@ -30,6 +30,8 @@ const CURSOR_PRESENTATION = {
   displayName: "Cursor",
   supportsConversationRollback: true,
   showInteractionModeToggle: true,
+  // The Cursor SDK settles approvals itself and exposes no callback, so host review has nothing to answer.
+  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],

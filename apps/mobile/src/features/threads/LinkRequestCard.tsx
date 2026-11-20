@@ -54,7 +54,10 @@ export const LINK_ACCESS_CHOICES: ReadonlyArray<{
     label: msg("Read only"),
     description: msg("Read projects and threads. Cannot start, message or change anything."),
   },
-  ...RUNTIME_MODE_CHOICES.map((choice) => ({ ...choice, access: choice.mode })),
+  // Host review only applies to threads; a client's access is one of the provider modes.
+  ...RUNTIME_MODE_CHOICES.flatMap((choice) =>
+    choice.mode === "host-auto" ? [] : [{ ...choice, access: choice.mode }],
+  ),
 ];
 const accessLabel = (access: AuthMcpClientAccess, resolve: MessageResolver) => {
   const label = LINK_ACCESS_CHOICES.find((choice) => choice.access === access)?.label;

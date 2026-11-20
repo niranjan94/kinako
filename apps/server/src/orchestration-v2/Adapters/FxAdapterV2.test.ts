@@ -9,7 +9,7 @@ import {
   ProviderSessionId,
   RunAttemptId,
   RunId,
-  type RuntimeMode,
+  type ProviderAdapterRuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
 import { ACP_PROTOCOL } from "@t3tools/provider-acp/server/adapter";
@@ -153,7 +153,7 @@ const setConfig = (
 const openFxSession = Effect.fn("openFxSession")(function* (input: {
   readonly scenario: string;
   readonly frames: ReadonlyArray<Frame>;
-  readonly runtimeMode: RuntimeMode;
+  readonly runtimeMode: ProviderAdapterRuntimeMode;
   readonly model?: string;
   readonly defaultBackend?: string;
   readonly modeOptions?: ReadonlyArray<{ readonly id: string; readonly value: string }>;

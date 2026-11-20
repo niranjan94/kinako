@@ -15,10 +15,10 @@ describe("fx replay fixtures", () => {
         const fixtureInput = input.buildInput();
         return {
           ...fixtureInput,
-          runtimeMode: providerRuntimeMode(
-            fixtureInput.runtimeMode ?? "full-access",
-            FX_SUPPORTED_RUNTIME_MODES,
-          ),
+          runtimeMode: providerRuntimeMode(fixtureInput.runtimeMode ?? "full-access", {
+            driver: "fx",
+            supportedRuntimeModes: FX_SUPPORTED_RUNTIME_MODES,
+          }),
         };
       },
       harness: FxOrchestratorReplayHarness,

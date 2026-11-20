@@ -4,7 +4,7 @@ import {
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   type ProviderSendTurnInput,
-  type RuntimeMode,
+  type ProviderAdapterRuntimeMode,
 } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -153,7 +153,7 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
   return yield* Effect.service(AcpSessionRuntime.AcpSessionRuntime).pipe(Effect.provide(context));
 });
 
-export function antigravityPermissionMode(runtimeMode: RuntimeMode): string {
+export function antigravityPermissionMode(runtimeMode: ProviderAdapterRuntimeMode): string {
   switch (runtimeMode) {
     case "full-access":
       return "yolo";
@@ -220,7 +220,9 @@ export function antigravityPermissionDisposition(
 }
 
 /** The runtime mode an Antigravity session mode grants; the inverse of `antigravityPermissionMode`. */
-export function antigravityRuntimeModeForSessionMode(modeId: string): RuntimeMode | undefined {
+export function antigravityRuntimeModeForSessionMode(
+  modeId: string,
+): ProviderAdapterRuntimeMode | undefined {
   switch (modeId) {
     case "yolo":
       return "full-access";

@@ -22,9 +22,12 @@ export const ProviderSandboxMode = Schema.Literals([
 ]);
 export type ProviderSandboxMode = typeof ProviderSandboxMode.Type;
 
+// `host-auto` is this fork's host-managed reviewer. It sorts before `auto` so a clamp to an
+// `auto` ceiling keeps landing on the provider's own Auto, as upstream does.
 export const RuntimeMode = Schema.Literals([
   "approval-required",
   "auto-accept-edits",
+  "host-auto",
   "auto",
   "full-access",
 ]);
@@ -44,6 +47,7 @@ const RUNTIME_MODE_RANK: Record<RuntimeMode, number> = {
   "approval-required": 0,
   "auto-accept-edits": 1,
   auto: 2,
+  "host-auto": 2,
   "full-access": 3,
 };
 
@@ -53,6 +57,35 @@ export const runtimeModeRank = (mode: RuntimeMode): number => RUNTIME_MODE_RANK[
 /** Whether `mode` grants the agent more than `ceiling`; no ceiling allows every mode. */
 export const isRuntimeModeAbove = (mode: RuntimeMode, ceiling: RuntimeMode | undefined): boolean =>
   ceiling !== undefined && RUNTIME_MODE_RANK[mode] > RUNTIME_MODE_RANK[ceiling];
+
+// Codex's and Claude's own reviewers settle requests inside the provider instead of handing them
+// to the host, so host review runs over Auto-accept edits. ACP Registry agents have no shared
+// reviewer and allow edits anywhere under Auto-accept edits, so every request comes to the host.
+const HOST_AUTO_BASE_BY_DRIVER: Readonly<Record<string, ProviderAdapterRuntimeMode>> = {
+  codex: "auto-accept-edits",
+  claudeAgent: "auto-accept-edits",
+  acpRegistry: "approval-required",
+};
+
+/**
+ * What a provider actually runs while a thread is in `host-auto`: its own Auto where it has one,
+ * so native rules run first, else the narrowest mode that still sends requests to the host.
+ * No supported list means the provider offers every mode.
+ */
+export function hostAutoBaseRuntimeMode(
+  driver: string,
+  supportedRuntimeModes: ReadonlyArray<RuntimeMode> | undefined,
+): ProviderAdapterRuntimeMode {
+  const offers = (mode: ProviderAdapterRuntimeMode) =>
+    supportedRuntimeModes === undefined ||
+    supportedRuntimeModes.length === 0 ||
+    supportedRuntimeModes.includes(mode);
+  const preferred = HOST_AUTO_BASE_BY_DRIVER[driver];
+  if (preferred !== undefined && offers(preferred)) return preferred;
+  if (offers("auto")) return "auto";
+  if (offers("auto-accept-edits")) return "auto-accept-edits";
+  return "approval-required";
+}
 
 export const ProviderInteractionMode = Schema.Literals(["default", "plan"]);
 export type ProviderInteractionMode = typeof ProviderInteractionMode.Type;

@@ -6,7 +6,7 @@ import {
   ProviderInstanceId,
   type ManagedPolicySummary,
   type ProviderOptionDescriptor,
-  type RuntimeMode,
+  type ProviderAdapterRuntimeMode,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -22,7 +22,10 @@ import {
   withManagedRuntimeModeLimits,
 } from "./thread-settings-options";
 
-const policy = (organization: string, maxRuntimeMode?: RuntimeMode): ManagedPolicySummary => ({
+const policy = (
+  organization: string,
+  maxRuntimeMode?: ProviderAdapterRuntimeMode,
+): ManagedPolicySummary => ({
   organization,
   lockedSettings: [],
   ...(maxRuntimeMode === undefined ? {} : { limits: { maxRuntimeMode } }),

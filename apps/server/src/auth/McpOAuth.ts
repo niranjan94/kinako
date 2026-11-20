@@ -16,7 +16,7 @@ import {
   MCP_PEER_LINK_SOFTWARE_ID,
   mcpClientScopes,
   parseMcpApprovalCode,
-  type RuntimeMode,
+  type ProviderAdapterRuntimeMode,
 } from "@t3tools/contracts";
 import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
 import * as Clock from "effect/Clock";
@@ -228,7 +228,7 @@ export class McpOAuth extends Context.Service<
     readonly deny: (authorization: AuthorizationRequest) => string;
     /** A managed policy's runtime-mode ceiling, shown on the approval page. */
     readonly runtimeModeCeiling:
-      | { readonly organization: string; readonly maxRuntimeMode: RuntimeMode }
+      | { readonly organization: string; readonly maxRuntimeMode: ProviderAdapterRuntimeMode }
       | undefined;
     readonly exchangeCode: (input: {
       readonly request: HttpServerRequest.HttpServerRequest;
