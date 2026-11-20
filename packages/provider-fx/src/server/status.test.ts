@@ -294,7 +294,11 @@ describe("checkFxProviderStatus", () => {
       };
       // fx 0.0.13 lists no modes and has no full-access mode.
       const withoutModes = yield* check({ ...backends, " status --json": status("fx login") });
-      assert.deepEqual(withoutModes.draft.supportedRuntimeModes, ["approval-required", "auto"]);
+      assert.deepEqual(withoutModes.draft.supportedRuntimeModes, [
+        "approval-required",
+        "auto",
+        "host-auto",
+      ]);
       // fx 0.0.14+ lists the ACP session modes (src/core/output/output_contracts.zig).
       const withModes = yield* check({
         ...backends,
@@ -305,6 +309,7 @@ describe("checkFxProviderStatus", () => {
       assert.deepEqual(withModes.draft.supportedRuntimeModes, [
         "approval-required",
         "auto",
+        "host-auto",
         "full-access",
       ]);
     }),
