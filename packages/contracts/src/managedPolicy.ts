@@ -3,7 +3,7 @@ import * as Struct from "effect/Struct";
 
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { ProviderDriverKind, ProviderInstanceEnvironmentVariableName } from "./providerInstance.ts";
-import { isRuntimeModeAbove, RuntimeMode } from "./providerPolicy.ts";
+import { isRuntimeModeAbove, ProviderAdapterRuntimeMode, RuntimeMode } from "./providerPolicy.ts";
 
 /**
  * One server setting an administrator manages, keyed in the policy by its dot path in the
@@ -72,7 +72,7 @@ export type ManagedPolicyClient = typeof ManagedPolicyClient.Type;
  */
 export const ManagedPolicyLimits = Schema.Struct({
   /** The broadest runtime mode any thread may be created in, switched to, or run turns in. */
-  maxRuntimeMode: Schema.optionalKey(RuntimeMode),
+  maxRuntimeMode: Schema.optionalKey(ProviderAdapterRuntimeMode),
   /** Clients the server accepts. Without `remote`, nothing off this machine can pair. */
   clients: Schema.optionalKey(Schema.NonEmptyArray(ManagedPolicyClient)),
   /** `false` turns T3 Connect off and unlinks this machine. */
@@ -90,7 +90,7 @@ export type ManagedPolicyLimits = typeof ManagedPolicyLimits.Type;
 
 /** The limits clients see: what the server enforces, which can be broader than the file says. */
 export const ManagedPolicySummaryLimits = Schema.Struct({
-  maxRuntimeMode: Schema.optionalKey(RuntimeMode),
+  maxRuntimeMode: Schema.optionalKey(ProviderAdapterRuntimeMode),
   clients: Schema.optionalKey(Schema.NonEmptyArray(ManagedPolicyClient)),
   /** `false` also when `clients` leaves out `remote`, since Connect is remote access. */
   connect: Schema.optionalKey(Schema.Boolean),
@@ -170,7 +170,7 @@ export function managedPolicyDeniedMessage(organization: string, capability: str
   return `${organization}'s policy does not allow ${capability}.`;
 }
 
-const RUNTIME_MODE_LABELS: Record<RuntimeMode, string> = {
+const RUNTIME_MODE_LABELS: Record<ProviderAdapterRuntimeMode, string> = {
   "approval-required": "Supervised",
   "auto-accept-edits": "Auto-accept edits",
   auto: "Auto",
@@ -178,7 +178,10 @@ const RUNTIME_MODE_LABELS: Record<RuntimeMode, string> = {
 };
 
 /** "Example Corp limits threads to Auto-accept edits." */
-export function managedRuntimeModeCeilingMessage(organization: string, ceiling: RuntimeMode) {
+export function managedRuntimeModeCeilingMessage(
+  organization: string,
+  ceiling: ProviderAdapterRuntimeMode,
+) {
   return `${organization} limits threads to ${RUNTIME_MODE_LABELS[ceiling]}.`;
 }
 

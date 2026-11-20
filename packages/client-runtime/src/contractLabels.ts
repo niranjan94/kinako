@@ -10,6 +10,7 @@ import {
   type ManagedPolicySummary,
   type ProjectCloneSnapshot,
   type ProjectCloneStage,
+  type ProviderAdapterRuntimeMode,
   type RuntimeMode,
   type WorktreeSetupStageId,
   worktreeSetupStageLabel as contractsWorktreeSetupStageLabel,
@@ -98,7 +99,7 @@ export function managedUpdatesDenial(
 /** @public */
 export function managedRuntimeModeCeilingMessage(
   organization: string,
-  ceiling: RuntimeMode,
+  ceiling: ProviderAdapterRuntimeMode,
   resolve: MFunctionType = mFallback,
 ): string {
   switch (ceiling) {

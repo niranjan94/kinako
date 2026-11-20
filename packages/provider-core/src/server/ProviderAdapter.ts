@@ -30,7 +30,7 @@ import {
   ProviderSessionId,
   ProviderThreadId,
   ProviderTurnId,
-  RuntimeMode,
+  ProviderAdapterRuntimeMode,
   RuntimeRequestId,
   RunAttemptId,
   RunId,
@@ -63,7 +63,7 @@ export const ProviderAdapterV2RuntimeWorkspace = Schema.Struct({
 export type ProviderAdapterV2RuntimeWorkspace = typeof ProviderAdapterV2RuntimeWorkspace.Type;
 
 export const ProviderAdapterV2RuntimePolicy = Schema.Struct({
-  runtimeMode: RuntimeMode,
+  runtimeMode: ProviderAdapterRuntimeMode,
   interactionMode: ProviderInteractionMode,
   cwd: Schema.NullOr(Schema.String),
   approvalPolicy: Schema.optional(Schema.Unknown),
@@ -72,7 +72,7 @@ export const ProviderAdapterV2RuntimePolicy = Schema.Struct({
    * The administrator's ceiling, when a managed policy sets one. `runtimeMode` is already under
    * it; adapters use it to refuse native mode choices a user makes beside T3 Code's own.
    */
-  maxRuntimeMode: Schema.optional(RuntimeMode),
+  maxRuntimeMode: Schema.optional(ProviderAdapterRuntimeMode),
   workspace: Schema.optional(ProviderAdapterV2RuntimeWorkspace),
 });
 export type ProviderAdapterV2RuntimePolicy = typeof ProviderAdapterV2RuntimePolicy.Type;
