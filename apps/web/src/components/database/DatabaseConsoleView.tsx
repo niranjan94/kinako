@@ -4,7 +4,7 @@ import {
   releaseDatabaseResources,
   type DatabaseWorkspaceTab,
 } from "@t3tools/client-runtime/state/database";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { squashAtomCommandFailure, runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import {
   DatabaseQueryId,
   type DatabaseConnection,
@@ -144,7 +144,7 @@ function ConsoleView({
     if (!tabConnection) return;
     try {
       const result = databaseValue(
-        await databaseState.introspect.run(registry, {
+        await runAtomCommand(registry, databaseState.introspect, {
           environmentId,
           input: { projectId, connectionId: tabConnection.id, scope: { kind: "databases" } },
         }),
@@ -184,7 +184,9 @@ function ConsoleView({
         scope,
         ...(completionContext.sessionId ? { sessionId: completionContext.sessionId } : {}),
       };
-      return databaseValue(await databaseState.introspect.run(registry, { environmentId, input }));
+      return databaseValue(
+        await runAtomCommand(registry, databaseState.introspect, { environmentId, input }),
+      );
     });
   })();
   const run = async (statements: SqlStatement[]) => {
@@ -219,7 +221,7 @@ function ConsoleView({
     return await (async () => {
       if (tab.queryId)
         databaseValue(
-          await databaseState.closeQuery.run(registry, {
+          await runAtomCommand(registry, databaseState.closeQuery, {
             environmentId,
             input: { projectId, queryId: tab.queryId },
           }),
@@ -235,7 +237,7 @@ function ConsoleView({
         });
         const execute = async () =>
           databaseValue(
-            await databaseState.execute.run(registry, {
+            await runAtomCommand(registry, databaseState.execute, {
               environmentId,
               input: {
                 projectId,
@@ -279,7 +281,7 @@ function ConsoleView({
         }
         if (index < statements.length - 1)
           databaseValue(
-            await databaseState.closeQuery.run(registry, {
+            await runAtomCommand(registry, databaseState.closeQuery, {
               environmentId,
               input: { projectId, queryId },
             }),
@@ -310,7 +312,7 @@ function ConsoleView({
       void releaseDatabaseResources(databaseState, registry, { environmentId, projectId }, tab);
       return;
     }
-    void databaseState.cancelQuery.run(registry, {
+    void runAtomCommand(registry, databaseState.cancelQuery, {
       environmentId,
       input: { projectId, queryId: tab.queryId },
     });
@@ -325,7 +327,7 @@ function ConsoleView({
     const previousResult = tab.result;
     return await (async () => {
       const result = databaseValue(
-        await databaseState.fetchPage.run(registry, {
+        await runAtomCommand(registry, databaseState.fetchPage, {
           environmentId,
           input: { projectId, queryId },
         }),
@@ -395,7 +397,7 @@ function ConsoleView({
               : null;
         if (question && !(await confirm(question))) return;
         databaseValue(
-          await projectEnvironment.writeFile.run(registry, {
+          await runAtomCommand(registry, projectEnvironment.writeFile, {
             environmentId,
             input: { cwd: workspaceRoot, relativePath: filePath, contents: tab.sql },
           }),

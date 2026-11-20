@@ -1,8 +1,10 @@
 import type { DesktopUpdateActionResult, DesktopUpdateState } from "@t3tools/contracts";
 import { FORK_DISPLAY_NAME, FORK_REPOSITORY } from "@t3tools/shared/forkBrand";
+import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
 import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "../i18n/messages";
+import { channelSwitchLabel } from "./sidebar/updateEverything.logic";
 
 export type DesktopUpdateButtonAction = "download" | "install" | "none";
 
@@ -162,6 +164,19 @@ export function getDesktopUpdateButtonTooltip(
       );
     }
     return state.message ?? resolve(msg("Update failed"));
+  }
+  // The updater discards every release of the other track, so "up to date" would be false here.
+  const buildChannel = desktopUpdateChannelOf(state.currentVersion);
+  if (state.status === "up-to-date" && buildChannel !== state.channel) {
+    return resolve(
+      msg(
+        "This {build} build ignores {track} releases. Review the update track in Settings to finish the switch.",
+        {
+          build: channelSwitchLabel(buildChannel, resolve),
+          track: channelSwitchLabel(state.channel, resolve),
+        },
+      ),
+    );
   }
   return resolve(msg("Up to date"));
 }

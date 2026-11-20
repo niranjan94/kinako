@@ -1,4 +1,5 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import {
   releaseDatabaseResources,
   type DatabaseWorkspace,
@@ -88,7 +89,7 @@ export async function ensureDatabaseSession(
   const sessionId = DatabaseSessionId.make(randomUUID());
   updateDatabaseTab(registry, threadRef, tabId, { sessionId });
   databaseValue(
-    await databaseState.openSession.run(registry, {
+    await runAtomCommand(registry, databaseState.openSession, {
       environmentId,
       input: {
         projectId,
@@ -176,7 +177,7 @@ export function openDatabaseTable(
     loading: false,
     table: { schema, object, where: "", orderBy: "", offset: 0, after: null },
   });
-  void databaseState.introspect.run(registry, {
+  void runAtomCommand(registry, databaseState.introspect, {
     environmentId,
     input: {
       projectId,

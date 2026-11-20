@@ -1,4 +1,5 @@
 import { useDatabaseGlobalDeletes } from "../../state/databaseGlobalDeletes";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   databaseCacheKey,
@@ -187,7 +188,7 @@ export function DatabaseSettings() {
         : [environmentId];
     const results = await fanOutDatabaseOperation(destinations, async (id) =>
       databaseValue(
-        await databaseState.deleteConnection.run(registry, {
+        await runAtomCommand(registry, databaseState.deleteConnection, {
           environmentId: id,
           input: { id: connection.id },
         }),

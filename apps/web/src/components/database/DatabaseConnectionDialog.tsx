@@ -1,4 +1,5 @@
 import { useDatabaseGlobalDeletes } from "../../state/databaseGlobalDeletes";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { randomUUID } from "../../lib/utils";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
@@ -184,7 +185,7 @@ export function DatabaseConnectionDialog({
     setMessage(null);
     return await (async () => {
       const result = databaseValue(
-        await databaseState.testConnection.run(registry, {
+        await runAtomCommand(registry, databaseState.testConnection, {
           environmentId: copyTo ?? environmentId,
           input: draft(),
         }),
@@ -229,7 +230,10 @@ export function DatabaseConnectionDialog({
       ) {
         for (const id of targets) {
           const list = databaseValue(
-            await databaseState.listConnections.run(registry, { environmentId: id, input: {} }),
+            await runAtomCommand(registry, databaseState.listConnections, {
+              environmentId: id,
+              input: {},
+            }),
           );
           if (!list.connections.some((item) => item.id === globalId && item.hasPassword))
             throw new Error(
@@ -241,7 +245,10 @@ export function DatabaseConnectionDialog({
       }
       const results = await fanOutDatabaseOperation(targets, async (id) =>
         databaseValue(
-          await databaseState.saveConnection.run(registry, { environmentId: id, input }),
+          await runAtomCommand(registry, databaseState.saveConnection, {
+            environmentId: id,
+            input,
+          }),
         ),
       );
       const failures = results.flatMap((result, index) =>

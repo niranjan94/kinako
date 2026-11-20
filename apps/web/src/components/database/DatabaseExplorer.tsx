@@ -1,4 +1,5 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { databaseCacheKey } from "@t3tools/client-runtime/state/database";
 import type {
   DatabaseConnection,
@@ -85,14 +86,16 @@ function DatabaseNode({
   useEffect(() => {
     if (!open || metadata) return;
     let active = true;
-    void databaseState.introspect.run(registry, { environmentId, input }).then((result) => {
-      try {
-        databaseValue(result);
-        if (active) setError(null);
-      } catch (error) {
-        if (active) setError(databaseErrorMessage(error));
-      }
-    });
+    void runAtomCommand(registry, databaseState.introspect, { environmentId, input }).then(
+      (result) => {
+        try {
+          databaseValue(result);
+          if (active) setError(null);
+        } catch (error) {
+          if (active) setError(databaseErrorMessage(error));
+        }
+      },
+    );
     return () => {
       active = false;
     };

@@ -3,6 +3,7 @@ import { databaseCacheKey } from "@t3tools/client-runtime/state/database";
 import {
   squashAtomCommandFailure,
   type AtomCommandResult,
+  runAtomCommand,
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
@@ -37,17 +38,18 @@ export function useDatabaseConnections(environmentId: EnvironmentId, projectId?:
   useEffect(() => {
     if (!allowed || phase !== "connected") return;
     let active = true;
-    void databaseState.listConnections
-      .run(registry, { environmentId, input: projectId === undefined ? {} : { projectId } })
-      .then((result) => {
-        if (!active) return;
-        try {
-          databaseValue(result);
-          setSettled({ key: loadKey, error: null });
-        } catch (error) {
-          setSettled({ key: loadKey, error: databaseErrorMessage(error) });
-        }
-      });
+    void runAtomCommand(registry, databaseState.listConnections, {
+      environmentId,
+      input: projectId === undefined ? {} : { projectId },
+    }).then((result) => {
+      if (!active) return;
+      try {
+        databaseValue(result);
+        setSettled({ key: loadKey, error: null });
+      } catch (error) {
+        setSettled({ key: loadKey, error: databaseErrorMessage(error) });
+      }
+    });
     return () => {
       active = false;
     };

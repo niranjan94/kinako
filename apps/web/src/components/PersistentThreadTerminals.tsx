@@ -24,7 +24,7 @@ import {
 import { databaseState } from "../state/database";
 import { useProject, useQuietThreadShell } from "../state/entities";
 import { useEnvironmentScope } from "../state/session";
-import { useKnownTerminalSessions } from "../state/terminalSessions";
+import { useKnownTerminalSessions, useTerminalDrawerSessions } from "../state/terminalSessions";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { DatabaseDrawerTabs, DatabaseDrawerView } from "./database/DatabaseDrawerTabs";
 import { hasDatabaseTabs, showDatabaseTab, shownDatabaseTabId } from "./database/databaseWorkspace";
@@ -37,40 +37,6 @@ export type PersistentTerminalLaunchContext = {
   readonly cwd: string;
   readonly worktreePath: string | null;
 };
-
-function terminalIdListsEqual(left: readonly string[], right: readonly string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  if (left.length === 0) {
-    return true;
-  }
-  const sortedLeft = left.toSorted((a, b) => a.localeCompare(b));
-  const sortedRight = right.toSorted((a, b) => a.localeCompare(b));
-  for (let index = 0; index < sortedLeft.length; index += 1) {
-    if (sortedLeft[index] !== sortedRight[index]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/** Server sessions lag terminal.open; reconciling strict subsets would discard new split layouts. */
-function serverTerminalIdsStrictSubsetOfClient(
-  serverIds: readonly string[],
-  clientIds: readonly string[],
-): boolean {
-  if (serverIds.length >= clientIds.length || clientIds.length === 0) {
-    return false;
-  }
-  const clientSet = new Set(clientIds);
-  for (const id of serverIds) {
-    if (!clientSet.has(id)) {
-      return false;
-    }
-  }
-  return true;
-}
 
 interface TerminalLaunchLocationWithEnv {
   readonly cwd: string;
@@ -126,10 +92,9 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   // Narrow selectors keep SQL console edits from re-rendering the terminal drawer.
   const hasDatabaseTabsOpen = useAtomValue(databaseWorkspace, hasDatabaseTabs);
   const shownDatabaseId = useAtomValue(databaseWorkspace, shownDatabaseTabId);
-  const knownTerminalSessions = useKnownTerminalSessions({
-    environmentId: threadRef.environmentId,
-    threadId,
-  });
+  const metadata = useTerminalDrawerSessions(threadRef.environmentId, threadId);
+  const knownTerminalSessions = metadata?.sessions;
+  const snapshotId = metadata?.snapshotId;
   const panelSurfaces = useRightPanelStore(
     (state) => selectThreadRightPanelState(state.byThreadKey, threadRef).surfaces,
   );
@@ -175,18 +140,11 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   const storeRevealTerminalDrawer = useTerminalUiStateStore((state) => state.revealTerminalDrawer);
   const reconcileTerminalIds = useTerminalUiStateStore((state) => state.reconcileTerminalIds);
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reconciles the terminal UI store's ids with the server's terminal list when they diverge
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- feeds the server's terminal list into the terminal UI store, which owns how local ids follow it
   useEffect(() => {
-    if (terminalIdListsEqual(serverOrderedTerminalIds, terminalUiState.terminalIds)) {
-      return;
-    }
-    if (
-      serverTerminalIdsStrictSubsetOfClient(serverOrderedTerminalIds, terminalUiState.terminalIds)
-    ) {
-      return;
-    }
-    reconcileTerminalIds(threadRef, serverOrderedTerminalIds);
-  }, [reconcileTerminalIds, serverOrderedTerminalIds, terminalUiState.terminalIds, threadRef]);
+    if (snapshotId === undefined) return;
+    reconcileTerminalIds(threadRef, serverOrderedTerminalIds, snapshotId);
+  }, [reconcileTerminalIds, serverOrderedTerminalIds, snapshotId, threadRef]);
   const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const effectiveWorktreePath = launchContext !== null ? launchContext.worktreePath : worktreePath;
   const cwd =

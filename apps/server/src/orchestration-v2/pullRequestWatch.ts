@@ -110,8 +110,17 @@ export function evaluatePullRequestWatch(
   const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
   if (checks.length > 0) {
     // A run awaiting approval waits on a person, like a review, so only running checks count.
-    checksPending = checks.some((check) => check.status === "pending");
-    if (autoFix === undefined && !checksBaseline && newlyFailed.length > 0) {
+    // An unfinished baseline read keeps the seed below for the next one.
+    checksPending =
+      checks.some((check) => check.status === "pending") ||
+      (checksBaseline && unread && watch.checksPending === true);
+    // The baseline hides failures from before the watch, but CI running at the start can fail
+    // before the first read.
+    if (
+      autoFix === undefined &&
+      newlyFailed.length > 0 &&
+      (!checksBaseline || watch.checksPending === true)
+    ) {
       changes.push({ kind: "checks-failed", failed: newlyFailed, fixAttempt: null });
     }
     if (!approvalAnnounced && awaiting.length > 0) {

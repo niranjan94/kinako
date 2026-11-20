@@ -107,6 +107,8 @@ export interface ThreadActionMenuState {
   readonly canFind?: boolean;
   /** Another thread on the same environment is open, so this one can sit beside it. */
   readonly canOpenBeside?: boolean;
+  /** False where no inline title editor is rendered, such as sidebar search results. */
+  readonly canRename?: boolean;
   readonly branch: string | null;
   /** Shell command that resumes the thread in its provider's CLI, when the provider supports it. */
   readonly cliResumeCommand: string | null;
@@ -262,7 +264,13 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
-    { id: "rename", label: resolve(msg("Rename thread")), icon: "pencil", separatorBefore: true },
+    {
+      id: "rename",
+      label: resolve(msg("Rename thread")),
+      icon: "pencil",
+      disabled: state.canRename === false,
+      separatorBefore: true,
+    },
     ...(state.supports.titleRegeneration
       ? [
           {

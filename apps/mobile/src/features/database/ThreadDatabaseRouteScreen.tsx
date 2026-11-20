@@ -2,6 +2,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { databaseCacheKey, releaseDatabaseResources } from "@t3tools/client-runtime/state/database";
 import {
+  runAtomCommand,
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
@@ -116,18 +117,19 @@ function DatabaseScreen({
   useEffect(() => {
     if (!allowed || status !== "connected") return;
     const key = `${environmentId}:${projectId}:${revision}`;
-    void databaseState.listConnections
-      .run(registry, { environmentId, input: { projectId } })
-      .then((result) => {
-        try {
-          value(result);
-          if (registry.get(databaseState.revision(environmentId)) !== revision) return;
-        } catch (error) {
-          if (mounted.current) setError(errorMessage(error));
-        } finally {
-          if (mounted.current) setListed(key);
-        }
-      });
+    void runAtomCommand(registry, databaseState.listConnections, {
+      environmentId,
+      input: { projectId },
+    }).then((result) => {
+      try {
+        value(result);
+        if (registry.get(databaseState.revision(environmentId)) !== revision) return;
+      } catch (error) {
+        if (mounted.current) setError(errorMessage(error));
+      } finally {
+        if (mounted.current) setListed(key);
+      }
+    });
   }, [allowed, environmentId, projectId, registry, revision, status]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- releases this screen's server-side database session and query on unmount
   useEffect(() => {
@@ -162,7 +164,7 @@ function DatabaseScreen({
     try {
       if (next.kind === "databases") await closeResult();
       const data = value(
-        await databaseState.introspect.run(registry, {
+        await runAtomCommand(registry, databaseState.introspect, {
           environmentId,
           input: {
             projectId,
@@ -201,7 +203,7 @@ function DatabaseScreen({
       const id = DatabaseQueryId.make(uuidv4());
       queryId.current = id;
       const data = value(
-        await databaseState.execute.run(registry, {
+        await runAtomCommand(registry, databaseState.execute, {
           environmentId,
           input: {
             projectId,
@@ -230,7 +232,7 @@ function DatabaseScreen({
     try {
       await closeResult();
       const data = value(
-        await databaseState.browseTable.run(registry, {
+        await runAtomCommand(registry, databaseState.browseTable, {
           environmentId,
           input: {
             projectId,
@@ -270,7 +272,7 @@ function DatabaseScreen({
     setBusy(true);
     try {
       const data = value(
-        await databaseState.fetchPage.run(registry, {
+        await runAtomCommand(registry, databaseState.fetchPage, {
           environmentId,
           input: { projectId, queryId: queryId.current },
         }),
@@ -468,7 +470,7 @@ function DatabaseScreen({
                   disabled={!busy}
                   onPress={() => {
                     if (queryId.current)
-                      void databaseState.cancelQuery.run(registry, {
+                      void runAtomCommand(registry, databaseState.cancelQuery, {
                         environmentId,
                         input: { projectId, queryId: queryId.current },
                       });

@@ -1,4 +1,5 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import {
   databaseCacheKey,
   type DatabaseWorkspaceTab,
@@ -78,7 +79,7 @@ function TableView({
     const table = start.table;
     return await (async () => {
       const result = databaseValue(
-        await databaseState.browseTable.run(registry, {
+        await runAtomCommand(registry, databaseState.browseTable, {
           environmentId,
           input: {
             projectId,

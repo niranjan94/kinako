@@ -208,8 +208,8 @@ export async function fanOutDatabaseOperation<A>(
   );
 }
 
-export async function releaseDatabaseResources(
-  state: Pick<ReturnType<typeof createDatabaseState>, "closeQuery" | "closeSession">,
+export async function releaseDatabaseResources<R, ER>(
+  state: Pick<ReturnType<typeof createDatabaseState<R, ER>>, "closeQuery" | "closeSession">,
   registry: import("effect/reactivity/AtomRegistry").AtomRegistry,
   target: { environmentId: EnvironmentId; projectId?: import("@t3tools/contracts").ProjectId },
   resources: {
@@ -219,15 +219,19 @@ export async function releaseDatabaseResources(
 ) {
   const { environmentId, ...context } = target;
   if (resources.queryId)
-    await state.closeQuery.run(registry, {
-      environmentId,
-      input: { ...context, queryId: resources.queryId },
-    });
+    await Effect.runPromiseExit(
+      state.closeQuery.run(registry, {
+        environmentId,
+        input: { ...context, queryId: resources.queryId },
+      }),
+    );
   if (resources.sessionId)
-    await state.closeSession.run(registry, {
-      environmentId,
-      input: { ...context, sessionId: resources.sessionId },
-    });
+    await Effect.runPromiseExit(
+      state.closeSession.run(registry, {
+        environmentId,
+        input: { ...context, sessionId: resources.sessionId },
+      }),
+    );
 }
 
 export interface DatabaseWorkspaceTab {
