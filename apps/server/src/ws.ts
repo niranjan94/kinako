@@ -279,6 +279,7 @@ import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReact
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
 import * as OtlpEndpointCheck from "./observability/OtlpEndpointCheck.ts";
 import * as TextGenerators from "./textGeneration/TextGenerators.ts";
+import * as DecisionApis from "./autoReview/DecisionApis.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as SourceControlSignIn from "./sourceControl/SourceControlSignIn.ts";
 import * as SourceControlBuiltInDrivers from "./sourceControl/builtInDrivers.ts";
@@ -1611,6 +1612,7 @@ export const layerWsRpc = (
       const secretCheck = yield* SecretCheck.SecretCheck;
       const otlpEndpointCheck = yield* OtlpEndpointCheck.OtlpEndpointCheck;
       const textGenerators = yield* TextGenerators.TextGenerators;
+      const decisionApis = yield* DecisionApis.DecisionApis;
       const sourceControlRepositories =
         yield* SourceControlRepositoryService.SourceControlRepositoryService;
       const sourceControlSignIn = yield* SourceControlSignIn.SourceControlSignIn;
@@ -2826,6 +2828,7 @@ export const layerWsRpc = (
         [WS_METHODS.serverRetryResourceTelemetry]: (_input) => resourceTelemetry.retry,
         [WS_METHODS.serverCheckOtlpEndpoint]: (input) => otlpEndpointCheck.check(input),
         [WS_METHODS.serverListTextGeneratorModels]: (input) => textGenerators.listModels(input),
+        [WS_METHODS.serverListDecisionApiModels]: (input) => decisionApis.listModels(input),
         [WS_METHODS.serverPrepareTriage]: (input) => triage.prepare(input),
         [WS_METHODS.serverSignalProcess]: (input) => processDiagnostics.signal(input),
         [WS_METHODS.serverReportClientActivity]: (input, metadata) =>
