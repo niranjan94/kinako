@@ -13294,5 +13294,75 @@
   "27d76249d09eb69f": "Guide de revue prêt",
   "faa3bb26abb39c93": "Échec du guide de revue",
   "b7df38b7d8792d78": "Ouvrir le guide",
-  "9e91e9a77b664e4e": "Impossible de démarrer un guide de revue"
+  "9e91e9a77b664e4e": "Impossible de démarrer un guide de revue",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto vous a demandé :",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto est en cours de vérification"
+  ],
+  "049963fb3496f947": "{app} Auto",
+  "703c611b175f91e4": "{app} approuve les actions locales courantes et vous demande pour le reste.",
+  "8c7640bd9a287482": "Cette API de décision n’est pas configurée sur tous les environnements sélectionnés. Sélectionnez un environnement pour choisir son vérificateur séparément.",
+  "cd186d77ae385abc": "Modèle de vérification non enregistré",
+  "06e169537474d36b": "{app} Auto",
+  "f2c9defaf1653de1": "Avec {app} Auto, les actions locales courantes s’exécutent et les actions risquées vous sont d’abord soumises. Le bac à sable du fournisseur s’applique toujours. « Règles uniquement » ignore le modèle de vérification : tout ce que les règles ne tranchent pas vous est demandé.",
+  "82d989ecc0a46510": "Règles uniquement",
+  "179e9c513b1e4a40": "Vérifie les requêtes que les règles ne tranchent pas. Les API de décision de Fournisseurs apparaissent aussi ici. Si désactivé, le modèle de génération de texte vérifie.",
+  "79b66e6316518ce1": "Modèle de vérification",
+  "c49fc0e2bc7294a7": "Utiliser un modèle de vérification distinct",
+  "f7aea80e63991ecf": "Le degré de certitude dont l’API de décision a besoin qu’une requête est sûre avant de l’exécuter. Tout ce qui est moins certain vous est demandé.",
+  "fd319a897600cebe": "Réinitialiser la confiance du vérificateur à la valeur par défaut",
+  "6a5afd4b252d3475": "Confiance du vérificateur",
+  "5789e351ce5ca4f9": "Indiquez au vérificateur ce que ce travail autorise ou ce qui doit toujours vous être demandé. Les règles de sécurité intégrées s’appliquent toujours.",
+  "5b09b8a729987952": "Réinitialiser les instructions du vérificateur à la valeur par défaut",
+  "f73fa9f53f6cdf1e": "Instructions du vérificateur",
+  "90d0ee411fa34939": "Lancer la suite de tests et installer les dépendances de développement ne pose pas de problème. Toujours demander avant de toucher à la base de données ou à quoi que ce soit en dehors de ce dépôt.",
+  "52fe9b861dc069f0": "Connectez un environnement pour choisir son modèle de vérification.",
+  "36c140953ad9ff92": "Aucune API de décision pour l’instant",
+  "e6c855ccadf656ad": "Connectez System One pour vérifier les requêtes de {app} Auto avec un modèle conçu pour les décisions oui ou non.",
+  "db26ddd183c62b45": "Ajouter une API de décision",
+  "cbd29f01b12406dc": "System One indique si une requête semble sûre, avec son degré de certitude. {app} Auto s’en sert pour décider quelles requêtes approuver. Votre clé d’API est stockée dans cet environnement.",
+  "5593f81d681044e9": "{count, plural, one {{name} est connecté et répertorie {count} modèle. {model} a répondu à une question de test.} other {{name} est connecté et répertorie {count} modèles. {model} a répondu à une question de test.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} est connecté et répertorie {count} modèle.} other {{name} est connecté et répertorie {count} modèles.}}",
+  "025088336e7e2a52": "Enregistrer et tester",
+  "b9980bcda59e098b": "Vérifie les requêtes de {app} Auto",
+  "c582d7f450dbc3c7": "Utiliser pour {app} Auto",
+  "6e7176af0297520d": "Ajouter une API de décision",
+  "409eefe94b1ca811": [
+    "Cela supprime la clé d’API stockée sur ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Les vérifications qui l’utilisent se rabattent sur le modèle de génération de texte."
+  ],
+  "b0900f4938210634": "Clé d’API",
+  "907eee6b144e2aba": "{app} Auto mode d’autorisation approbations vérifier requêtes actions risquées sans modèle",
+  "ad3f65bc5ad993e3": "{app} Auto mode d’autorisation approbations vérifier requêtes System One Jev api de décision",
+  "6b8e533b54b79b5a": "{app} Auto seuil certitude probabilité api de décision System One approuver",
+  "1f86c7e6b8a0d2b9": "{app} Auto politique prompt consignes autoriser toujours demander approbations",
+  "1d0a8d68920cccef": "API de décision",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev clé d’api url de base {app} Auto approbations vérificateur"
 }

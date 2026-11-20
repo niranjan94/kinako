@@ -13302,5 +13302,75 @@
   "27d76249d09eb69f": "Review guide ready",
   "faa3bb26abb39c93": "Review guide failed",
   "b7df38b7d8792d78": "Open guide",
-  "9e91e9a77b664e4e": "Could not start a review guide"
+  "9e91e9a77b664e4e": "Could not start a review guide",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto asked you:",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto is reviewing"
+  ],
+  "049963fb3496f947": "{app} Auto",
+  "703c611b175f91e4": "{app} approves routine local actions and asks you about the rest.",
+  "8c7640bd9a287482": "This decision API is not set up on every selected environment. Select an environment to choose its reviewer separately.",
+  "cd186d77ae385abc": "Reviewer model not saved",
+  "06e169537474d36b": "{app} Auto",
+  "f2c9defaf1653de1": "In {app} Auto, routine local actions run and risky ones ask you first. The provider's sandbox still applies. Rules only skips the reviewer model, so anything the rules don't settle asks you.",
+  "82d989ecc0a46510": "Rules only",
+  "179e9c513b1e4a40": "Reviews requests the rules don't settle. Decision APIs from Providers also appear here. When off, the text generation model reviews.",
+  "79b66e6316518ce1": "Reviewer model",
+  "c49fc0e2bc7294a7": "Use a separate reviewer model",
+  "f7aea80e63991ecf": "How sure the decision API must be that a request is safe before it runs. Anything less certain asks you.",
+  "fd319a897600cebe": "Reset reviewer confidence to default",
+  "6a5afd4b252d3475": "Reviewer confidence",
+  "5789e351ce5ca4f9": "Tell the reviewer what this work allows or should always ask about. Built-in safety rules still apply.",
+  "5b09b8a729987952": "Reset reviewer instructions to default",
+  "f73fa9f53f6cdf1e": "Reviewer instructions",
+  "90d0ee411fa34939": "Running the test suite and installing dev dependencies is fine. Always ask before touching the database or anything outside this repository.",
+  "52fe9b861dc069f0": "Connect an environment to choose its reviewer model.",
+  "36c140953ad9ff92": "No decision APIs yet",
+  "e6c855ccadf656ad": "Connect System One to review {app} Auto requests with a model built for yes or no decisions.",
+  "db26ddd183c62b45": "Add a decision API",
+  "cbd29f01b12406dc": "System One answers whether a request looks safe, with how sure it is. {app} Auto uses it to decide which requests to approve. Your API key is stored on this environment.",
+  "5593f81d681044e9": "{count, plural, one {{name} is connected and lists {count} model. {model} answered a test question.} other {{name} is connected and lists {count} models. {model} answered a test question.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} is connected and lists {count} model.} other {{name} is connected and lists {count} models.}}",
+  "025088336e7e2a52": "Save and test",
+  "b9980bcda59e098b": "Reviewing {app} Auto requests",
+  "c582d7f450dbc3c7": "Use for {app} Auto",
+  "6e7176af0297520d": "Add decision API",
+  "409eefe94b1ca811": [
+    "This deletes the API key stored on ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Reviews set to use it fall back to the text generation model."
+  ],
+  "b0900f4938210634": "API key",
+  "907eee6b144e2aba": "{app} Auto permission mode approvals review requests risky actions without a model",
+  "ad3f65bc5ad993e3": "{app} Auto permission mode approvals review requests System One Jev decision API",
+  "6b8e533b54b79b5a": "{app} Auto threshold certainty probability decision API System One approve",
+  "1f86c7e6b8a0d2b9": "{app} Auto policy prompt guidance allow always ask approvals",
+  "1d0a8d68920cccef": "Decision APIs",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev api key base url {app} Auto approvals reviewer"
 }
