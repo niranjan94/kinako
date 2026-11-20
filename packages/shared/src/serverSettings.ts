@@ -161,6 +161,26 @@ export function resolveReviewGuideModelSelection(
     : resolveSourceControlWriterModelSelection(settings, providers, projectId);
 }
 
+/**
+ * The host reviewer's model: its own selection when usable, which may name a decision API,
+ * else the text generation model.
+ */
+export function resolveAutoReviewModelSelection(
+  settings: ServerSettings,
+  providers?: ReadonlyArray<ServerProvider>,
+): ModelSelection {
+  const selection = settings.autoReviewModelSelection;
+  if (selection === null) return settings.textGenerationModelSelection;
+  const decisionApi = settings.decisionApis[selection.instanceId];
+  if (decisionApi !== undefined) {
+    return decisionApi.enabled ? selection : settings.textGenerationModelSelection;
+  }
+  return isModelSelectionProviderEnabled(settings, selection) &&
+    isTextGenerationTargetUsable(settings, providers, selection.instanceId)
+    ? selection
+    : settings.textGenerationModelSelection;
+}
+
 /** Transcript cleanup follows the text generation model unless its own usable model is set. */
 export function resolveSpeechPostProcessingModelSelection(
   settings: ServerSettings,
@@ -425,6 +445,7 @@ export function applyServerSettingsPatch(
     // Merged per entry below; its `null` removals must not reach deepMerge.
     usageLimitSources: usageLimitSourcesPatch,
     textGenerators: textGeneratorsPatch,
+    decisionApis: decisionApisPatch,
     secretProviders: secretProvidersPatch,
     sourceControlHosts: sourceControlHostsPatch,
     usagePriceOverrides: usagePriceOverridesPatch,
@@ -667,6 +688,9 @@ export function applyServerSettingsPatch(
     ...(textGeneratorsPatch !== undefined
       ? { textGenerators: mergeSettingsEntries(current.textGenerators, textGeneratorsPatch) }
       : {}),
+    ...(decisionApisPatch !== undefined
+      ? { decisionApis: mergeSettingsEntries(current.decisionApis, decisionApisPatch) }
+      : {}),
     ...(secretProvidersPatch !== undefined
       ? { secretProviders: mergeSettingsEntries(current.secretProviders, secretProvidersPatch) }
       : {}),
@@ -691,6 +715,9 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.reviewGuideModelSelection !== undefined
       ? { reviewGuideModelSelection: patch.reviewGuideModelSelection }
+      : {}),
+    ...(patch.autoReviewModelSelection !== undefined
+      ? { autoReviewModelSelection: patch.autoReviewModelSelection }
       : {}),
     ...(automaticGitFetchInterval !== undefined ? { automaticGitFetchInterval } : {}),
     ...(providerHealthRefreshInterval !== undefined ? { providerHealthRefreshInterval } : {}),

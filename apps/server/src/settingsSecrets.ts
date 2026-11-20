@@ -9,6 +9,7 @@ import {
   type SettingsSecretValue,
   SimlockDeviceHostConfig,
   TextGeneratorConfig,
+  DecisionApiConfig,
   UsageLimitSourceConfig,
   isSecretReference,
   secretSettingsFields,
@@ -48,6 +49,7 @@ const providerSecretFields = new Map([
 ]);
 const usageLimitSecretFields = secretSettingsFields(UsageLimitSourceConfig);
 const textGeneratorSecretFields = secretSettingsFields(TextGeneratorConfig);
+const decisionApiSecretFields = secretSettingsFields(DecisionApiConfig);
 const voiceSecretFields = secretSettingsFields(CloudSpeechCredentials);
 const easDeviceHostSecretFields = secretSettingsFields(EasDeviceHostConfig);
 const simlockDeviceHostSecretFields = secretSettingsFields(SimlockDeviceHostConfig);
@@ -224,6 +226,19 @@ function mapSecretFieldGroups(
     ]),
   ) as ServerSettings["textGenerators"];
 
+  const decisionApis = Object.fromEntries(
+    Object.entries(settings.decisionApis).map(([id, api]) => [
+      id,
+      mapFields(
+        api,
+        decisionApiSecretFields,
+        (field, serverHost) =>
+          `decision-api-${encode(id)}-${encode(field)}` +
+          (serverHost === null ? "" : `-${encode(serverHost)}`),
+      ),
+    ]),
+  ) as ServerSettings["decisionApis"];
+
   const easDeviceHosts = settings.easDeviceHosts.map(
     (host) =>
       mapFields(
@@ -258,6 +273,7 @@ function mapSecretFieldGroups(
     sourceControlHosts,
     usageLimitSources,
     textGenerators,
+    decisionApis,
     easDeviceHosts,
     simlockDeviceHosts,
   };

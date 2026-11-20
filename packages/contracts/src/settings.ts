@@ -1051,6 +1051,47 @@ export class TextGeneratorError extends Schema.TaggedError<TextGeneratorError>()
   }
 }
 
+/**
+ * A decision model API for host review of approvals, kept apart from text generators so it never
+ * appears where prose is generated. Its key shares the id namespace with provider instances.
+ */
+export const DecisionApiKind = Schema.Literals(["systemOne"]);
+export type DecisionApiKind = typeof DecisionApiKind.Type;
+
+const DEFAULT_SYSTEM_ONE_BASE_URL = "https://api.typesafe.ai";
+
+export const DecisionApiConfig = Schema.Struct({
+  kind: DecisionApiKind,
+  label: Schema.optional(TrimmedNonEmptyString),
+  baseUrl: TextGeneratorBaseUrl.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SYSTEM_ONE_BASE_URL)),
+  ),
+  apiKey: SettingsSecretValue.pipe(Schema.withDecodingDefault(Effect.succeed("")), secretSetting),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type DecisionApiConfig = typeof DecisionApiConfig.Type;
+
+export const ListDecisionApiModelsInput = Schema.Struct({
+  id: ProviderInstanceId,
+  /** Unsaved settings to check before saving. A redacted key keeps the one saved under `id`. */
+  config: Schema.optional(DecisionApiConfig),
+  refresh: Schema.optional(Schema.Boolean),
+  /** Also ask a model one question, which proves the key, endpoint, and model. */
+  test: Schema.optional(Schema.Boolean),
+  model: Schema.optional(TrimmedNonEmptyString),
+});
+export type ListDecisionApiModelsInput = typeof ListDecisionApiModelsInput.Type;
+
+export const ListDecisionApiModelsResult = ListTextGeneratorModelsResult;
+export type ListDecisionApiModelsResult = typeof ListDecisionApiModelsResult.Type;
+
+const AUTO_REVIEW_DEFAULT_CONFIDENCE_THRESHOLD = 0.85;
+
+export const AutoReviewConfidenceThreshold = Schema.Number.check(
+  Schema.isGreaterThanOrEqualTo(0.5),
+  Schema.isLessThanOrEqualTo(1),
+);
+
 export const SecretProviderKind = SecretProviderSlug.pipe(Schema.brand("SecretProviderKind"));
 export type SecretProviderKind = typeof SecretProviderKind.Type;
 
@@ -1251,6 +1292,8 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "continueThreadsAfterServerUpdate",
   "responseStreamingMode",
   "speechProjectCustomWords",
+  "autoReviewModelSelection",
+  "autoReviewPolicyInstructions",
 ] as const;
 export type ProjectScopedServerSettingKey = (typeof PROJECT_SCOPED_SERVER_SETTING_KEYS)[number];
 
@@ -1290,6 +1333,8 @@ export const ProjectSettingsOverrides = Schema.Struct({
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   speechProjectCustomWords: Schema.optionalKey(SpeechCustomWords),
+  autoReviewModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  autoReviewPolicyInstructions: Schema.optionalKey(TrimmedString),
   providerInstances: Schema.optionalKey(
     Schema.Record(ProviderInstanceId, ProjectProviderInstanceOverride),
   ),
@@ -1320,6 +1365,7 @@ const NULLABLE_PROJECT_SETTINGS_OVERRIDES: ReadonlySet<ProjectScopedServerSettin
   "reviewGuideModelSelection",
   "pullRequestMergeMethod",
   "sidebarAutoSettleAfterDays",
+  "autoReviewModelSelection",
 ]);
 
 /** Reclaimable bytes from which the offline `t3 doctor` repair is worth suggesting. */
@@ -1674,6 +1720,20 @@ export const ServerSettings = Schema.Struct({
    * into new worktrees. A repository's `.worktreeinclude` replaces them.
    */
   worktreeIncludePatterns: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** The model behind host-managed Auto. Null follows `textGenerationModelSelection`. */
+  autoReviewModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /** Host-managed Auto answers only from its rules and asks about everything else. */
+  autoReviewRulesOnly: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  autoReviewPolicyInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** How sure a decision model must be that an action is safe before it is approved. */
+  autoReviewConfidenceThreshold: AutoReviewConfidenceThreshold.pipe(
+    Schema.withDecodingDefault(Effect.succeed(AUTO_REVIEW_DEFAULT_CONFIDENCE_THRESHOLD)),
+  ),
+  decisionApis: Schema.Record(ProviderInstanceId, DecisionApiConfig).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -2084,6 +2144,14 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   // Fork additions stay last so upstream's list merges cleanly.
   worktreeIncludePatterns: Schema.optionalKey(TrimmedString),
+  autoReviewModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  autoReviewRulesOnly: Schema.optionalKey(Schema.Boolean),
+  autoReviewPolicyInstructions: Schema.optionalKey(TrimmedString),
+  autoReviewConfidenceThreshold: Schema.optionalKey(AutoReviewConfidenceThreshold),
+  // Merge per entry like textGenerators; null removes an entry.
+  decisionApis: Schema.optionalKey(
+    Schema.Record(ProviderInstanceId, Schema.NullOr(DecisionApiConfig)),
+  ),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
@@ -2108,6 +2176,7 @@ export function requiredScopesForServerSettingsPatch(
       key === "setProviderCustomModels" ||
       key === "usageLimitSources" ||
       key === "textGenerators" ||
+      key === "decisionApis" ||
       key === "secretProviders"
     ) {
       changesProviders = true;
