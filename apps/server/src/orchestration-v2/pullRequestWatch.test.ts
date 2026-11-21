@@ -697,6 +697,7 @@ describe("evaluatePullRequestWatch", () => {
           number: 1,
           url: "https://github.com/o/r/pull/1",
           baseBranch: "main",
+          headBranch: "feature",
           headSha: finished.next.headSha,
           report: finished,
         }).notification.outcome,
