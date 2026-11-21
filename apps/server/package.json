@@ -40,7 +40,7 @@
     "@aws-sdk/client-secrets-manager": "^3.1152.0",
     "@aws-sdk/client-ssm": "^3.1152.0",
     "@aws-sdk/rds-signer": "^3.1152.0",
-    "@cursor/sdk": "1.4.1",
+    "@cursor/sdk": "1.4.2",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@ff-labs/fff-node": "0.11.0",

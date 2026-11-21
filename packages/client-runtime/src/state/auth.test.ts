@@ -237,6 +237,7 @@ describe("auth access commands", () => {
           },
           registerSsh: () => Effect.die("unused"),
           updateBearer: () => Effect.die("unused"),
+          reaches: () => Effect.die("unused"),
         });
 
         const exit = yield* addRouteOverConnection({

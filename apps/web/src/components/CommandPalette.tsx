@@ -1714,7 +1714,7 @@ function OpenCommandPaletteDialog(props: {
               run: async () => {
                 useRightPanelStore
                   .getState()
-                  .openSideChat(host, ThreadId.make(item.value.slice(sameEnvironment.length)));
+                  .openThread(host, ThreadId.make(item.value.slice(sameEnvironment.length)));
               },
             })),
         },

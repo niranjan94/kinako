@@ -3076,7 +3076,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           }
           case "open-beside":
             if (routeThreadRef)
-              useRightPanelStore.getState().openSideChat(routeThreadRef, threadRef.threadId);
+              useRightPanelStore.getState().openThread(routeThreadRef, threadRef.threadId);
             return;
           case "rename":
             startThreadRename(threadRef, thread.title);

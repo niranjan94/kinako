@@ -1,3 +1,4 @@
+import { FORK_CLI_NAME } from "@t3tools/shared/forkBrand";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { m } from "~/i18n/messages";
 import { pipe } from "effect/Function";
@@ -56,6 +57,7 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentSessionScopes } from "~/state/session";
 import { desktopSshHostsStateAtom, filterDiscoveredSshHosts } from "~/state/desktopSshHosts";
 import { type EnvironmentPresentation, useRelayEnvironmentDiscovery } from "~/state/environments";
+import type { AddEnvironmentPrefill } from "~/state/linkedThreadView";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import {
@@ -80,14 +82,20 @@ const sshHostSuggestionValue = (target: DesktopDiscoveredSshHost) =>
 
 export function AddEnvironmentDialog({
   open,
+  prefill = null,
   routeTarget,
   error,
   savedEnvironments,
+  initialHost = "",
   onOpenChange,
   onErrorChange,
 }: {
   readonly open: boolean;
+  /** A machine the user chose elsewhere to pair with; they supply only the pairing code. */
+  readonly prefill?: AddEnvironmentPrefill | null;
   readonly routeTarget: EnvironmentPresentation | null;
+  /** An address already known for the machine being added, such as one a link uses. */
+  readonly initialHost?: string;
   readonly error: string | null;
   readonly savedEnvironments: ReadonlyArray<EnvironmentPresentation>;
   readonly onOpenChange: (open: boolean) => void;
@@ -131,7 +139,7 @@ export function AddEnvironmentDialog({
     return keys;
   })();
   const [savedBackendMode, setSavedBackendMode] = useState<"remote" | "ssh">("remote");
-  const [savedBackendHost, setSavedBackendHost] = useState("");
+  const [savedBackendHost, setSavedBackendHost] = useState(prefill?.host ?? initialHost);
   const [savedBackendPairingCode, setSavedBackendPairingCode] = useState("");
   const [savedBackendSshHost, setSavedBackendSshHost] = useState("");
   const [savedBackendSshUsername, setSavedBackendSshUsername] = useState("");
@@ -173,7 +181,7 @@ export function AddEnvironmentDialog({
     if (!nextOpen) {
       savedBackendSessionRef.current += 1;
       setSavedBackendMode("remote");
-      setSavedBackendHost("");
+      setSavedBackendHost(initialHost);
       setSavedBackendPairingCode("");
       setSavedBackendSshHost("");
       setSavedBackendSshUsername("");
@@ -265,12 +273,13 @@ export function AddEnvironmentDialog({
       return;
     }
 
+    const expected = routeTarget ?? prefill;
     const result =
       "grantedScopes" in pairing
         ? await addRouteWithoutCode(pairing)
         : await connectPairing({
             ...pairing,
-            ...(routeTarget ? { expectedEnvironmentId: routeTarget.environmentId } : {}),
+            ...(expected ? { expectedEnvironmentId: expected.environmentId } : {}),
           });
     if (result._tag === "Failure") {
       if (!isAtomCommandInterrupted(result)) {
@@ -712,14 +721,21 @@ export function AddEnvironmentDialog({
           <DialogTitle>
             {routeTarget
               ? gt("Add a route to {environment}", { environment: routeTarget.label })
-              : gt("Add Environment")}
+              : prefill
+                ? gt("Connect to {environment}", { environment: prefill.label })
+                : gt("Add Environment")}
           </DialogTitle>
           <DialogDescription>
             {routeTarget
               ? gt(
                   "Pair this machine again over another address, such as its Tailscale name. It joins the existing routes instead of adding a second machine.",
                 )
-              : gt("Pair another environment to this client.")}
+              : prefill
+                ? gt(
+                    "Create a pairing code on {environment}, in its Settings → Sharing & access or with `{cli} auth pairing create`, and enter it here.",
+                    { environment: prefill.label, cli: FORK_CLI_NAME },
+                  )
+                : gt("Pair another environment to this client.")}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>

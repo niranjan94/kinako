@@ -5,6 +5,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
+import type { DesktopUpdateChannel } from "@t3tools/contracts";
 import * as Electron from "electron";
 import { msg } from "gt-i18n";
 
@@ -68,6 +69,11 @@ const runMainContentsCommand = Effect.fn("desktop.menu.runMainContentsCommand")(
   const desktopWindow = yield* DesktopWindow.DesktopWindow;
   yield* desktopWindow.runMainContentsCommand(command);
 });
+
+const trackLabel = (channel: DesktopUpdateChannel) =>
+  channel === "nightly"
+    ? m(msg("Nightly", { $context: "release track" }))
+    : m(msg("Stable", { $context: "release track" }));
 
 const checkForUpdatesFromMenu = Effect.gen(function* () {
   const updates = yield* DesktopUpdates.DesktopUpdates;
@@ -143,7 +149,18 @@ const checkForUpdatesFromMenu = Effect.gen(function* () {
       type: "warning",
       title: m(msg("Update check failed")),
       message: m(msg("Could not check for updates.")),
-      detail: updateState.message ?? m(msg("An unknown error occurred. Please try again later.")),
+      detail:
+        updateState.trackMismatch !== undefined
+          ? m(
+              msg(
+                "This {build} build can't update from the {saved} track on its own. Switch the update track back to {build}, or use Review beside Update track to retry the switch to {saved}.",
+              ),
+              {
+                build: trackLabel(updateState.trackMismatch.buildChannel),
+                saved: trackLabel(updateState.channel),
+              },
+            )
+          : (updateState.message ?? m(msg("An unknown error occurred. Please try again later."))),
       buttons: [m(msg("OK"))],
     });
   }

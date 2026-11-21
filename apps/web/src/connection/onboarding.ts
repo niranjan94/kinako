@@ -4,7 +4,7 @@ import {
   createAtomCommandScheduler,
   createRuntimeCommand,
 } from "@t3tools/client-runtime/state/runtime";
-import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
+import type { DesktopSshEnvironmentTarget, EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import { connectionAtomRuntime } from "./runtime";
@@ -46,4 +46,12 @@ export const addRouteOverConnection = createRuntimeCommand(connectionAtomRuntime
       JSON.stringify([input.environmentId, input.host]),
   },
   execute: addRouteOverConnectionEffect,
+});
+
+export const reachesEnvironment = createRuntimeCommand(connectionAtomRuntime, {
+  label: "web:connection:reaches-environment",
+  execute: (input: { readonly host: string; readonly environmentId: EnvironmentId }) =>
+    ConnectionOnboarding.ConnectionOnboarding.pipe(
+      Effect.flatMap((onboarding) => onboarding.reaches(input)),
+    ),
 });
