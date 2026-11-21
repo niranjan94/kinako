@@ -131,11 +131,12 @@ Nothing migrates automatically: Kinako never reads `~/.t3` or upstream's desktop
 
 ## CI
 
-Upstream's `ci.yml` runs unchanged except for its runners. GitHub's standard runners are free for public repositories but have half the cores of upstream's Blacksmith machines, so job timeouts are doubled, and so is the web suite's 15 s per-test timeout, which the heaviest browser tests otherwise hit on these runners. The substitutions are safe to rerun:
+Upstream's `ci.yml` runs unchanged except for its runners. GitHub's standard runners are free for public repositories but have half the cores of upstream's Blacksmith machines, so job timeouts are doubled, and so is the web suite's 15 s per-test timeout, which the heaviest browser tests otherwise hit on these runners. Fewer cores also means fewer browser pages, so each page runs about 100 test files. On Vitest 5.0.5 that is enough for Chromium to hit its 32 GiB cap on mapped shared memory, and the page then drops its connection mid-run ([vitest#12024](https://github.com/vitest-dev/vitest/issues/12024)). An oversized `VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB` makes Vitest collect Chromium's garbage after every file instead of only when `/tmp` runs low. Drop it once upstream moves to Vitest 5.1.1 or later, which no longer leaks. The substitutions are safe to rerun, in this order:
 
 ```bash
 perl -pi -e 'if (s/blacksmith-\d+vcpu-ubuntu-2404/ubuntu-24.04/ || s/blacksmith-\d+vcpu-macos-\d+/macos-26/) { $d = 1; next } if ($d && s/^(    timeout-minutes: )(\d+)$/$1 . $2 * 2/e) { $d = 0 }' .github/workflows/ci.yml
 perl -pi -e 's/^(        run: vp run --filter \@t3tools\/web test)( --shard |$)/$1 --testTimeout=30000 --hookTimeout=30000$2/' .github/workflows/ci.yml
+perl -pi -e 's/^(        run: )(vp run --filter \@t3tools\/web test)/$1VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB=1000000 $2/' .github/workflows/ci.yml
 ```
 
 CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does not support Ubuntu 26.04 yet, so the server browser tests cannot install Chromium there. Linux release artifacts also link against the build machine's glibc, so a 26.04 build would not start on older distributions.
