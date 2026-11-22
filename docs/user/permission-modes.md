@@ -33,7 +33,7 @@ offer it, because Cursor settles approvals itself.
 
 Kinako first applies fixed rules. It never approves access to credentials, `.env` files, git
 hooks, or system files, privileged commands such as `sudo`, pushes, publishes, merges, or changes
-outside the thread's workspace and added folders; those always come to you. Reads, edits, and
+outside the thread's workspace and its project's [folders](./multi-repo-projects.md); those always come to you. Reads, edits, and
 build, test, and inspection commands inside the workspace run without asking. Anything else goes
 to a reviewer model, which sees your recent messages and the requested action, never file
 contents or command output. If the reviewer is unsure, slow, or unavailable, the request comes to
