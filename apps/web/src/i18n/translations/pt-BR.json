@@ -4634,6 +4634,32 @@
   "e4e5cb6ab610e37d": "Pedido de permissão",
   "9243d7a2b22d5f3d": "Aprovação de acesso do app",
   "847e5019e2ff249d": "Pedido de acesso do app",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto perguntou a você:",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto está revisando"
+  ],
   "9c65d76ca030950f": "Aguardando aprovação",
   "b7419ed1c775db7e": "O processo do provedor não existe mais. Interrompa ou reinicie a execução para responder.",
   "87f63288c0f1ca07": "Texto colado",
@@ -5020,6 +5046,8 @@
   "3fe210c30bf00152": "Aprova edições automaticamente e pergunta antes de outras ações.",
   "468986e98d947cb7": "Auto",
   "451204c240ead696": "Os provedores compatíveis aprovam ações rotineiras; os outros continuam perguntando.",
+  "049963fb3496f947": "{app} Auto",
+  "703c611b175f91e4": "{app} aprova ações locais rotineiras e pergunta a você sobre o resto.",
   "1eed3d794eed6b65": "Acesso total",
   "7f284f51644bb125": "Permite comandos e edições sem perguntar.",
   "4f402027a24d31c4": "{organization} limita as threads a {mode}.",
@@ -8122,6 +8150,24 @@
   "cbff27b770de81c2": "Configuração necessária",
   "1c5879d287821457": "Definir como padrão",
   "4082cde5252183e6": "Acessível em",
+  "8c7640bd9a287482": "Esta API de decisão não está configurada em todos os ambientes selecionados. Selecione um ambiente para escolher o revisor dele separadamente.",
+  "cd186d77ae385abc": "Modelo revisor não salvo",
+  "06e169537474d36b": "{app} Auto",
+  "f2c9defaf1653de1": "No {app} Auto, ações locais rotineiras são executadas e as arriscadas perguntam a você primeiro. O sandbox do provedor continua valendo. \"Somente regras\" ignora o modelo revisor, então tudo o que as regras não resolverem pergunta a você.",
+  "82d989ecc0a46510": "Somente regras",
+  "179e9c513b1e4a40": "Revisa as solicitações que as regras não resolvem. APIs de decisão de Provedores também aparecem aqui. Quando desativado, o modelo de geração de texto revisa.",
+  "79b66e6316518ce1": "Modelo revisor",
+  "d52b3d6bf9f2a013": "Misto",
+  "c49fc0e2bc7294a7": "Usar um modelo revisor separado",
+  "f7aea80e63991ecf": "O quanto a API de decisão precisa ter certeza de que uma solicitação é segura antes de executá-la. Qualquer coisa com menos certeza pergunta a você.",
+  "fd319a897600cebe": "Redefinir a confiança do revisor para o padrão",
+  "6a5afd4b252d3475": "Confiança do revisor",
+  "5789e351ce5ca4f9": "Diga ao revisor o que este trabalho permite ou sobre o que ele deve sempre perguntar. As regras de segurança integradas continuam valendo.",
+  "5b09b8a729987952": "Redefinir as instruções do revisor para o padrão",
+  "f73fa9f53f6cdf1e": "Instruções do revisor",
+  "011a880d28ad813b": "Misto. Digite instruções para aplicar a todos os destinos selecionados.",
+  "90d0ee411fa34939": "Executar a suíte de testes e instalar dependências de desenvolvimento não tem problema. Sempre pergunte antes de mexer no banco de dados ou em qualquer coisa fora deste repositório.",
+  "52fe9b861dc069f0": "Conecte um ambiente para escolher o modelo revisor dele.",
   "42f8550e26e9ffd9": "Equilibrado",
   "e91e30033a833aaf": "Desempenho",
   "8c6a3ffe43dae6da": "Economia de bateria",
@@ -8181,7 +8227,6 @@
   "abcdead6f7529103": "Instruções para nomear branches",
   "820d2f52218914ef": "Adicionadas ao prompt de nomeação. O modelo retorna o nome completo do branch; nenhum prefixo ou sufixo é adicionado.",
   "41126a14bd7ce52b": "Redefinir as instruções de nomenclatura de branches para o padrão",
-  "011a880d28ad813b": "Misto. Digite instruções para aplicar a todos os destinos selecionados.",
   "a8edab62f7a0e5dc": "Use julius/ seguido do ID da issue e de uma descrição curta.",
   "35c482e288f87f27": "nenhum cookie",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} cookie} other {{formatted} cookies}}",
@@ -8871,6 +8916,43 @@
     " min. Os agentes em execução param quando ele reiniciar."
   ],
   "c56b618d212bf018": "Reiniciar e recuperar",
+  "36c140953ad9ff92": "Nenhuma API de decisão ainda",
+  "e6c855ccadf656ad": "Conecte o System One para revisar as solicitações do {app} Auto com um modelo feito para decisões de sim ou não.",
+  "1d32dad13ca765db": "Desativado · ",
+  "1ece6e9c15a13601": "Mais ações para {name}",
+  "ebffe4dabf52835f": "Ativar {name}",
+  "db26ddd183c62b45": "Adicionar uma API de decisão",
+  "cbd29f01b12406dc": "O System One responde se uma solicitação parece segura e com quanta certeza. O {app} Auto usa isso para decidir quais solicitações aprovar. Sua chave de API é armazenada neste ambiente.",
+  "5593f81d681044e9": "{count, plural, one {{name} está conectado e lista {count} modelo. {model} respondeu a uma pergunta de teste.} other {{name} está conectado e lista {count} modelos. {model} respondeu a uma pergunta de teste.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} está conectado e lista {count} modelo.} other {{name} está conectado e lista {count} modelos.}}",
+  "025088336e7e2a52": "Salvar e testar",
+  "8c4f4ec4de08ed72": "Conectar",
+  "b9980bcda59e098b": "Revisando solicitações do {app} Auto",
+  "c582d7f450dbc3c7": "Usar no {app} Auto",
+  "6e7176af0297520d": "Adicionar API de decisão",
+  "f5b66c481aa3e4df": "Editar",
+  "111a44209dc6e701": "Remover",
+  "a3538ba5ca802bd7": [
+    "Remover ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "?"
+  ],
+  "409eefe94b1ca811": [
+    "Isso exclui a chave de API armazenada em ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". As revisões configuradas para usá-la voltam para o modelo de geração de texto."
+  ],
+  "b0900f4938210634": "Chave de API",
+  "c732b08a5fa8c3d7": "URL base",
+  "3953d1cccd71ab7e": "Nome (opcional)",
   "6b6ac43d7def4a04": "Verificando ambientes…",
   "ec617524d49f21be": "{failed} de {total} falharam",
   "c3a1c907ccb50ecf": "Verificações de conexão aprovadas",
@@ -8925,7 +9007,6 @@
   "0c99fa183ed512e8": "{platform} disponível em alguns",
   "e6886a7f77b73a8e": "{platform} indisponível",
   "b0b7610d9860d18d": "Não configurado nesta máquina.",
-  "f5b66c481aa3e4df": "Editar",
   "b35256ca61016104": "Adicionar fonte",
   "3b20ef0670ae4b0b": "Máquina via SSH",
   "121ccffacb6b8c6d": "Expo Simulators",
@@ -9794,7 +9875,6 @@
   "e749b8ba2ff18f8f": "Adicionar {name} ao projeto",
   "6d08f0285e2bbf34": "Adicionar pasta",
   "b7820a37d8ff1918": "Os repositórios dentro desta pasta fazem parte do projeto assim que estão lá. Adicione uma pasta para trazer um de outro lugar.",
-  "111a44209dc6e701": "Remover",
   "daafb41c2b3c066f": "No arquivo de workspace",
   "2c5c798252f91fdc": "Adicionar",
   "7e4d1ce9725c2327": "Rastreie um repositório ou uma pasta em qualquer lugar da máquina deste projeto.",
@@ -9892,7 +9972,6 @@
   "31ec0bc3424717ae": "Cancelar login",
   "99bb27b91bab1824": "Trocar de conta",
   "bab85ed5989ef4df": "Tentar entrar novamente",
-  "8c4f4ec4de08ed72": "Conectar",
   "032f6dd7ca55ec6f": "Sair de {provider} em {environment}? Isso interrompe as threads em execução que compartilham este login. O histórico das threads é mantido.",
   "58239cd7288bdc37": "O terminal de login do provedor não está mais disponível.",
   "99fff7aa0034e316": "Não foi possível enviar entrada ao terminal de login do provedor.",
@@ -10656,15 +10735,6 @@
   ],
   "13d4f258e93f1dc1": "Conecte um ambiente para gerenciar os provedores de segredos de onde as variáveis de provedor dele leem.",
   "88466f5a03be2419": "Configuração do ambiente inteiro. Selecione um ambiente para alterá-la.",
-  "a3538ba5ca802bd7": [
-    "Remover ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    "?"
-  ],
   "0d5b3b39f92c04e4": "Remover provedor",
   "c52bdbe39649742c": [
     "Nada lê de ",
@@ -11901,9 +11971,6 @@
   "57308bc0ab24f15e": "Limpeza da transcrição de voz",
   "2d411bb0736c0643": "Nenhum gerador de texto ainda",
   "85eb2d15da7d016f": "Adicione uma API de modelo para escrever títulos de threads, mensagens de commit e outros textos curtos sem iniciar um agente de código.",
-  "1d32dad13ca765db": "Desativado · ",
-  "1ece6e9c15a13601": "Mais ações para {name}",
-  "ebffe4dabf52835f": "Ativar {name}",
   "b663e2e129c61493": "Adicionar um gerador de texto",
   "149ffa363168a419": "Escreve títulos de threads, mensagens de commit e outros textos curtos sem iniciar um agente de código. Sua chave de API é armazenada neste ambiente.",
   "1e0a645ef3661af3": "Serviço",
@@ -11939,8 +12006,6 @@
     ". Tudo o que estiver configurado para usar este gerador volta para o modelo de geração de texto."
   ],
   "2e487089c231536b": "Serviço",
-  "c732b08a5fa8c3d7": "URL base",
-  "3953d1cccd71ab7e": "Nome (opcional)",
   "304d6712ac5d3a89": [
     {
       "i": 1,
@@ -12619,6 +12684,10 @@
   "de504407a9dfe3bd": "confirmação app desktop sair imediato manter pressionado clique duplo pressionar duas vezes",
   "a8a6da6439b8333e": "títulos gerados de threads controle de versão conteúdo provedor padrão",
   "0c5fc3b5e41e1956": "títulos gerados de threads prompt estilo personalizado nomenclatura renomear gerar novamente",
+  "907eee6b144e2aba": "{app} Auto modo de permissão aprovações revisar solicitações ações arriscadas sem modelo",
+  "ad3f65bc5ad993e3": "{app} Auto modo de permissão aprovações revisar solicitações System One Jev api de decisão",
+  "6b8e533b54b79b5a": "{app} Auto limite certeza probabilidade api de decisão System One aprovar",
+  "1f86c7e6b8a0d2b9": "{app} Auto política prompt orientação permitir sempre perguntar aprovações",
   "a83570bcb45d8fa1": "sobre verificar atualizações baixar instalar atualizar versão",
   "d65bdf6748801734": "canal de versões estável latest nightly pré-lançamento",
   "3fe7c98a1dc29a98": "Comando {cli}",
@@ -12643,6 +12712,8 @@
   "9d9d31a4f3d5ff69": "fontes de uso CLIProxyAPI proxy de CLI hub cota assinatura limites chave de gerenciamento adicionar remover",
   "d65fa0946585b245": "Geradores de texto",
   "e6fd69a8a3bb69e2": "modelo api chave de api openai openrouter anthropic ollama lm studio endpoint personalizado url base títulos de threads mensagens de commit",
+  "1d0a8d68920cccef": "APIs de decisão",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev chave de api url base {app} Auto aprovações revisor",
   "f2b07faba1229ce7": "Intervalo de verificação de saúde",
   "5c9dc9970db79fe2": "atualizar disponibilidade versões estado de autenticação modelos verificações em segundo plano segundos desativado",
   "056ba6a180d114b5": "permitir desativar ativar abrir controlar ferramentas de pré-visualização sessões substituição por projeto",
@@ -13294,75 +13365,5 @@
   "27d76249d09eb69f": "Guia de revisão pronto",
   "faa3bb26abb39c93": "O guia de revisão falhou",
   "b7df38b7d8792d78": "Abrir guia",
-  "9e91e9a77b664e4e": "Não foi possível iniciar um guia de revisão",
-  "364ab43c151560f2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Auto perguntou a você:",
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": {
-        "i": 3,
-        "k": "_gt_value_3",
-        "v": "v"
-      }
-    }
-  ],
-  "71e7bea30ba66484": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Auto está revisando"
-  ],
-  "049963fb3496f947": "{app} Auto",
-  "703c611b175f91e4": "{app} aprova ações locais rotineiras e pergunta a você sobre o resto.",
-  "8c7640bd9a287482": "Esta API de decisão não está configurada em todos os ambientes selecionados. Selecione um ambiente para escolher o revisor dele separadamente.",
-  "cd186d77ae385abc": "Modelo revisor não salvo",
-  "06e169537474d36b": "{app} Auto",
-  "f2c9defaf1653de1": "No {app} Auto, ações locais rotineiras são executadas e as arriscadas perguntam a você primeiro. O sandbox do provedor continua valendo. \"Somente regras\" ignora o modelo revisor, então tudo o que as regras não resolverem pergunta a você.",
-  "82d989ecc0a46510": "Somente regras",
-  "179e9c513b1e4a40": "Revisa as solicitações que as regras não resolvem. APIs de decisão de Provedores também aparecem aqui. Quando desativado, o modelo de geração de texto revisa.",
-  "79b66e6316518ce1": "Modelo revisor",
-  "c49fc0e2bc7294a7": "Usar um modelo revisor separado",
-  "f7aea80e63991ecf": "O quanto a API de decisão precisa ter certeza de que uma solicitação é segura antes de executá-la. Qualquer coisa com menos certeza pergunta a você.",
-  "fd319a897600cebe": "Redefinir a confiança do revisor para o padrão",
-  "6a5afd4b252d3475": "Confiança do revisor",
-  "5789e351ce5ca4f9": "Diga ao revisor o que este trabalho permite ou sobre o que ele deve sempre perguntar. As regras de segurança integradas continuam valendo.",
-  "5b09b8a729987952": "Redefinir as instruções do revisor para o padrão",
-  "f73fa9f53f6cdf1e": "Instruções do revisor",
-  "90d0ee411fa34939": "Executar a suíte de testes e instalar dependências de desenvolvimento não tem problema. Sempre pergunte antes de mexer no banco de dados ou em qualquer coisa fora deste repositório.",
-  "52fe9b861dc069f0": "Conecte um ambiente para escolher o modelo revisor dele.",
-  "36c140953ad9ff92": "Nenhuma API de decisão ainda",
-  "e6c855ccadf656ad": "Conecte o System One para revisar as solicitações do {app} Auto com um modelo feito para decisões de sim ou não.",
-  "db26ddd183c62b45": "Adicionar uma API de decisão",
-  "cbd29f01b12406dc": "O System One responde se uma solicitação parece segura e com quanta certeza. O {app} Auto usa isso para decidir quais solicitações aprovar. Sua chave de API é armazenada neste ambiente.",
-  "5593f81d681044e9": "{count, plural, one {{name} está conectado e lista {count} modelo. {model} respondeu a uma pergunta de teste.} other {{name} está conectado e lista {count} modelos. {model} respondeu a uma pergunta de teste.}}",
-  "8f33e34b8d340b35": "{count, plural, one {{name} está conectado e lista {count} modelo.} other {{name} está conectado e lista {count} modelos.}}",
-  "025088336e7e2a52": "Salvar e testar",
-  "b9980bcda59e098b": "Revisando solicitações do {app} Auto",
-  "c582d7f450dbc3c7": "Usar no {app} Auto",
-  "6e7176af0297520d": "Adicionar API de decisão",
-  "409eefe94b1ca811": [
-    "Isso exclui a chave de API armazenada em ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    ". As revisões configuradas para usá-la voltam para o modelo de geração de texto."
-  ],
-  "b0900f4938210634": "Chave de API",
-  "907eee6b144e2aba": "{app} Auto modo de permissão aprovações revisar solicitações ações arriscadas sem modelo",
-  "ad3f65bc5ad993e3": "{app} Auto modo de permissão aprovações revisar solicitações System One Jev api de decisão",
-  "6b8e533b54b79b5a": "{app} Auto limite certeza probabilidade api de decisão System One aprovar",
-  "1f86c7e6b8a0d2b9": "{app} Auto política prompt orientação permitir sempre perguntar aprovações",
-  "1d0a8d68920cccef": "APIs de decisão",
-  "a37b7ddccbfbaa26": "System One TypeSafe Jev chave de api url base {app} Auto aprovações revisor"
+  "9e91e9a77b664e4e": "Não foi possível iniciar um guia de revisão"
 }

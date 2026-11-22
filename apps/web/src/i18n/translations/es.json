@@ -4634,6 +4634,32 @@
   "e4e5cb6ab610e37d": "Solicitud de permiso",
   "9243d7a2b22d5f3d": "Aprobación de acceso de app",
   "847e5019e2ff249d": "Solicitud de acceso de app",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Automático te preguntó:",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Automático está revisando"
+  ],
   "9c65d76ca030950f": "Esperando aprobación",
   "b7419ed1c775db7e": "El proceso del proveedor ya no existe. Interrumpe o reinicia la ejecución para responder.",
   "87f63288c0f1ca07": "Texto pegado",
@@ -5020,6 +5046,8 @@
   "3fe210c30bf00152": "Aprueba las ediciones automáticamente y pregunta antes de otras acciones.",
   "468986e98d947cb7": "Automático",
   "451204c240ead696": "Los proveedores compatibles aprueban las acciones rutinarias; los demás siguen preguntando.",
+  "049963fb3496f947": "{app} Automático",
+  "703c611b175f91e4": "{app} aprueba las acciones locales rutinarias y te pregunta por el resto.",
   "1eed3d794eed6b65": "Acceso completo",
   "7f284f51644bb125": "Permite comandos y ediciones sin preguntar.",
   "4f402027a24d31c4": "{organization} limita los hilos a {mode}.",
@@ -8122,6 +8150,24 @@
   "cbff27b770de81c2": "Configuración necesaria",
   "1c5879d287821457": "Establecer como predeterminado",
   "4082cde5252183e6": "Accesible en",
+  "8c7640bd9a287482": "Esta API de decisión no está configurada en todos los entornos seleccionados. Selecciona un entorno para elegir su revisor por separado.",
+  "cd186d77ae385abc": "No se guardó el modelo revisor",
+  "06e169537474d36b": "{app} Automático",
+  "f2c9defaf1653de1": "En {app} Automático, las acciones locales rutinarias se ejecutan y las arriesgadas te preguntan primero. El sandbox del proveedor sigue aplicándose. «Solo reglas» omite el modelo revisor, así que todo lo que las reglas no resuelvan te pregunta.",
+  "82d989ecc0a46510": "Solo reglas",
+  "179e9c513b1e4a40": "Revisa las solicitudes que las reglas no resuelven. Las API de decisión de Proveedores también aparecen aquí. Si está desactivado, revisa el modelo de generación de texto.",
+  "79b66e6316518ce1": "Modelo revisor",
+  "d52b3d6bf9f2a013": "Mixto",
+  "c49fc0e2bc7294a7": "Usar un modelo revisor aparte",
+  "f7aea80e63991ecf": "Qué tan segura debe estar la API de decisión de que una solicitud es segura antes de ejecutarla. Todo lo que tenga menos certeza te pregunta.",
+  "fd319a897600cebe": "Restablecer la confianza del revisor al valor predeterminado",
+  "6a5afd4b252d3475": "Confianza del revisor",
+  "5789e351ce5ca4f9": "Indica al revisor qué permite este trabajo o sobre qué debe preguntar siempre. Las reglas de seguridad integradas siguen aplicándose.",
+  "5b09b8a729987952": "Restablecer las instrucciones del revisor al valor predeterminado",
+  "f73fa9f53f6cdf1e": "Instrucciones del revisor",
+  "011a880d28ad813b": "Mixto. Introduce instrucciones para aplicarlas a todos los destinos seleccionados.",
+  "90d0ee411fa34939": "Ejecutar la suite de pruebas e instalar dependencias de desarrollo está bien. Pregunta siempre antes de tocar la base de datos o cualquier cosa fuera de este repositorio.",
+  "52fe9b861dc069f0": "Conecta un entorno para elegir su modelo revisor.",
   "42f8550e26e9ffd9": "Equilibrado",
   "e91e30033a833aaf": "Rendimiento",
   "8c6a3ffe43dae6da": "Ahorro de batería",
@@ -8181,7 +8227,6 @@
   "abcdead6f7529103": "Instrucciones para nombrar ramas",
   "820d2f52218914ef": "Se añaden al prompt de nombres. El modelo devuelve el nombre completo de la rama; no se añade prefijo ni sufijo.",
   "41126a14bd7ce52b": "Restablecer las instrucciones de nomenclatura de ramas al valor predeterminado",
-  "011a880d28ad813b": "Mixto. Introduce instrucciones para aplicarlas a todos los destinos seleccionados.",
   "a8edab62f7a0e5dc": "Usa julius/ seguido del ID de la issue y una descripción breve.",
   "35c482e288f87f27": "sin cookies",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} cookie} other {{formatted} cookies}}",
@@ -8871,6 +8916,43 @@
     " min. Los agentes en ejecución se detienen al reiniciarse."
   ],
   "c56b618d212bf018": "Reiniciar y recuperar",
+  "36c140953ad9ff92": "Aún no hay API de decisión",
+  "e6c855ccadf656ad": "Conecta System One para revisar las solicitudes de {app} Automático con un modelo creado para decisiones de sí o no.",
+  "1d32dad13ca765db": "Desactivado · ",
+  "1ece6e9c15a13601": "Más acciones para {name}",
+  "ebffe4dabf52835f": "Activar {name}",
+  "db26ddd183c62b45": "Añadir una API de decisión",
+  "cbd29f01b12406dc": "System One responde si una solicitud parece segura y con cuánta certeza. {app} Automático lo usa para decidir qué solicitudes aprobar. Tu clave de API se guarda en este entorno.",
+  "5593f81d681044e9": "{count, plural, one {{name} está conectado y muestra {count} modelo. {model} respondió una pregunta de prueba.} other {{name} está conectado y muestra {count} modelos. {model} respondió una pregunta de prueba.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} está conectado y muestra {count} modelo.} other {{name} está conectado y muestra {count} modelos.}}",
+  "025088336e7e2a52": "Guardar y probar",
+  "8c4f4ec4de08ed72": "Conectar",
+  "b9980bcda59e098b": "Revisa las solicitudes de {app} Automático",
+  "c582d7f450dbc3c7": "Usar para {app} Automático",
+  "6e7176af0297520d": "Añadir API de decisión",
+  "f5b66c481aa3e4df": "Editar",
+  "111a44209dc6e701": "Quitar",
+  "a3538ba5ca802bd7": [
+    "¿Quitar ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "?"
+  ],
+  "409eefe94b1ca811": [
+    "Esto elimina la clave de API guardada en ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Las revisiones configuradas para usarla vuelven al modelo de generación de texto."
+  ],
+  "b0900f4938210634": "Clave de API",
+  "c732b08a5fa8c3d7": "URL base",
+  "3953d1cccd71ab7e": "Nombre (opcional)",
   "6b6ac43d7def4a04": "Comprobando entornos…",
   "ec617524d49f21be": "{failed} de {total} fallaron",
   "c3a1c907ccb50ecf": "Comprobaciones de conexión superadas",
@@ -8925,7 +9007,6 @@
   "0c99fa183ed512e8": "{platform} disponible en algunos",
   "e6886a7f77b73a8e": "{platform} no disponible",
   "b0b7610d9860d18d": "No configurado en esta máquina.",
-  "f5b66c481aa3e4df": "Editar",
   "b35256ca61016104": "Añadir origen",
   "3b20ef0670ae4b0b": "Máquina por SSH",
   "121ccffacb6b8c6d": "Simuladores de Expo",
@@ -9793,7 +9874,6 @@
   "e749b8ba2ff18f8f": "Añadir {name} al proyecto",
   "6d08f0285e2bbf34": "Añadir carpeta",
   "b7820a37d8ff1918": "Los repositorios dentro de esta carpeta forman parte del proyecto en cuanto están ahí. Añade una carpeta para incorporar uno de otro lugar.",
-  "111a44209dc6e701": "Quitar",
   "daafb41c2b3c066f": "En el archivo del espacio de trabajo",
   "2c5c798252f91fdc": "Añadir",
   "7e4d1ce9725c2327": "Sigue un repositorio o una carpeta en cualquier lugar del equipo de este proyecto.",
@@ -9890,7 +9970,6 @@
   "31ec0bc3424717ae": "Cancelar inicio de sesión",
   "99bb27b91bab1824": "Cambiar de cuenta",
   "bab85ed5989ef4df": "Reintentar inicio de sesión",
-  "8c4f4ec4de08ed72": "Conectar",
   "032f6dd7ca55ec6f": "¿Cerrar sesión en {provider} en {environment}? Se detienen los hilos en curso que comparten este inicio de sesión. Se conserva el historial de los hilos.",
   "58239cd7288bdc37": "La terminal de inicio de sesión del proveedor ya no está disponible.",
   "99fff7aa0034e316": "No se pudo enviar la entrada a la terminal de inicio de sesión del proveedor.",
@@ -10654,15 +10733,6 @@
   ],
   "13d4f258e93f1dc1": "Conecta un entorno para gestionar los proveedores de secretos de los que leen sus variables de proveedor.",
   "88466f5a03be2419": "Ajuste de todo el entorno. Selecciona un entorno para cambiarlo.",
-  "a3538ba5ca802bd7": [
-    "¿Quitar ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    "?"
-  ],
   "0d5b3b39f92c04e4": "Quitar proveedor",
   "c52bdbe39649742c": [
     "Nada lee de ",
@@ -11896,9 +11966,6 @@
   "57308bc0ab24f15e": "Limpieza de transcripciones de voz",
   "2d411bb0736c0643": "Aún no hay generadores de texto",
   "85eb2d15da7d016f": "Añade una API de modelos para escribir títulos de hilos, mensajes de commit y otros textos breves sin iniciar un agente de código.",
-  "1d32dad13ca765db": "Desactivado · ",
-  "1ece6e9c15a13601": "Más acciones para {name}",
-  "ebffe4dabf52835f": "Activar {name}",
   "b663e2e129c61493": "Añadir un generador de texto",
   "149ffa363168a419": "Escribe títulos de hilos, mensajes de commit y otros textos breves sin iniciar un agente de código. Tu clave de API se guarda en este entorno.",
   "1e0a645ef3661af3": "Servicio",
@@ -11934,8 +12001,6 @@
     ". Todo lo configurado para usar este generador vuelve al modelo de generación de texto."
   ],
   "2e487089c231536b": "Servicio",
-  "c732b08a5fa8c3d7": "URL base",
-  "3953d1cccd71ab7e": "Nombre (opcional)",
   "304d6712ac5d3a89": [
     {
       "i": 1,
@@ -12614,6 +12679,10 @@
   "de504407a9dfe3bd": "confirmación app de escritorio salir directo mantener doble clic pulsar dos veces",
   "a8a6da6439b8333e": "títulos de hilos generados control de versiones contenido proveedor predeterminado",
   "0c5fc3b5e41e1956": "títulos de hilos generados prompt estilo personalizado nombres renombrar regenerar",
+  "907eee6b144e2aba": "{app} Automático modo de permisos aprobaciones revisar solicitudes acciones arriesgadas sin modelo",
+  "ad3f65bc5ad993e3": "{app} Automático modo de permisos aprobaciones revisar solicitudes System One Jev api de decisión",
+  "6b8e533b54b79b5a": "{app} Automático umbral certeza probabilidad api de decisión System One aprobar",
+  "1f86c7e6b8a0d2b9": "{app} Automático política prompt indicaciones permitir preguntar siempre aprobaciones",
   "a83570bcb45d8fa1": "acerca de buscar actualizaciones descargar instalar actualizar versión",
   "d65bdf6748801734": "canal de versiones estable latest nightly preliminar",
   "3fe7c98a1dc29a98": "Comando {cli}",
@@ -12638,6 +12707,8 @@
   "9d9d31a4f3d5ff69": "fuentes de uso CLIProxyAPI proxy de CLI hub cuota suscripción límites gestión clave añadir quitar",
   "d65fa0946585b245": "Generadores de texto",
   "e6fd69a8a3bb69e2": "modelo api clave de api openai openrouter anthropic ollama lm studio endpoint personalizado url base títulos de hilos mensajes de commit",
+  "1d0a8d68920cccef": "API de decisión",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev clave de api url base {app} Automático aprobaciones revisor",
   "f2b07faba1229ce7": "Intervalo de comprobación de estado",
   "5c9dc9970db79fe2": "actualizar disponibilidad versiones estado de autenticación modelos sondeos en segundo plano segundos desactivado",
   "056ba6a180d114b5": "permitir desactivar activar abrir controlar herramientas de vista previa sesiones proyecto anulación",
@@ -13289,75 +13360,5 @@
   "27d76249d09eb69f": "Guía de revisión lista",
   "faa3bb26abb39c93": "Falló la guía de revisión",
   "b7df38b7d8792d78": "Abrir guía",
-  "9e91e9a77b664e4e": "No se pudo iniciar una guía de revisión",
-  "364ab43c151560f2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Automático te preguntó:",
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": {
-        "i": 3,
-        "k": "_gt_value_3",
-        "v": "v"
-      }
-    }
-  ],
-  "71e7bea30ba66484": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Automático está revisando"
-  ],
-  "049963fb3496f947": "{app} Automático",
-  "703c611b175f91e4": "{app} aprueba las acciones locales rutinarias y te pregunta por el resto.",
-  "8c7640bd9a287482": "Esta API de decisión no está configurada en todos los entornos seleccionados. Selecciona un entorno para elegir su revisor por separado.",
-  "cd186d77ae385abc": "No se guardó el modelo revisor",
-  "06e169537474d36b": "{app} Automático",
-  "f2c9defaf1653de1": "En {app} Automático, las acciones locales rutinarias se ejecutan y las arriesgadas te preguntan primero. El sandbox del proveedor sigue aplicándose. «Solo reglas» omite el modelo revisor, así que todo lo que las reglas no resuelvan te pregunta.",
-  "82d989ecc0a46510": "Solo reglas",
-  "179e9c513b1e4a40": "Revisa las solicitudes que las reglas no resuelven. Las API de decisión de Proveedores también aparecen aquí. Si está desactivado, revisa el modelo de generación de texto.",
-  "79b66e6316518ce1": "Modelo revisor",
-  "c49fc0e2bc7294a7": "Usar un modelo revisor aparte",
-  "f7aea80e63991ecf": "Qué tan segura debe estar la API de decisión de que una solicitud es segura antes de ejecutarla. Todo lo que tenga menos certeza te pregunta.",
-  "fd319a897600cebe": "Restablecer la confianza del revisor al valor predeterminado",
-  "6a5afd4b252d3475": "Confianza del revisor",
-  "5789e351ce5ca4f9": "Indica al revisor qué permite este trabajo o sobre qué debe preguntar siempre. Las reglas de seguridad integradas siguen aplicándose.",
-  "5b09b8a729987952": "Restablecer las instrucciones del revisor al valor predeterminado",
-  "f73fa9f53f6cdf1e": "Instrucciones del revisor",
-  "90d0ee411fa34939": "Ejecutar la suite de pruebas e instalar dependencias de desarrollo está bien. Pregunta siempre antes de tocar la base de datos o cualquier cosa fuera de este repositorio.",
-  "52fe9b861dc069f0": "Conecta un entorno para elegir su modelo revisor.",
-  "36c140953ad9ff92": "Aún no hay API de decisión",
-  "e6c855ccadf656ad": "Conecta System One para revisar las solicitudes de {app} Automático con un modelo creado para decisiones de sí o no.",
-  "db26ddd183c62b45": "Añadir una API de decisión",
-  "cbd29f01b12406dc": "System One responde si una solicitud parece segura y con cuánta certeza. {app} Automático lo usa para decidir qué solicitudes aprobar. Tu clave de API se guarda en este entorno.",
-  "5593f81d681044e9": "{count, plural, one {{name} está conectado y muestra {count} modelo. {model} respondió una pregunta de prueba.} other {{name} está conectado y muestra {count} modelos. {model} respondió una pregunta de prueba.}}",
-  "8f33e34b8d340b35": "{count, plural, one {{name} está conectado y muestra {count} modelo.} other {{name} está conectado y muestra {count} modelos.}}",
-  "025088336e7e2a52": "Guardar y probar",
-  "b9980bcda59e098b": "Revisa las solicitudes de {app} Automático",
-  "c582d7f450dbc3c7": "Usar para {app} Automático",
-  "6e7176af0297520d": "Añadir API de decisión",
-  "409eefe94b1ca811": [
-    "Esto elimina la clave de API guardada en ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    ". Las revisiones configuradas para usarla vuelven al modelo de generación de texto."
-  ],
-  "b0900f4938210634": "Clave de API",
-  "907eee6b144e2aba": "{app} Automático modo de permisos aprobaciones revisar solicitudes acciones arriesgadas sin modelo",
-  "ad3f65bc5ad993e3": "{app} Automático modo de permisos aprobaciones revisar solicitudes System One Jev api de decisión",
-  "6b8e533b54b79b5a": "{app} Automático umbral certeza probabilidad api de decisión System One aprobar",
-  "1f86c7e6b8a0d2b9": "{app} Automático política prompt indicaciones permitir preguntar siempre aprobaciones",
-  "1d0a8d68920cccef": "API de decisión",
-  "a37b7ddccbfbaa26": "System One TypeSafe Jev clave de api url base {app} Automático aprobaciones revisor"
+  "9e91e9a77b664e4e": "No se pudo iniciar una guía de revisión"
 }
