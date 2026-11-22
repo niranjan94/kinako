@@ -5,7 +5,6 @@ import {
   type OrchestrationV2DomainEvent,
   type OrchestrationV2RuntimeRequest,
   type OrchestrationV2TurnItem,
-  resolveThreadAdditionalDirectoryPath,
   type RuntimeRequestId,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -29,6 +28,7 @@ import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as WorkspaceFolders from "../workspace/WorkspaceFolders.ts";
 import * as ApprovalClassifier from "./ApprovalClassifier.ts";
 import { evaluateRules } from "./autoApprovalRules.ts";
 import { buildReviewBundle } from "./reviewBundle.ts";
@@ -58,6 +58,7 @@ const make = Effect.gen(function* () {
   const providers = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
   const settingsService = yield* ServerSettings.ServerSettingsService;
   const classifier = yield* ApprovalClassifier.ApprovalClassifier;
+  const workspaceFolders = yield* WorkspaceFolders.WorkspaceFolders;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const homeDir = NodeOS.homedir();
@@ -106,9 +107,10 @@ const make = Effect.gen(function* () {
         reason: "The thread's workspace could not be found.",
       } as const;
     }
-    const additionalDirectories = (thread.additionalDirectories ?? []).map(
-      resolveThreadAdditionalDirectoryPath,
-    );
+    // Without the tracked folders, only cwd counts as inside, which asks about more, not less.
+    const additionalDirectories = (yield* workspaceFolders
+      .forThread({ projectId: thread.projectId, worktreePath: thread.worktreePath })
+      .pipe(Effect.orElseSucceed(() => ({ extraRoots: [] as ReadonlyArray<string> })))).extraRoots;
     const instance = yield* providers.getInstance(thread.modelSelection.instanceId);
     const snapshot = instance === undefined ? undefined : yield* instance.snapshot.getSnapshot;
     const driver = snapshot?.driver ?? thread.modelSelection.instanceId;

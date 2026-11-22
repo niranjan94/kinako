@@ -108,6 +108,7 @@ import * as ThreadLaunchService from "./ThreadLaunchService.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import * as DelegatedTaskQuestionReactor from "./DelegatedTaskQuestionReactor.ts";
 import * as AutoApprovalReactor from "../autoReview/AutoApprovalReactor.ts";
+import * as WorkspaceFolders from "../workspace/WorkspaceFolders.ts";
 import * as ApprovalClassifier from "../autoReview/ApprovalClassifier.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
@@ -3179,6 +3180,11 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
               }),
             ),
             Layer.provide(layerTestProviderInstanceRegistry),
+            Layer.provide(
+              Layer.mock(WorkspaceFolders.WorkspaceFolders)({
+                forThread: () => Effect.succeed({ folders: [], extraRoots: [] }),
+              }),
+            ),
             Layer.provide(NodeServices.layer),
           ),
         ),
