@@ -920,18 +920,20 @@ export function runtimeRequestInspection(input: {
   readonly toolInput?: unknown;
 }): OrchestrationV2RuntimeRequest["inspection"] {
   const toolName = boundedText(input.toolName, 200);
-  const command = boundedText(
-    typeof input.command === "string" ? input.command : input.command?.join(" "),
-    INSPECTION_COMMAND_MAX_CHARS,
-  );
-  const paths = [
+  const fullCommand = typeof input.command === "string" ? input.command : input.command?.join(" ");
+  const command = boundedText(fullCommand, INSPECTION_COMMAND_MAX_CHARS);
+  const allPaths = [
     ...new Set(
       (input.paths ?? []).flatMap((path) => {
         const trimmed = path?.trim();
         return trimmed === undefined || trimmed.length === 0 ? [] : [trimmed];
       }),
     ),
-  ].slice(0, INSPECTION_MAX_PATHS);
+  ];
+  const paths = allPaths.slice(0, INSPECTION_MAX_PATHS);
+  const truncated =
+    allPaths.length > paths.length ||
+    (fullCommand !== undefined && fullCommand.trim().length > INSPECTION_COMMAND_MAX_CHARS);
   let rendered: string | undefined;
   if (typeof input.toolInput === "string") rendered = input.toolInput;
   else if (input.toolInput !== undefined && input.toolInput !== null) {
@@ -947,6 +949,7 @@ export function runtimeRequestInspection(input: {
     ...(command === undefined ? {} : { command }),
     ...(paths.length === 0 ? {} : { paths }),
     ...(toolInputSummary === undefined ? {} : { toolInputSummary }),
+    ...(truncated ? { truncated } : {}),
   };
   return Object.keys(inspection).length === 0 ? undefined : inspection;
 }

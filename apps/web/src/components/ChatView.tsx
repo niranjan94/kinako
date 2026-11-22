@@ -2715,7 +2715,7 @@ export default function ChatView(props: ChatViewProps) {
     freshSessionAvailable && activePendingApproval === null && pendingUserInputs.length === 0;
   // Screen readers hear "Needs approval" only once the host reviewer hands a request over.
   const approvalAwaitingUser =
-    activePendingApproval?.autoReview?.state === "reviewing" ? null : activePendingApproval;
+    pendingApprovals.find((approval) => approval.autoReview?.state !== "reviewing") ?? null;
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
   const composerSendHeld = useComposerSendHeld(composerDraftTargetKey);
   const cancelHeldSendStable = useStableCallback(() => {

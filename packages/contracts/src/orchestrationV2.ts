@@ -1460,6 +1460,8 @@ export const OrchestrationV2RuntimeRequestInspection = Schema.Struct({
   paths: Schema.optional(Schema.Array(Schema.String)),
   /** A bounded rendering of the tool's input, for tools that are neither a command nor a path. */
   toolInputSummary: Schema.optional(Schema.String),
+  /** Set when `command` or `paths` was cut short to fit. */
+  truncated: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationV2RuntimeRequestInspection =
   typeof OrchestrationV2RuntimeRequestInspection.Type;
