@@ -4636,6 +4636,32 @@
   "e4e5cb6ab610e37d": "Permission request",
   "9243d7a2b22d5f3d": "App access approval",
   "847e5019e2ff249d": "App access request",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto asked you:",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto is reviewing"
+  ],
   "9c65d76ca030950f": "Waiting for approval",
   "b7419ed1c775db7e": "Provider process is gone. Interrupt or restart the run to respond.",
   "87f63288c0f1ca07": "Pasted text",
@@ -5022,6 +5048,8 @@
   "3fe210c30bf00152": "Auto-approve edits, ask before other actions.",
   "468986e98d947cb7": "Auto",
   "451204c240ead696": "Supported providers approve routine actions; others still ask.",
+  "049963fb3496f947": "{app} Auto",
+  "703c611b175f91e4": "{app} approves routine local actions and asks you about the rest.",
   "1eed3d794eed6b65": "Full access",
   "7f284f51644bb125": "Allow commands and edits without prompts.",
   "4f402027a24d31c4": "{organization} limits threads to {mode}.",
@@ -8129,6 +8157,24 @@
   "cbff27b770de81c2": "Setup required",
   "1c5879d287821457": "Set as default",
   "4082cde5252183e6": "Reachable at",
+  "8c7640bd9a287482": "This decision API is not set up on every selected environment. Select an environment to choose its reviewer separately.",
+  "cd186d77ae385abc": "Reviewer model not saved",
+  "06e169537474d36b": "{app} Auto",
+  "f2c9defaf1653de1": "In {app} Auto, routine local actions run and risky ones ask you first. The provider's sandbox still applies. Rules only skips the reviewer model, so anything the rules don't settle asks you.",
+  "82d989ecc0a46510": "Rules only",
+  "179e9c513b1e4a40": "Reviews requests the rules don't settle. Decision APIs from Providers also appear here. When off, the text generation model reviews.",
+  "79b66e6316518ce1": "Reviewer model",
+  "d52b3d6bf9f2a013": "Mixed",
+  "c49fc0e2bc7294a7": "Use a separate reviewer model",
+  "f7aea80e63991ecf": "How sure the decision API must be that a request is safe before it runs. Anything less certain asks you.",
+  "fd319a897600cebe": "Reset reviewer confidence to default",
+  "6a5afd4b252d3475": "Reviewer confidence",
+  "5789e351ce5ca4f9": "Tell the reviewer what this work allows or should always ask about. Built-in safety rules still apply.",
+  "5b09b8a729987952": "Reset reviewer instructions to default",
+  "f73fa9f53f6cdf1e": "Reviewer instructions",
+  "011a880d28ad813b": "Mixed. Enter instructions to apply to all selected targets.",
+  "90d0ee411fa34939": "Running the test suite and installing dev dependencies is fine. Always ask before touching the database or anything outside this repository.",
+  "52fe9b861dc069f0": "Connect an environment to choose its reviewer model.",
   "42f8550e26e9ffd9": "Balanced",
   "e91e30033a833aaf": "Performance",
   "8c6a3ffe43dae6da": "Battery saver",
@@ -8188,7 +8234,6 @@
   "abcdead6f7529103": "Branch naming instructions",
   "820d2f52218914ef": "Appended to the naming prompt. The model returns the complete branch name; no prefix or suffix is added.",
   "41126a14bd7ce52b": "Reset branch naming instructions to default",
-  "011a880d28ad813b": "Mixed. Enter instructions to apply to all selected targets.",
   "a8edab62f7a0e5dc": "Use julius/ followed by the issue ID and a short description.",
   "35c482e288f87f27": "no cookies",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} cookie} other {{formatted} cookies}}",
@@ -8878,6 +8923,43 @@
     " min. Running agents stop when it restarts."
   ],
   "c56b618d212bf018": "Restart and reclaim",
+  "36c140953ad9ff92": "No decision APIs yet",
+  "e6c855ccadf656ad": "Connect System One to review {app} Auto requests with a model built for yes or no decisions.",
+  "1d32dad13ca765db": "Off · ",
+  "1ece6e9c15a13601": "More actions for {name}",
+  "ebffe4dabf52835f": "Enable {name}",
+  "db26ddd183c62b45": "Add a decision API",
+  "cbd29f01b12406dc": "System One answers whether a request looks safe, with how sure it is. {app} Auto uses it to decide which requests to approve. Your API key is stored on this environment.",
+  "5593f81d681044e9": "{count, plural, one {{name} is connected and lists {count} model. {model} answered a test question.} other {{name} is connected and lists {count} models. {model} answered a test question.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} is connected and lists {count} model.} other {{name} is connected and lists {count} models.}}",
+  "025088336e7e2a52": "Save and test",
+  "8c4f4ec4de08ed72": "Connect",
+  "b9980bcda59e098b": "Reviewing {app} Auto requests",
+  "c582d7f450dbc3c7": "Use for {app} Auto",
+  "6e7176af0297520d": "Add decision API",
+  "f5b66c481aa3e4df": "Edit",
+  "111a44209dc6e701": "Remove",
+  "a3538ba5ca802bd7": [
+    "Remove ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "?"
+  ],
+  "409eefe94b1ca811": [
+    "This deletes the API key stored on ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Reviews set to use it fall back to the text generation model."
+  ],
+  "b0900f4938210634": "API key",
+  "c732b08a5fa8c3d7": "Base URL",
+  "3953d1cccd71ab7e": "Name (optional)",
   "6b6ac43d7def4a04": "Checking environments…",
   "ec617524d49f21be": "{failed} of {total} failed",
   "c3a1c907ccb50ecf": "Connection checks passed",
@@ -8932,7 +9014,6 @@
   "0c99fa183ed512e8": "{platform} available on some",
   "e6886a7f77b73a8e": "{platform} not available",
   "b0b7610d9860d18d": "Not set up on this machine.",
-  "f5b66c481aa3e4df": "Edit",
   "b35256ca61016104": "Add source",
   "3b20ef0670ae4b0b": "Machine over SSH",
   "121ccffacb6b8c6d": "Expo Simulators",
@@ -9802,7 +9883,6 @@
   "e749b8ba2ff18f8f": "Add {name} to the project",
   "6d08f0285e2bbf34": "Add folder",
   "b7820a37d8ff1918": "Repositories inside this folder are part of the project as soon as they are there. Add a folder to bring in one from somewhere else.",
-  "111a44209dc6e701": "Remove",
   "daafb41c2b3c066f": "In workspace file",
   "2c5c798252f91fdc": "Add",
   "7e4d1ce9725c2327": "Track a repository or folder anywhere on this project's machine.",
@@ -9899,7 +9979,6 @@
   "31ec0bc3424717ae": "Cancel sign-in",
   "99bb27b91bab1824": "Change account",
   "bab85ed5989ef4df": "Retry sign-in",
-  "8c4f4ec4de08ed72": "Connect",
   "032f6dd7ca55ec6f": "Sign out of {provider} on {environment}? This stops running threads that share this sign-in. Thread history is kept.",
   "58239cd7288bdc37": "The provider sign-in terminal is no longer available.",
   "99fff7aa0034e316": "Could not send input to the provider sign-in terminal.",
@@ -10665,15 +10744,6 @@
   ],
   "13d4f258e93f1dc1": "Connect an environment to manage the secret providers its provider variables read from.",
   "88466f5a03be2419": "Environment-wide setting. Select an environment to change it.",
-  "a3538ba5ca802bd7": [
-    "Remove ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    "?"
-  ],
   "0d5b3b39f92c04e4": "Remove provider",
   "c52bdbe39649742c": [
     "Nothing reads from ",
@@ -11910,9 +11980,6 @@
   "57308bc0ab24f15e": "Voice transcript cleanup",
   "2d411bb0736c0643": "No text generators yet",
   "85eb2d15da7d016f": "Add a model API to write thread titles, commit messages, and other short text without starting a coding agent.",
-  "1d32dad13ca765db": "Off · ",
-  "1ece6e9c15a13601": "More actions for {name}",
-  "ebffe4dabf52835f": "Enable {name}",
   "b663e2e129c61493": "Add a text generator",
   "149ffa363168a419": "Writes thread titles, commit messages, and other short text without starting a coding agent. Your API key is stored on this environment.",
   "1e0a645ef3661af3": "Service",
@@ -11948,8 +12015,6 @@
     ". Anything set to use this generator falls back to the text generation model."
   ],
   "2e487089c231536b": "Service",
-  "c732b08a5fa8c3d7": "Base URL",
-  "3953d1cccd71ab7e": "Name (optional)",
   "304d6712ac5d3a89": [
     {
       "i": 1,
@@ -12628,6 +12693,10 @@
   "de504407a9dfe3bd": "confirmation desktop app exit direct hold double click press twice",
   "a8a6da6439b8333e": "generated thread titles source control content default provider",
   "0c5fc3b5e41e1956": "generated thread titles prompt custom style naming rename regenerate",
+  "907eee6b144e2aba": "{app} Auto permission mode approvals review requests risky actions without a model",
+  "ad3f65bc5ad993e3": "{app} Auto permission mode approvals review requests System One Jev decision API",
+  "6b8e533b54b79b5a": "{app} Auto threshold certainty probability decision API System One approve",
+  "1f86c7e6b8a0d2b9": "{app} Auto policy prompt guidance allow always ask approvals",
   "a83570bcb45d8fa1": "about check for updates download install upgrade release",
   "d65bdf6748801734": "release channel stable latest nightly prerelease",
   "3fe7c98a1dc29a98": "{cli} command",
@@ -12652,6 +12721,8 @@
   "9d9d31a4f3d5ff69": "usage sources CLIProxyAPI CLI proxy hub quota subscription limits management key add remove",
   "d65fa0946585b245": "Text generators",
   "e6fd69a8a3bb69e2": "model api api key openai openrouter anthropic ollama lm studio custom endpoint base url thread titles commit messages",
+  "1d0a8d68920cccef": "Decision APIs",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev api key base url {app} Auto approvals reviewer",
   "f2b07faba1229ce7": "Health check interval",
   "5c9dc9970db79fe2": "refresh availability versions auth state models background probes seconds off",
   "056ba6a180d114b5": "allow disable enable open drive preview tools sessions project override",
@@ -13302,75 +13373,5 @@
   "27d76249d09eb69f": "Review guide ready",
   "faa3bb26abb39c93": "Review guide failed",
   "b7df38b7d8792d78": "Open guide",
-  "9e91e9a77b664e4e": "Could not start a review guide",
-  "364ab43c151560f2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Auto asked you:",
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": {
-        "i": 3,
-        "k": "_gt_value_3",
-        "v": "v"
-      }
-    }
-  ],
-  "71e7bea30ba66484": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Auto is reviewing"
-  ],
-  "049963fb3496f947": "{app} Auto",
-  "703c611b175f91e4": "{app} approves routine local actions and asks you about the rest.",
-  "8c7640bd9a287482": "This decision API is not set up on every selected environment. Select an environment to choose its reviewer separately.",
-  "cd186d77ae385abc": "Reviewer model not saved",
-  "06e169537474d36b": "{app} Auto",
-  "f2c9defaf1653de1": "In {app} Auto, routine local actions run and risky ones ask you first. The provider's sandbox still applies. Rules only skips the reviewer model, so anything the rules don't settle asks you.",
-  "82d989ecc0a46510": "Rules only",
-  "179e9c513b1e4a40": "Reviews requests the rules don't settle. Decision APIs from Providers also appear here. When off, the text generation model reviews.",
-  "79b66e6316518ce1": "Reviewer model",
-  "c49fc0e2bc7294a7": "Use a separate reviewer model",
-  "f7aea80e63991ecf": "How sure the decision API must be that a request is safe before it runs. Anything less certain asks you.",
-  "fd319a897600cebe": "Reset reviewer confidence to default",
-  "6a5afd4b252d3475": "Reviewer confidence",
-  "5789e351ce5ca4f9": "Tell the reviewer what this work allows or should always ask about. Built-in safety rules still apply.",
-  "5b09b8a729987952": "Reset reviewer instructions to default",
-  "f73fa9f53f6cdf1e": "Reviewer instructions",
-  "90d0ee411fa34939": "Running the test suite and installing dev dependencies is fine. Always ask before touching the database or anything outside this repository.",
-  "52fe9b861dc069f0": "Connect an environment to choose its reviewer model.",
-  "36c140953ad9ff92": "No decision APIs yet",
-  "e6c855ccadf656ad": "Connect System One to review {app} Auto requests with a model built for yes or no decisions.",
-  "db26ddd183c62b45": "Add a decision API",
-  "cbd29f01b12406dc": "System One answers whether a request looks safe, with how sure it is. {app} Auto uses it to decide which requests to approve. Your API key is stored on this environment.",
-  "5593f81d681044e9": "{count, plural, one {{name} is connected and lists {count} model. {model} answered a test question.} other {{name} is connected and lists {count} models. {model} answered a test question.}}",
-  "8f33e34b8d340b35": "{count, plural, one {{name} is connected and lists {count} model.} other {{name} is connected and lists {count} models.}}",
-  "025088336e7e2a52": "Save and test",
-  "b9980bcda59e098b": "Reviewing {app} Auto requests",
-  "c582d7f450dbc3c7": "Use for {app} Auto",
-  "6e7176af0297520d": "Add decision API",
-  "409eefe94b1ca811": [
-    "This deletes the API key stored on ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    ". Reviews set to use it fall back to the text generation model."
-  ],
-  "b0900f4938210634": "API key",
-  "907eee6b144e2aba": "{app} Auto permission mode approvals review requests risky actions without a model",
-  "ad3f65bc5ad993e3": "{app} Auto permission mode approvals review requests System One Jev decision API",
-  "6b8e533b54b79b5a": "{app} Auto threshold certainty probability decision API System One approve",
-  "1f86c7e6b8a0d2b9": "{app} Auto policy prompt guidance allow always ask approvals",
-  "1d0a8d68920cccef": "Decision APIs",
-  "a37b7ddccbfbaa26": "System One TypeSafe Jev api key base url {app} Auto approvals reviewer"
+  "9e91e9a77b664e4e": "Could not start a review guide"
 }

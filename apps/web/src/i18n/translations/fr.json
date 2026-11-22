@@ -4635,6 +4635,32 @@
   "e4e5cb6ab610e37d": "Demande d’autorisation",
   "9243d7a2b22d5f3d": "Approbation d’accès d’app",
   "847e5019e2ff249d": "Demande d’accès d’app",
+  "364ab43c151560f2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto vous a demandé :",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    }
+  ],
+  "71e7bea30ba66484": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Auto est en cours de vérification"
+  ],
   "9c65d76ca030950f": "En attente d’approbation",
   "b7419ed1c775db7e": "Le processus du fournisseur n’existe plus. Interrompez ou redémarrez l’exécution pour répondre.",
   "87f63288c0f1ca07": "Texte collé",
@@ -5021,6 +5047,8 @@
   "3fe210c30bf00152": "Approuver automatiquement les modifications, demander avant les autres actions.",
   "468986e98d947cb7": "Auto",
   "451204c240ead696": "Les fournisseurs compatibles approuvent les actions courantes ; les autres demandent toujours.",
+  "049963fb3496f947": "{app} Auto",
+  "703c611b175f91e4": "{app} approuve les actions locales courantes et vous demande pour le reste.",
   "1eed3d794eed6b65": "Accès complet",
   "7f284f51644bb125": "Autoriser les commandes et les modifications sans demander.",
   "4f402027a24d31c4": "{organization} limite les fils au mode {mode}.",
@@ -8123,6 +8151,24 @@
   "cbff27b770de81c2": "Configuration requise",
   "1c5879d287821457": "Définir par défaut",
   "4082cde5252183e6": "Joignable à",
+  "8c7640bd9a287482": "Cette API de décision n’est pas configurée sur tous les environnements sélectionnés. Sélectionnez un environnement pour choisir son vérificateur séparément.",
+  "cd186d77ae385abc": "Modèle de vérification non enregistré",
+  "06e169537474d36b": "{app} Auto",
+  "f2c9defaf1653de1": "Avec {app} Auto, les actions locales courantes s’exécutent et les actions risquées vous sont d’abord soumises. Le bac à sable du fournisseur s’applique toujours. « Règles uniquement » ignore le modèle de vérification : tout ce que les règles ne tranchent pas vous est demandé.",
+  "82d989ecc0a46510": "Règles uniquement",
+  "179e9c513b1e4a40": "Vérifie les requêtes que les règles ne tranchent pas. Les API de décision de Fournisseurs apparaissent aussi ici. Si désactivé, le modèle de génération de texte vérifie.",
+  "79b66e6316518ce1": "Modèle de vérification",
+  "d52b3d6bf9f2a013": "Mixte",
+  "c49fc0e2bc7294a7": "Utiliser un modèle de vérification distinct",
+  "f7aea80e63991ecf": "Le degré de certitude dont l’API de décision a besoin qu’une requête est sûre avant de l’exécuter. Tout ce qui est moins certain vous est demandé.",
+  "fd319a897600cebe": "Réinitialiser la confiance du vérificateur à la valeur par défaut",
+  "6a5afd4b252d3475": "Confiance du vérificateur",
+  "5789e351ce5ca4f9": "Indiquez au vérificateur ce que ce travail autorise ou ce qui doit toujours vous être demandé. Les règles de sécurité intégrées s’appliquent toujours.",
+  "5b09b8a729987952": "Réinitialiser les instructions du vérificateur à la valeur par défaut",
+  "f73fa9f53f6cdf1e": "Instructions du vérificateur",
+  "011a880d28ad813b": "Mixte. Saisissez des instructions à appliquer à toutes les cibles sélectionnées.",
+  "90d0ee411fa34939": "Lancer la suite de tests et installer les dépendances de développement ne pose pas de problème. Toujours demander avant de toucher à la base de données ou à quoi que ce soit en dehors de ce dépôt.",
+  "52fe9b861dc069f0": "Connectez un environnement pour choisir son modèle de vérification.",
   "42f8550e26e9ffd9": "Équilibré",
   "e91e30033a833aaf": "Performance",
   "8c6a3ffe43dae6da": "Économie de batterie",
@@ -8182,7 +8228,6 @@
   "abcdead6f7529103": "Instructions de nommage des branches",
   "820d2f52218914ef": "Ajoutées au prompt de nommage. Le modèle renvoie le nom de branche complet ; aucun préfixe ni suffixe n’est ajouté.",
   "41126a14bd7ce52b": "Réinitialiser les instructions de nommage des branches à la valeur par défaut",
-  "011a880d28ad813b": "Mixte. Saisissez des instructions à appliquer à toutes les cibles sélectionnées.",
   "a8edab62f7a0e5dc": "Utilise julius/ suivi de l’ID du ticket et d’une courte description.",
   "35c482e288f87f27": "aucun cookie",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} cookie} other {{formatted} cookies}}",
@@ -8872,6 +8917,43 @@
     " min. Les agents en cours s’arrêtent au redémarrage."
   ],
   "c56b618d212bf018": "Redémarrer et récupérer",
+  "36c140953ad9ff92": "Aucune API de décision pour l’instant",
+  "e6c855ccadf656ad": "Connectez System One pour vérifier les requêtes de {app} Auto avec un modèle conçu pour les décisions oui ou non.",
+  "1d32dad13ca765db": "Désactivé · ",
+  "1ece6e9c15a13601": "Plus d’actions pour {name}",
+  "ebffe4dabf52835f": "Activer {name}",
+  "db26ddd183c62b45": "Ajouter une API de décision",
+  "cbd29f01b12406dc": "System One indique si une requête semble sûre, avec son degré de certitude. {app} Auto s’en sert pour décider quelles requêtes approuver. Votre clé d’API est stockée dans cet environnement.",
+  "5593f81d681044e9": "{count, plural, one {{name} est connecté et répertorie {count} modèle. {model} a répondu à une question de test.} other {{name} est connecté et répertorie {count} modèles. {model} a répondu à une question de test.}}",
+  "8f33e34b8d340b35": "{count, plural, one {{name} est connecté et répertorie {count} modèle.} other {{name} est connecté et répertorie {count} modèles.}}",
+  "025088336e7e2a52": "Enregistrer et tester",
+  "8c4f4ec4de08ed72": "Se connecter",
+  "b9980bcda59e098b": "Vérifie les requêtes de {app} Auto",
+  "c582d7f450dbc3c7": "Utiliser pour {app} Auto",
+  "6e7176af0297520d": "Ajouter une API de décision",
+  "f5b66c481aa3e4df": "Modifier",
+  "111a44209dc6e701": "Supprimer",
+  "a3538ba5ca802bd7": [
+    "Supprimer ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ?"
+  ],
+  "409eefe94b1ca811": [
+    "Cela supprime la clé d’API stockée sur ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Les vérifications qui l’utilisent se rabattent sur le modèle de génération de texte."
+  ],
+  "b0900f4938210634": "Clé d’API",
+  "c732b08a5fa8c3d7": "URL de base",
+  "3953d1cccd71ab7e": "Nom (facultatif)",
   "6b6ac43d7def4a04": "Vérification des environnements…",
   "ec617524d49f21be": "{failed} sur {total} en échec",
   "c3a1c907ccb50ecf": "Vérifications de connexion réussies",
@@ -8926,7 +9008,6 @@
   "0c99fa183ed512e8": "{platform} disponible sur certains",
   "e6886a7f77b73a8e": "{platform} non disponible",
   "b0b7610d9860d18d": "Non configuré sur cette machine.",
-  "f5b66c481aa3e4df": "Modifier",
   "b35256ca61016104": "Ajouter une source",
   "3b20ef0670ae4b0b": "Machine via SSH",
   "121ccffacb6b8c6d": "Expo Simulators",
@@ -9795,7 +9876,6 @@
   "e749b8ba2ff18f8f": "Ajouter {name} au projet",
   "6d08f0285e2bbf34": "Ajouter un dossier",
   "b7820a37d8ff1918": "Les dépôts situés dans ce dossier font partie du projet dès qu’ils s’y trouvent. Ajoutez un dossier pour en intégrer un situé ailleurs.",
-  "111a44209dc6e701": "Supprimer",
   "daafb41c2b3c066f": "Dans le fichier d’espace de travail",
   "2c5c798252f91fdc": "Ajouter",
   "7e4d1ce9725c2327": "Suivez un dépôt ou un dossier situé n’importe où sur la machine de ce projet.",
@@ -9892,7 +9972,6 @@
   "31ec0bc3424717ae": "Annuler la connexion",
   "99bb27b91bab1824": "Changer de compte",
   "bab85ed5989ef4df": "Réessayer la connexion",
-  "8c4f4ec4de08ed72": "Se connecter",
   "032f6dd7ca55ec6f": "Se déconnecter de {provider} sur {environment} ? Cela arrête les fils en cours qui partagent cette connexion. L’historique des fils est conservé.",
   "58239cd7288bdc37": "Le terminal de connexion du fournisseur n’est plus disponible.",
   "99fff7aa0034e316": "Impossible d’envoyer la saisie au terminal de connexion du fournisseur.",
@@ -10656,15 +10735,6 @@
   ],
   "13d4f258e93f1dc1": "Connectez un environnement pour gérer les fournisseurs de secrets lus par ses variables de fournisseur.",
   "88466f5a03be2419": "Paramètre propre à l’environnement. Sélectionnez un environnement pour le modifier.",
-  "a3538ba5ca802bd7": [
-    "Supprimer ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ?"
-  ],
   "0d5b3b39f92c04e4": "Supprimer le fournisseur",
   "c52bdbe39649742c": [
     "Rien ne lit depuis ",
@@ -11901,9 +11971,6 @@
   "57308bc0ab24f15e": "Nettoyage des transcriptions vocales",
   "2d411bb0736c0643": "Aucun générateur de texte pour l’instant",
   "85eb2d15da7d016f": "Ajoutez une API de modèle pour rédiger les titres des fils, les messages de commit et d’autres textes courts sans démarrer d’agent de code.",
-  "1d32dad13ca765db": "Désactivé · ",
-  "1ece6e9c15a13601": "Plus d’actions pour {name}",
-  "ebffe4dabf52835f": "Activer {name}",
   "b663e2e129c61493": "Ajouter un générateur de texte",
   "149ffa363168a419": "Rédige les titres des fils, les messages de commit et d’autres textes courts sans démarrer d’agent de code. Votre clé d’API est stockée dans cet environnement.",
   "1e0a645ef3661af3": "Service",
@@ -11939,8 +12006,6 @@
     ". Tout ce qui utilise ce générateur se rabat sur le modèle de génération de texte."
   ],
   "2e487089c231536b": "Service",
-  "c732b08a5fa8c3d7": "URL de base",
-  "3953d1cccd71ab7e": "Nom (facultatif)",
   "304d6712ac5d3a89": [
     {
       "i": 1,
@@ -12619,6 +12684,10 @@
   "de504407a9dfe3bd": "confirmation app de bureau quitter direct maintenir double clic appuyer deux fois",
   "a8a6da6439b8333e": "titres de fils générés gestion de versions contenu fournisseur par défaut",
   "0c5fc3b5e41e1956": "titres de fils générés prompt style personnalisé nommage renommer régénérer",
+  "907eee6b144e2aba": "{app} Auto mode d’autorisation approbations vérifier requêtes actions risquées sans modèle",
+  "ad3f65bc5ad993e3": "{app} Auto mode d’autorisation approbations vérifier requêtes System One Jev api de décision",
+  "6b8e533b54b79b5a": "{app} Auto seuil certitude probabilité api de décision System One approuver",
+  "1f86c7e6b8a0d2b9": "{app} Auto politique prompt consignes autoriser toujours demander approbations",
   "a83570bcb45d8fa1": "à propos rechercher des mises à jour télécharger installer mettre à niveau version",
   "d65bdf6748801734": "canal de publication stable latest nightly préversion",
   "3fe7c98a1dc29a98": "Commande {cli}",
@@ -12643,6 +12712,8 @@
   "9d9d31a4f3d5ff69": "sources d’utilisation CLIProxyAPI proxy CLI hub quota abonnement limites clé de gestion ajouter supprimer",
   "d65fa0946585b245": "Générateurs de texte",
   "e6fd69a8a3bb69e2": "modèle api clé d’api openai openrouter anthropic ollama lm studio point de terminaison personnalisé url de base titres de fils messages de commit",
+  "1d0a8d68920cccef": "API de décision",
+  "a37b7ddccbfbaa26": "System One TypeSafe Jev clé d’api url de base {app} Auto approbations vérificateur",
   "f2b07faba1229ce7": "Intervalle de vérification de l’état",
   "5c9dc9970db79fe2": "actualiser disponibilité versions état d’authentification modèles sondes en arrière-plan secondes désactivé",
   "056ba6a180d114b5": "autoriser désactiver activer ouvrir piloter aperçu outils sessions remplacement par projet",
@@ -13294,75 +13365,5 @@
   "27d76249d09eb69f": "Guide de revue prêt",
   "faa3bb26abb39c93": "Échec du guide de revue",
   "b7df38b7d8792d78": "Ouvrir le guide",
-  "9e91e9a77b664e4e": "Impossible de démarrer un guide de revue",
-  "364ab43c151560f2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Auto vous a demandé :",
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": {
-        "i": 3,
-        "k": "_gt_value_3",
-        "v": "v"
-      }
-    }
-  ],
-  "71e7bea30ba66484": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Auto est en cours de vérification"
-  ],
-  "049963fb3496f947": "{app} Auto",
-  "703c611b175f91e4": "{app} approuve les actions locales courantes et vous demande pour le reste.",
-  "8c7640bd9a287482": "Cette API de décision n’est pas configurée sur tous les environnements sélectionnés. Sélectionnez un environnement pour choisir son vérificateur séparément.",
-  "cd186d77ae385abc": "Modèle de vérification non enregistré",
-  "06e169537474d36b": "{app} Auto",
-  "f2c9defaf1653de1": "Avec {app} Auto, les actions locales courantes s’exécutent et les actions risquées vous sont d’abord soumises. Le bac à sable du fournisseur s’applique toujours. « Règles uniquement » ignore le modèle de vérification : tout ce que les règles ne tranchent pas vous est demandé.",
-  "82d989ecc0a46510": "Règles uniquement",
-  "179e9c513b1e4a40": "Vérifie les requêtes que les règles ne tranchent pas. Les API de décision de Fournisseurs apparaissent aussi ici. Si désactivé, le modèle de génération de texte vérifie.",
-  "79b66e6316518ce1": "Modèle de vérification",
-  "c49fc0e2bc7294a7": "Utiliser un modèle de vérification distinct",
-  "f7aea80e63991ecf": "Le degré de certitude dont l’API de décision a besoin qu’une requête est sûre avant de l’exécuter. Tout ce qui est moins certain vous est demandé.",
-  "fd319a897600cebe": "Réinitialiser la confiance du vérificateur à la valeur par défaut",
-  "6a5afd4b252d3475": "Confiance du vérificateur",
-  "5789e351ce5ca4f9": "Indiquez au vérificateur ce que ce travail autorise ou ce qui doit toujours vous être demandé. Les règles de sécurité intégrées s’appliquent toujours.",
-  "5b09b8a729987952": "Réinitialiser les instructions du vérificateur à la valeur par défaut",
-  "f73fa9f53f6cdf1e": "Instructions du vérificateur",
-  "90d0ee411fa34939": "Lancer la suite de tests et installer les dépendances de développement ne pose pas de problème. Toujours demander avant de toucher à la base de données ou à quoi que ce soit en dehors de ce dépôt.",
-  "52fe9b861dc069f0": "Connectez un environnement pour choisir son modèle de vérification.",
-  "36c140953ad9ff92": "Aucune API de décision pour l’instant",
-  "e6c855ccadf656ad": "Connectez System One pour vérifier les requêtes de {app} Auto avec un modèle conçu pour les décisions oui ou non.",
-  "db26ddd183c62b45": "Ajouter une API de décision",
-  "cbd29f01b12406dc": "System One indique si une requête semble sûre, avec son degré de certitude. {app} Auto s’en sert pour décider quelles requêtes approuver. Votre clé d’API est stockée dans cet environnement.",
-  "5593f81d681044e9": "{count, plural, one {{name} est connecté et répertorie {count} modèle. {model} a répondu à une question de test.} other {{name} est connecté et répertorie {count} modèles. {model} a répondu à une question de test.}}",
-  "8f33e34b8d340b35": "{count, plural, one {{name} est connecté et répertorie {count} modèle.} other {{name} est connecté et répertorie {count} modèles.}}",
-  "025088336e7e2a52": "Enregistrer et tester",
-  "b9980bcda59e098b": "Vérifie les requêtes de {app} Auto",
-  "c582d7f450dbc3c7": "Utiliser pour {app} Auto",
-  "6e7176af0297520d": "Ajouter une API de décision",
-  "409eefe94b1ca811": [
-    "Cela supprime la clé d’API stockée sur ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    ". Les vérifications qui l’utilisent se rabattent sur le modèle de génération de texte."
-  ],
-  "b0900f4938210634": "Clé d’API",
-  "907eee6b144e2aba": "{app} Auto mode d’autorisation approbations vérifier requêtes actions risquées sans modèle",
-  "ad3f65bc5ad993e3": "{app} Auto mode d’autorisation approbations vérifier requêtes System One Jev api de décision",
-  "6b8e533b54b79b5a": "{app} Auto seuil certitude probabilité api de décision System One approuver",
-  "1f86c7e6b8a0d2b9": "{app} Auto politique prompt consignes autoriser toujours demander approbations",
-  "1d0a8d68920cccef": "API de décision",
-  "a37b7ddccbfbaa26": "System One TypeSafe Jev clé d’api url de base {app} Auto approbations vérificateur"
+  "9e91e9a77b664e4e": "Impossible de démarrer un guide de revue"
 }
