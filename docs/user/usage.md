@@ -193,6 +193,8 @@ The environment saves 30 days of quota readings from its regular hub checks. The
 
 Once the hub can serve Claude requests, a separate **Claude (hub name)** provider appears. Select it when starting a thread to use the hub. It uses the default Claude provider's runtime settings with the hub's endpoint, credential, and model list. Matching models share favorites and default effort levels with the default Claude provider. Kinako refreshes the model list and credential on hub checks and hides the provider while the hub is unavailable. Remove the hub from **Usage providers** to remove both its usage data and its Claude provider.
 
+A thread uses the hub's limits and reset times only when its provider's endpoint has the same address as the hub, for example `http://127.0.0.1:8317` for both. To send other providers' requests through the hub, configure their endpoints separately.
+
 ## Subscription usage widget
 
 Add **Subscription usage** from your iOS or Android widget gallery to see remaining Codex and

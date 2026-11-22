@@ -12,6 +12,7 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 
 import { FORK_CLI_NAME, FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import { listManageableSettings } from "../policy/managedSettings.ts";
 import { macosProfile, windowsAdml, windowsAdmx } from "../policy/policyTemplates.ts";
 import { isProcessAlive, readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
@@ -163,7 +164,20 @@ const templatesCommand = Command.make("templates", {
   ),
 );
 
+const describeManageableSettings = () =>
+  listManageableSettings()
+    .map(
+      ([path, value]) =>
+        `${path} = ${value === undefined ? "(no default)" : JSON.stringify(value)}`,
+    )
+    .join("\n");
+
+const settingsCommand = Command.make("settings").pipe(
+  Command.withDescription("List the settings a policy can manage, with their defaults."),
+  Command.withHandler(() => Console.log(describeManageableSettings())),
+);
+
 export const policyCommand = Command.make("policy").pipe(
   Command.withDescription("Inspect the administrator's managed policy."),
-  Command.withSubcommands([showCommand, checkCommand, templatesCommand]),
+  Command.withSubcommands([showCommand, checkCommand, settingsCommand, templatesCommand]),
 );

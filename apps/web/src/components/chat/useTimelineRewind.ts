@@ -43,6 +43,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
 import { rewindToMessage } from "./chatViewSend";
+import { toastManager } from "../ui/toast";
 import {
   makeThreadErrorSetter,
   waitForRevertedMessage,
@@ -227,24 +228,41 @@ export function useTimelineRewind(input: TimelineRewindInput) {
     const threadId = activeThread.id;
     const commandId = CommandId.make(randomUUID());
     // Keep the live checkpoint identity when command context refetches a bounded window.
-    const checkpoint = findRevertCheckpoint(serverProjection?.checkpoints ?? [], turnCount);
-    await rewindMessageIntoComposer(message, threadId, () =>
-      waitForRevertedMessage(routeThreadRef, turnCount, commandId, async () => {
-        const result = await revertThreadCheckpoint({
-          environmentId,
-          input: {
-            commandId,
-            threadId,
-            turnCount,
-            restoreFiles,
-            ...(checkpoint === undefined
-              ? {}
-              : { checkpointId: checkpoint.id, scopeId: checkpoint.scopeId }),
-          },
+    const checkpoint = findRevertCheckpoint(serverProjection, turnCount);
+    await rewindMessageIntoComposer(message, threadId, async () => {
+      const unrestored = await waitForRevertedMessage(
+        routeThreadRef,
+        turnCount,
+        commandId,
+        async () => {
+          const result = await revertThreadCheckpoint({
+            environmentId,
+            input: {
+              commandId,
+              threadId,
+              turnCount,
+              restoreFiles,
+              ...(checkpoint === undefined
+                ? {}
+                : { checkpointId: checkpoint.id, scopeId: checkpoint.scopeId }),
+            },
+          });
+          if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+        },
+      );
+      if (unrestored.length > 0) {
+        toastManager.add({
+          type: "warning",
+          title: m(msg("Some repositories were not rewound")),
+          description: m(
+            msg(
+              "{count, plural, one {{repositories} had no snapshot from before these turns, so it keeps the changes. Check the uncommitted changes there.} other {{repositories} had no snapshot from before these turns, so they keep the changes. Check the uncommitted changes there.}}",
+              { repositories: unrestored.join(", "), count: unrestored.length },
+            ),
+          ),
         });
-        if (result._tag === "Failure") throw squashAtomCommandFailure(result);
-      }),
-    );
+      }
+    });
   };
   const onRevertToTurnCountStable = useStableCallback(onRevertToTurnCount);
   const onConfirmRevert = (turnCount: number, messageId: MessageId, restoreFiles: boolean) => {
