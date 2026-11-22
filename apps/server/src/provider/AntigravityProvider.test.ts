@@ -363,6 +363,13 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
         Effect.map((snapshot) => snapshot.supportedRuntimeModes),
       );
       const withoutAuto = ["approval-required", "auto-accept-edits", "host-auto", "full-access"];
+      const withAuto: ReadonlyArray<RuntimeMode> = [
+        "approval-required",
+        "auto-accept-edits",
+        "auto",
+        "host-auto",
+        "full-access",
+      ];
       const startedWithAuto = {
         ...started,
         sessionSetupResult: {
@@ -378,24 +385,12 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       };
       expect(yield* supportedModes).toEqual(withoutAuto);
       yield* harness.provider.onSessionStarted(startedWithAuto);
-      expect(yield* supportedModes).toEqual([
-        "approval-required",
-        "auto-accept-edits",
-        "auto",
-        "host-auto",
-        "full-access",
-      ]);
+      expect(yield* supportedModes).toEqual(withAuto);
       yield* harness.provider.onSessionStarted(started);
       expect(yield* supportedModes).toEqual(withoutAuto);
       yield* harness.provider.onSessionStarted(startedWithAuto);
       yield* harness.provider.onSignedOut;
       expect(yield* supportedModes).toEqual(withoutAuto);
-      const withAuto: ReadonlyArray<RuntimeMode> = [
-        "approval-required",
-        "auto-accept-edits",
-        "auto",
-        "full-access",
-      ];
       expect(yield* Ref.get(harness.savedRuntimeModes)).toEqual([
         withAuto,
         withoutAuto,
