@@ -21,7 +21,9 @@ Feature highlights:
 - **Turn wrap-up:** a recap card shows how a turn ended, what the agent is waiting on, and the diff totals. Agents can suggest follow-ups that start as new threads. [Guide](./docs/user/composer.md#suggested-follow-ups)
 - **Context controls:** summarize part of a conversation, restore full context, and see a context-window breakdown. [Guide](./docs/user/composer.md#summarize-part-of-a-conversation)
 - **Thread organization:** group and collapse threads in the sidebar and on mobile, or watch them work as characters in a pixel agent office. [Guide](./docs/user/thread-sidebar.md#group-threads)
-- **Workspaces:** give threads additional directories, copy gitignored files such as `.env` into new worktrees, move a thread between the local checkout and a worktree, point a project at a moved folder, and save recovery snapshots before worktree cleanup. [Guide](./docs/user/project-settings.md#additional-directories)
+- **Workspaces:** copy gitignored files such as `.env` into new worktrees, move a thread between the local checkout and a worktree, point a project at a moved folder, and save recovery snapshots before worktree cleanup. [Guide](./docs/user/project-settings.md#storage-cleanup)
+- **Usage:** connect a CLIProxyAPI hub to see pooled account limits, forecast when quota runs out, and run Claude through the hub. The Machine view graphs CPU, memory, and disk for each environment over the past day. [Guide](./docs/user/usage.md#connect-a-cliproxyapi-hub)
+- **Models:** favorites, hidden models, ordering, and custom models sync across connected environments, and each model can have its own default reasoning effort. [Guide](./docs/user/composer.md#model-settings-across-environments)
 - **GitHub:** read and reply to issues, send issues and PRs to agents, and opt into automatic CI fixes on watched PRs. [Guide](./docs/user/source-control.md)
 - **Remote access:** reach an environment from anywhere through a Cloudflare Tunnel on your own Cloudflare account, add it to a phone with a QR code, manage pairing on remote environments, update SSH servers from the app, and pair using stable local or Tailscale names. [Guide](./docs/user/remote-access.md#public-routes-with-your-cloudflare-account)
 
@@ -54,7 +56,7 @@ With Node.js 20.11 or newer, run the npm launcher:
 npx kinako-cli@nightly
 ```
 
-Or install it globally:
+It offers to install the `kinako` command for you. Or install it globally:
 
 ```bash
 npm install -g kinako-cli@nightly
