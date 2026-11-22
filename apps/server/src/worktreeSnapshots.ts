@@ -6,7 +6,6 @@ import {
   type VcsWorktreeSnapshotInput,
   type WorktreeSnapshot,
 } from "@t3tools/contracts";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -17,7 +16,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
@@ -79,7 +77,6 @@ const make = Effect.gen(function* () {
   const gitManager = yield* GitManager.GitManager;
   const checkpoints = yield* CheckpointStore.CheckpointStore;
   const projectStore = yield* ProjectStore.ProjectStoreV2;
-  const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const isManagedWorktreePath = yield* makeIsManagedWorktreePath;
@@ -126,24 +123,15 @@ const make = Effect.gen(function* () {
     return ref;
   });
 
-  // Project roots plus the repositories of additional directories, one entry per
-  // git common dir so a repository opened as several projects is listed once.
+  // Project roots, one entry per git common dir so a repository opened as several
+  // projects is listed once.
   // Deleted projects count too: their threads' worktrees are still cleaned up, and
   // their snapshots must stay restorable and still expire.
   const repositories = Effect.fn("WorktreeSnapshots.repositories")(function* () {
     const projects = yield* projectStore.list({ includeDeleted: true });
-    const additional = yield* sql<{ path: string }>`
-      SELECT DISTINCT json_extract(directory.value, '$.path') AS "path"
-      FROM orchestration_v2_projection_threads thread,
-        json_each(thread.payload_json, '$.additionalDirectories') directory
-      WHERE json_extract(directory.value, '$.worktreePath') IS NOT NULL
-    `.pipe(NodeSqliteClient.readOnly);
     const seen = new Set<string>();
     const result: string[] = [];
-    for (const cwd of new Set([
-      ...projects.map((project) => path.resolve(project.workspaceRoot)),
-      ...additional.flatMap((row) => (row.path ? [path.resolve(row.path)] : [])),
-    ])) {
+    for (const cwd of new Set(projects.map((project) => path.resolve(project.workspaceRoot)))) {
       const commonDir = yield* run("commonDir", cwd, [
         "rev-parse",
         "--path-format=absolute",

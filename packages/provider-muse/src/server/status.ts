@@ -31,7 +31,6 @@ import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 const MUSE_PRESENTATION = {
   displayName: "Muse Code",
   showInteractionModeToggle: false,
-  supportsAdditionalDirectories: false,
   reportsContextWindow: true,
   // Muse has no accept-edits mode; map only :ask-me and :unrestricted.
   supportedRuntimeModes: ["approval-required", "full-access"],

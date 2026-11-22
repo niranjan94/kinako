@@ -206,7 +206,6 @@ export function openRevertConfirm(threadKey: string, pending: PendingRevert): vo
 
 export function RevertConfirmHost(props: {
   readonly threadKey: string;
-  readonly restoreNote?: string | null;
   readonly checkpoints: OrchestrationV2ThreadProjection["checkpoints"] | undefined;
   readonly worktreePath: string | null;
   readonly onConfirm: (turnCount: number, messageId: MessageId, restoreFiles: boolean) => void;
@@ -239,7 +238,6 @@ export function RevertConfirmHost(props: {
               Rewind chat to before this message. Your prompt and attachments return to the
               composer. “Revert files too” also undoes your own edits.
             </T>
-            {props.restoreNote ? ` ${props.restoreNote}` : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

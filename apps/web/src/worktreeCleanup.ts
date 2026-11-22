@@ -29,32 +29,6 @@ export function getOrphanedWorktreePathForThread(
   return isShared ? null : targetWorktreePath;
 }
 
-/** Additional-directory worktrees no other thread uses, with the repository each belongs to. */
-export function getOrphanedAdditionalWorktreesForThread(
-  threads: ReadonlyArray<Pick<ThreadShell, "id" | "worktreePath" | "additionalDirectories">>,
-  threadId: ThreadShell["id"],
-): Array<{ readonly repository: string; readonly worktreePath: string }> {
-  const targetThread = threads.find((thread) => thread.id === threadId);
-  if (!targetThread) {
-    return [];
-  }
-  const usedElsewhere = new Set(
-    threads.flatMap((thread) =>
-      thread.id === threadId
-        ? []
-        : [thread.worktreePath, ...thread.additionalDirectories.map((d) => d.worktreePath)]
-            .filter((path): path is string => path !== null)
-            .map(normalizeProjectPathForComparison),
-    ),
-  );
-  return targetThread.additionalDirectories.flatMap((directory) => {
-    const worktreePath = directory.worktreePath?.trim();
-    return worktreePath && !usedElsewhere.has(normalizeProjectPathForComparison(worktreePath))
-      ? [{ repository: directory.path, worktreePath }]
-      : [];
-  });
-}
-
 export function formatWorktreePathForDisplay(worktreePath: string): string {
   const trimmed = worktreePath.trim();
   if (!trimmed) {

@@ -58,7 +58,6 @@ import {
   ProjectFaviconPickerDialog,
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
-import { ProjectAdditionalDirectoriesSettings } from "./ProjectAdditionalDirectoriesSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import {
   defaultProjectIcon,
@@ -731,10 +730,6 @@ function ProjectDetail({
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
-        <ProjectAdditionalDirectoriesSettings
-          members={group.memberProjects}
-          editableEnvironmentIds={editableIds}
-        />
         {sessionImportMembers.length > 0 ? (
           <SettingsSection title={gt("Terminal sessions")}>
             <SettingsRow

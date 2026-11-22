@@ -12,7 +12,6 @@ import {
   defaultInstanceIdForDriver,
   EnvironmentId,
   ModelSelection,
-  ProjectAdditionalDirectory,
   ProjectId,
   ProviderInstanceId,
   ProviderInteractionMode,
@@ -419,7 +418,6 @@ const PersistedDraftThreadState = Schema.Struct({
   worktreePath: Schema.NullOr(Schema.String),
   envMode: DraftThreadEnvModeSchema,
   startFromOrigin: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  additionalDirectories: Schema.optionalKey(Schema.Array(ProjectAdditionalDirectory)),
   checkoutPullRequest: Schema.optionalKey(
     Schema.Struct({ url: Schema.String, branch: Schema.String }),
   ),
@@ -519,8 +517,6 @@ export interface DraftSessionState {
   worktreePath: string | null;
   envMode: DraftThreadEnvMode;
   startFromOrigin: boolean;
-  /** Overrides the project's additional directories; absent uses the project's. */
-  additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory>;
   /** Linked to the thread when the draft is sent on this branch. */
   checkoutPullRequest?: DraftCheckoutPullRequest;
   promotedTo?: ScopedThreadRef | null;
@@ -624,8 +620,6 @@ interface ComposerDraftStoreState {
       createdAt?: string;
       envMode?: DraftThreadEnvMode;
       startFromOrigin?: boolean;
-      /** Null drops the override so the project's directories apply. */
-      additionalDirectories?: ReadonlyArray<ProjectAdditionalDirectory> | null;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
       environmentSelection?: "auto" | "manual";
@@ -1798,9 +1792,6 @@ function createDraftThreadState(
     envMode:
       options?.envMode ?? (nextWorktreePath ? "worktree" : (existingThread?.envMode ?? "local")),
     startFromOrigin: nextStartFromOrigin,
-    ...(!projectChanged && existingThread?.additionalDirectories !== undefined
-      ? { additionalDirectories: existingThread.additionalDirectories }
-      : {}),
     ...(checkoutPullRequest ? { checkoutPullRequest } : {}),
     promotedTo: null,
   };
@@ -1853,7 +1844,6 @@ function draftThreadsEqual(left: DraftThreadState | undefined, right: DraftThrea
     left.worktreePath === right.worktreePath &&
     left.envMode === right.envMode &&
     left.startFromOrigin === right.startFromOrigin &&
-    left.additionalDirectories === right.additionalDirectories &&
     checkoutPullRequestsEqual(left.checkoutPullRequest, right.checkoutPullRequest) &&
     scopedThreadRefsEqual(left.promotedTo, right.promotedTo)
   );
@@ -2506,14 +2496,7 @@ export function partializeComposerDraftStoreState(
     if (!keptSessionKeys.has(threadKey)) {
       continue;
     }
-    const { additionalDirectories, ...persistedDraftThread } = draftThread;
-    persistedDraftThreadsByThreadKey[threadKey] =
-      additionalDirectories === undefined
-        ? persistedDraftThread
-        : {
-            ...persistedDraftThread,
-            additionalDirectories: additionalDirectories.map((directory) => ({ ...directory })),
-          };
+    persistedDraftThreadsByThreadKey[threadKey] = draftThread;
   }
   return {
     draftsByThreadKey: persistedDraftsByThreadKey,
@@ -2802,9 +2785,6 @@ function toHydratedDraftThreadState(
     worktreePath: persistedDraftThread.worktreePath,
     envMode: persistedDraftThread.envMode,
     startFromOrigin: persistedDraftThread.startFromOrigin,
-    ...(persistedDraftThread.additionalDirectories === undefined
-      ? {}
-      : { additionalDirectories: persistedDraftThread.additionalDirectories }),
     ...(persistedDraftThread.environmentSelection
       ? { environmentSelection: persistedDraftThread.environmentSelection }
       : {}),
@@ -3071,12 +3051,6 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               options.startFromOrigin === undefined
                 ? existing.startFromOrigin
                 : options.startFromOrigin;
-            const nextAdditionalDirectories =
-              options.additionalDirectories === undefined
-                ? projectChanged
-                  ? undefined
-                  : existing.additionalDirectories
-                : (options.additionalDirectories ?? undefined);
             const environmentSelection =
               options.environmentSelection ??
               (options.branch != null || options.worktreePath != null
@@ -3110,9 +3084,6 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               envMode:
                 options.envMode ?? (nextWorktreePath ? "worktree" : (existing.envMode ?? "local")),
               startFromOrigin: nextStartFromOrigin,
-              ...(nextAdditionalDirectories === undefined
-                ? {}
-                : { additionalDirectories: nextAdditionalDirectories }),
               ...(checkoutPullRequest ? { checkoutPullRequest } : {}),
               promotedTo: existing.promotedTo ?? null,
             };
@@ -3129,7 +3100,6 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               nextDraftThread.worktreePath === existing.worktreePath &&
               nextDraftThread.envMode === existing.envMode &&
               nextDraftThread.startFromOrigin === existing.startFromOrigin &&
-              nextDraftThread.additionalDirectories === existing.additionalDirectories &&
               checkoutPullRequestsEqual(
                 nextDraftThread.checkoutPullRequest,
                 existing.checkoutPullRequest,

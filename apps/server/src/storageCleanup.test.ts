@@ -1699,39 +1699,6 @@ describe("deleted thread worktrees", () => {
       }).pipe(Effect.provide(cleanupTestLayer)),
   );
 
-  it.effect("removes a deleted thread's additional directory worktree", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(NOW_MS);
-      const fixture = yield* cleanupFixture({
-        ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-        worktreeAfterDays: null,
-        worktreeOnDelete: true,
-      });
-      const owner = shell({
-        branch: null,
-        worktreePath: null,
-        deletedAt: at(-DAY_MS),
-        additionalDirectories: [
-          {
-            path: fixture.repo,
-            mode: "worktree",
-            branch: "feature",
-            worktreePath: fixture.worktree,
-          },
-        ],
-      });
-      fixture.setDeletedThreads([owner]);
-      fixture.setThreads([]);
-      const report = yield* fixture.service.runNow;
-      expect(report.entries[0]).toMatchObject({
-        threadId: owner.id,
-        outcome: "removed",
-        reason: "Thread was deleted",
-      });
-      expect(yield* fixture.fs.exists(fixture.worktree)).toBe(false);
-    }).pipe(Effect.provide(cleanupTestLayer), Effect.scoped),
-  );
-
   it.effect("leaves a deleted owner's subagent on the owner's saved branch", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW_MS);

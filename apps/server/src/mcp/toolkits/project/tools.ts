@@ -13,7 +13,6 @@ import {
   ProviderInteractionMode,
   Project,
   ProjectCreatePayload,
-  ProjectAdditionalDirectories,
   ProjectUpdatePayload,
   ProjectId,
   OrchestratorMcpClientRequestId,
@@ -152,12 +151,6 @@ const ThreadLaunchTool = Tool.make("t3_thread_launch", {
       OrchestrationV2ThreadLaunchWorkspaceStrategy.annotate({
         description:
           "'worktree': new checkout from `baseRef`. Honor a requested base. Otherwise, independent work uses the default branch as `remote/branch` (e.g. `origin/main`) with `startFromOrigin: true`; with no remote, use the local default branch. Required unpublished commits and dependent or stacked work use their local base with `startFromOrigin: false`. 'existing_worktree': bind `worktreePath`, a project worktree. 'root': project checkout, the default, not your worktree. Uncommitted edits are not copied.",
-      }),
-    ),
-    additionalDirectories: Schema.optional(
-      ProjectAdditionalDirectories.annotate({
-        description:
-          "Extra folders the agent may use besides the workspace, as absolute paths on this environment. mode local uses the folder as it is; mode worktree creates a worktree of it on the thread's branch. Omitted uses the project's additional directories; [] uses none. Edits there are not checkpointed, diffed, or rolled back.",
       }),
     ),
     message: Schema.optional(

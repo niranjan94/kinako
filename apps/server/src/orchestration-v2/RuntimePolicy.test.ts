@@ -104,7 +104,6 @@ const layerWithPolicy = (policy?: ManagedPolicySummary) =>
             faviconPath: null,
             projectIcon: null,
             scripts: [],
-            additionalDirectories: [],
             pinnedAt: null,
             archivedAt: null,
             createdAt: "2026-06-21T00:00:00.000Z",
@@ -118,24 +117,6 @@ const layerWithPolicy = (policy?: ManagedPolicySummary) =>
 const layerTest = layerWithPolicy();
 
 it.layer(layerTest)("RuntimePolicyV2", (it) => {
-  it.effect("passes additional directories, preferring the thread's worktree of each", () =>
-    Effect.gen(function* () {
-      const policy = yield* RuntimePolicy.RuntimePolicyV2;
-      const now = yield* DateTime.now;
-      const resolved = yield* policy.resolve({
-        thread: {
-          ...makeThread({ now, worktreePath: null }),
-          additionalDirectories: [
-            { path: "/docs", mode: "local", branch: null, worktreePath: null },
-            { path: "/api", mode: "worktree", branch: "feature", worktreePath: "/api-feature" },
-          ],
-        },
-        modelSelection,
-      });
-      assert.deepEqual(resolved.additionalDirectories, ["/docs", "/api-feature"]);
-    }),
-  );
-
   it.effect("asks for Antigravity command approval when a stored Auto thread falls back", () =>
     Effect.gen(function* () {
       const policy = yield* RuntimePolicy.RuntimePolicyV2;

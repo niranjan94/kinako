@@ -76,8 +76,6 @@ interface ThreadDetailsPanelProps extends Pick<
   workspaceMutationId: string | null;
   isGitRepo: boolean;
   envLocked: boolean;
-  /** False when the selected provider cannot use additional directories. */
-  additionalDirectoriesSupported: boolean;
   availableEnvironments: readonly EnvironmentOption[];
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
@@ -138,7 +136,6 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
       ? { onActiveThreadBranchOverrideChange: props.onActiveThreadBranchOverrideChange }
       : {}),
     envLocked: props.envLocked,
-    additionalDirectoriesSupported: props.additionalDirectoriesSupported,
     forceNewWorktree: props.forceNewWorktree ?? false,
     onComposerFocusRequest: props.onComposerFocusRequest,
     ...(props.onCheckoutPullRequestRequest

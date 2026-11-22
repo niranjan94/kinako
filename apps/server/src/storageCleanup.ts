@@ -15,7 +15,6 @@ import type {
   ServerSettings,
   ServerSettingsError,
   TerminalSummary,
-  ThreadAdditionalDirectory,
   WorktreeCleanupRules,
   StorageCleanupReport,
   StorageCleanupReportEntry,
@@ -503,14 +502,11 @@ const make = Effect.gen(function* () {
     return { projects, threads: [...snapshot.threads, ...snapshot.archivedThreads] };
   });
 
-  // The thread's own worktree and its additional directories' worktrees. A null
-  // repository means the project root owns the worktree.
   const threadWorktrees = <
     Thread extends {
       readonly worktreePath: string | null;
       readonly associatedWorktreePath?: string | null | undefined;
       readonly branch: string | null;
-      readonly additionalDirectories?: ReadonlyArray<ThreadAdditionalDirectory> | undefined;
     },
   >(
     thread: Thread,
@@ -521,7 +517,6 @@ const make = Effect.gen(function* () {
             thread,
             worktreePath: path.resolve(thread.associatedWorktreePath),
             branch: null,
-            repository: null,
           },
         ]
       : []),
@@ -532,21 +527,8 @@ const make = Effect.gen(function* () {
             thread,
             worktreePath: path.resolve(thread.worktreePath),
             branch: thread.branch,
-            repository: null,
           },
         ]),
-    ...(thread.additionalDirectories ?? []).flatMap((directory) =>
-      directory.worktreePath === null
-        ? []
-        : [
-            {
-              thread,
-              worktreePath: path.resolve(directory.worktreePath),
-              branch: directory.branch,
-              repository: directory.path,
-            },
-          ],
-    ),
   ];
 
   const ownerOf = <
@@ -593,11 +575,6 @@ const make = Effect.gen(function* () {
       SELECT DISTINCT json_extract(payload_json, '$.associatedWorktreePath') AS "worktreePath"
       FROM orchestration_v2_projection_threads
       WHERE json_extract(payload_json, '$.associatedWorktreePath') IS NOT NULL
-      UNION
-      SELECT DISTINCT json_extract(directory.value, '$.worktreePath') AS "worktreePath"
-      FROM orchestration_v2_projection_threads thread,
-        json_each(thread.payload_json, '$.additionalDirectories') directory
-      WHERE json_extract(directory.value, '$.worktreePath') IS NOT NULL
     `.pipe(NodeSqliteClient.readOnly);
     const referenced = new Set<string>();
     for (const row of rows) {
@@ -1378,7 +1355,6 @@ const make = Effect.gen(function* () {
       // No project threads have no branch; their folders sit directly in the scratch root.
       const scratch =
         worktreeBranch === null &&
-        candidate.repository === null &&
         thread.worktreePath !== null &&
         scratchRoot !== null &&
         pathKey(path.dirname(worktreeKey)) === pathKey(scratchRoot);
@@ -1394,7 +1370,6 @@ const make = Effect.gen(function* () {
       const project = deleted
         ? { workspaceRoot: thread.workspaceRoot }
         : snapshot.projects.find((entry) => entry.id === thread.projectId);
-      const repositoryRoot = candidate.repository ?? project?.workspaceRoot;
       const entry: StorageCleanupReportEntry = {
         kind: "worktree",
         outcome: "kept",
@@ -1440,8 +1415,7 @@ const make = Effect.gen(function* () {
           return keep("retained for a thread using the local checkout");
         if (members.length > 1 && ownerOf(members) === undefined)
           return keep(`shared by ${members.length} threads`);
-        if (project === undefined || repositoryRoot === undefined)
-          return keep("project is unavailable");
+        if (project === undefined) return keep("project is unavailable");
         if (!group.every((member) => threadIdle(member.thread, now, serverSettings)))
           return keep(waitForStop("thread is running or has pending work"));
         if (worktreeBranch === null && !scratch) return keep("thread has no branch");
@@ -1449,7 +1423,7 @@ const make = Effect.gen(function* () {
           return keep("a subagent thread's branch differs from this worktree's branch");
         if (yield* hasTerminal(worktreePaths)) return keep(waitForStop("open terminal"));
         const includeFrom = (current: ServerSettings): WorktreeIncludeSource => ({
-          sourceCwd: repositoryRoot,
+          sourceCwd: project.workspaceRoot,
           patterns: resolveProjectSettings(current, thread.projectId).settings
             .worktreeIncludePatterns,
         });
@@ -1553,9 +1527,7 @@ const make = Effect.gen(function* () {
             latestOwner?.id !== thread.id ||
             latestGroup.some((member) => {
               const shell = member.thread;
-              const previous = group.find(
-                (entry) => entry.thread.id === shell.id && entry.repository === member.repository,
-              );
+              const previous = group.find((entry) => entry.thread.id === shell.id);
               return (
                 previous === undefined ||
                 member.branch !== worktreeBranch ||
@@ -1598,16 +1570,10 @@ const make = Effect.gen(function* () {
           const sessions = yield* Effect.forEach(sessionRows, (row) =>
             decodeCleanupSession(row.payload_json),
           );
-          // Additional worktrees are never session cwds; the thread's open session may still use them.
-          const threadRoot = path.resolve(thread.worktreePath ?? project.workspaceRoot);
-          const sessionCwds =
-            candidate.repository === null
-              ? worktreePaths
-              : [...worktreePaths, threadRoot, yield* canonical(threadRoot)];
           // Ready persisted sessions may have released their runtime; only live sessions protect the path.
           for (const session of sessions) {
             if (
-              (yield* occupies(sessionCwds, session.cwd)) &&
+              (yield* occupies(worktreePaths, session.cwd)) &&
               (yield* providerSessions.isLive(session.id))
             )
               return waitForStop("provider session is still open");
@@ -1677,7 +1643,7 @@ const make = Effect.gen(function* () {
         if (changes !== null) return keep(changes);
         const head = yield* git.resolveCommit({ cwd: worktreePath, revision: "HEAD" });
         if (!eligible) {
-          const repositoryCwd = path.resolve(repositoryRoot);
+          const repositoryCwd = path.resolve(project.workspaceRoot);
           const remotes = yield* git.execute({
             operation: "StorageCleanup.listRemotes",
             cwd: repositoryCwd,
@@ -1867,7 +1833,7 @@ const make = Effect.gen(function* () {
               bytes,
               snapshotRef,
             });
-            yield* gitManager.invalidateStatus(repositoryRoot);
+            yield* gitManager.invalidateStatus(project.workspaceRoot);
             // Preserve branch/path so ProviderTurnStartService can recreate the checkout on resume.
             yield* Effect.logInfo("storage cleanup removed worktree", { threadId: thread.id });
           }),

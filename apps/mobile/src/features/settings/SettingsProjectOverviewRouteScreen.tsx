@@ -38,7 +38,6 @@ import {
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
-import { ProjectAdditionalDirectoriesSection } from "./ProjectAdditionalDirectoriesSection";
 import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
@@ -438,12 +437,6 @@ function ProjectOverviewContent(props: {
           );
         })}
       </SettingsSection>
-
-      <ProjectAdditionalDirectoriesSection
-        members={props.members}
-        environments={props.environments}
-      />
-
       <SettingsSection
         title={gt("Danger", { $context: "section heading for destructive actions" })}
       >

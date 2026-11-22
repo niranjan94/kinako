@@ -33,7 +33,6 @@ const state = vi.hoisted(() => ({
     projectId: ProjectId;
     title: string;
     worktreePath: string | null;
-    additionalDirectories: [];
     lineage: {
       parentThreadId: ThreadId | null;
       relationshipToParent: "fork" | null;
@@ -276,7 +275,6 @@ beforeEach(() => {
       projectId: ProjectId.make("project"),
       title: "Thread",
       worktreePath: null,
-      additionalDirectories: [],
       lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: target.threadId },
       session: null,
       latestTurn: null,

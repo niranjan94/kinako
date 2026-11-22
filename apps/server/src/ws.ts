@@ -2245,9 +2245,6 @@ export const layerWsRpc = (
                           runtimeMode: input.runtimeMode,
                           interactionMode: input.interactionMode,
                           workspaceStrategy: input.workspaceStrategy,
-                          ...(input.additionalDirectories === undefined
-                            ? {}
-                            : { additionalDirectories: input.additionalDirectories }),
                           ...(input.initialMessage === undefined
                             ? {}
                             : {

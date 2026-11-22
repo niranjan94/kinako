@@ -241,7 +241,6 @@ export const make = Effect.gen(function* () {
     autoPull: row.autoPull,
     projectIcon: row.projectIcon,
     scripts: row.scripts,
-    additionalDirectories: row.additionalDirectories,
     pinnedAt: row.pinnedAt,
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,
@@ -665,15 +664,6 @@ export const make = Effect.gen(function* () {
               projectId: input.projectId,
               workspaceRoot: input.workspaceRoot,
             });
-      const additionalDirectories =
-        input.additionalDirectories === undefined
-          ? undefined
-          : yield* Effect.forEach(input.additionalDirectories, (directory) =>
-              normalizeWorkspaceRoot({
-                projectId: input.projectId,
-                workspaceRoot: directory.path,
-              }).pipe(Effect.map((path) => ({ path, mode: directory.mode }))),
-            );
       const relocating = workspaceRoot !== previousRoot;
       if (relocating) {
         yield* rejectWorktreeContainer(input.projectId, workspaceRoot);
@@ -725,7 +715,6 @@ export const make = Effect.gen(function* () {
           ? {}
           : { defaultThreadEnvMode: input.defaultThreadEnvMode }),
         ...(input.scripts === undefined ? {} : { scripts: input.scripts }),
-        ...(additionalDirectories === undefined ? {} : { additionalDirectories }),
         ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
         ...(input.archived === undefined ? {} : { archived: input.archived }),
       });

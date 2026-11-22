@@ -24,7 +24,6 @@ const row = (overrides: Partial<ProjectRow> = {}): ProjectRow => ({
   faviconPath: null,
   projectIcon: null,
   scripts: [],
-  additionalDirectories: [],
   pinnedAt: null,
   archivedAt: null,
   createdAt: "2026-01-01T00:00:00.000Z",
@@ -79,32 +78,6 @@ describe("planProjectCommand", () => {
       failureOf(withLegacy([legacy, script("another.invalid.id")]))._tag,
       "ProjectCommandInvariantError",
     );
-  });
-
-  it("rejects an additional directory that repeats the root or another entry", () => {
-    const withDirectories = (
-      additionalDirectories: ReadonlyArray<{ path: string; mode: "local" | "worktree" }>,
-    ) =>
-      plan(
-        {
-          type: "project.meta.update",
-          commandId: CommandId.make("cmd-update"),
-          projectId,
-          additionalDirectories,
-        },
-        { project: row() },
-      );
-    const sibling = { path: "/tmp/sibling", mode: "worktree" } as const;
-    assert.deepEqual(payloadOf(withDirectories([sibling])).additionalDirectories, [sibling]);
-    for (const additionalDirectories of [
-      [{ path: "/tmp/scripts", mode: "local" as const }],
-      [sibling, { ...sibling, mode: "local" as const }],
-    ]) {
-      assert.equal(
-        failureOf(withDirectories(additionalDirectories))._tag,
-        "ProjectCommandInvariantError",
-      );
-    }
   });
 
   it("keeps the first pin and archive time, and clears both on undo", () => {

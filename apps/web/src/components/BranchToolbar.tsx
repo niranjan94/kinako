@@ -13,14 +13,7 @@ import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type {
-  EnvironmentId,
-  ProjectAdditionalDirectory,
-  ProjectId,
-  ThreadAdditionalDirectory,
-  ThreadEnvMode,
-  ThreadId,
-} from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { m as resolveMessage } from "../i18n/messages";
 import {
@@ -43,9 +36,8 @@ import {
 import { flushSync } from "react-dom";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
-import { ADDITIONAL_DIRECTORIES_CAVEAT, directoryName } from "../lib/additionalDirectories";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
-import { useProject, useQuietThreadShell, useThreadShellsForProjectRefs } from "../state/entities";
+import { useProject, useThreadShellsForProjectRefs } from "../state/entities";
 import {
   ADD_TO_MACHINE_LABEL_CLASS,
   type EnvMode,
@@ -131,57 +123,6 @@ interface BranchToolbarProps {
   trailing?: ReactNode;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
-  /** False when the selected provider cannot use additional directories. */
-  additionalDirectoriesSupported?: boolean;
-}
-
-const EMPTY_DIRECTORIES: ReadonlyArray<ProjectAdditionalDirectory> = [];
-
-/** The thread's extra roots in the details panel; a started thread shows its worktrees. */
-function AdditionalDirectoriesSummary({
-  directories,
-  supported,
-}: {
-  directories: ReadonlyArray<ProjectAdditionalDirectory | ThreadAdditionalDirectory>;
-  supported: boolean;
-}) {
-  const gt = useGT();
-  return (
-    <div className="flex flex-col" aria-label={gt("Additional directories")}>
-      {directories.map((directory) => {
-        const worktreePath = "worktreePath" in directory ? directory.worktreePath : null;
-        const Icon = directory.mode === "worktree" ? FolderGit2Icon : FolderIcon;
-        return (
-          <Tooltip key={directory.path}>
-            <TooltipTrigger
-              render={
-                <span
-                  className={cn(
-                    THREAD_DETAILS_PANEL_LOCKED_ROW_CLASS,
-                    "inline-flex items-center text-muted-foreground",
-                  )}
-                />
-              }
-            >
-              <Icon className={THREAD_DETAILS_PANEL_ICON_CLASS} />
-              <span className="min-w-0 truncate">{directoryName(directory.path)}</span>
-              <span className="ms-auto shrink-0 text-xs font-normal">
-                {resolveEnvModeLabel(directory.mode)}
-              </span>
-            </TooltipTrigger>
-            <TooltipPopup>{worktreePath ?? directory.path}</TooltipPopup>
-          </Tooltip>
-        );
-      })}
-      <p className="px-2.5 pt-1 pb-2 text-xs text-muted-foreground">
-        {supported
-          ? ADDITIONAL_DIRECTORIES_CAVEAT
-          : gt(
-              "This provider cannot use additional directories, so the agent only sees the workspace.",
-            )}
-      </p>
-    </div>
-  );
 }
 
 function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string) {
@@ -238,10 +179,6 @@ interface RunContextSelectorProps {
   previousWorktreeLabel: string | null;
   previousWorktreeBranch: string | null;
   onUsePreviousWorktree: () => void;
-  additionalDirectories: ReadonlyArray<ProjectAdditionalDirectory>;
-  additionalDirectoriesLocked: boolean;
-  additionalDirectoriesSupported: boolean;
-  onAdditionalDirectoryModeChange: (path: string, mode: ThreadEnvMode) => void;
   addTargets: readonly AddProjectTarget[];
   onAddToMachine: (environmentId: EnvironmentId) => void;
 }
@@ -266,10 +203,6 @@ const RunContextSelector = memo(function RunContextSelector({
   previousWorktreeLabel,
   previousWorktreeBranch,
   onUsePreviousWorktree,
-  additionalDirectories,
-  additionalDirectoriesLocked,
-  additionalDirectoriesSupported,
-  onAdditionalDirectoryModeChange,
   addTargets,
   onAddToMachine,
 }: RunContextSelectorProps) {
@@ -566,51 +499,6 @@ const RunContextSelector = memo(function RunContextSelector({
             ) : null}
           </MenuRadioGroup>
         </MenuGroup>
-        {additionalDirectories.length > 0 ? (
-          <>
-            <MenuSeparator />
-            <MenuGroup>
-              <MenuGroupLabel>
-                {additionalDirectoriesSupported
-                  ? gt("Additional directories")
-                  : gt("Additional directories (not supported by this provider)")}
-              </MenuGroupLabel>
-              {additionalDirectories.map((directory) => (
-                <MenuSub key={directory.path}>
-                  <MenuSubTrigger disabled={additionalDirectoriesLocked}>
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {directory.mode === "worktree" ? (
-                        <FolderGit2Icon className="size-3" />
-                      ) : (
-                        <FolderIcon className="size-3" />
-                      )}
-                      <span className="min-w-0 truncate">{directoryName(directory.path)}</span>
-                      <span className="shrink-0 text-muted-foreground">
-                        {resolveEnvModeLabel(directory.mode)}
-                      </span>
-                    </span>
-                  </MenuSubTrigger>
-                  <MenuSubPopup>
-                    <MenuRadioGroup
-                      value={directory.mode}
-                      onValueChange={(value) => {
-                        if (value === "local" || value === "worktree")
-                          onAdditionalDirectoryModeChange(directory.path, value);
-                      }}
-                    >
-                      <MenuRadioItem value="local" closeOnClick>
-                        {resolveEnvModeLabel("local")}
-                      </MenuRadioItem>
-                      <MenuRadioItem value="worktree" closeOnClick>
-                        {resolveEnvModeLabel("worktree")}
-                      </MenuRadioItem>
-                    </MenuRadioGroup>
-                  </MenuSubPopup>
-                </MenuSub>
-              ))}
-            </MenuGroup>
-          </>
-        ) : null}
       </MenuPopup>
     </Menu>
   );
@@ -802,16 +690,11 @@ export const BranchToolbar = memo(function BranchToolbar({
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
-  additionalDirectoriesSupported = true,
   trailing,
 }: BranchToolbarProps) {
   const m = useMessages();
   const branchSelectorRef = useRef<BranchToolbarBranchSelectorHandle>(null);
   const threadRef = scopeThreadRef(environmentId, threadId);
-  const draftThread = useComposerDraftStore((store) =>
-    draftId ? store.getDraftSession(draftId) : store.getDraftThreadByRef(threadRef),
-  );
-  const serverThread = useQuietThreadShell(threadRef);
   const canMoveWorkspace = useAtomValue(vcsEnvironment.moveThread.permissionAtom(environmentId));
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   // The composer retains resolved thread details while bootstrap cleanup can remove its shell.
@@ -820,20 +703,6 @@ export const BranchToolbar = memo(function BranchToolbar({
   const activeWorktreePath = forceNewWorktree ? null : worktreePath;
   const effectiveEnvMode = forceNewWorktree ? "worktree" : envMode;
   const envModeLocked = envLocked || (isServerThread && activeWorktreePath !== null);
-  // A draft may override how it uses the project's additional directories;
-  // the thread locks its choice once it exists.
-  const additionalDirectoriesLocked = envLocked || isServerThread;
-  const draftAdditionalDirectories =
-    draftThread?.additionalDirectories ?? activeProject?.additionalDirectories;
-  const additionalDirectories =
-    serverThread?.additionalDirectories ?? draftAdditionalDirectories ?? EMPTY_DIRECTORIES;
-  const onAdditionalDirectoryModeChange = (path: string, mode: ThreadEnvMode) => {
-    setDraftThreadContext(draftId ?? threadRef, {
-      additionalDirectories: (draftAdditionalDirectories ?? []).map((directory) =>
-        directory.path === path ? { ...directory, mode } : directory,
-      ),
-    });
-  };
 
   const canUsePreviousWorktree = !isServerThread && !envModeLocked && !forceNewWorktree;
   const projectRefsForWorktreeLookup = canUsePreviousWorktree ? [activeProjectRef] : [];
@@ -922,18 +791,8 @@ export const BranchToolbar = memo(function BranchToolbar({
             previousWorktreeLabel={previousWorktreeLabel}
             previousWorktreeBranch={previousWorktreeSeed?.branch ?? null}
             onUsePreviousWorktree={onUsePreviousWorktree}
-            additionalDirectories={additionalDirectories}
-            additionalDirectoriesLocked={additionalDirectoriesLocked}
-            additionalDirectoriesSupported={additionalDirectoriesSupported}
-            onAdditionalDirectoryModeChange={onAdditionalDirectoryModeChange}
             addTargets={addTargets}
             onAddToMachine={onAddToMachine}
-          />
-        ) : null}
-        {panelSection !== "branch" && additionalDirectories.length > 0 ? (
-          <AdditionalDirectoriesSummary
-            directories={additionalDirectories}
-            supported={additionalDirectoriesSupported}
           />
         ) : null}
         {panelSection !== "workspace" ? (
@@ -987,10 +846,6 @@ export const BranchToolbar = memo(function BranchToolbar({
             previousWorktreeLabel={previousWorktreeLabel}
             previousWorktreeBranch={previousWorktreeSeed?.branch ?? null}
             onUsePreviousWorktree={onUsePreviousWorktree}
-            additionalDirectories={additionalDirectories}
-            additionalDirectoriesLocked={additionalDirectoriesLocked}
-            additionalDirectoriesSupported={additionalDirectoriesSupported}
-            onAdditionalDirectoryModeChange={onAdditionalDirectoryModeChange}
             addTargets={addTargets}
             onAddToMachine={onAddToMachine}
           />

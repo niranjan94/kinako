@@ -280,7 +280,6 @@ function makeHarness(options: HarnessOptions = {}) {
         layerReceipts,
         layerOrchestrator,
         IdAllocator.layer,
-        NodeServices.layer,
         options.getLaunchSettings === undefined
           ? Layer.empty
           : Layer.mock(ServerSettings.ServerSettingsService)({
@@ -304,7 +303,6 @@ function makeHarness(options: HarnessOptions = {}) {
               faviconPath: null,
               projectIcon: null,
               scripts: project.scripts,
-              additionalDirectories: [],
               pinnedAt: null,
               archivedAt: null,
               createdAt: project.createdAt,
@@ -2203,130 +2201,6 @@ it.effect.each(["failed", "interrupted"] as const)(
       assert.equal(after.thread.worktreePath, null);
     }).pipe(Effect.provide(harness.layer));
   },
-);
-
-it.effect(
-  "creates an additional worktree on the primary branch and renames it with the primary",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const sibling = yield* fs.makeTempDirectoryScoped();
-      const harness = makeHarness({
-        createWorktree: (input) =>
-          Effect.succeed({
-            worktree: {
-              path: input.cwd === "/repo" ? "/repo-worktrees/feature" : `${input.cwd}-worktree`,
-              refName: input.newRefName,
-              headSha: "abc",
-            },
-          } as never),
-        git: { repositoryRoot: (cwd: string) => Effect.succeed(cwd) },
-      });
-      yield* Effect.gen(function* () {
-        const launches = yield* ThreadLaunch.ThreadLaunchService;
-        const launched = yield* launches.launch({
-          ...launchInput({
-            command: "command:launch:additional-worktree",
-            thread: "thread:launch:additional-worktree",
-            message: "Change both repositories",
-            workspace: { type: "worktree", baseRef: "main" },
-          }),
-          additionalDirectories: [{ path: sibling, mode: "worktree" }],
-        });
-        const renamed = yield* launchEventCommitted(
-          launched.threadId,
-          "command:launch:additional-worktree:additional-branch-rename",
-        );
-        assert.equal(renamed.thread.branch, "generated-branch");
-        const [primary, additional] = harness.createWorktree.mock.calls.map(([input]) => input);
-        assert.equal(additional?.cwd, sibling);
-        assert.equal(additional?.newRefName, primary?.newRefName);
-        assert.deepEqual(renamed.thread.additionalDirectories, [
-          {
-            path: sibling,
-            mode: "worktree",
-            branch: "generated-branch",
-            worktreePath: `${sibling}-worktree`,
-          },
-        ]);
-        assert.deepEqual(harness.renameBranch.mock.calls[1]?.[0], {
-          cwd: `${sibling}-worktree`,
-          oldBranch: primary!.newRefName!,
-          newBranch: "generated-branch",
-          exactName: true,
-        });
-      }).pipe(Effect.provide(harness.layer));
-    }).pipe(Effect.provide(NodeServices.layer)),
-);
-
-it.effect("names an additional worktree on its own when the thread has no worktree", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const sibling = yield* fs.makeTempDirectoryScoped();
-    const harness = makeHarness({
-      createWorktree: (input) =>
-        Effect.succeed({
-          worktree: { path: `${input.cwd}-worktree`, refName: input.newRefName, headSha: "abc" },
-        } as never),
-      git: { repositoryRoot: (cwd: string) => Effect.succeed(cwd) },
-    });
-    yield* Effect.gen(function* () {
-      const launches = yield* ThreadLaunch.ThreadLaunchService;
-      const launched = yield* launches.launch({
-        ...launchInput({
-          command: "command:launch:additional-only",
-          thread: "thread:launch:additional-only",
-          message: "Change the sibling repository",
-        }),
-        additionalDirectories: [{ path: sibling, mode: "worktree" }],
-      });
-      const renamed = yield* launchEventCommitted(
-        launched.threadId,
-        "command:launch:additional-only:additional-branch-rename",
-      );
-      const [additional] = harness.createWorktree.mock.calls.map(([input]) => input);
-      assert.equal(additional?.cwd, sibling);
-      assert.deepEqual(harness.renameBranch.mock.calls[0]?.[0], {
-        cwd: `${sibling}-worktree`,
-        oldBranch: additional!.newRefName!,
-        newBranch: "generated-branch",
-      });
-      assert.deepEqual(renamed.thread.additionalDirectories, [
-        {
-          path: sibling,
-          mode: "worktree",
-          branch: "generated-branch",
-          worktreePath: `${sibling}-worktree`,
-        },
-      ]);
-    }).pipe(Effect.provide(harness.layer));
-  }).pipe(Effect.provide(NodeServices.layer)),
-);
-
-it.effect("fails the launch when an additional worktree directory is not a repository", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const folder = yield* fs.makeTempDirectoryScoped();
-    const harness = makeHarness({ git: { repositoryRoot: () => Effect.succeed(null) } });
-    yield* Effect.gen(function* () {
-      const launches = yield* ThreadLaunch.ThreadLaunchService;
-      const launched = yield* launches.launch({
-        ...launchInput({
-          command: "command:launch:additional-not-git",
-          thread: "thread:launch:additional-not-git",
-          message: "Use the notes folder",
-        }),
-        additionalDirectories: [{ path: folder, mode: "worktree" }],
-      });
-      const projection = yield* preparationSettled(launched.threadId);
-      assert.equal(projection.runs[0]?.status, "failed");
-      assert.match(
-        projection.turnItems.find((item) => item.type === "error")?.failure.message ?? "",
-        /is not a Git repository, so it cannot use worktree mode/u,
-      );
-      assert.equal(harness.createWorktree.mock.calls.length, 0);
-    }).pipe(Effect.provide(harness.layer));
-  }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.effect("replays a server-allocated launch", () =>

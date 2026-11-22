@@ -163,7 +163,6 @@ function Panel({ fixture }: { fixture: ReturnType<typeof setup> }) {
         isGitRepo={false}
         envLocked
         availableEnvironments={[]}
-        additionalDirectoriesSupported={false}
         onEnvModeChange={noop}
         envMode="local"
         startFromOrigin={false}

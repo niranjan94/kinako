@@ -1947,9 +1947,6 @@ export function threadShellFromProjection(
     ...(projection.thread.associatedWorktreePath === undefined
       ? {}
       : { associatedWorktreePath: projection.thread.associatedWorktreePath }),
-    ...(projection.thread.additionalDirectories === undefined
-      ? {}
-      : { additionalDirectories: projection.thread.additionalDirectories }),
     pullRequests: threadPullRequestsOf(projection.thread),
     ...(projection.thread.linkedPullRequest === undefined
       ? {}
@@ -2298,9 +2295,6 @@ function shellFromState(input: {
     ...(input.state.thread.associatedWorktreePath === undefined
       ? {}
       : { associatedWorktreePath: input.state.thread.associatedWorktreePath }),
-    ...(input.state.thread.additionalDirectories === undefined
-      ? {}
-      : { additionalDirectories: input.state.thread.additionalDirectories }),
     pullRequests: threadPullRequestsOf(input.state.thread),
     ...(input.state.thread.linkedPullRequest === undefined
       ? {}
@@ -9074,13 +9068,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           ${options?.includeArchived === true ? sql`` : sql`AND json_extract(payload_json, '$.archivedAt') IS NULL`}
           AND json_extract(payload_json, '$.worktreePath') IS NULL
           AND json_extract(payload_json, '$.associatedWorktreePath') IS NOT NULL
-        UNION ALL
-        SELECT thread.thread_id, json_extract(directory.value, '$.worktreePath') AS worktree_path
-        FROM orchestration_v2_projection_threads AS thread,
-          json_each(thread.payload_json, '$.additionalDirectories') AS directory
-        WHERE thread.deleted_at IS NULL
-          ${options?.includeArchived === true ? sql`` : sql`AND json_extract(thread.payload_json, '$.archivedAt') IS NULL`}
-          AND json_extract(directory.value, '$.worktreePath') IS NOT NULL
       `.pipe(
         Effect.map((rows) =>
           rows.map((row) => ({

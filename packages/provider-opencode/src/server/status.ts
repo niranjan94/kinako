@@ -38,8 +38,6 @@ import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 const OPENCODE_PRESENTATION = {
   displayName: "OpenCode",
   showInteractionModeToggle: false,
-  // OpenCode sessions take a single directory and have no extra workspace roots.
-  supportsAdditionalDirectories: false,
 } as const;
 
 class OpenCodeProbeError extends Schema.TaggedError<OpenCodeProbeError>()("OpenCodeProbeError", {

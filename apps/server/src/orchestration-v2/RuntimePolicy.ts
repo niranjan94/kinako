@@ -5,7 +5,6 @@ import {
   OrchestrationV2AppThread,
   ProjectId,
   ProviderInstanceId,
-  resolveThreadAdditionalDirectoryPath,
   RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
@@ -85,19 +84,9 @@ export const layer: Layer.Layer<RuntimePolicyV2> = Layer.succeed(RuntimePolicyV2
       runtimeMode: input.thread.runtimeMode,
       interactionMode: input.thread.interactionMode,
       cwd: input.thread.worktreePath,
-      ...additionalDirectoriesOf(input.thread),
     });
   }),
 });
-
-function additionalDirectoriesOf(thread: OrchestrationV2AppThread): {
-  readonly additionalDirectories?: ReadonlyArray<string>;
-} {
-  const directories = thread.additionalDirectories ?? [];
-  return directories.length === 0
-    ? {}
-    : { additionalDirectories: directories.map(resolveThreadAdditionalDirectoryPath) };
-}
 
 export function providerRuntimeMode(
   runtimeMode: RuntimeMode,
@@ -199,7 +188,6 @@ export const layerFromProjectStore: Layer.Layer<
           runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
           interactionMode: input.thread.interactionMode,
           cwd,
-          ...additionalDirectoriesOf(input.thread),
           ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
         });
       }),

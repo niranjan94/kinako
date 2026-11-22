@@ -805,20 +805,6 @@ function withoutPreparationResult(
   return rest;
 }
 
-function sameAdditionalDirectorySelection(
-  current: OrchestrationV2AppThread["additionalDirectories"],
-  next: NonNullable<OrchestrationV2AppThread["additionalDirectories"]>,
-): boolean {
-  const previous = current ?? [];
-  return (
-    previous.length === next.length &&
-    previous.every(
-      (directory, index) =>
-        directory.path === next[index]!.path && directory.mode === next[index]!.mode,
-    )
-  );
-}
-
 const SUMMARIZE_BUSY_MESSAGE = "Wait for the agent to finish before summarizing.";
 
 /** Stop ended this task, so its result is not delivered to the parent agent. */
@@ -4074,9 +4060,6 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       interactionMode: command.interactionMode,
       branch: command.branch,
       worktreePath: command.worktreePath,
-      ...(command.additionalDirectories === undefined || command.additionalDirectories.length === 0
-        ? {}
-        : { additionalDirectories: command.additionalDirectories }),
       activeProviderThreadId: null,
       pullRequests: [],
       ...(command.linkOrigin === undefined ? {} : { linkOrigin: command.linkOrigin }),
@@ -4517,18 +4500,6 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         commandId: command.commandId,
         commandType: command.type,
         cause: `Thread ${command.threadId} worktree changed before the metadata update could be applied.`,
-      });
-    }
-    if (
-      command.type === "thread.metadata.update" &&
-      command.additionalDirectories !== undefined &&
-      command.expectedEmpty !== true &&
-      !sameAdditionalDirectorySelection(thread.additionalDirectories, command.additionalDirectories)
-    ) {
-      return yield* new OrchestratorDispatchError({
-        commandId: command.commandId,
-        commandType: command.type,
-        cause: `Thread ${command.threadId} additional directories are locked once the thread exists.`,
       });
     }
     if (
@@ -5194,9 +5165,6 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             ...(command.associatedWorktreePath === undefined
               ? {}
               : { associatedWorktreePath: command.associatedWorktreePath }),
-            ...(command.additionalDirectories === undefined
-              ? {}
-              : { additionalDirectories: command.additionalDirectories }),
             ...(command.linkedPullRequest === undefined
               ? {}
               : {

@@ -328,9 +328,6 @@ export function makeCursorAgentOptions(input: {
     ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
     local: {
       ...(input.runtimePolicy.cwd === null ? {} : { cwd: input.runtimePolicy.cwd }),
-      ...(input.runtimePolicy.additionalDirectories === undefined
-        ? {}
-        : { dirs: [...input.runtimePolicy.additionalDirectories] }),
       autoReview: policy.autoReview,
       settingSources:
         input.runtimePolicy.runtimeMode === "full-access" &&

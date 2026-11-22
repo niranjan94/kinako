@@ -239,33 +239,6 @@ describe("CodexAdapterV2 runtime policy", () => {
     }),
   );
 
-  it.effect(
-    "grants additional directories as writable roots only in a workspace-write sandbox",
-    () =>
-      Effect.gen(function* () {
-        const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" };
-        const paramsFor = (runtimeMode: "auto" | "approval-required") =>
-          CodexAdapterV2.buildCodexTurnStartParams({
-            nativeThreadId: `native-${runtimeMode}`,
-            codexInput: [{ type: "text", text: "test" }],
-            runtimePolicy: {
-              runtimeMode,
-              interactionMode: "default",
-              cwd: "/repo",
-              additionalDirectories: ["/sibling"],
-            },
-            modelSelection,
-          });
-        const auto = yield* paramsFor("auto");
-        assert.deepEqual(auto.sandboxPolicy, {
-          type: "workspaceWrite",
-          writableRoots: ["/sibling"],
-        });
-        const supervised = yield* paramsFor("approval-required");
-        assert.deepEqual(supervised.sandboxPolicy, { type: "readOnly" });
-      }),
-  );
-
   it.effect("sends the chosen cyber access program, else the model's default", () =>
     Effect.gen(function* () {
       const build = (value?: string, cyberAccess?: { defaultProgram: string | undefined }) =>

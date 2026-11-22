@@ -392,7 +392,6 @@ export function useComposerSend(input: ComposerSendInput) {
     promptRef,
     runtimeMode,
     startFromOrigin,
-    additionalDirectories: draftThread?.additionalDirectories,
     resetLocalDispatch,
     setThreadError,
   });
@@ -1452,9 +1451,6 @@ export function useComposerSend(input: ComposerSendInput) {
                       interactionMode: DEFAULT_INTERACTION_MODE,
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
-                      ...(draftThread?.additionalDirectories === undefined
-                        ? {}
-                        : { additionalDirectories: draftThread.additionalDirectories }),
                       createdAt: activeThread.createdAt,
                     },
                   }

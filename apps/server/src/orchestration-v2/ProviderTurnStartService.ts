@@ -38,16 +38,12 @@ import {
   CLAUDE_PROVIDER,
   CLAUDE_QUERY_ENDED_BEFORE_TURN_DETAIL,
 } from "./Adapters/ClaudeAdapterV2.ts";
-import { makeIsManagedWorktreePath } from "../worktreesDirectory.ts";
 import { withTurnStartReservation, withWorkspaceLease } from "../workspace/workspaceLease.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import {
-  makeRecreateMissingWorktree,
-  makeRestoreMissingWorktree,
-} from "../workspace/restoreMissingWorktree.ts";
+import { makeRestoreMissingWorktree } from "../workspace/restoreMissingWorktree.ts";
 import * as EventSink from "./EventSink.ts";
 import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
 import * as ContextHandoffService from "./ContextHandoffService.ts";
@@ -290,8 +286,6 @@ export const layer: Layer.Layer<
     const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
     const runtimePolicy = yield* RuntimePolicy.RuntimePolicyV2;
     const restoreMissingWorktree = yield* makeRestoreMissingWorktree;
-    const isManagedWorktreePath = yield* makeIsManagedWorktreePath;
-    const recreateMissingWorktree = yield* makeRecreateMissingWorktree;
     const turnItemPositions = yield* TurnItemPositionStore.TurnItemPositionStoreV2;
 
     // Build draining callbacks outside startup scope so they cannot retain full thread history.
@@ -824,34 +818,6 @@ export const layer: Layer.Layer<
           message: recreateResult.failure.message,
         });
         return;
-      }
-      // Additional directories are best effort: a missing one should not block the turn.
-      for (const directory of projection.thread.additionalDirectories ?? []) {
-        if (directory.worktreePath === null || directory.branch === null) continue;
-        const exists = yield* fileSystem
-          .exists(directory.worktreePath)
-          .pipe(Effect.orElseSucceed(() => true));
-        if (exists || !(yield* isManagedWorktreePath(directory.worktreePath))) continue;
-        yield* Effect.logWarning("provider turn start recreating missing worktree", {
-          threadId: projection.thread.id,
-          worktreePath: directory.worktreePath,
-          branch: directory.branch,
-        });
-        yield* recreateMissingWorktree({
-          cwd: directory.path,
-          worktreePath: directory.worktreePath,
-          branch: directory.branch,
-        }).pipe(
-          Effect.catchCauseIf(
-            (cause) => !Cause.hasInterruptsOnly(cause),
-            (cause) =>
-              Effect.logWarning("provider turn start failed to recreate worktree", {
-                threadId: projection.thread.id,
-                worktreePath: directory.worktreePath,
-                cause: Cause.pretty(cause),
-              }),
-          ),
-        );
       }
       const selectInheritedBackgroundItems = (
         current: ProjectionStore.ProjectionRuntimeRecoveryState,

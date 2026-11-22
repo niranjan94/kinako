@@ -65,7 +65,6 @@ import { useChatShortcuts } from "./chat/useChatShortcuts";
 import { ChatBannerLane } from "./chat/ChatBannerLane";
 import { SummarizeConversationDialog } from "./chat/ConversationSummary";
 import { TurnRecapCard } from "./chat/TurnRecapCard";
-import { directoryName } from "../lib/additionalDirectories";
 import { deriveTurnRecap } from "@t3tools/client-runtime/state/turn-recap";
 import * as Schema from "effect/Schema";
 import {
@@ -1433,17 +1432,6 @@ export default function ChatView(props: ChatViewProps) {
   const conversationProviderStatus =
     providerStatuses.find((status) => status.instanceId === activeRuntime?.providerInstanceId) ??
     activeProviderStatus;
-  const additionalDirectoriesSupported =
-    activeProviderStatus?.supportsAdditionalDirectories !== false;
-  // Checkpoints cover only the primary root, so restore must not look complete.
-  const additionalDirectoriesRestoreNote =
-    serverThread !== null && serverThread.additionalDirectories.length > 0
-      ? gt("Files in {directories} are not restored.", {
-          directories: serverThread.additionalDirectories
-            .map((directory) => directoryName(directory.path))
-            .join(", "),
-        })
-      : null;
   const supportsConversationRollback =
     canOperateThread &&
     conversationProviderStatus !== null &&
@@ -4001,7 +3989,6 @@ export default function ChatView(props: ChatViewProps) {
                                       }
                                     : {})}
                                   envLocked={envLocked}
-                                  additionalDirectoriesSupported={additionalDirectoriesSupported}
                                   onComposerFocusRequest={scheduleComposerFocusStable}
                                   {...(canCheckoutPullRequestIntoThread
                                     ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
@@ -4108,7 +4095,6 @@ export default function ChatView(props: ChatViewProps) {
                   workspaceMutationId={workspaceMutationId}
                   isGitRepo={isGitRepo}
                   envLocked={envLocked}
-                  additionalDirectoriesSupported={additionalDirectoriesSupported}
                   availableEnvironments={selectableEnvironments}
                   autoEnvironmentLabel={autoEnvironmentLabel}
                   onAutoEnvironment={
@@ -4251,7 +4237,6 @@ export default function ChatView(props: ChatViewProps) {
         checkpoints={serverProjection?.checkpoints}
         worktreePath={activeThread?.worktreePath ?? null}
         onConfirm={onConfirmRevertStable}
-        restoreNote={additionalDirectoriesRestoreNote}
       />
       <SummarizeConversationDialog
         direction={pendingSummaryDirection}

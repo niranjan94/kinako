@@ -18,7 +18,6 @@ const KNOWN_BAILOUTS: Record<string, string> = {
   "src/features/database/ThreadDatabaseRouteScreen.tsx": "try/finally",
   "src/features/diffs/nativeReviewDiffSurface.ts": "ref read during render",
   "src/features/home/thread-swipe-actions.tsx": "ref read during render",
-  "src/features/settings/ProjectAdditionalDirectoriesSection.tsx": "unsupported logical test block",
   "src/features/threads/ImportCliSessionRouteScreen.tsx": "try without catch",
   "src/features/threads/ThreadArrangementSheet.tsx": "ref read during render",
   "src/features/voice-input/useVoiceInputController.ts": "ref read during render",

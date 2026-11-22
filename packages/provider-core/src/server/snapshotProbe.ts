@@ -113,7 +113,6 @@ export interface ServerProviderPresentation {
   readonly reportsContextWindow?: boolean;
   readonly supportedRuntimeModes?: ReadonlyArray<RuntimeMode>;
   readonly supportsConversationRollback?: boolean;
-  readonly supportsAdditionalDirectories?: boolean;
 }
 
 export type ServerProviderDraft = Omit<ServerProvider, "instanceId" | "driver">;
@@ -310,9 +309,6 @@ export function buildServerProvider(input: {
     displayName: input.presentation.displayName,
     ...(typeof input.presentation.supportsConversationRollback === "boolean"
       ? { supportsConversationRollback: input.presentation.supportsConversationRollback }
-      : {}),
-    ...(typeof input.presentation.supportsAdditionalDirectories === "boolean"
-      ? { supportsAdditionalDirectories: input.presentation.supportsAdditionalDirectories }
       : {}),
     ...(input.presentation.badgeLabel ? { badgeLabel: input.presentation.badgeLabel } : {}),
     ...(typeof input.presentation.showInteractionModeToggle === "boolean"

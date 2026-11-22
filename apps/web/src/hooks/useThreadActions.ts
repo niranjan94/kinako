@@ -57,11 +57,7 @@ import { clearThreadPreviewState } from "../previewStateStore";
 import { useRightPanelStore } from "../rightPanelStore";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
-import {
-  formatWorktreePathForDisplay,
-  getOrphanedAdditionalWorktreesForThread,
-  getOrphanedWorktreePathForThread,
-} from "../worktreeCleanup";
+import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { useClientSettings } from "./useSettings";
 import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
@@ -583,20 +579,10 @@ export function useThreadActions() {
     const displayWorktreePath = orphanedWorktreePath
       ? formatWorktreePathForDisplay(orphanedWorktreePath)
       : null;
-    const orphanedAdditionalWorktrees = getOrphanedAdditionalWorktreesForThread(
-      survivingThreads,
-      threadRef.threadId,
-    );
-    const orphanedDisplayPaths = [
-      ...(orphanedWorktreePath ? [displayWorktreePath ?? orphanedWorktreePath] : []),
-      ...orphanedAdditionalWorktrees.map((worktree) =>
-        formatWorktreePathForDisplay(worktree.worktreePath),
-      ),
-    ];
     const localApi = readLocalApi();
     let canDeleteWorktree = false;
     if (
-      orphanedDisplayPaths.length > 0 &&
+      orphanedWorktreePath !== null &&
       threadProject !== null &&
       !isScratchProject(threadProject, environmentConfig?.scratchWorkspaceRoot) &&
       localApi
@@ -616,19 +602,12 @@ export function useThreadActions() {
     if (canDeleteWorktree && localApi && !automaticWorktreeCleanup) {
       const confirmationResult = await settlePromise(() =>
         localApi.dialogs.confirm(
-          orphanedDisplayPaths.length === 1
-            ? [
-                m(msg("This thread is the only one linked to this worktree:")),
-                orphanedDisplayPaths[0],
-                "",
-                m(msg("Delete the worktree too?")),
-              ].join("\n")
-            : [
-                m(msg("This thread is the only one linked to these worktrees:")),
-                ...orphanedDisplayPaths,
-                "",
-                m(msg("Delete the worktrees too?")),
-              ].join("\n"),
+          [
+            m(msg("This thread is the only one linked to this worktree:")),
+            displayWorktreePath ?? orphanedWorktreePath,
+            "",
+            m(msg("Delete the worktree too?")),
+          ].join("\n"),
           { variant: "destructive" },
         ),
       );
@@ -706,36 +685,6 @@ export function useThreadActions() {
             })
           : router.navigate({ to: "/", replace: true }),
       );
-    }
-
-    if (shouldDeleteWorktree && threadProject) {
-      for (const worktree of orphanedAdditionalWorktrees) {
-        const additionalResult = readEnvironmentScope(
-          threadRef.environmentId,
-          AuthSourceControlWriteScope,
-        )
-          ? await removeWorktree({
-              environmentId: threadRef.environmentId,
-              input: { cwd: worktree.repository, path: worktree.worktreePath, force: true },
-            })
-          : AsyncResult.failure(
-              Cause.fail(new Error("This connection can no longer remove worktrees.")),
-            );
-        if (additionalResult._tag !== "Failure") continue;
-        const error = squashAtomCommandFailure(additionalResult);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: m(msg("Failed to delete worktree")),
-            description: m(
-              msg("Could not remove {path}. {detail}", {
-                path: formatWorktreePathForDisplay(worktree.worktreePath),
-                detail: error instanceof Error ? error.message : m(msg("An error occurred.")),
-              }),
-            ),
-          }),
-        );
-      }
     }
 
     if (!shouldDeleteWorktree || !orphanedWorktreePath || !threadProject) {

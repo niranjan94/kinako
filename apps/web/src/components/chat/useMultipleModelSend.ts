@@ -18,7 +18,6 @@ import {
   type ComposerThreadTarget,
   composerDraftHasUserContent,
   type DraftId,
-  type DraftSessionState,
   useComposerDraftStore,
 } from "../../composerDraftStore";
 import type { ComposerHandleRef } from "../../composerHandleContext";
@@ -56,7 +55,6 @@ interface MultipleModelSendInput {
   readonly promptRef: { current: string };
   readonly runtimeMode: RuntimeMode;
   readonly startFromOrigin: boolean;
-  readonly additionalDirectories: DraftSessionState["additionalDirectories"];
   readonly resetLocalDispatch: ReturnType<typeof useLocalDispatchState>["resetLocalDispatch"];
   readonly setThreadError: ReturnType<typeof makeThreadErrorSetter>;
 }
@@ -77,7 +75,6 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
     promptRef,
     runtimeMode,
     startFromOrigin,
-    additionalDirectories,
     resetLocalDispatch,
     setThreadError,
   } = input;
@@ -197,7 +194,6 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
                       interactionMode: DEFAULT_INTERACTION_MODE,
                       branch,
                       worktreePath: null,
-                      ...(additionalDirectories === undefined ? {} : { additionalDirectories }),
                       createdAt: createdAt,
                     },
                     prepareWorktree: {
