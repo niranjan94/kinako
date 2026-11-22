@@ -68,6 +68,15 @@ describe("evaluateRules", () => {
     ["a recursive delete outside", { command: "rm -rf ~/projects" }],
     ["a recursive delete upward", { command: "rm -rf ../shared" }],
     ["reading credentials by command", { command: "cat ~/.aws/credentials" }],
+    ["reading credentials through a quoted path", { command: 'cat "$HOME/.ssh/id_ed25519"' }],
+    [
+      "a git config edit",
+      {
+        request: { kind: "file-change" as const, responseCapability: live },
+        paths: ["/work/repo/.git/config"],
+      },
+    ],
+    ["a cut-short request", { command: "git status", truncated: true }],
   ])("escalates %s without a model", (_name, overrides) => {
     expect(evaluateRules(subject(overrides)).type).toBe("escalate");
   });
@@ -100,6 +109,12 @@ describe("evaluateRules", () => {
     ["a redirect into a file", { command: "echo hi > notes.txt" }],
     ["an unknown tool", { command: "make deploy" }],
     ["find with -exec", { command: "find . -name '*.log' -exec rm {} ;" }],
+    ["sort writing a file", { command: "sort -o ../notes.txt a.txt" }],
+    ["a git diff writing a file", { command: "git diff --output=/tmp/x.patch" }],
+    ["rg running a preprocessor", { command: "rg --pre ./run.sh foo" }],
+    ["a program-loading env prefix", { command: "NODE_OPTIONS=--require=./x.js pnpm test" }],
+    ["an escaped separator", { command: "ls \\; rm -rf src" }],
+    ["git branch deleting a branch", { command: "git branch -D main" }],
     [
       "a read outside the workspace",
       {

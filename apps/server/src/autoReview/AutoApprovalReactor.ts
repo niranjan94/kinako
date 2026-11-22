@@ -87,6 +87,12 @@ const make = Effect.gen(function* () {
     request: OrchestrationV2RuntimeRequest,
   ) {
     const thread = yield* projections.getThread(threadId);
+    if (thread.runtimeMode !== "host-auto") {
+      return {
+        outcome: "escalated",
+        reason: "The thread left Auto review before this request was reviewed.",
+      } as const;
+    }
     const settings = resolveProjectSettings(
       yield* settingsService.getSettings,
       thread.projectId,
@@ -124,6 +130,7 @@ const make = Effect.gen(function* () {
       paths,
       options: card?.options,
       fullAccessOverride: card?.fullAccessOverride,
+      truncated: request.inspection?.truncated,
       roots,
       homeDir,
       baseMode,
@@ -185,12 +192,16 @@ const make = Effect.gen(function* () {
       provider: driver,
       baseMode,
     });
+    const available = yield* Effect.forEach(
+      yield* providers.listInstances,
+      (candidate) => candidate.snapshot.getSnapshot,
+    );
     const verdict = yield* classifier.classify({
       bundle,
-      selection: resolveAutoReviewModelSelection(
-        settings,
-        snapshot === undefined ? undefined : [snapshot],
-      ),
+      selection: resolveAutoReviewModelSelection(settings, [
+        ...available,
+        ...(yield* providers.listUnavailable),
+      ]),
       settings,
       cwd,
     });
@@ -212,14 +223,40 @@ const make = Effect.gen(function* () {
           ),
         ),
       );
-      yield* engine.dispatch({
-        type: "runtime-request.auto-review",
-        commandId: CommandId.make(`server:auto-review:${threadId}:${requestId}`),
-        threadId,
-        requestId,
-        outcome: verdict.outcome,
-        reason: verdict.reason,
-      });
+      yield* engine
+        .dispatch({
+          type: "runtime-request.auto-review",
+          commandId: CommandId.make(`server:auto-review:${threadId}:${requestId}`),
+          threadId,
+          requestId,
+          outcome: verdict.outcome,
+          reason: verdict.reason,
+        })
+        .pipe(
+          // An approval that cannot be delivered must not leave the request held from the user.
+          Effect.catchCause((cause) =>
+            verdict.outcome === "escalated"
+              ? Effect.failCause(cause)
+              : Effect.logWarning("delivering a host approval failed", {
+                  threadId,
+                  requestId,
+                  cause,
+                }).pipe(
+                  Effect.andThen(
+                    engine.dispatch({
+                      type: "runtime-request.auto-review",
+                      commandId: CommandId.make(
+                        `server:auto-review:${threadId}:${requestId}:escalate`,
+                      ),
+                      threadId,
+                      requestId,
+                      outcome: "escalated",
+                      reason: "The approval could not be delivered.",
+                    }),
+                  ),
+                ),
+          ),
+        );
     },
     (effect, threadId, requestId) =>
       effect.pipe(

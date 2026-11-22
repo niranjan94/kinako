@@ -15,6 +15,8 @@ export interface ReviewSubject {
   readonly paths: ReadonlyArray<string | undefined>;
   readonly options?: ReadonlyArray<ProviderApprovalOption> | undefined;
   readonly fullAccessOverride?: "ask_rule" | "provider_check" | undefined;
+  /** The adapter cut the command or path list short, so the rules cannot see all of it. */
+  readonly truncated?: boolean | undefined;
   /** The thread's checkout and its additional directories, resolved. */
   readonly roots: ReadonlyArray<string>;
   readonly homeDir: string;
@@ -56,9 +58,16 @@ function isSensitivePath(path: string, homeDir: string): boolean {
   if (sensitiveHomeEntries.some((entry) => within(path, NodePath.join(homeDir, entry))))
     return true;
   if (within(path, "/etc") || within(path, "/private/etc")) return true;
+  // Git config and hooks run code on the next git command, the app's own included.
   const segments = path.split(NodePath.sep);
-  const hooks = segments.indexOf("hooks");
-  if (hooks > 0 && segments[hooks - 1] === ".git") return true;
+  if (
+    segments.some(
+      (segment, index) =>
+        segment === ".git" && (segments[index + 1] === "hooks" || segments[index + 1] === "config"),
+    )
+  ) {
+    return true;
+  }
   const base = NodePath.basename(path);
   return /^\.env(\..+)?$/.test(base) && !/^\.env\.(example|sample|template)$/.test(base);
 }
@@ -78,30 +87,30 @@ const RED_LINE_COMMANDS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\b(dd|mkfs|diskutil|fdisk)\b/, "Writes to a disk device."],
 ];
 
-const HOME_OR_ABSOLUTE_TARGET = /(^|\s)(~|\$HOME|\/)[^\s]*/g;
+const HOME_OR_ABSOLUTE_TARGET = /(^|[\s='"])(~|\$\{?HOME\}?|\/)[^\s'"]*/g;
+
+const expandHome = (target: string, homeDir: string) => {
+  const home = /^(~|\$\{HOME\}|\$HOME)/.exec(target)?.[0];
+  return home === undefined ? target : NodePath.join(homeDir, target.slice(home.length));
+};
+
+const targetOf = (match: RegExpMatchArray) => match[0].replace(/^[\s='"]/, "");
 
 function escalatingCommand(command: string, subject: ReviewSubject): string | undefined {
   for (const [pattern, reason] of RED_LINE_COMMANDS) {
     if (pattern.test(command)) return reason;
   }
   for (const match of command.matchAll(HOME_OR_ABSOLUTE_TARGET)) {
-    const raw = match[0].trim();
-    const expanded = raw.startsWith("~")
-      ? NodePath.join(subject.homeDir, raw.slice(1))
-      : raw.startsWith("$HOME")
-        ? NodePath.join(subject.homeDir, raw.slice(5))
-        : raw;
+    const expanded = expandHome(targetOf(match), subject.homeDir);
     if (isSensitivePath(NodePath.resolve(expanded), subject.homeDir)) {
       return "Touches credentials, app state, or system files.";
     }
   }
   if (/\brm\s+(-[a-zA-Z]*[rR][a-zA-Z]*\s+)*-?[a-zA-Z]*[rRf]/.test(command)) {
     const outside = [...command.matchAll(HOME_OR_ABSOLUTE_TARGET)].some((match) => {
-      const target = match[0].trim();
+      const target = targetOf(match);
       if (target.startsWith("/dev/null")) return false;
-      const resolved = target.startsWith("~")
-        ? NodePath.join(subject.homeDir, target.slice(1))
-        : target;
+      const resolved = expandHome(target, subject.homeDir);
       return !subject.roots.some((root) => within(NodePath.resolve(resolved), root));
     });
     if (outside || /\.\.(\/|\s|$)/.test(command)) {
@@ -112,12 +121,18 @@ function escalatingCommand(command: string, subject: ReviewSubject): string | un
 }
 
 // Read-only inspection and local build, test, and lint tools: they read the checkout and
-// write only inside it.
+// write only inside it. Flags that write a file or run another program are excluded.
 const SAFE_COMMANDS: ReadonlyArray<RegExp> = [
-  /^(ls|pwd|cat|head|tail|wc|stat|file|tree|du|df|which|whoami|date|uname|echo|printf|true|diff|cut|sort|uniq|tr|basename|dirname|realpath|grep|egrep|rg|fd|jq)(\s|$)/,
-  /^find(\s|$)(?!.*\s-(exec|execdir|delete|ok)\b)/,
-  /^sed\s+-n(\s|$)/,
-  /^git\s+(status|diff|log|show|branch|rev-parse|ls-files|blame|describe|remote(\s+-v)?|stash\s+list|grep)(\s|$)/,
+  /^(ls|pwd|cat|head|tail|wc|stat|file|du|df|which|whoami|date|uname|echo|printf|true|diff|cut|tr|basename|dirname|realpath|grep|egrep|jq)(\s|$)/,
+  /^sort(\s|$)(?!.*(?<!\S)(-[a-zA-Z]*o|--output)(\s|=|$))/,
+  /^uniq(\s+-[a-zA-Z]+)*$/,
+  /^tree(\s|$)(?!.*(?<!\S)-o(\s|$))/,
+  /^rg(\s|$)(?!.*(?<!\S)--pre(\s|=))/,
+  /^fd(\s|$)(?!.*(?<!\S)(-x|-X|--exec|--exec-batch)(\s|=|$))/,
+  /^find(\s|$)(?!.*(?<!\S)-(exec|execdir|delete|ok|okdir|fprint|fprint0|fprintf|fls)\b)/,
+  /^git\s+(status|diff|log|show|rev-parse|ls-files|blame|describe|stash\s+list|grep)(\s|$)(?!.*(?<!\S)(--output|-O|--open-files-in-pager|--ext-diff)(\s|=|$))/,
+  /^git\s+branch(\s+(-a|-r|-v|-vv|--all|--remotes|--list|--show-current|--verbose))*$/,
+  /^git\s+remote(\s+-v)?$/,
   /^(node|bun|deno|python3?|ruby|go|rustc|cargo|java)\s+(-v|--version|version)$/,
   /^(vp|vpr)\s+(test|check|lint|fmt|typecheck|run\s+(test|typecheck|lint|fmt|check|check:changed|i18n:check))(\s|$)/,
   /^(pnpm|npm|yarn|bun)\s+(test|lint|typecheck|tsc|build|run\s+(test|lint|typecheck|build|check|format:check))(\s|$)/,
@@ -129,7 +144,8 @@ const SAFE_COMMANDS: ReadonlyArray<RegExp> = [
 
 /** Splits a command at `&&`, `||`, `;` and `|`, or returns undefined when it can't parse it. */
 export function splitSimpleCommand(command: string): ReadonlyArray<string> | undefined {
-  if (/\$\(|`|<\(|>\(|\beval\b|\\\n/.test(command)) return undefined;
+  // A backslash can escape a quote or separator, which this splitter does not follow.
+  if (/\$\(|`|<\(|>\(|\beval\b|\\/.test(command)) return undefined;
   const segments: Array<string> = [];
   let current = "";
   let quote: '"' | "'" | undefined;
@@ -166,6 +182,10 @@ export function splitSimpleCommand(command: string): ReadonlyArray<string> | und
   return segments.some((segment) => segment.length === 0) ? undefined : segments;
 }
 
+// Variables such as GIT_EXTERNAL_DIFF or NODE_OPTIONS run other programs, so only these pass.
+const SAFE_ENV_PREFIX =
+  /^((CI|NODE_ENV|FORCE_COLOR|NO_COLOR|TZ|LANG|LC_\w+|DEBUG|RUST_BACKTRACE|RUST_LOG)=\S*\s+)+/;
+
 function isSafeLocalCommand(command: string): boolean {
   const segments = splitSimpleCommand(command);
   if (segments === undefined) return false;
@@ -173,8 +193,10 @@ function isSafeLocalCommand(command: string): boolean {
     // Only discarded output may be redirected; anything else could write outside the checkout.
     const withoutDiscards = segment.replace(/\s*(\d?>>?\s*\/dev\/null|2>&1)/g, "");
     if (/[<>]/.test(withoutDiscards)) return false;
-    const unquoted = withoutDiscards.replace(/^(\w+=\S*\s+)+/, "");
-    return SAFE_COMMANDS.some((pattern) => pattern.test(unquoted));
+    // Expansions and parent paths can point anywhere, so their targets can't be checked here.
+    if (/\$|(^|[\s/='"])\.\.(\/|\s|$)/.test(withoutDiscards)) return false;
+    const bare = withoutDiscards.replace(SAFE_ENV_PREFIX, "");
+    return SAFE_COMMANDS.some((pattern) => pattern.test(bare));
   });
 }
 
@@ -195,6 +217,9 @@ export function evaluateRules(subject: ReviewSubject): RuleVerdict {
     !subject.options.some((option) => option.decision === "accept")
   ) {
     return { type: "escalate", reason: "The provider offers only a standing approval." };
+  }
+  if (subject.truncated === true) {
+    return { type: "escalate", reason: "The request is too large to review in full." };
   }
   if (subject.paths.some((path) => path === undefined)) {
     return { type: "escalate", reason: "A requested path could not be resolved." };
