@@ -28,7 +28,14 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import { McpSchema, McpServer, Tool, Toolkit } from "effect/ai";
-import { HttpBody, HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/http";
+import {
+  Headers,
+  HttpBody,
+  HttpClient,
+  HttpClientRequest,
+  HttpRouter,
+  HttpServer,
+} from "effect/http";
 import * as NetAddress from "effect/net/NetAddress";
 
 import * as ProjectService from "../project/ProjectService.ts";
@@ -1007,6 +1014,25 @@ it.effect("bounds page text made of wide characters before dropping locators", (
     }),
   ).pipe(Effect.provide(layerTest)),
 );
+
+it("only delegates event stream revocation to the stateless protocol", () => {
+  expect(
+    McpHttpServer.isStatelessEventsStream(
+      Headers.fromInput({
+        "mcp-method": "events/stream",
+        "mcp-protocol-version": "2026-07-28",
+      }),
+    ),
+  ).toBe(true);
+  expect(
+    McpHttpServer.isStatelessEventsStream(
+      Headers.fromInput({
+        "mcp-method": "events/stream",
+        "mcp-protocol-version": "2025-06-18",
+      }),
+    ),
+  ).toBe(false);
+});
 
 it.effect("terminates HTTP MCP sessions with DELETE", () =>
   Effect.scoped(

@@ -187,6 +187,13 @@ const normalizeMcpHttpResponse = (
 // The first protocol is the fallback for clients that offer an unknown version.
 const mcpProtocols = [McpProtocol.v2025_06_18, McpProtocol.v2026_07_28] as const;
 
+export function isStatelessEventsStream(headers: HttpServerRequest.HttpServerRequest["headers"]) {
+  return (
+    headers["mcp-protocol-version"] === McpProtocol.v2026_07_28.protocolVersion &&
+    headers["mcp-method"] === "events/stream"
+  );
+}
+
 /**
  * Effect answers 400 to a notification a sessionless protocol does not define, because it requires
  * `_meta` before it checks the method. The Go MCP SDK still sends `notifications/roots/list_changed`
@@ -305,9 +312,8 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
   const pullRequests = yield* Effect.serviceOption(PullRequestService.PullRequestService);
   const projections = yield* Effect.serviceOption(ProjectionStore.ProjectionStoreV2);
   const sessions = yield* Effect.serviceOption(SessionStore.SessionStore);
-  // Auth runs once per request, so a response that streams on ends when the outside client's
-  // session is revoked or expires. `events/stream` ends itself first with
-  // `notifications/events/terminated`, which cutting the body here would lose.
+  // Only the stateless protocol validates the method header against the body. Its event streams
+  // send `notifications/events/terminated` before closing on session invalidation.
   const endWithSession = (
     response: HttpServerResponse.HttpServerResponse,
     request: HttpServerRequest.HttpServerRequest,
@@ -315,7 +321,7 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
   ) => {
     const body = response.body;
     if (client === undefined || Option.isNone(sessions) || body._tag !== "Stream") return response;
-    if (request.headers["mcp-method"] === "events/stream") return response;
+    if (isStatelessEventsStream(request.headers)) return response;
     const invalidated = sessions.value
       .awaitInvalidation(AuthSessionId.make(client.sessionId))
       .pipe(Effect.ignore);
