@@ -92,6 +92,8 @@ jobs:
         # widget bundle's absolute initialLayout import fails to resolve in Metro.
         env:
           EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
+          # EAS can throw ESRCH when Expo Doctor exits during timeout cleanup.
+          EAS_BUILD_DISABLE_EXPO_DOCTOR_STEP: "1"
         run: eas build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/kinako.ipa"
 
       - name: Submit to TestFlight
