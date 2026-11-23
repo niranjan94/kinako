@@ -77,7 +77,7 @@ const resolveAll = (host: string) =>
 /**
  * The webhook address check and the client deliveries go through. The client resolves again
  * as it connects, to the address it checks, so DNS rebinding cannot reach a private address;
- * TLS still sees the host name. Undici's dispatcher never follows redirects.
+ * TLS still sees the host name. The Node HTTP client never follows redirects.
  */
 export const make = (hosts: ReadonlyArray<string>) => {
   const allowed = new Set(hosts.map((host) => host.trim().toLowerCase()));
@@ -122,6 +122,6 @@ export const make = (hosts: ReadonlyArray<string>) => {
   return {
     check,
     allowsPlaintext: (url: URL) => allowed.has(hostOf(url)),
-    layerClient: NodeHttpClient.layerUndiciOptions({ connect: { lookup } }),
+    layerClient: NodeHttpClient.layerNodeHttpOptions({ keepAlive: true, lookup }),
   };
 };
