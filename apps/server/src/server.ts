@@ -809,8 +809,8 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.provideMerge(SecretResolver.layer),
   // Above the settings it writes when a theme is applied.
   Layer.provideMerge(EnvironmentTheme.layer),
-  Layer.provideMerge(DecisionApis.layer),
-  Layer.provideMerge(layerServerSettings),
+  // Nested so this pipe stays within pipe's 20 typed steps; a 21st degrades it to `any`.
+  Layer.provideMerge(DecisionApis.layer.pipe(Layer.provideMerge(layerServerSettings))),
   Layer.provideMerge(layerSourceControlProviderRegistry),
   Layer.provideMerge(layerGit),
   Layer.provideMerge(layerVcs),
