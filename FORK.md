@@ -65,6 +65,7 @@ Upstream code usually reaches the tunnel through `hasCloudPublicConfig()` on cli
 - MCP "Use in another app": `PublicRouteWizard` in `apps/web/src/components/mcp/UseInAnotherAppDialog.tsx`.
 - Guest share links: `servedHostnames` in `apps/server/src/guest/GuestShareService.ts`.
 - Scheduled task webhook URLs: `webhookBaseUrl` in `apps/server/src/scheduledTasks/ScheduledTaskService.ts`.
+- Workflow webhooks: `kinako workflow hooks` prints paths served directly by `apps/server/src/scheduledTasks/webhookRoute.ts`. Use the host's public route address with those paths.
 
 ## Unauthenticated surface
 
@@ -102,6 +103,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `scripts/npm-launcher/t3.mjs` stays byte-identical to upstream's. `LAUNCHER_REBRAND` in `scripts/build-npm-launcher.ts` swaps its home directory, archive stem, release URL, executable name, and messages at build time; the generated package names its launcher `bin/kinako.mjs` and updates the `dist/bin.mjs` compatibility import, and the build fails if upstream changed one of those literals. Add new upstream literals to that list.
 - `AGENTS.md`: the Kinako paragraph under the introduction, and the live database path in rule 2 and Test data.
 - `.github/triage/PLAYBOOK.md` and its byte-identical copy in `apps/server/src/cli/triagePrompt.ts`: the fork's repository for playbook updates, source clones, and issues, and the `kinako` CLI.
+- `docs/user/workflows.md` and `skills/t3-workflows/SKILL.md`: the `~/.kinako/workflows/` directory and `kinako workflow` commands.
 - `apps/mobile/scripts/measure-renders.mts`: profiling targets use Kinako's app ID and dev URL scheme.
 - `apps/desktop/src/app/DesktopUserData.ts`, `apps/desktop/src/app/DesktopLegacyLocalStorage.ts`: no import from upstream's desktop profiles. `resolveUserDataPath` copies nothing and `V1_PROFILE_NAMES` stays empty.
 

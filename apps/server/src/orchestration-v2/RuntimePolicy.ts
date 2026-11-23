@@ -81,16 +81,6 @@ export class RuntimePolicyV2 extends Context.Service<RuntimePolicyV2, RuntimePol
   "t3/orchestration-v2/RuntimePolicy/RuntimePolicyV2",
 ) {}
 
-export const layer: Layer.Layer<RuntimePolicyV2> = Layer.succeed(RuntimePolicyV2, {
-  resolve: Effect.fn("RuntimePolicyV2.resolve")(function (input) {
-    return Effect.succeed({
-      runtimeMode: providerRuntimeMode(input.thread.runtimeMode, undefined),
-      interactionMode: input.thread.interactionMode,
-      cwd: input.thread.worktreePath,
-    });
-  }),
-});
-
 /** The mode an adapter receives for a thread's mode; host-managed modes become what runs under them. */
 export function providerRuntimeMode(
   runtimeMode: RuntimeMode,
