@@ -93,6 +93,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksPairClient]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksPairLink]: AuthAccessWriteScope,
+  // Send stores and sends a report from a thread's turn: the bar of running that thread.
+  [WS_METHODS.agentFeedbackAnswerRequest]: AuthOrchestrationOperateScope,
   // Fork additions stay last so upstream's list merges cleanly.
   [WS_METHODS.vcsMoveThread]: AuthSourceControlWriteScope,
   [WS_METHODS.vcsRestoreWorktreeSnapshot]: AuthSourceControlWriteScope,

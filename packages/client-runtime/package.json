@@ -111,6 +111,10 @@
       "types": "./src/followUp.ts",
       "default": "./src/followUp.ts"
     },
+    "./feedback-request": {
+      "types": "./src/feedbackRequest.ts",
+      "default": "./src/feedbackRequest.ts"
+    },
     "./link-batch": {
       "types": "./src/linkBatch.ts",
       "default": "./src/linkBatch.ts"

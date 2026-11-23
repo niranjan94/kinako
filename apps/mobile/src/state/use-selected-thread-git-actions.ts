@@ -40,7 +40,11 @@ import {
 } from "./use-remote-environment-registry";
 import { useAtomCommand } from "./use-atom-command";
 import type { GitRepositoryTarget } from "./thread-git-target";
-import { noteRepositoryGitAction, showGitActionResult } from "./use-vcs-action-state";
+import {
+  noteRepositoryGitAction,
+  showGitActionResult,
+  type GitActionResultNotification,
+} from "./use-vcs-action-state";
 import { useThreadSelection } from "./use-thread-selection";
 import { useSelectedThreadWorktree } from "./use-selected-thread-worktree";
 
@@ -80,6 +84,12 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
   );
   const pull = useAtomCommand(vcsEnvironment.pull, { reportFailure: false });
   const { selectedThread, selectedThreadProject } = useThreadSelection();
+  const threadRef = selectedThread
+    ? { environmentId: selectedThread.environmentId, threadId: selectedThread.id }
+    : null;
+  const reportGitActionResult = (result: GitActionResultNotification) => {
+    if (threadRef !== null) showGitActionResult({ ...result, threadRef });
+  };
   const canWriteSourceControl = useEnvironmentScope(
     selectedThread?.environmentId ?? null,
     AuthSourceControlWriteScope,
@@ -232,7 +242,7 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
       const error = Cause.squash(result.cause);
       const message = errorDisplayMessage(error, m) ?? m(msg("Git action failed."));
       setPendingConnectionError(message);
-      showGitActionResult({
+      reportGitActionResult({
         type: "error",
         title: m(msg("Git action failed")),
         description: message,
@@ -252,7 +262,7 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
       const error = Cause.squash(result.cause);
       const message = errorDisplayMessage(error, m) ?? m(msg("Failed to refresh branches."));
       setPendingConnectionError(message);
-      showGitActionResult({
+      reportGitActionResult({
         type: "error",
         title: m(msg("Git action failed")),
         description: message,
@@ -355,6 +365,7 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
                   target,
                 };
           pendingWorkspaceMove.current = { environmentId: thread.environmentId, input };
+          const threadRef = { environmentId: thread.environmentId, threadId: thread.id };
           const result = await moveThread({ environmentId: thread.environmentId, input });
           if (AsyncResult.isFailure(result) && isThreadWorkspaceError(Cause.squash(result.cause)))
             pendingWorkspaceMove.current = null;
@@ -364,6 +375,7 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
             showGitActionResult({
               type: "error",
               title: m(msg("Workspace moved; source changes retained")),
+              threadRef,
               description: m(
                 msg("Source cleanup could not finish. Both copies of your changes are preserved."),
               ),
@@ -372,6 +384,7 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
             showGitActionResult({
               type: "error",
               title: m(msg("Workspace moved; setup script failed")),
+              threadRef,
               description: result.value.setupScript.detail,
             });
           return result;
@@ -406,7 +419,7 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
           return result;
         }
         await refreshSelectedThreadGitStatus({ quiet: true, cwd });
-        showGitActionResult({
+        reportGitActionResult({
           type: "success",
           title:
             result.value.status === "skipped_up_to_date"
@@ -453,7 +466,7 @@ export function useSelectedThreadGitActions(repository?: GitRepositoryTarget) {
         } else {
           await refreshSelectedThreadGitStatus({ quiet: true, cwd });
         }
-        showGitActionResult({
+        reportGitActionResult({
           type: "success",
           title: result.value.toast.title,
           description: result.value.toast.description,
