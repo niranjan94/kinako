@@ -19,7 +19,7 @@ import { msg, useGT, useMessages } from "gt-react";
 
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
+import { DiffStatLabel } from "./DiffStatLabel";
 
 const OUTCOME_PRESENTATION = {
   completed: { variant: "success", Icon: CheckCircle2Icon },
@@ -34,16 +34,14 @@ const OUTCOME_PRESENTATION = {
 
 export const TurnRecapCard = memo(function TurnRecapCard(props: {
   recap: TurnRecap;
-  /** The run's changed-files card already sits above, so the recap would repeat it. */
-  changesShownAbove: boolean;
   onOpenTurnDiff: (runId: RunId) => void;
 }) {
   const gt = useGT();
   const m = useMessages();
-  const { recap, changesShownAbove, onOpenTurnDiff } = props;
+  const { recap, onOpenTurnDiff } = props;
   const { variant, Icon } = OUTCOME_PRESENTATION[recap.outcome];
   const { runId } = recap;
-  const changes = changesShownAbove ? null : recap.changes;
+  const changes = recap.changes;
   const generated = recap.generated;
 
   return (
@@ -65,7 +63,7 @@ export const TurnRecapCard = memo(function TurnRecapCard(props: {
                   count: changes.fileCount,
                 })}
               </span>
-              {hasNonZeroStat(changes) ? (
+              {changes.additions > 0 || changes.deletions > 0 ? (
                 <DiffStatLabel
                   additions={changes.additions}
                   deletions={changes.deletions}

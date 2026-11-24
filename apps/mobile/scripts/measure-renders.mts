@@ -4,7 +4,7 @@ import {
   FORK_DESKTOP_APP_ID,
   FORK_DEV_URL_SCHEME,
 } from "@t3tools/shared/forkBrand";
-// See docs/internals/mobile-development.md#measuring-renders.
+// See docs/internals/13_mobile-development.md#measuring-renders.
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";

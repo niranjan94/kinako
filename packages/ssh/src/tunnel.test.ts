@@ -256,11 +256,14 @@ describe("ssh tunnel scripts", () => {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ssh-launch-log-" });
       const target = { alias: "devbox", hostname: "devbox", username: null, port: null };
-      const stateDir = NodePath.join(home, ".t3", "ssh-launch", yield* remoteStateKey(target));
+      const launchDir = NodePath.join(home, ".kinako", "ssh-launch");
+      const stateDir = NodePath.join(launchDir, yield* remoteStateKey(target));
+      const serverDir = NodePath.join(launchDir, "server");
       const bin = NodePath.join(home, "bin");
       yield* fs.makeDirectory(stateDir, { recursive: true });
+      yield* fs.makeDirectory(serverDir, { recursive: true });
       yield* fs.makeDirectory(bin);
-      yield* fs.writeFileString(NodePath.join(stateDir, "server.log"), "EARLIER_LAUNCH\n");
+      yield* fs.writeFileString(NodePath.join(serverDir, "server.log"), "EARLIER_LAUNCH\n");
       // The new server exits without output. Readiness then fails after a process from the
       // earlier launch writes through the log descriptor it still holds (fd 3).
       yield* fs.writeFileString(
@@ -278,7 +281,7 @@ describe("ssh tunnel scripts", () => {
               "-c",
               'exec 3>>"$1/server.log"; exec sh -s -- "$2"',
               "sh",
-              stateDir,
+              serverDir,
               launchStateKey(command) ?? "",
             ],
             {
@@ -302,6 +305,13 @@ describe("ssh tunnel scripts", () => {
       assert.include(result.failure.stderr, "It wrote nothing to");
       assert.notInclude(result.failure.stderr, "EARLIER_LAUNCH");
       assert.notInclude(result.failure.stderr, "EARLIER_PROCESS");
+      for (const [path, mode] of [
+        [stateDir, 0o700],
+        [serverDir, 0o700],
+        [NodePath.join(serverDir, "server.log"), 0o600],
+      ] as const) {
+        assert.equal((yield* fs.stat(path)).mode & 0o777, mode, path);
+      }
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 

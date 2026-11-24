@@ -313,19 +313,18 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     useRightPanelStore.getState().openPullRequest(activeThreadRef, pullRequestPanelTarget);
   };
   const addPullRequestSurfaceStable = useStableCallback(addPullRequestSurface);
-  const onOpenTurnDiff = (runId: RunId, filePath?: string) => {
+  const onOpenTurnDiffStable = useStableCallback((runId: RunId) => {
     if (!isServerThread || !activeThreadRef) return;
-    useDiffPanelStore.getState().selectTurn(activeThreadRef, runId, filePath);
+    useDiffPanelStore.getState().selectTurn(activeThreadRef, runId);
     useRightPanelStore.getState().open(activeThreadRef, "diff");
     onDiffPanelOpen?.();
-  };
+  });
   const onOpenToolDiffStable = useStableCallback((target: ToolCallDiffTarget) => {
     if (!isServerThread || !activeThreadRef) return;
     useDiffPanelStore.getState().selectToolCall(activeThreadRef, target);
     useRightPanelStore.getState().open(activeThreadRef, "diff");
     onDiffPanelOpen?.();
   });
-  const onOpenTurnDiffStable = useStableCallback(onOpenTurnDiff);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to the preview action bus to toggle the preview panel
   useEffect(
     () =>

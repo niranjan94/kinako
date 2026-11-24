@@ -127,6 +127,8 @@ export interface ThreadActionMenuState {
   readonly group: string | null;
   /** Group names already in use, offered as move targets. */
   readonly groups: ReadonlyArray<string>;
+  /** The server marks unread against the latest run's completion, so in-flight runs cannot be. */
+  readonly hasCompletedRun: boolean;
   readonly supports: {
     readonly settlement: boolean;
     readonly autoSettleOptOut: boolean;
@@ -283,7 +285,9 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
-    { id: "mark-unread", label: resolve(msg("Mark unread")), icon: "mail-open" },
+    ...(state.hasCompletedRun && !state.isRunning
+      ? [{ id: "mark-unread" as const, label: resolve(msg("Mark unread")), icon: "mail-open" }]
+      : []),
     ...(state.canShareWithGuest
       ? [{ id: "share-guest" as const, label: resolve(msg("Share with guest")), icon: "user-plus" }]
       : []),

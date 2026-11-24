@@ -426,7 +426,7 @@ const readTimeline = Effect.fn("cli.thread.readTimeline")(function* (
   view: "messages" | "activity",
 ) {
   const items: Array<OrchestratorMcpThreadTimelineItem> = [];
-  let afterPosition: number | undefined;
+  let afterPosition: number | null = -1;
   let page: OrchestratorMcpThreadReadResult;
   do {
     page = yield* tools.call(
@@ -437,13 +437,13 @@ const readTimeline = Effect.fn("cli.thread.readTimeline")(function* (
         limit: READ_PAGE_LIMIT,
         maxCharsPerItem: READ_ITEM_MAX_CHARS,
         runLimit: 1,
-        ...(afterPosition === undefined ? {} : { afterPosition }),
+        afterPosition,
       },
       OrchestratorMcpThreadReadResult,
     );
     items.push(...page.items);
-    afterPosition = page.nextPosition ?? undefined;
-  } while (page.hasMore && afterPosition !== undefined);
+    afterPosition = page.nextPosition;
+  } while (page.hasMore && afterPosition !== null);
   return { thread: page.thread, items };
 });
 
@@ -483,7 +483,7 @@ export const readLatestMessages = Effect.fn("cli.thread.readLatestMessages")(fun
           limit: READ_PAGE_LIMIT,
           maxCharsPerItem: READ_ITEM_MAX_CHARS,
           runLimit: 1,
-          ...(afterPosition < 0 ? {} : { afterPosition }),
+          afterPosition,
         },
         OrchestratorMcpThreadReadResult,
       );
@@ -935,7 +935,7 @@ const threadStartCommand = Command.make("start", {
   ),
   option: Flag.String("option").pipe(
     Flag.withDescription(
-      "Model option as id=value, such as effort=high. Repeat for more. Needs --provider and --model.",
+      "Model option as id=value (Codex: reasoningEffort=high; Claude: effort=high). Ids depend on the model. Repeat for more. Needs --provider and --model.",
     ),
     Flag.atLeast(0),
   ),

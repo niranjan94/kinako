@@ -444,6 +444,8 @@ export function startThreadNotifications(
     }
     if (hasNotificationSound(nextMode)) {
       const unlockAudio = () => unlockNotificationAudio(getClientSettings().notificationSoundTheme);
+      // Electron's default autoplay policy needs no gesture, unlike browsers.
+      if (window.desktopBridge) unlockAudio();
       document.addEventListener("pointerdown", unlockAudio);
       document.addEventListener("keydown", unlockAudio);
       stops.push(() => {

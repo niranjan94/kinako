@@ -64,12 +64,15 @@ const isFailedCheck = (check: PullRequestCheck) =>
 const workflowRunOf = (url: string | null) => url?.match(/^.*\/actions\/runs\/\d+/)?.[0] ?? null;
 const approvalKey = (check: PullRequestCheck) => workflowRunOf(check.url) ?? check.name;
 
-/**
- * With auto-fix on, a failure on a head commit not yet handed over becomes a fix request, at most
- * once per head. Further failures on that head stay quiet, and once its fix turn ends with the
- * head unchanged and still red, auto-fix pauses. So does a failure after the attempt limit.
- * Checks that pass with nothing failing reset the attempts and lift a pause.
- */
+function isReviewAcknowledgement(remark: PullRequestComment): boolean {
+  return (
+    remark.author?.login.toLowerCase().replace(/\[bot\]$/, "") === "coderabbitai" &&
+    /<!-- This is an auto-generated reply by CodeRabbit -->[\s\S]*?<summary>[^\p{L}<]*Actions? performed<\/summary>\s*(?:<dl>\s*<dd>\s*<br>\s*)?(?:Full review|Review) triggered\./u.test(
+      remark.body.slice(0, 1_000),
+    )
+  );
+}
+
 export function evaluatePullRequestWatch(
   watch: ThreadPullRequestWatch,
   detail: Pick<
@@ -285,7 +288,8 @@ export function evaluatePullRequestWatch(
       remark.author?.login.toLowerCase() !== own
     );
   });
-  if (fresh.length > 0) changes.push({ kind: "remarks", remarks: fresh });
+  const actionable = fresh.filter((remark) => !isReviewAcknowledgement(remark));
+  if (actionable.length > 0) changes.push({ kind: "remarks", remarks: actionable });
   const latest = Math.max(through, ...fresh.map((remark) => Date.parse(activeAt(remark))));
   const atLatest = fresh.filter((remark) => Date.parse(activeAt(remark)) === latest);
   const remarksThrough = latest === through ? watch.remarksThrough : activeAt(atLatest[0]!);

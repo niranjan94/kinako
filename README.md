@@ -109,7 +109,7 @@ User and internal docs are inherited from upstream and live in [docs/](./docs). 
 - Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
 - [Run Kinako as a background service](./docs/user/background-service.md)
 
-[All docs](./docs/README.md) has the full list. Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
+[All docs](./docs/README.md) has the full list. Building from source? Start at [docs/internals/01_architecture.md](./docs/internals/01_architecture.md).
 
 ## Building from source
 
@@ -132,7 +132,7 @@ vp i
 vp run dev
 ```
 
-The [development runbook](./docs/operations/development.md#first-checkout) covers the rest of a first checkout.
+The [development runbook](./docs/operations/00_development.md#first-checkout) covers the rest of a first checkout.
 
 ## Issues and contributions
 
