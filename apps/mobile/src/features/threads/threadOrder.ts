@@ -1,5 +1,6 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
+  activeThreadSortKey,
   generateSpreadPinOrderKeys,
   pinOrderKeyBetween,
   planPinnedReorder,
@@ -74,9 +75,13 @@ function rowId(row: OrderRow): string {
   return `${row.environmentId}:${row.id}`;
 }
 
+function storedKey(row: OrderRow, section: PendingThreadOrder["section"]) {
+  return (section === "pinned" ? row.pinOrderKey : row.activeOrderKey) ?? null;
+}
+
 function rowOrder(row: OrderRow, section: PendingThreadOrder["section"]) {
   return {
-    key: (section === "pinned" ? row.pinOrderKey : row.activeOrderKey) ?? null,
+    key: section === "pinned" ? storedKey(row, section) : activeThreadSortKey(row),
     anchor: section === "pinned" ? (row.pinnedAt ?? "") : (row.unsettledAt ?? row.createdAt),
   };
 }
@@ -88,12 +93,13 @@ export function createThreadMovePlanner(input: {
   readonly reorderableEnvironmentIds: ReadonlySet<EnvironmentId>;
 }) {
   const orderedIds = input.ordered.map(rowId);
-  const keysById = new Map(
-    (input.allThreads ?? input.ordered).map((row) => [
-      rowId(row),
-      rowOrder(row, input.section).key,
-    ]),
-  );
+  // Hidden rows keep their stored key: only stored keys can collide with a write.
+  const keysById = new Map([
+    ...(input.allThreads ?? input.ordered).map(
+      (row) => [rowId(row), storedKey(row, input.section)] as const,
+    ),
+    ...input.ordered.map((row) => [rowId(row), rowOrder(row, input.section).key] as const),
+  ]);
   const writableIds = new Set(
     (input.allThreads ?? input.ordered)
       .filter((row) => input.reorderableEnvironmentIds.has(row.environmentId))
@@ -134,7 +140,7 @@ export function createThreadMoveAvailabilityIndex(input: {
   const writableIds = new Set<string>();
   for (const row of input.allThreads) {
     const id = rowId(row);
-    keysById.set(id, rowOrder(row, input.section).key);
+    keysById.set(id, storedKey(row, input.section));
     if (input.reorderableEnvironmentIds.has(row.environmentId)) writableIds.add(id);
   }
   const keyHolders = new Map<string, number>();
@@ -167,17 +173,20 @@ export function computeThreadMoveAvailability(input: {
     indexById.set(id, orderedIds.length);
     orderedIds.push(id);
   }
-  const { keysById, writableIds, keyHolders } =
-    input.index ??
-    createThreadMoveAvailabilityIndex({
-      allThreads: input.allThreads ?? input.ordered,
-      section: input.section,
-      reorderableEnvironmentIds: input.reorderableEnvironmentIds,
-    });
+  const {
+    keysById: storedKeysById,
+    writableIds,
+    keyHolders,
+  } = input.index ??
+  createThreadMoveAvailabilityIndex({
+    allThreads: input.allThreads ?? input.ordered,
+    section: input.section,
+    reorderableEnvironmentIds: input.reorderableEnvironmentIds,
+  });
   // A key is reserved when some thread outside `ordered` holds it.
   const orderedHolders = new Map<string, number>();
   for (const id of orderedIds) {
-    const key = keysById.get(id);
+    const key = storedKeysById.get(id);
     if (key != null) orderedHolders.set(key, (orderedHolders.get(key) ?? 0) + 1);
   }
   let reservedCount = keyHolders.size;
@@ -202,7 +211,7 @@ export function computeThreadMoveAvailability(input: {
   const spreadKeys = generateSpreadPinOrderKeys(orderedIds.length + reservedKeys.size)
     .filter((key) => !reservedKeys.has(key))
     .slice(0, orderedIds.length);
-  const currentKeys = orderedIds.map((id) => keysById.get(id) ?? null);
+  const currentKeys = rows.map((row) => rowOrder(row, input.section).key);
   const writableRow = orderedIds.map((id) => writableIds.has(id));
   let baselineWrites = 0;
   let baselineUnwritableWrites = 0;
@@ -246,8 +255,8 @@ export function computeThreadMoveAvailability(input: {
       const afterIndex = towardUp ? index - 1 : index + 2;
       const beforeId = beforeIndex < 0 ? null : (orderedIds[beforeIndex] ?? null);
       const afterId = afterIndex >= orderedIds.length ? null : (orderedIds[afterIndex] ?? null);
-      const beforeKey = beforeId === null ? null : (keysById.get(beforeId) ?? null);
-      const afterKey = afterId === null ? null : (keysById.get(afterId) ?? null);
+      const beforeKey = beforeId === null ? null : (currentKeys[beforeIndex] ?? null);
+      const afterKey = afterId === null ? null : (currentKeys[afterIndex] ?? null);
       if ((beforeId === null || beforeKey != null) && (afterId === null || afterKey != null)) {
         const key = fastPathKey(beforeKey, afterKey);
         if (key !== null) return true;

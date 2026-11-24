@@ -334,7 +334,9 @@ Choose **Write guide** to have the review guide model from Settings → Source c
 change in a temporary checkout; without one set, the source control writer model is used. Nothing
 in the checkout is changed, and a large pull request takes a few minutes; you can go elsewhere in
 the app. On web, you are told when the guide is ready; on mobile, return to the guide to check
-its progress. Claude and Codex can write guides. The guide is
+its progress. Claude and Codex can write guides. Claude writes them with your user settings, but
+tool approvals in those settings do not apply: it reads files and runs `git diff`, `git log` and
+`git show`, nothing else. The guide is
 kept for everyone using this server. To write it again, for example after a push or after changing
 the model or instructions, choose **Rewrite guide** from the pull request's **⋯** menu.
 
@@ -453,9 +455,11 @@ reads its teams through the account you picked them under.
 
 Select an issue to open it beside the list: description, comments, state changes, linked pull
 requests, labels, assignees, and reactions. Linked pull requests open in the same panel. You can
-comment, edit the title and description, change labels and assignees, react, and close or
-reopen (with a close reason where the tracker records one) when the tracker and your account
-allow it. An issue read through a project that does not own its repository is shown read-only.
+comment, edit the title and description, change labels and assignees, react, and move it to
+another state when the tracker and your account allow it. Where a GitHub repository has issue
+statuses (Backlog, Todo, In progress, and so on), those are the states you move between, as a
+Linear team's workflow states are; elsewhere you close or reopen, with a close reason where the
+tracker records one. An issue read through a project that does not own its repository is shown read-only.
 
 To hand an issue to an agent, use the agent menu in the issue's header (the issue menu on mobile). **Send to agent** opens a new thread in the issue's project with the task in the composer. **Ask about this issue** opens one with the issue attached, for your question, and asks before changing anything. Nothing is sent until you send it.
 

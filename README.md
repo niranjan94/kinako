@@ -4,7 +4,7 @@
 
 <h1 align="center">Kinako</h1>
 
-Kinako is a personal, opinionated fork of [T3 Code](https://github.com/pingdotgg/t3code), a GUI for driving the coding agents on your machine from web, desktop, and mobile clients.
+Kinako is an unofficial, personal fork of [T3 Code](https://github.com/pingdotgg/t3code), a GUI for driving the coding agents on your machine from web, desktop, and mobile clients.
 
 It works with Claude Code, Codex, Cursor, OpenCode, Grok Build, Antigravity, Kiro, Pi, Muse Code, fx, and any [ACP](./docs/user/providers-acp.md) agent. If an agent is set up on your computer, Kinako can control it.
 
@@ -140,4 +140,4 @@ Bugs that reproduce on upstream belong [upstream](https://github.com/pingdotgg/t
 
 ## License
 
-[MIT](./LICENSE), same as upstream. All credit for T3 Code goes to its upstream authors.
+The source code is licensed under the [MIT License](./LICENSE). All credit for T3 Code goes to its upstream authors. See upstream’s [Trademark and Branding Policy](./TRADEMARK.md) for its name and branding.

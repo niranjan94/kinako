@@ -27,7 +27,7 @@ import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { FORK_CLI_NAME, FORK_REPOSITORY } from "@t3tools/shared/forkBrand";
+import { FORK_CLI_NAME, FORK_HOME_DIR_NAME, FORK_REPOSITORY } from "@t3tools/shared/forkBrand";
 
 import { captureLauncher, captureLauncherFor, runLauncher } from "./launcherTestHarness.ts";
 import * as SshAuth from "./auth.ts";
@@ -1937,6 +1937,62 @@ server.listen(Number(flag("--port") ?? 0), "127.0.0.1", () => {
       );
       assert.isTrue(yield* isRunning(pid));
     }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.live(
+    "another desktop with the same connection details neither owns nor stops the server",
+    () =>
+      Effect.gen(function* () {
+        const { fs, home, fakeServer, sshAsLocalShell, serverDir } =
+          yield* prepare("an unrelated process");
+        const launch = (launcherId: string) =>
+          SshTunnel.launchOrReuseRemoteServer(
+            target,
+            undefined,
+            { nodeScriptPath: fakeServer },
+            launcherId,
+          ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, sshAsLocalShell));
+        const runtimePid = fs
+          .readFileString(`${home}/${FORK_HOME_DIR_NAME}/userdata/server-runtime.json`)
+          .pipe(Effect.map((runtime) => Number(JSON.parse(runtime).pid)));
+
+        assert.equal((yield* launch("a".repeat(32))).remoteServerKind, "managed");
+        const serverPid = yield* runtimePid;
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            try {
+              process.kill(serverPid, "SIGKILL");
+            } catch {}
+          }),
+        );
+
+        const otherDesktop = yield* launch("b".repeat(32));
+        assert.equal(
+          yield* fs.readFileString(`${serverDir}/launcher`),
+          `${"a".repeat(32)}\n`,
+          "the second desktop recorded itself as the server's launcher",
+        );
+        assert.equal(otherDesktop.remoteServerKind, "external");
+
+        const layer = Layer.mergeAll(
+          NodeServices.layer,
+          Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, sshAsLocalShell),
+          Layer.succeed(HttpClient.HttpClient, testHttpClient),
+          Layer.succeed(NetService.NetService, testNetService),
+          SshAuth.SshPasswordPrompt.disabledLayer,
+          SshTunnel.SshEnvironmentManager.layer({
+            resolveCliRunner: Effect.succeed(ARCHIVE),
+            resolveLauncherId: Effect.succeed("b".repeat(32)),
+          }),
+        );
+        yield* Effect.flatMap(SshTunnel.SshEnvironmentManager, (manager) =>
+          manager.disconnectEnvironment(target),
+        ).pipe(Effect.provide(layer));
+        assert.isTrue(
+          yield* isRunning(serverPid),
+          "the second desktop's disconnect stopped the server the first desktop launched",
+        );
+      }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
 
   it.live.each(staleIds)("disconnecting does not signal %s named by the managed pid file", (kind) =>
