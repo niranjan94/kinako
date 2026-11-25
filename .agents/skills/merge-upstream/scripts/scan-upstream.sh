@@ -186,6 +186,7 @@ printf '== 5. Unauthenticated surface changed upstream\n\n'
 # Anyone who can reach the server, including through a public route, hits these before a credential check.
 surface='apps/server/src/auth apps/server/src/http.ts apps/server/src/httpBodyLimit.ts
 apps/server/src/httpForwardedProto.ts apps/server/src/httpCors.ts apps/server/src/server.ts
+apps/server/src/httpResponseErrorGuard.ts
 apps/server/src/ws.ts apps/server/src/guest apps/server/src/scheduledTasks/webhookRoute.ts
 apps/server/src/cloud/http.ts apps/server/src/cloud/CliTokenManager.ts
 apps/server/src/mcp/McpHttpServer.ts apps/server/src/assets/AttachmentUpload.ts

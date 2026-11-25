@@ -3,7 +3,9 @@ import {
   type WorkflowHook,
   WorkflowQuestion,
   type WorkflowRunReference,
+  applyWorkflowRunsUpdate,
   type WorkflowRunsSnapshot,
+  type WorkflowRunsUpdate,
 } from "@t3tools/contracts";
 import { FORK_HOME_DIR_NAME } from "@t3tools/shared/forkBrand";
 import * as Context from "effect/Context";
@@ -95,7 +97,14 @@ export class Workflows extends Context.Service<
     readonly signal: (
       address: WorkflowStore.SignalAddress,
       value: Schema.Json,
-      options: { readonly id: string; readonly ttl?: Duration.Input },
+      options: {
+        readonly id: string;
+        readonly ttl?: Duration.Input;
+        /** Who sent it, kept with an answer to a question. */
+        readonly answeredBy?: string | undefined;
+        /** The client session that sent it, where one did. A name is shared; this is not. */
+        readonly answeredBySession?: string | undefined;
+      },
     ) => Effect.Effect<"delivered" | "buffered", WorkflowInputError>;
     /**
      * Answer the question a run asks a person. One answer per time it is asked: a second, a
@@ -105,6 +114,8 @@ export class Workflows extends Context.Service<
       runId: string,
       name: string,
       value: Schema.Json,
+      /** Who answered, as the server knows them; kept with the answer. */
+      answeredBy?: { readonly label: string; readonly sessionId?: string | undefined },
     ) => Effect.Effect<void, WorkflowInputError>;
     /** Run a paused run's failed step again. */
     readonly resume: (runId: string) => Effect.Effect<void, WorkflowError>;
@@ -156,8 +167,8 @@ export class Workflows extends Context.Service<
     /** Set a key of the store from outside a run, as a person flipping a switch does. */
     readonly storeSet: (key: string, value: Schema.Json) => Effect.Effect<void, WorkflowInputError>;
     readonly storeDelete: (key: string) => Effect.Effect<void, WorkflowInputError>;
-    /** Recent runs and open questions, now and again after every change. */
-    readonly watch: Stream.Stream<WorkflowRunsSnapshot>;
+    /** Recent runs and open questions now, then what changed of them after every change. */
+    readonly watch: Stream.Stream<WorkflowRunsUpdate>;
     /** How much is going on, now and again whenever a count changes. */
     readonly counts: Stream.Stream<WorkflowCounts>;
     /**
@@ -207,6 +218,18 @@ export const disabled = Workflows.of({
   sweep: Effect.void,
 });
 export const layerDisabled = Layer.succeed(Workflows, disabled);
+
+/** What `watch` sends, as the whole list every time: for a client that did not ask for changes. */
+export const wholeLists = (updates: Stream.Stream<WorkflowRunsUpdate>) =>
+  updates.pipe(
+    Stream.mapAccum(
+      (): WorkflowRunsSnapshot | undefined => undefined,
+      (list, update) => {
+        const next = applyWorkflowRunsUpdate(list, update);
+        return [next, [next]] as const;
+      },
+    ),
+  );
 
 export const OFF = `Workflows are off on this server. Turn them on in its Settings → Labs → Workflows, or without a desktop, set "workflowsEnabled": true in userdata/settings.json in its T3 home (~/${FORK_HOME_DIR_NAME} by default).`;
 
