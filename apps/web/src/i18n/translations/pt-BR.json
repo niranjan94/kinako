@@ -34,6 +34,7 @@
   "986b0873f913a840": "A política de {organization} não permite tarefas de webhook.",
   "eebc538e25b09fe2": "A política de {organization} não permite importar cookies do navegador.",
   "7642a133db05f164": "A política de {organization} não permite abrir os servidores locais desta máquina em outros dispositivos.",
+  "e0856d6a402ad821": "A política de {organization} não permite comandos de layout de worktree de projetos.",
   "39f6771b49f9b3b6": "Usar padrão",
   "45bb0e90e1c42046": "Quando você voltar",
   "d8fa0a55446bbb0d": "Antes de o cache expirar (beta)",
@@ -1559,6 +1560,8 @@
   "4eb599c7f36c99ba": "Esse arquivo de tema não é um JSON válido.",
   "29a5ff50ce55c4f9": "Tema do VS Code",
   "10348092dfed8b11": "Esse tema do VS Code não tem a cor \"editor.background\", então não há base para criar uma paleta.",
+  "206811f6f441bfc7": "Este projeto prepara os worktrees com um comando próprio, que ninguém aprovou como está escrito agora. Esta conexão não pode aprová-lo: aprove-o em um cliente que possa usar o terminal.",
+  "b8087c9a70c26da9": "Não foi possível aprovar o comando de layout de worktree.",
   "6dff8d487001c6cf": "Responsivo",
   "f5f61c338cc5aeb5": "Barra de dispositivos do navegador",
   "3b4eb5b5ec5e60cb": "Predefinição de dispositivo do navegador",
@@ -2033,13 +2036,16 @@
   "7af7f00b85cc2930": "Confirmar ação",
   "8b418a02b73f49b8": "Esta ação exige sua confirmação.",
   "e74139c17fab1fa1": "Confirmar",
+  "4a18481bea4b4ad5": "Novo dispositivo conectado a {environmentLabel}",
+  "4144ab6aa487528a": "{device} se conectou pelo {product}. Não foi você? Revise.",
+  "a10cfdb27152c757": "{count, plural, one {{count} dispositivo se conectou} other {{count} dispositivos se conectaram}} pelo {product}. Não foi você? Revise.",
+  "4672f332c89dbcd9": "Revisar",
   "775a3e99e2638341": "Um dispositivo quer se conectar a {environmentLabel}",
   "a8befcb9f1c61f60": "{device}. Aprove apenas se ele mostrar o código {code}.",
   "ac48cc297029db41": "Aprovar",
   "c12ca3fea745def0": "Não foi possível aprovar o dispositivo",
   "af63f05ed2f5eeb3": "Negar",
   "b735bab216b27041": "Não foi possível negar o dispositivo",
-  "4672f332c89dbcd9": "Revisar",
   "913fc23f62321556": "Escolha uma data e hora válidas no futuro.",
   "9485a52216cfc0d5": "Informe uma duração positiva.",
   "9bc551235d78e133": "Tipo de agendamento",
@@ -2722,6 +2728,8 @@
   "89b5e8f3887812da": "Pedido de convidado",
   "62e626804919b294": "Resposta necessária",
   "c6196d99000642b4": "Abrir thread",
+  "70bdebaa3d291d3b": "Thread indisponível",
+  "a351ebbdcf1a3f7a": "Esta thread está em um ambiente ao qual este app não está conectado.",
   "826cb862b4a11fb3": "{label}:",
   "3e597ec938e7551b": "Você:",
   "a1fbf2422c588292": "Agente:",
@@ -2800,6 +2808,24 @@
   "9f122f4c410241c0": "Move",
   "91adc33cc8d2a9f7": "Change destination",
   "3634e9c8df5f1bd5": "Use associated worktree",
+  "49eda70cfd56e621": "Executado quando uma thread em worktree começa e quando a pasta dela é restaurada",
+  "188ccaa1199f5611": "Executado quando o worktree de uma thread é removido",
+  "7e8476e7306acabe": "Permitir que este projeto execute seus comandos de worktree?",
+  "8e11914556fd8b13": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " prepara as threads em worktree com comandos próprios de ",
+    {
+      "t": "code",
+      "i": 2,
+      "c": "t3.json"
+    },
+    ". Eles são executados na máquina deste ambiente com as suas permissões, fora de qualquer sandbox de agente. Você será perguntado de novo sempre que o texto deles mudar."
+  ],
+  "46807acd02a4ff72": "Aprovar e continuar",
   "2ac142f34e5dabc2": "Repositórios no novo worktree: {selection}",
   "c514773a8031f00b": "Filtrar repositórios",
   "e32b730f6d27753f": "Escolha os repositórios em que esta thread trabalha",
@@ -3857,8 +3883,8 @@
   "478e3b4551be4db3": "Mostrar texto extraído",
   "e7205ebfead1aafc": "Pré-visualização de vídeo expandida",
   "1bda77e861bb472f": "Pré-visualização de imagem expandida",
-  "eebe5b17e3c19a1c": "Voltar, fechar a pré-visualização do vídeo",
-  "58fd0009a6eb7258": "Voltar, fechar a pré-visualização da imagem",
+  "fb633d54edaeb4b1": "Fechar a pré-visualização do vídeo",
+  "62d0c453f5803180": "Fechar a pré-visualização da imagem",
   "47bae54b5f532ff3": "Mídia anterior",
   "fb9434aad2b5c0bb": "Não foi possível carregar esta imagem.",
   "26aee5d4e97bfb28": "Imagem indisponível. O arquivo pode ter sido movido ou excluído.",
@@ -3872,6 +3898,7 @@
   "ddb7e6f8ce99e657": "Somente quem pode executar agentes nesta máquina pode enviar ou recusar o relatório.",
   "03c1eb603c112f47": "Não enviar",
   "653405e4ed498d9f": "Enviar",
+  "76cf478e5674fd12": "{count, plural, one {{count} correspondência} other {{count} correspondências}}",
   "5c14a0f0471566dc": "{label} · Started in a new thread",
   "5d1b287ae2ee1b53": "{label} · Suggested in the original thread",
   "86935055d4602903": "More ways to start",
@@ -4029,6 +4056,21 @@
     " foi fechado"
   ],
   "dff97202cbdaec5b": "Mostrar app",
+  "796b81c4875c4feb": [
+    "O app ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " precisa de um servidor ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    " mais recente neste ambiente. Atualize o servidor para usá-lo."
+  ],
   "705cf2b2ee4e0e42": [
     "O app ",
     {
@@ -8047,9 +8089,20 @@
   "dc87902396b8ade4": "Letras, dígitos, '-' ou '_'.",
   "251dfec07b7c3612": "Este driver não exige configuração. Você pode adicionar a instância agora.",
   "08fe32f007e788f1": "Configurar manualmente",
+  "65300794c1edb929": "Token Bearer (opcional)",
   "84eb2878dc17d3eb": "Chave de gerenciamento",
   "7ac196c1e8175928": "Usa o nome do host do hub por padrão",
+  "0c026221dcd2820b": "Adicionar uma fonte de cotas HTTP",
   "e3548407052e9e12": "Adicionar um hub CLIProxyAPI",
+  "d185c750156b2121": [
+    "Consulte as cotas em um endpoint em ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
   "432e85a50e2e7964": [
     "Mostra a cota de cada conta agrupada pelo hub, ao lado dos provedores em",
     " ",
@@ -8060,9 +8113,12 @@
     },
     ". A chave fica nesse servidor."
   ],
+  "2324770ba91371ac": "URL do endpoint",
   "556a695b117565ac": "URL do hub",
+  "e4e5b75bba51396c": "Token Bearer (opcional)",
   "e62cedcbcdbafc75": "Chave de gerenciamento",
   "f1b3d0634ec035cb": "Rótulo (opcional)",
+  "b35256ca61016104": "Adicionar fonte",
   "52814dd6f7d0a15c": "Adicionar hub",
   "27b770d3402abfa2": "Avançado",
   "584595dfcadab699": "Arte",
@@ -9048,7 +9104,6 @@
   "0c99fa183ed512e8": "{platform} disponível em alguns",
   "e6886a7f77b73a8e": "{platform} indisponível",
   "b0b7610d9860d18d": "Não configurado nesta máquina.",
-  "b35256ca61016104": "Adicionar fonte",
   "3b20ef0670ae4b0b": "Máquina via SSH",
   "121ccffacb6b8c6d": "Expo Simulators",
   "130b55a1410a8030": "Pool do Simlock (alfa)",
@@ -9603,6 +9658,9 @@
   "f0e853acd2006d53": "Ambientes vinculados",
   "ef10c2dff987f3ea": "Execute workflows de várias etapas a partir de arquivos na pasta workflows da pasta T3 deste servidor. Abra-os pela paleta de comandos. Enquanto estiver desativado, nada dessa pasta é executado; as execuções aguardam até que seja ativado novamente.",
   "2dadb2359422121c": "Workflows",
+  "933dabf0700708af": "Quantas execuções ignoradas cada workflow mantém no histórico. Execuções ignoradas mais antigas são excluídas; execuções que fizeram algo são sempre mantidas.",
+  "f172d7e5deb24f75": "Redefinir execuções ignoradas mantidas para o padrão",
+  "ba94015389f327bc": "Execuções ignoradas mantidas",
   "13e86eb5d8287a71": "Mostra uma próxima mensagem prevista no editor vazio após um turno do Claude ou do Codex. Tab a usa. Cada uma é uma requisição extra em cache no seu plano. Requer Codex 0.165+. As threads do Claude são atualizadas ao reiniciar.",
   "d4b2a2ec812aafb0": "Sugerir próximo prompt",
   "298c7150a7621c80": "Hosts de dispositivos Simlock",
@@ -9978,6 +10036,28 @@
   "d2ad2df4c015f417": "A regra de agrupamento define como cada checkout entra nos grupos de projetos da barra lateral. Alterá-la pode mover um checkout para outro projeto.",
   "0bdf6ae2117b6c23": "Não encontrou uma configuração? Mantenha este projeto selecionado acima e vá para qualquer outra página de configurações.",
   "3310e10f1efdc9bd": "Escolher ícone",
+  "a9cb97fca6a6576b": "Comando de criação",
+  "90f45a354884ccdd": "Comando de remoção",
+  "0cdc8cdbed3e5eae": "Layout de worktree",
+  "c17b25519e2b194e": "Não foi possível carregar os comandos de layout de worktree",
+  "78e308ada516928b": "Não foi possível aprovar o comando",
+  "a0c772d32a233da6": "Não foi possível revogar a aprovação",
+  "5ccd5614c65f8d1f": "Revogar a aprovação do comando {kind}",
+  "80c3794a5fa12f3a": "Aprovar o comando {kind}",
+  "f206891e124c77b0": [
+    "O ",
+    {
+      "t": "code",
+      "i": 1,
+      "c": "t3.json"
+    },
+    " deste projeto prepara as threads em worktree com comandos próprios. Eles são executados na máquina deste ambiente com as suas permissões e somente como aprovados aqui: um comando cujo texto muda precisa de aprovação de novo."
+  ],
+  "8e73b883d41d4102": "Desativado",
+  "f6a91589456cca50": "Aprovado",
+  "c92657bb7f2293ff": "Precisa de aprovação",
+  "f1e5c1be1ac92361": "Aprovar",
+  "fcb5f3c4d4753326": "Esta conexão não pode aprovar comandos. Use um cliente que possa usar o terminal.",
   "65ccf4f8e049003e": "Escolha um projeto para gerenciar o nome, o ícone, os checkouts e as ações dele.",
   "067beea7d8f6e2c9": "Mostrar todos os ambientes",
   "1bf6da50131340d4": "Matiz da cor de destaque",
@@ -11938,7 +12018,6 @@
   "b0d0aebadc521ed1": "Exclui as capturas do navegador salvas após esta quantidade de dias. Links de capturas mais antigas deixarão de abrir.",
   "fe4208562792c313": "Excluir logs rotacionados antigos",
   "8debac9c8e9cff47": "Exclui os arquivos de log rotacionados inativos após esta quantidade de dias. Os logs atuais são mantidos.",
-  "8e73b883d41d4102": "Desativado",
   "80d58a3fd4e4212a": "Projeto",
   "de770505be25f1ff": "Pasta",
   "ada7b9a4d96959d2": "Thread",
@@ -12330,10 +12409,11 @@
       "v": "v"
     }
   ],
-  "f54364b854a07918": "Nenhum hub configurado.",
+  "39f64d971ba424b5": "Nenhuma fonte de uso configurada.",
+  "dbd877abdc2c7c81": "Fonte de cotas HTTP",
   "4cf6a373a7535324": "{name} · Desativado",
-  "1d1e9cda847bd398": "A chave de gerenciamento do hub é excluída deste servidor. As contas dele saem da visualização Limites; o hub em si não é afetado. Adicione-o novamente com a URL e a chave para trazê-las de volta.",
-  "c9bee4f93481b77a": "Remover hub",
+  "c792e744936dbe1b": "Adicionar fonte HTTP",
+  "4032a03ee5301037": "A conexão salva e suas credenciais são removidas deste ambiente.",
   "0424112d5a0ecd71": "Automático",
   "3f0e1b77e45d53a9": "Toque para alternar, segure para falar",
   "45928549c050a1b4": "Manter pressionado",
@@ -12667,6 +12747,7 @@
   "6826fa9579c22035": "beta compartilhar convidado convite link colega acompanhar t3 connect túnel",
   "f10c06cba0cdf7fe": "beta vincular outra máquina vps par agentes trabalham lá delegar",
   "bc0b409d89ce086e": "beta workflow execuções duráveis automação etapas agendamento webhook pasta",
+  "4b2669dcdb7d3776": "workflow histórico retenção excluir antigas execuções ignoradas webhook history retention skipped runs",
   "4a21cf825a2045b0": "beta tab autocompletar prever próxima mensagem claude codex texto fantasma",
   "fea2dc36585c4a20": "Hosts de dispositivos Simlock (alfa)",
   "9d834d178130180e": "beta alpha simlock callstack simulador emulador ios android pool lease gateway",
@@ -12889,11 +12970,14 @@
   "37ffec8201f153c1": "Falhou",
   "984b361806ce8d25": "Despertou",
   "c6e8abc00ae470d2": "Pronta",
+  "353b08f4363dbb2c": "Pendente",
   "f31a95961de19433": "Issue {key}: {title}, {state}",
   "2dd9d295c882ef65": "{count, plural, one {{count} issue vinculada} other {{count} issues vinculadas}}",
   "8cf699ae75fd8067": "Fixadas",
   "be451f475c514b37": "Dispensar notificação de despertar",
   "e9ced65134f2f36c": "Despertar thread agora",
+  "374dac09151d4578": "Pendente",
+  "a8f30f631e2b010e": "Aguardando sincronização com o ambiente",
   "aca5896600bf173e": "Você está com outro branch em checkout no momento.",
   "f665b5be60d8c144": [
     "Transferida de ",
@@ -13085,6 +13169,28 @@
   "8bcab2ef61de6518": "Limite de $0",
   "a16b48709357a5a7": "Gerenciar uso",
   "a00e74aaa421c524": "restante",
+  "0e34c3076c08feb2": [
+    {
+      "t": "span",
+      "i": 1,
+      "c": [
+        "↻ +",
+        {
+          "i": 2,
+          "k": "_gt_value_2",
+          "v": "v"
+        },
+        "%"
+      ]
+    },
+    " ",
+    "em ",
+    {
+      "i": 3,
+      "k": "_gt_value_3",
+      "v": "v"
+    }
+  ],
   "8bd6f07136317c8f": "Nenhum provedor nos ambientes selecionados informa limites de assinatura.",
   "87f5d0c61b335f38": "Veja o uso no ChatGPT com sua conta conectada.",
   "26873ac82fef86bb": "used",
@@ -13480,11 +13586,15 @@
   "5459bf696a187c26": "Não foi possível carregar as execuções de workflow",
   "d57c35d43b0f163a": "Esta execução não está aqui",
   "b9aae2f7cdb1a379": "Nenhuma execução de workflow ainda",
+  "45a94c724845ec1d": "Outras",
   "8f15f66e545af7c0": "Quais execuções",
   "b6409289e0c9a4dd": "Workflow",
   "035cb02ca1ae4952": "Todos os workflows ({count})",
+  "8eeb9cb07d7c59e1": "Tipo de pergunta",
+  "e2131cbec8accfe3": "Todos os tipos",
   "46d614fa7b4bf1e5": "Execuções de workflow",
   "1c635faa2fb45b8b": "Ainda não foi executado.",
+  "e4d1316c85ed7066": "Nenhuma pergunta desse tipo aguarda você.",
   "156ff7b625287a1e": "Ocultar puladas",
   "69b985b97ab45e6b": "Mostrar puladas ({count})",
   "2400254d362de84d": "Carregando execuções de workflow…",
@@ -13524,6 +13634,7 @@
     }
   ],
   "5d8d278ff828102d": "Todos os workflows",
+  "3b0f1659172107e4": "Todos os tipos",
   "39459da07479f482": "Agente",
   "7741243632056b81": "{step} · transcrição",
   "c512071143a5ba32": "Esta thread não existe mais.",

@@ -55,12 +55,23 @@ export class WorkflowInputError extends Schema.TaggedError<WorkflowInputError>()
   }
 }
 
+/** A hook that has started as many runs as it may for now. */
+export class WorkflowHookBusyError extends Schema.TaggedError<WorkflowHookBusyError>()(
+  "WorkflowHookBusyError",
+  { hook: Schema.String },
+) {
+  override get message(): string {
+    return `Hook ${this.hook} has started as many runs as it may in a minute.`;
+  }
+}
+
 export { WorkflowQuestion };
 
 export type WorkflowError =
   | WorkflowNotRegisteredError
   | WorkflowRunNotFoundError
-  | WorkflowInputError;
+  | WorkflowInputError
+  | WorkflowHookBusyError;
 
 export class Workflows extends Context.Service<
   Workflows,
@@ -108,6 +119,8 @@ export class Workflows extends Context.Service<
     >;
     readonly list: (filter?: {
       readonly status?: WorkflowStore.WorkflowRunStatus;
+      /** Only runs their workflow tagged with this. */
+      readonly tag?: string;
     }) => Effect.Effect<ReadonlyArray<WorkflowStore.WorkflowRun>, WorkflowInputError>;
     /** The run once `done` holds for it. Looks now, then on every change to the run. */
     readonly waitFor: (
@@ -125,6 +138,7 @@ export class Workflows extends Context.Service<
     /**
      * Start the run a request to a hook asks for. Nothing, for a hook or token that is not known.
      * `deliveryId` names the delivery when its carrier vouches for one, so its retry is one run.
+     * A hook starts a bounded number of new runs a minute and is busy past that.
      */
     readonly deliver: (delivery: {
       readonly hookId: string;

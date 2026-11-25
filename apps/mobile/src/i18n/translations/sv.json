@@ -34,6 +34,7 @@
   "986b0873f913a840": "Policyn för {organization} tillåter inte webhook-uppgifter.",
   "eebc538e25b09fe2": "Policyn för {organization} tillåter inte import av cookies från webbläsare.",
   "7642a133db05f164": "{organization}s policy tillåter inte att den här datorns lokala servrar öppnas på andra enheter.",
+  "e0856d6a402ad821": "Policyn för {organization} tillåter inte projekts layoutkommandon för worktrees.",
   "39f6771b49f9b3b6": "Använd standard",
   "45bb0e90e1c42046": "När du kommer tillbaka",
   "d8fa0a55446bbb0d": "Innan cachen går ut (beta)",
@@ -1991,6 +1992,7 @@
   "4d1f68ef069c7a0b": "Ny flik",
   "9c149c8c50e58e4c": "Uppdatera miljöer",
   "d81626aad3a95cb2": "Logga in på ditt T3-konto för att konfigurera {product}.",
+  "6787f93bbf6ce0b6": "Hjälper T3 Code-teamet att åtgärda anslutningsproblem. Spårningar innehåller tider, feltyper, ett ID för den här appsessionen och appversionen, aldrig dina trådar, prompter eller din kod. Du kan ändra det under Inställningar > Om T3 Code > Diagnostik.",
   "a1b125c5ff7c2dd3": "Visa inte det här igen",
   "b28a147f66b0e088": "Länkdatumet är inte tillgängligt",
   "6f0589fb1a5e38a9": "Länkad {date}",
@@ -2049,6 +2051,9 @@
   "782a518513f0777a": "Aktivera {environment}",
   "a35685d9ad9de747": "Läser in länkade molnmiljöer.",
   "91ca3ba7b2f9d6b6": "Inga ytterligare länkade molnmiljöer.",
+  "89bf40eb2503b6c5": "Ny enhet inloggad på {environment}",
+  "c94b5fe9ef372bc0": "{device} anslöt via {product}. Om det inte var du, ta bort den under Inställningar → Åtkomst i T3 Code på den datorn.",
+  "bec67d0ed485f885": "{count, plural, one {{count} enhet} other {{count} enheter}} anslöt via {product}. Om det inte var du, ta bort dem under Inställningar → Åtkomst i T3 Code på den datorn.",
   "190165d4fad2f072": "Begäran väntar inte längre",
   "c403db0535205f50": "Den har gått ut eller besvarats någon annanstans.",
   "4e3abf0ba32ed1d6": "Begäran väntar fortfarande. Försök igen.",
@@ -2256,6 +2261,8 @@
   "f4a6fe781a07f2aa": "Kopiera kraschrapport",
   "13c5214251f7d058": "Kraschrapporter",
   "b3f6c24b0bf18cfb": "Skicka kraschrapporter",
+  "18c30aa94d0a807f": "Anslutningsdiagnostik",
+  "0b1e4aecbd38e0cf": "När appen ansluter till en dator via {product} skickar den hur lång tid varje steg tog, feltypen, ett ID för den här appsessionen och appversionen till T3 Code-teamet. Spårningar innehåller aldrig dina trådar, prompter eller din kod.",
   "93eb8ae0bf209025": "Läser kraschloggen…",
   "4429ccae147b2b2f": "Klistra in rapporten i ett GitHub-ärende. Den innehåller appversionen, JavaScript-felmeddelandet och komponentstacken. Felmeddelanden kan citera värden från appen, så läs igenom den innan du delar den.",
   "58df920ec2681250": "När appen kraschar eller stöter på ett fel skickas felmeddelandet, stackspårningen, appversionen samt enhetsmodell och OS-version till T3 Code-teamet. Varje start skickar också starttider. Rapporterna har ett slumpmässigt id för den här installationen.",
@@ -2666,6 +2673,7 @@
   "1e726fbe61076269": "Gör panelen bredare",
   "4af8c6ef39e00592": "Gör panelen smalare",
   "54940a3e03ca7fc7": "{width} punkter bred",
+  "eb287395a09cd288": "Skicka anslutningsspårningar",
   "b1043ff2793170eb": "Projektet finns redan",
   "34d24b23043908f5": "{title} är fortfarande arkiverat. Försök igen senare.",
   "cc5e0eb3b8d438e5": "Projektet lades inte till",
@@ -4482,6 +4490,21 @@
     },
     " stängdes"
   ],
+  "796b81c4875c4feb": [
+    "Appen ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " behöver en nyare ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    "-server i den här miljön. Uppdatera servern för att använda den."
+  ],
   "705cf2b2ee4e0e42": [
     "Appen ",
     {
@@ -5081,6 +5104,7 @@
   "306a6f95ad9d52f7": "Ej skickade",
   "11276ab6c58b7a25": "Öppnar utkastet i inmatningsfältet för ny uppgift. Svep åt vänster för att kasta.",
   "99950f3a28d425fa": "Skickas när miljön återansluter. Öppnar uppgiften för redigering. Svep åt vänster för att ta bort.",
+  "d71048f4fb9cf44a": "Väntar på synkronisering",
   "0a260c7744afd0be": "Väntar",
   "ad78fae7d373cf21": "Arbetar",
   "be451f475c514b37": "Stäng aviseringen Väckt",
@@ -5529,12 +5553,15 @@
   "f25af5332ffc3734": "Inget väntar på dig.",
   "c3f0119b8d6231f8": "Inget körs.",
   "33028dfc1229eaa6": "Inga körningar än.",
+  "e4d1316c85ed7066": "Inga frågor av den här typen väntar på dig.",
   "156ff7b625287a1e": "Dölj överhoppade",
   "69b985b97ab45e6b": "Visa överhoppade ({count})",
   "8f6589c9e0ac5d4e": "Ingen miljö ansluten",
   "744127f8dfad7d22": "Anslut en miljö för att se dess arbetsflödeskörningar.",
   "b9aae2f7cdb1a379": "Inga arbetsflödeskörningar än",
   "ace8fc1c643cf9f6": "Ett arbetsflöde knyter ihop agenter, kod, scheman och frågor till dig i en enda körning som överlever omstarter. Skriv ett på din dator, under Arbetsflöden och sedan Definitioner.",
+  "fc9c3a00cfc18b55": "Alla typer",
+  "45a94c724845ec1d": "Övrigt",
   "fceb81aa6685fb47": "Chattar",
   "86798f07ba2d7f4d": "Sök ärenden",
   "484cd83bb303bab8": "Sök pull requests",

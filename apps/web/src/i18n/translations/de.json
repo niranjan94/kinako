@@ -34,6 +34,7 @@
   "986b0873f913a840": "Die Richtlinie von {organization} erlaubt keine Webhook-Aufgaben.",
   "eebc538e25b09fe2": "Die Richtlinie von {organization} erlaubt keinen Import von Browser-Cookies.",
   "7642a133db05f164": "Die Richtlinie von {organization} erlaubt nicht, die lokalen Server dieses Rechners auf anderen Geräten zu öffnen.",
+  "e0856d6a402ad821": "Die Richtlinie von {organization} erlaubt keine Worktree-Layout-Befehle von Projekten.",
   "39f6771b49f9b3b6": "Standard verwenden",
   "45bb0e90e1c42046": "Wenn du zurückkommst",
   "d8fa0a55446bbb0d": "Bevor der Cache abläuft (Beta)",
@@ -1559,6 +1560,8 @@
   "4eb599c7f36c99ba": "Diese Design-Datei ist kein gültiges JSON.",
   "29a5ff50ce55c4f9": "VS-Code-Design",
   "10348092dfed8b11": "Dieses VS-Code-Design hat keine Farbe „editor.background“, daher lässt sich keine Palette daraus erstellen.",
+  "206811f6f441bfc7": "Dieses Projekt richtet Worktrees mit einem eigenen Befehl ein, den in seiner jetzigen Form niemand genehmigt hat. Über diese Verbindung lässt er sich nicht genehmigen: Genehmige ihn in einem Client, der das Terminal verwenden darf.",
+  "b8087c9a70c26da9": "Der Worktree-Layout-Befehl konnte nicht genehmigt werden.",
   "6dff8d487001c6cf": "Responsiv",
   "f5f61c338cc5aeb5": "Browser-Gerätesymbolleiste",
   "3b4eb5b5ec5e60cb": "Browser-Gerätevorlage",
@@ -2032,13 +2035,16 @@
   "7af7f00b85cc2930": "Aktion bestätigen",
   "8b418a02b73f49b8": "Diese Aktion erfordert deine Bestätigung.",
   "e74139c17fab1fa1": "Bestätigen",
+  "4a18481bea4b4ad5": "Neues Gerät bei {environmentLabel} angemeldet",
+  "4144ab6aa487528a": "{device} hat sich über {product} verbunden. Warst du das nicht? Prüfe es.",
+  "a10cfdb27152c757": "{count, plural, one {{count} Gerät hat} other {{count} Geräte haben}} sich über {product} verbunden. Warst du das nicht? Prüfe sie.",
+  "4672f332c89dbcd9": "Prüfen",
   "775a3e99e2638341": "Ein Gerät möchte sich mit {environmentLabel} verbinden",
   "a8befcb9f1c61f60": "{device}. Genehmige nur, wenn der Code {code} angezeigt wird.",
   "ac48cc297029db41": "Genehmigen",
   "c12ca3fea745def0": "Das Gerät konnte nicht genehmigt werden",
   "af63f05ed2f5eeb3": "Ablehnen",
   "b735bab216b27041": "Das Gerät konnte nicht abgelehnt werden",
-  "4672f332c89dbcd9": "Prüfen",
   "913fc23f62321556": "Wähle ein gültiges Datum und eine Uhrzeit in der Zukunft.",
   "9485a52216cfc0d5": "Gib eine positive Dauer ein.",
   "9bc551235d78e133": "Zeitplantyp",
@@ -2723,6 +2729,8 @@
   "89b5e8f3887812da": "Gastanfrage",
   "62e626804919b294": "Eingabe nötig",
   "c6196d99000642b4": "Thread öffnen",
+  "70bdebaa3d291d3b": "Thread nicht verfügbar",
+  "a351ebbdcf1a3f7a": "Dieser Thread liegt in einer Umgebung, mit der diese App nicht verbunden ist.",
   "826cb862b4a11fb3": "{label}:",
   "3e597ec938e7551b": "Du:",
   "a1fbf2422c588292": "Agent:",
@@ -2801,6 +2809,24 @@
   "9f122f4c410241c0": "Move",
   "91adc33cc8d2a9f7": "Change destination",
   "3634e9c8df5f1bd5": "Use associated worktree",
+  "49eda70cfd56e621": "Läuft, wenn ein Worktree-Thread startet und wenn sein Ordner wiederhergestellt wird",
+  "188ccaa1199f5611": "Läuft, wenn der Worktree eines Threads entfernt wird",
+  "7e8476e7306acabe": "Darf dieses Projekt seine Worktree-Befehle ausführen?",
+  "8e11914556fd8b13": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " richtet Worktree-Threads mit eigenen Befehlen aus ",
+    {
+      "t": "code",
+      "i": 2,
+      "c": "t3.json"
+    },
+    " ein. Sie laufen auf dem Rechner dieser Umgebung mit deinen Berechtigungen, außerhalb jeder Agenten-Sandbox. Du wirst erneut gefragt, sobald sich ihr Text ändert."
+  ],
+  "46807acd02a4ff72": "Genehmigen und fortfahren",
   "2ac142f34e5dabc2": "Repositorys im neuen Worktree: {selection}",
   "c514773a8031f00b": "Repositorys filtern",
   "e32b730f6d27753f": "Wähle die Repositorys, an denen dieser Thread arbeitet",
@@ -3858,8 +3884,8 @@
   "478e3b4551be4db3": "Extrahierten Text anzeigen",
   "e7205ebfead1aafc": "Vergrößerte Videovorschau",
   "1bda77e861bb472f": "Vergrößerte Bildvorschau",
-  "eebe5b17e3c19a1c": "Zurück, Videovorschau schließen",
-  "58fd0009a6eb7258": "Zurück, Bildvorschau schließen",
+  "fb633d54edaeb4b1": "Videovorschau schließen",
+  "62d0c453f5803180": "Bildvorschau schließen",
   "47bae54b5f532ff3": "Vorheriges Medium",
   "fb9434aad2b5c0bb": "Dieses Bild konnte nicht geladen werden.",
   "26aee5d4e97bfb28": "Bild nicht verfügbar. Die Datei wurde möglicherweise verschoben oder gelöscht.",
@@ -3873,6 +3899,7 @@
   "ddb7e6f8ce99e657": "Nur wer auf diesem Rechner Agenten ausführen kann, kann den Bericht senden oder ablehnen.",
   "03c1eb603c112f47": "Nicht senden",
   "653405e4ed498d9f": "Senden",
+  "76cf478e5674fd12": "{count, plural, one {{count} Treffer} other {{count} Treffer}}",
   "5c14a0f0471566dc": "{label} · Started in a new thread",
   "5d1b287ae2ee1b53": "{label} · Suggested in the original thread",
   "86935055d4602903": "More ways to start",
@@ -4030,6 +4057,21 @@
     " wurde geschlossen"
   ],
   "dff97202cbdaec5b": "App anzeigen",
+  "796b81c4875c4feb": [
+    "Die App ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " benötigt einen neueren ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    "-Server in dieser Umgebung. Aktualisiere den Server, um sie zu nutzen."
+  ],
   "705cf2b2ee4e0e42": [
     "Die App ",
     {
@@ -8046,9 +8088,20 @@
   "dc87902396b8ade4": "Buchstaben, Ziffern, '-' oder '_'.",
   "251dfec07b7c3612": "Dieser Treiber erfordert keine Konfiguration. Du kannst die Instanz jetzt hinzufügen.",
   "08fe32f007e788f1": "Manuell konfigurieren",
+  "65300794c1edb929": "Bearer-Token (optional)",
   "84eb2878dc17d3eb": "Verwaltungsschlüssel",
   "7ac196c1e8175928": "Standardmäßig der Hostname des Hubs",
+  "0c026221dcd2820b": "HTTP-Kontingentquelle hinzufügen",
   "e3548407052e9e12": "CLIProxyAPI-Hub hinzufügen",
+  "d185c750156b2121": [
+    "Kontingente von einem Endpunkt auf ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " abrufen."
+  ],
   "432e85a50e2e7964": [
     "Zeige das Kontingent jedes Kontos, das der Hub bündelt, neben den Anbietern auf",
     " ",
@@ -8059,9 +8112,12 @@
     },
     ". Der Schlüssel bleibt auf diesem Server."
   ],
+  "2324770ba91371ac": "Endpunkt-URL",
   "556a695b117565ac": "Hub-URL",
+  "e4e5b75bba51396c": "Bearer-Token (optional)",
   "e62cedcbcdbafc75": "Verwaltungsschlüssel",
   "f1b3d0634ec035cb": "Bezeichnung (optional)",
+  "b35256ca61016104": "Quelle hinzufügen",
   "52814dd6f7d0a15c": "Hub hinzufügen",
   "27b770d3402abfa2": "Erweitert",
   "584595dfcadab699": "Artwork",
@@ -9046,7 +9102,6 @@
   "0c99fa183ed512e8": "{platform} teilweise verfügbar",
   "e6886a7f77b73a8e": "{platform} nicht verfügbar",
   "b0b7610d9860d18d": "Auf diesem Rechner nicht eingerichtet.",
-  "b35256ca61016104": "Quelle hinzufügen",
   "3b20ef0670ae4b0b": "Rechner über SSH",
   "121ccffacb6b8c6d": "Expo-Simulatoren",
   "130b55a1410a8030": "Simlock-Pool (Alpha)",
@@ -9603,6 +9658,9 @@
   "f0e853acd2006d53": "Verknüpfte Umgebungen",
   "ef10c2dff987f3ea": "Führe mehrstufige Workflows aus Dateien im Ordner workflows des T3-Home dieses Servers aus. Öffne sie über die Befehlspalette. Solange es aus ist, läuft nichts aus diesem Ordner; Läufe warten, bis es wieder an ist.",
   "2dadb2359422121c": "Workflows",
+  "933dabf0700708af": "Wie viele übersprungene Läufe jeder Workflow in seinem Verlauf behält. Ältere übersprungene Läufe werden gelöscht; Läufe, die etwas getan haben, bleiben immer erhalten.",
+  "f172d7e5deb24f75": "Behaltene übersprungene Läufe auf Standard zurücksetzen",
+  "ba94015389f327bc": "Behaltene übersprungene Läufe",
   "13e86eb5d8287a71": "Nach einer Claude- oder Codex-Runde eine vorhergesagte nächste Nachricht im leeren Eingabefeld anzeigen. Tab übernimmt sie. Jede ist eine zusätzliche gecachte Anfrage in deinem Tarif. Erfordert Codex 0.165+. Claude-Threads werden nach einem Neustart aktualisiert.",
   "d4b2a2ec812aafb0": "Nächsten Prompt vorschlagen",
   "298c7150a7621c80": "Simlock-Geräte-Hosts",
@@ -9976,6 +10034,28 @@
   "d2ad2df4c015f417": "Die Gruppierungsregel bestimmt, wie jeder Checkout Projektgruppen in der Seitenleiste beitritt. Eine Änderung kann einen Checkout in ein anderes Projekt verschieben.",
   "0bdf6ae2117b6c23": "Einstellung nicht gefunden? Lass dieses Projekt oben ausgewählt und wechsle zu einer anderen Einstellungsseite.",
   "3310e10f1efdc9bd": "Symbol auswählen",
+  "a9cb97fca6a6576b": "Befehl zum Erstellen",
+  "90f45a354884ccdd": "Befehl zum Entfernen",
+  "0cdc8cdbed3e5eae": "Worktree-Layout",
+  "c17b25519e2b194e": "Die Worktree-Layout-Befehle konnten nicht geladen werden",
+  "78e308ada516928b": "Der Befehl konnte nicht genehmigt werden",
+  "a0c772d32a233da6": "Die Genehmigung konnte nicht widerrufen werden",
+  "5ccd5614c65f8d1f": "Genehmigung des Befehls {kind} widerrufen",
+  "80c3794a5fa12f3a": "Befehl {kind} genehmigen",
+  "f206891e124c77b0": [
+    "Die ",
+    {
+      "t": "code",
+      "i": 1,
+      "c": "t3.json"
+    },
+    " dieses Projekts richtet Worktree-Threads mit eigenen Befehlen ein. Sie laufen auf dem Rechner dieser Umgebung mit deinen Berechtigungen und nur so, wie sie hier genehmigt wurden: Ändert sich der Text eines Befehls, muss er erneut genehmigt werden."
+  ],
+  "8e73b883d41d4102": "Aus",
+  "f6a91589456cca50": "Genehmigt",
+  "c92657bb7f2293ff": "Genehmigung nötig",
+  "f1e5c1be1ac92361": "Genehmigen",
+  "fcb5f3c4d4753326": "Über diese Verbindung lassen sich keine Befehle genehmigen. Verwende einen Client, der das Terminal verwenden darf.",
   "65ccf4f8e049003e": "Wähle ein Projekt, um Name, Symbol, Checkouts und Aktionen zu verwalten.",
   "067beea7d8f6e2c9": "Alle Umgebungen anzeigen",
   "1bf6da50131340d4": "Farbton der Akzentfarbe",
@@ -11938,7 +12018,6 @@
   "b0d0aebadc521ed1": "Gespeicherte Browser-Aufnahmen nach so vielen Tagen löschen. Ältere Aufnahme-Links öffnen sich dann nicht mehr.",
   "fe4208562792c313": "Alte rotierte Logs löschen",
   "8debac9c8e9cff47": "Inaktive rotierte Log-Dateien nach so vielen Tagen löschen. Aktuelle Logs bleiben erhalten.",
-  "8e73b883d41d4102": "Aus",
   "80d58a3fd4e4212a": "Projekt",
   "de770505be25f1ff": "Ordner",
   "ada7b9a4d96959d2": "Thread",
@@ -12330,10 +12409,11 @@
     },
     " wechseln"
   ],
-  "f54364b854a07918": "Keine Hubs konfiguriert.",
+  "39f64d971ba424b5": "Keine Nutzungsquellen konfiguriert.",
+  "dbd877abdc2c7c81": "HTTP-Kontingentquelle",
   "4cf6a373a7535324": "{name} · Deaktiviert",
-  "1d1e9cda847bd398": "Der Verwaltungsschlüssel des Hubs wird von diesem Server gelöscht. Seine Konten verschwinden aus der Limits-Ansicht; der Hub selbst bleibt unberührt. Füge ihn mit URL und Schlüssel erneut hinzu, um sie zurückzuholen.",
-  "c9bee4f93481b77a": "Hub entfernen",
+  "c792e744936dbe1b": "HTTP-Quelle hinzufügen",
+  "4032a03ee5301037": "Die gespeicherte Verbindung und ihre Zugangsdaten werden aus dieser Umgebung entfernt.",
   "0424112d5a0ecd71": "Automatisch",
   "3f0e1b77e45d53a9": "Tippen zum Umschalten, halten zum Sprechen",
   "45928549c050a1b4": "Halten",
@@ -12668,6 +12748,7 @@
   "6826fa9579c22035": "beta teilen gast einladen link teammitglied zuschauen t3 connect tunnel",
   "f10c06cba0cdf7fe": "beta anderen rechner verknüpfen vps peer agenten dort arbeiten delegieren",
   "bc0b409d89ce086e": "beta workflow dauerhafte läufe automatisierung schritte zeitplan webhook ordner",
+  "4b2669dcdb7d3776": "workflow verlauf aufbewahrung löschen alte übersprungene läufe webhook history retention skipped runs",
   "4a21cf825a2045b0": "beta tab autovervollständigung nächste nachricht vorhersagen claude codex ghost text",
   "fea2dc36585c4a20": "Simlock-Geräte-Hosts (Alpha)",
   "9d834d178130180e": "beta alpha simlock callstack simulator emulator ios android pool lease gateway",
@@ -12890,11 +12971,14 @@
   "37ffec8201f153c1": "Fehlgeschlagen",
   "984b361806ce8d25": "Aufgeweckt",
   "c6e8abc00ae470d2": "Fertig",
+  "353b08f4363dbb2c": "Ausstehend",
   "f31a95961de19433": "Issue {key}: {title}, {state}",
   "2dd9d295c882ef65": "{count, plural, one {{count} verknüpftes Issue} other {{count} verknüpfte Issues}}",
   "8cf699ae75fd8067": "Angeheftet",
   "be451f475c514b37": "Aufgeweckt-Hinweis schließen",
   "e9ced65134f2f36c": "Thread jetzt aufwecken",
+  "374dac09151d4578": "Ausstehend",
+  "a8f30f631e2b010e": "Wartet auf die Synchronisierung mit seiner Umgebung",
   "aca5896600bf173e": "Du hast gerade einen anderen Branch ausgecheckt.",
   "f665b5be60d8c144": [
     "Übergeben von ",
@@ -13086,6 +13170,28 @@
   "8bcab2ef61de6518": "0-$-Limit",
   "a16b48709357a5a7": "Nutzung verwalten",
   "a00e74aaa421c524": "übrig",
+  "0e34c3076c08feb2": [
+    {
+      "t": "span",
+      "i": 1,
+      "c": [
+        "↻ +",
+        {
+          "i": 2,
+          "k": "_gt_value_2",
+          "v": "v"
+        },
+        "%"
+      ]
+    },
+    " ",
+    "in ",
+    {
+      "i": 3,
+      "k": "_gt_value_3",
+      "v": "v"
+    }
+  ],
   "8bd6f07136317c8f": "Kein Anbieter in den ausgewählten Umgebungen meldet Abo-Limits.",
   "87f5d0c61b335f38": "Nutzung in ChatGPT mit deinem verbundenen Konto ansehen.",
   "26873ac82fef86bb": "used",
@@ -13481,11 +13587,15 @@
   "5459bf696a187c26": "Workflow-Ausführungen konnten nicht geladen werden",
   "d57c35d43b0f163a": "Diesen Lauf gibt es hier nicht",
   "b9aae2f7cdb1a379": "Noch keine Workflow-Ausführungen",
+  "45a94c724845ec1d": "Sonstige",
   "8f15f66e545af7c0": "Welche Ausführungen",
   "b6409289e0c9a4dd": "Workflow",
   "035cb02ca1ae4952": "Alle {count} Workflows",
+  "8eeb9cb07d7c59e1": "Art der Frage",
+  "e2131cbec8accfe3": "Alle Arten",
   "46d614fa7b4bf1e5": "Workflow-Ausführungen",
   "1c635faa2fb45b8b": "Noch nie gelaufen.",
+  "e4d1316c85ed7066": "Keine Fragen dieser Art warten auf dich.",
   "156ff7b625287a1e": "Übersprungene ausblenden",
   "69b985b97ab45e6b": "{count} übersprungene anzeigen",
   "2400254d362de84d": "Workflow-Ausführungen werden geladen…",
@@ -13525,6 +13635,7 @@
     }
   ],
   "5d8d278ff828102d": "Alle Workflows",
+  "3b0f1659172107e4": "Alle Arten",
   "39459da07479f482": "Agent",
   "7741243632056b81": "{step} · Transkript",
   "c512071143a5ba32": "Diesen Thread gibt es nicht mehr.",

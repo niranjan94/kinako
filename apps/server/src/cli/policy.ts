@@ -153,10 +153,11 @@ const templatesCommand = Command.make("templates", {
       if (profile._tag === "Invalid") {
         return yield* new CliError.UserError({ cause: document, userMessage: profile.reason });
       }
+      const outputDir = yield* expandHomePath(directory);
       const files = [
-        [path.join(directory, "windows", `${FORK_CLI_NAME}.admx`), windowsAdmx()],
-        [path.join(directory, "windows", "en-US", `${FORK_CLI_NAME}.adml`), windowsAdml()],
-        [path.join(directory, "macos", `${FORK_CLI_NAME}.mobileconfig`), profile.profile],
+        [path.join(outputDir, "windows", `${FORK_CLI_NAME}.admx`), windowsAdmx()],
+        [path.join(outputDir, "windows", "en-US", `${FORK_CLI_NAME}.adml`), windowsAdml()],
+        [path.join(outputDir, "macos", `${FORK_CLI_NAME}.mobileconfig`), profile.profile],
       ] as const;
       for (const [file, contents] of files) {
         yield* fs.makeDirectory(path.dirname(file), { recursive: true });

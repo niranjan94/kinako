@@ -64,11 +64,20 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))((it) => {
     }),
   );
 
-  it.effect("templates reads a ~/ --policy file from the home directory", () =>
+  it.effect("templates expands ~/ in the output directory and --policy file", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-policy-templates-" });
+      const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "t3-policy-templates-cwd-" });
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = process.cwd();
+          process.chdir(cwd);
+          return previous;
+        }),
+        (previous) => Effect.sync(() => process.chdir(previous)),
+      );
       yield* fs.writeFileString(
         path.join(home, "policy.json"),
         JSON.stringify({ schemaVersion: 1, organization: "Tilde Corp" }),
@@ -77,7 +86,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))((it) => {
       yield* Command.runWith(cli, { version: "0.0.0" })([
         "policy",
         "templates",
-        home,
+        "~/out",
         "--policy=~/policy.json",
       ]).pipe(
         Effect.provideService(HostProcess.HomeDirectory, home),
@@ -85,7 +94,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))((it) => {
       );
 
       assert.include(
-        yield* fs.readFileString(path.join(home, "macos", `${FORK_CLI_NAME}.mobileconfig`)),
+        yield* fs.readFileString(path.join(home, "out", "macos", `${FORK_CLI_NAME}.mobileconfig`)),
         "Tilde Corp",
       );
     }),

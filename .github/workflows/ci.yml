@@ -425,7 +425,7 @@ jobs:
           fi
 
       - name: Test
-        run: VITEST_CHROMIUM_GC_DISK_THRESHOLD_GB=1000000 vp run --filter @t3tools/web test --testTimeout=30000 --hookTimeout=30000 --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: vp run --filter @t3tools/web test --testTimeout=30000 --hookTimeout=30000 --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
   # apps/server sets `fileParallelism: false`, so its test files run strictly
   # one at a time. Sharding spreads them over separate runners instead of

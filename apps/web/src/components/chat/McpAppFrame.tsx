@@ -24,8 +24,8 @@ import { Minimize2Icon } from "lucide-react";
 import { useEffect, useRef, useState, type FocusEvent, type ToggleEvent } from "react";
 import { flushSync } from "react-dom";
 
-import { APP_BASE_NAME, APP_VERSION } from "~/branding";
 import { useLongLivedAssetUrl } from "~/assets/longLivedAssetUrls";
+import { APP_BASE_NAME, APP_VERSION } from "~/branding";
 import { isConfirmDialogActive, requestConfirmDialog } from "~/confirmDialog";
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { useStableCallback } from "~/hooks/useStableCallback";
@@ -101,6 +101,7 @@ export function McpAppFrame(props: {
   const [width, setWidth] = useState(0);
   const [height, setHeight] = useState(MCP_APP_DEFAULT_HEIGHT);
   const [navigatedAway, setNavigatedAway] = useState(false);
+  const [bridgeMissing, setBridgeMissing] = useState(false);
   const [displayMode, setDisplayMode] = useState<McpAppDisplayMode>("inline");
   const [closed, setClosed] = useState(false);
   const [documentGeneration, setDocumentGeneration] = useState(0);
@@ -276,7 +277,11 @@ export function McpAppFrame(props: {
       const { environmentId, threadId, itemId } = readLive().props;
       return { environmentId, input: { threadId, itemId } };
     };
-    const documentLink = attachMcpAppDocumentLink(frame, (data) => host.receive(data));
+    const documentLink = attachMcpAppDocumentLink(
+      frame,
+      (data) => host.receive(data),
+      () => setBridgeMissing(true),
+    );
     const host = makeMcpAppHost({
       app,
       hostVersion: APP_VERSION,
@@ -444,6 +449,18 @@ export function McpAppFrame(props: {
           <T>Show app</T>
         </Button>
       </div>
+    );
+  }
+
+  // Only a server that binds the app to its document gets a bridge; without one the app cannot run.
+  if (bridgeMissing) {
+    return (
+      <p className="rounded-lg border border-border px-3 py-2 text-muted-foreground text-xs">
+        <T>
+          The <Var>{app.server}</Var> app needs a newer <Var>{APP_BASE_NAME}</Var> server on this
+          environment. Update the server to use it.
+        </T>
+      </p>
     );
   }
 

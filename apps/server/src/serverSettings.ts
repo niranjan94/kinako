@@ -146,9 +146,14 @@ const normalizeServerSettings = (
     ),
   );
 
+export interface SettingsClient {
+  readonly secretReferences: boolean;
+  readonly httpUsageLimitSources?: boolean;
+}
+
 export function redactServerSettingsForClient(
   settings: ServerSettings,
-  client: { readonly secretReferences: boolean },
+  client: SettingsClient,
 ): ServerSettings {
   const redacted = mapSettingsSecrets(settings, (secret) =>
     secret.sensitive
@@ -175,6 +180,14 @@ export function redactServerSettingsForClient(
       ]),
     ),
     secretProviders: withoutUnknownSecretProviderConfigs(shaped),
+    // Older clients decode only "cliproxy" sources and reject the whole settings payload otherwise.
+    usageLimitSources: client.httpUsageLimitSources
+      ? shaped.usageLimitSources
+      : Object.fromEntries(
+          Object.entries(shaped.usageLimitSources).filter(
+            ([, source]) => source.kind === "cliproxy",
+          ),
+        ),
   };
 }
 
@@ -872,15 +885,6 @@ function migrateLegacyProviderSettings(
   };
 }
 
-const ACP_REGISTRY_DRIVER = ProviderDriverKind.make("acpRegistry");
-
-function selectionSupportsTextGeneration(
-  settings: ServerSettings,
-  selection: ModelSelection,
-): boolean {
-  return settings.providerInstances[selection.instanceId]?.driver !== ACP_REGISTRY_DRIVER;
-}
-
 type DriverAllowed = (driver: ProviderDriverKind) => boolean;
 const anyDriver: DriverAllowed = () => true;
 
@@ -890,7 +894,6 @@ function resolveTextGenerationProvider(
 ): ServerSettings {
   const selection = settings.textGenerationModelSelection;
   return isModelSelectionProviderEnabled(settings, selection) &&
-    selectionSupportsTextGeneration(settings, selection) &&
     isDriverAllowed(
       settings.providerInstances[selection.instanceId]?.driver ??
         ProviderDriverKind.make(selection.instanceId),

@@ -34,6 +34,7 @@
   "986b0873f913a840": "{organization}'s policy does not allow webhook tasks.",
   "eebc538e25b09fe2": "{organization}'s policy does not allow importing browser cookies.",
   "7642a133db05f164": "{organization}'s policy does not allow opening this machine's local servers on other devices.",
+  "e0856d6a402ad821": "{organization}'s policy does not allow project worktree layout commands.",
   "39f6771b49f9b3b6": "Use default",
   "45bb0e90e1c42046": "When you return",
   "d8fa0a55446bbb0d": "Before the cache expires (beta)",
@@ -1559,6 +1560,8 @@
   "4eb599c7f36c99ba": "That theme file is not valid JSON.",
   "29a5ff50ce55c4f9": "VS Code theme",
   "10348092dfed8b11": "That VS Code theme has no \"editor.background\" color, so there is nothing to build a palette from.",
+  "206811f6f441bfc7": "This project sets up worktrees with its own command, which nobody has approved as it is written now. This connection cannot approve it: approve it from a client that can use the terminal.",
+  "b8087c9a70c26da9": "Could not approve the worktree layout command.",
   "6dff8d487001c6cf": "Responsive",
   "f5f61c338cc5aeb5": "Browser device toolbar",
   "3b4eb5b5ec5e60cb": "Browser device preset",
@@ -2033,13 +2036,16 @@
   "7af7f00b85cc2930": "Confirm action",
   "8b418a02b73f49b8": "This action requires your confirmation.",
   "e74139c17fab1fa1": "Confirm",
+  "4a18481bea4b4ad5": "New device signed in to {environmentLabel}",
+  "4144ab6aa487528a": "{device} connected through {product}. Not you? Review it.",
+  "a10cfdb27152c757": "{count, plural, one {{count} device} other {{count} devices}} connected through {product}. Not you? Review them.",
+  "4672f332c89dbcd9": "Review",
   "775a3e99e2638341": "A device wants to connect to {environmentLabel}",
   "a8befcb9f1c61f60": "{device}. Approve only if it shows code {code}.",
   "ac48cc297029db41": "Approve",
   "c12ca3fea745def0": "Could not approve the device",
   "af63f05ed2f5eeb3": "Deny",
   "b735bab216b27041": "Could not deny the device",
-  "4672f332c89dbcd9": "Review",
   "913fc23f62321556": "Choose a valid date and time in the future.",
   "9485a52216cfc0d5": "Enter a positive duration.",
   "9bc551235d78e133": "Schedule type",
@@ -2722,6 +2728,8 @@
   "89b5e8f3887812da": "Guest request",
   "62e626804919b294": "Input needed",
   "c6196d99000642b4": "Open thread",
+  "70bdebaa3d291d3b": "Thread unavailable",
+  "a351ebbdcf1a3f7a": "This thread is on an environment this app is not connected to.",
   "826cb862b4a11fb3": "{label}:",
   "3e597ec938e7551b": "You:",
   "a1fbf2422c588292": "Agent:",
@@ -2800,6 +2808,24 @@
   "9f122f4c410241c0": "Move",
   "91adc33cc8d2a9f7": "Change destination",
   "3634e9c8df5f1bd5": "Use associated worktree",
+  "49eda70cfd56e621": "Runs when a worktree thread starts, and when its folder is restored",
+  "188ccaa1199f5611": "Runs when a thread's worktree is removed",
+  "7e8476e7306acabe": "Let this project run its worktree commands?",
+  "8e11914556fd8b13": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " sets up worktree threads with its own commands from ",
+    {
+      "t": "code",
+      "i": 2,
+      "c": "t3.json"
+    },
+    ". They run on this environment's machine with your permissions, outside any agent sandbox. You are asked again whenever their text changes."
+  ],
+  "46807acd02a4ff72": "Approve and continue",
   "2ac142f34e5dabc2": "Repositories in the new worktree: {selection}",
   "c514773a8031f00b": "Filter repositories",
   "e32b730f6d27753f": "Choose the repositories this thread works on",
@@ -3857,8 +3883,8 @@
   "478e3b4551be4db3": "Show extracted text",
   "e7205ebfead1aafc": "Expanded video preview",
   "1bda77e861bb472f": "Expanded image preview",
-  "eebe5b17e3c19a1c": "Back, close video preview",
-  "58fd0009a6eb7258": "Back, close image preview",
+  "fb633d54edaeb4b1": "Close video preview",
+  "62d0c453f5803180": "Close image preview",
   "47bae54b5f532ff3": "Previous media",
   "fb9434aad2b5c0bb": "This image could not be loaded.",
   "26aee5d4e97bfb28": "Image unavailable. The file may have been moved or deleted.",
@@ -3872,6 +3898,7 @@
   "ddb7e6f8ce99e657": "Only someone who can run agents on this machine can send or decline it.",
   "03c1eb603c112f47": "Don't send",
   "653405e4ed498d9f": "Send",
+  "76cf478e5674fd12": "{count, plural, one {{count} match} other {{count} matches}}",
   "5c14a0f0471566dc": "{label} · Started in a new thread",
   "5d1b287ae2ee1b53": "{label} · Suggested in the original thread",
   "86935055d4602903": "More ways to start",
@@ -4029,6 +4056,21 @@
     " app was closed"
   ],
   "dff97202cbdaec5b": "Show app",
+  "796b81c4875c4feb": [
+    "The ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " app needs a newer ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    " server on this environment. Update the server to use it."
+  ],
   "705cf2b2ee4e0e42": [
     "The ",
     {
@@ -8054,9 +8096,20 @@
   "dc87902396b8ade4": "Letters, digits, '-', or '_'.",
   "251dfec07b7c3612": "This driver has no required configuration. You can add the instance now.",
   "08fe32f007e788f1": "Configure manually",
+  "65300794c1edb929": "Bearer token (optional)",
   "84eb2878dc17d3eb": "Management key",
   "7ac196c1e8175928": "Defaults to the hub's host name",
+  "0c026221dcd2820b": "Add an HTTP quota source",
   "e3548407052e9e12": "Add a CLIProxyAPI hub",
+  "d185c750156b2121": [
+    "Read quotas from an endpoint on ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
   "432e85a50e2e7964": [
     "Show the quota of every account the hub pools, next to the providers on",
     " ",
@@ -8067,9 +8120,12 @@
     },
     ". The key stays on that server."
   ],
+  "2324770ba91371ac": "Endpoint URL",
   "556a695b117565ac": "Hub URL",
+  "e4e5b75bba51396c": "Bearer token (optional)",
   "e62cedcbcdbafc75": "Management key",
   "f1b3d0634ec035cb": "Label (optional)",
+  "b35256ca61016104": "Add source",
   "52814dd6f7d0a15c": "Add hub",
   "27b770d3402abfa2": "Advanced",
   "584595dfcadab699": "Artwork",
@@ -9055,7 +9111,6 @@
   "0c99fa183ed512e8": "{platform} available on some",
   "e6886a7f77b73a8e": "{platform} not available",
   "b0b7610d9860d18d": "Not set up on this machine.",
-  "b35256ca61016104": "Add source",
   "3b20ef0670ae4b0b": "Machine over SSH",
   "121ccffacb6b8c6d": "Expo Simulators",
   "130b55a1410a8030": "Simlock pool (alpha)",
@@ -9612,6 +9667,9 @@
   "f0e853acd2006d53": "Linked environments",
   "ef10c2dff987f3ea": "Run multi-step workflows from files in the workflows folder of this server's T3 home. Open them from the command palette. While off, nothing in that folder runs; runs wait until it is on again.",
   "2dadb2359422121c": "Workflows",
+  "933dabf0700708af": "How many skipped runs each workflow keeps in its history. Older skipped runs are deleted; runs that did something are always kept.",
+  "f172d7e5deb24f75": "Reset skipped runs kept to default",
+  "ba94015389f327bc": "Skipped runs kept",
   "13e86eb5d8287a71": "Show a predicted next message in the empty composer after a Claude or Codex turn. Tab uses it. Each is an extra cached request on your plan. Needs Codex 0.165+. Claude threads update on restart.",
   "d4b2a2ec812aafb0": "Suggest next prompt",
   "298c7150a7621c80": "Simlock device hosts",
@@ -9985,6 +10043,28 @@
   "d2ad2df4c015f417": "Grouping rule decides how each checkout joins project groups in the sidebar. Changing it can move a checkout to a different project.",
   "0bdf6ae2117b6c23": "Can't find a setting? Keep this project picked above and hop to any other settings page.",
   "3310e10f1efdc9bd": "Choose icon",
+  "a9cb97fca6a6576b": "Create command",
+  "90f45a354884ccdd": "Remove command",
+  "0cdc8cdbed3e5eae": "Worktree layout",
+  "c17b25519e2b194e": "Could not load the worktree layout commands",
+  "78e308ada516928b": "Could not approve the command",
+  "a0c772d32a233da6": "Could not revoke the approval",
+  "5ccd5614c65f8d1f": "Revoke approval of the {kind} command",
+  "80c3794a5fa12f3a": "Approve the {kind} command",
+  "f206891e124c77b0": [
+    "This project's ",
+    {
+      "t": "code",
+      "i": 1,
+      "c": "t3.json"
+    },
+    " sets up worktree threads with its own commands. They run on this environment's machine with your permissions, and only as approved here: a command whose text changes needs approval again."
+  ],
+  "8e73b883d41d4102": "Off",
+  "f6a91589456cca50": "Approved",
+  "c92657bb7f2293ff": "Needs approval",
+  "f1e5c1be1ac92361": "Approve",
+  "fcb5f3c4d4753326": "This connection cannot approve commands. Use a client that can use the terminal.",
   "65ccf4f8e049003e": "Choose a project to manage its name, icon, checkouts and actions.",
   "067beea7d8f6e2c9": "Show all environments",
   "1bf6da50131340d4": "Accent color hue",
@@ -11947,7 +12027,6 @@
   "b0d0aebadc521ed1": "Delete saved browser captures after this many days. Older capture links will no longer open.",
   "fe4208562792c313": "Delete old rotated logs",
   "8debac9c8e9cff47": "Delete inactive rotated log files after this many days. Current logs are kept.",
-  "8e73b883d41d4102": "Off",
   "80d58a3fd4e4212a": "Project",
   "de770505be25f1ff": "Folder",
   "ada7b9a4d96959d2": "Thread",
@@ -12339,10 +12418,11 @@
       "v": "v"
     }
   ],
-  "f54364b854a07918": "No hubs configured.",
+  "39f64d971ba424b5": "No usage sources configured.",
+  "dbd877abdc2c7c81": "HTTP quota source",
   "4cf6a373a7535324": "{name} · Disabled",
-  "1d1e9cda847bd398": "The hub's management key is deleted from this server. Its accounts leave the Limits view; the hub itself is untouched. Add it again with the URL and key to bring them back.",
-  "c9bee4f93481b77a": "Remove hub",
+  "c792e744936dbe1b": "Add HTTP source",
+  "4032a03ee5301037": "The saved connection and its credentials are removed from this environment.",
   "0424112d5a0ecd71": "Auto",
   "3f0e1b77e45d53a9": "Tap to toggle, hold to talk",
   "45928549c050a1b4": "Hold",
@@ -12676,6 +12756,7 @@
   "6826fa9579c22035": "beta share guest invite link teammate watch t3 connect tunnel",
   "f10c06cba0cdf7fe": "beta link another machine vps peer agents work there delegate",
   "bc0b409d89ce086e": "beta workflow durable runs automation steps schedule webhook folder",
+  "4b2669dcdb7d3776": "workflow history retention delete old skipped runs webhook",
   "4a21cf825a2045b0": "beta tab autocomplete predict next message claude codex ghost text",
   "fea2dc36585c4a20": "Simlock device hosts (alpha)",
   "9d834d178130180e": "beta alpha simlock callstack simulator emulator ios android pool lease gateway",
@@ -12898,11 +12979,14 @@
   "37ffec8201f153c1": "Failed",
   "984b361806ce8d25": "Woke",
   "c6e8abc00ae470d2": "Done",
+  "353b08f4363dbb2c": "Pending",
   "f31a95961de19433": "Issue {key}: {title}, {state}",
   "2dd9d295c882ef65": "{count, plural, one {{count} linked issue} other {{count} linked issues}}",
   "8cf699ae75fd8067": "Pinned",
   "be451f475c514b37": "Dismiss Woke notification",
   "e9ced65134f2f36c": "Wake thread now",
+  "374dac09151d4578": "Pending",
+  "a8f30f631e2b010e": "Waiting to sync with its environment",
   "aca5896600bf173e": "You're currently checked out on another branch.",
   "f665b5be60d8c144": [
     "Handed off from ",
@@ -13094,6 +13178,28 @@
   "8bcab2ef61de6518": "$0 cap",
   "a16b48709357a5a7": "Manage usage",
   "a00e74aaa421c524": "left",
+  "0e34c3076c08feb2": [
+    {
+      "t": "span",
+      "i": 1,
+      "c": [
+        "↻ +",
+        {
+          "i": 2,
+          "k": "_gt_value_2",
+          "v": "v"
+        },
+        "%"
+      ]
+    },
+    " ",
+    "in ",
+    {
+      "i": 3,
+      "k": "_gt_value_3",
+      "v": "v"
+    }
+  ],
   "8bd6f07136317c8f": "No provider on the selected environments reports subscription limits.",
   "87f5d0c61b335f38": "View usage in ChatGPT with your connected account.",
   "26873ac82fef86bb": "used",
@@ -13489,11 +13595,15 @@
   "5459bf696a187c26": "Could not load workflow runs",
   "d57c35d43b0f163a": "This run is not here",
   "b9aae2f7cdb1a379": "No workflow runs yet",
+  "45a94c724845ec1d": "Other",
   "8f15f66e545af7c0": "Which runs",
   "b6409289e0c9a4dd": "Workflow",
   "035cb02ca1ae4952": "All {count} workflows",
+  "8eeb9cb07d7c59e1": "Kind of question",
+  "e2131cbec8accfe3": "All kinds",
   "46d614fa7b4bf1e5": "Workflow runs",
   "1c635faa2fb45b8b": "Has not run yet.",
+  "e4d1316c85ed7066": "No questions of this kind wait on you.",
   "156ff7b625287a1e": "Hide skipped",
   "69b985b97ab45e6b": "Show {count} skipped",
   "2400254d362de84d": "Loading workflow runs…",
@@ -13533,6 +13643,7 @@
     }
   ],
   "5d8d278ff828102d": "All workflows",
+  "3b0f1659172107e4": "All kinds",
   "39459da07479f482": "Agent",
   "7741243632056b81": "{step} · transcript",
   "c512071143a5ba32": "This thread is no longer there.",

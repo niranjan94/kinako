@@ -26,7 +26,11 @@ import { AppRoot } from "~/AppRoot";
 // The route loads ChatView lazily, and its first transform (React Compiler over ~4k lines)
 // takes 6-11s; importing it here keeps that out of the test's timeout.
 import "~/components/ChatView";
-import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import {
+  clearComposerDraftsEnvironment,
+  DraftId,
+  useComposerDraftStore,
+} from "~/composerDraftStore";
 import { selectThreadDiffPanelSelection, useDiffPanelStore } from "~/diffPanelStore";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
 import stylesheet from "~/index.css?inline";
@@ -152,7 +156,7 @@ it("opens a linked Linear issue from an inactive thread's sidebar badge", async 
     url: "https://linear.app/example/issue/WEB-123/add-keyboard-support",
     source: "manual",
     linkedAt: "2026-01-01T00:00:00.000Z",
-    displayKey: issueRef.key,
+    displayKey: "#123",
     title: "Add keyboard support",
   };
   const completed = {
@@ -165,7 +169,22 @@ it("opens a linked Linear issue from an inactive thread's sidebar badge", async 
   const grouped = threadWithHistory("issue-grouped", 1);
   using _environment = installFakeEnvironment([
     first,
-    { ...linked, issues: [issue] },
+    {
+      ...linked,
+      issues: [issue],
+      pullRequests: [
+        {
+          host: "github.com",
+          repository: "pingdotgg/t3code",
+          number: 124,
+          url: "https://github.com/pingdotgg/t3code/pull/124",
+          source: "manual",
+          linkedAt: "2026-01-01T00:00:00.000Z",
+          snapshot: null,
+          stack: null,
+        },
+      ],
+    },
     { ...grouped, issues: [completed, issue] },
   ]);
   const liveTitle = "Add keyboard shortcuts to the sidebar";
@@ -232,10 +251,21 @@ it("opens a linked Linear issue from an inactive thread's sidebar badge", async 
     name: `Issue ${issue.displayKey}: ${issue.title}, Open`,
   });
   await expect.element(badge).toBeVisible();
-  expect(badge.element().querySelector("svg")).toHaveClass(/text-emerald-600/);
+  expect(badge.element().querySelector("span")).toHaveClass(/text-emerald-600/);
+  expect(badge.element()).toHaveTextContent("123");
+  expect(badge.element()).not.toHaveTextContent("#");
+  const prBadge = page.getByRole("link", { name: "PR #124, status pending" });
+  await expect.element(prBadge).toHaveTextContent("124");
+  for (const control of [badge, prBadge]) {
+    expect(control.element().querySelector("span")).toHaveClass(
+      "contents",
+      "text-xs",
+      "tabular-nums",
+    );
+  }
   const groupedBadge = page.getByRole("button", { name: "2 linked issues" });
   await vi.waitFor(() =>
-    expect(groupedBadge.element().querySelector("svg")).toHaveClass(/text-emerald-600/),
+    expect(groupedBadge.element().querySelector("span")).toHaveClass(/text-emerald-600/),
   );
   await userEvent.hover(badge);
   const issueName = `Issue ${issue.displayKey}: ${liveTitle}`;
@@ -411,6 +441,7 @@ it("a new draft does not load its reserved thread before the server lists it", a
 
 it("a failed image-only first send of a new thread keeps the new draft", async () => {
   using _environment = installFakeEnvironment([]);
+  using _drafts = { [Symbol.dispose]: () => clearComposerDraftsEnvironment(ENVIRONMENT_ID) };
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
     onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
@@ -675,6 +706,7 @@ it("retains each thread's diff selection when returning from another thread or S
 
 it("a stashed prompt ending in a file chip restores with the chip", async () => {
   using _environment = installFakeEnvironment([]);
+  using _drafts = { [Symbol.dispose]: () => clearComposerDraftsEnvironment(ENVIRONMENT_ID) };
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
     onboardingCompletedAt: "2026-01-01T00:00:00.000Z",

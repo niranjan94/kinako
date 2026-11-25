@@ -34,6 +34,7 @@
   "986b0873f913a840": "Die Richtlinie von {organization} erlaubt keine Webhook-Aufgaben.",
   "eebc538e25b09fe2": "Die Richtlinie von {organization} erlaubt keinen Import von Browser-Cookies.",
   "7642a133db05f164": "Die Richtlinie von {organization} erlaubt nicht, die lokalen Server dieses Rechners auf anderen Geräten zu öffnen.",
+  "e0856d6a402ad821": "Die Richtlinie von {organization} erlaubt keine Worktree-Layout-Befehle von Projekten.",
   "39f6771b49f9b3b6": "Standard verwenden",
   "45bb0e90e1c42046": "Wenn du zurückkommst",
   "d8fa0a55446bbb0d": "Bevor der Cache abläuft (Beta)",
@@ -1991,6 +1992,7 @@
   "4d1f68ef069c7a0b": "Neuer Tab",
   "9c149c8c50e58e4c": "Umgebungen aktualisieren",
   "d81626aad3a95cb2": "Melde dich bei deinem T3-Konto an, um {product} einzurichten.",
+  "6787f93bbf6ce0b6": "Hilft dem T3 Code-Team, Verbindungsprobleme zu beheben. Traces enthalten Zeiten, Fehlertypen, eine ID für diese App-Sitzung und die App-Version, nie deine Threads, Prompts oder deinen Code. Du kannst das unter Einstellungen > Über T3 Code > Diagnose ändern.",
   "a1b125c5ff7c2dd3": "Nicht mehr anzeigen",
   "b28a147f66b0e088": "Verknüpfungsdatum nicht verfügbar",
   "6f0589fb1a5e38a9": "Verknüpft {date}",
@@ -2049,6 +2051,9 @@
   "782a518513f0777a": "{environment} aktivieren",
   "a35685d9ad9de747": "Verknüpfte Cloud-Umgebungen werden geladen.",
   "91ca3ba7b2f9d6b6": "Keine weiteren verknüpften Cloud-Umgebungen.",
+  "89bf40eb2503b6c5": "Neues Gerät bei {environment} angemeldet",
+  "c94b5fe9ef372bc0": "{device} hat sich über {product} verbunden. Warst du das nicht, entferne es in T3 Code auf diesem Computer unter Einstellungen → Zugriff.",
+  "bec67d0ed485f885": "{count, plural, one {{count} Gerät hat} other {{count} Geräte haben}} sich über {product} verbunden. Warst du das nicht, entferne sie in T3 Code auf diesem Computer unter Einstellungen → Zugriff.",
   "190165d4fad2f072": "Anfrage wartet nicht mehr",
   "c403db0535205f50": "Sie ist abgelaufen oder wurde anderswo beantwortet.",
   "4e3abf0ba32ed1d6": "Die Anfrage wartet noch. Versuch es erneut.",
@@ -2256,6 +2261,8 @@
   "f4a6fe781a07f2aa": "Absturzbericht kopieren",
   "13c5214251f7d058": "Absturzberichte",
   "b3f6c24b0bf18cfb": "Absturzberichte senden",
+  "18c30aa94d0a807f": "Verbindungsdiagnose",
+  "0b1e4aecbd38e0cf": "Wenn die App über {product} eine Verbindung zu einem Computer herstellt, sendet sie dem T3 Code-Team, wie lange jeder Schritt gedauert hat, den Fehlertyp, eine ID für diese App-Sitzung und die App-Version. Traces enthalten nie deine Threads, Prompts oder deinen Code.",
   "93eb8ae0bf209025": "Absturzprotokoll wird gelesen…",
   "4429ccae147b2b2f": "Füge den Bericht in ein GitHub-Issue ein. Er enthält die App-Version, die JavaScript-Fehlermeldung und den Komponenten-Stack. Fehlermeldungen können Werte aus der App zitieren, also lies ihn vor dem Teilen durch.",
   "58df920ec2681250": "Wenn die App abstürzt oder auf einen Fehler stößt, sendet sie die Fehlermeldung, den Stacktrace, die App-Version sowie Gerätemodell und Betriebssystemversion an das T3-Code-Team. Jeder Start sendet außerdem Startzeiten. Berichte tragen eine zufällige ID für diese Installation.",
@@ -2666,6 +2673,7 @@
   "1e726fbe61076269": "Bereich verbreitern",
   "4af8c6ef39e00592": "Bereich verschmälern",
   "54940a3e03ca7fc7": "{width} Punkte breit",
+  "eb287395a09cd288": "Verbindungs-Traces senden",
   "b1043ff2793170eb": "Projekt existiert bereits",
   "34d24b23043908f5": "{title} ist noch archiviert. Versuch es später erneut.",
   "cc5e0eb3b8d438e5": "Projekt nicht hinzugefügt",
@@ -4481,6 +4489,21 @@
     },
     " wurde geschlossen"
   ],
+  "796b81c4875c4feb": [
+    "Die App ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " benötigt einen neueren ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    "-Server in dieser Umgebung. Aktualisiere den Server, um sie zu nutzen."
+  ],
   "705cf2b2ee4e0e42": [
     "Die App ",
     {
@@ -5081,6 +5104,7 @@
   "306a6f95ad9d52f7": "Nicht gesendet",
   "11276ab6c58b7a25": "Öffnet den Entwurf im Eingabefeld für neue Aufgaben. Nach links wischen zum Verwerfen.",
   "99950f3a28d425fa": "Wird gesendet, sobald die Umgebung wieder verbunden ist. Öffnet die Aufgabe zum Bearbeiten. Nach links wischen zum Löschen.",
+  "d71048f4fb9cf44a": "Wartet auf Synchronisierung",
   "0a260c7744afd0be": "Wartet",
   "ad78fae7d373cf21": "Arbeitet",
   "be451f475c514b37": "Aufgeweckt-Hinweis schließen",
@@ -5529,12 +5553,15 @@
   "f25af5332ffc3734": "Nichts wartet auf dich.",
   "c3f0119b8d6231f8": "Es läuft nichts.",
   "33028dfc1229eaa6": "Noch keine Ausführungen.",
+  "e4d1316c85ed7066": "Keine Fragen dieser Art warten auf dich.",
   "156ff7b625287a1e": "Übersprungene ausblenden",
   "69b985b97ab45e6b": "{count} übersprungene anzeigen",
   "8f6589c9e0ac5d4e": "Keine Umgebung verbunden",
   "744127f8dfad7d22": "Verbinde eine Umgebung, um ihre Workflow-Ausführungen zu sehen.",
   "b9aae2f7cdb1a379": "Noch keine Workflow-Ausführungen",
   "ace8fc1c643cf9f6": "Ein Workflow verbindet Agenten, Code, Zeitpläne und Fragen an dich zu einer Ausführung, die Neustarts übersteht. Schreib einen auf deinem Computer, unter Workflows, dann Definitionen.",
+  "fc9c3a00cfc18b55": "Alle Arten",
+  "45a94c724845ec1d": "Sonstige",
   "fceb81aa6685fb47": "Chats",
   "86798f07ba2d7f4d": "Issues durchsuchen",
   "484cd83bb303bab8": "Pull Requests durchsuchen",
