@@ -1,0 +1,106 @@
+name: Fork Android
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+    secrets:
+      EXPO_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-android-play
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    name: Build and submit to Play Internal testing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      APP_VARIANT: production
+      EAS_VERSION: 27.11.0
+    steps:
+      - id: expo-token
+        name: Check for EXPO_TOKEN
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::EXPO_TOKEN is not set; skipping the Google Play build."
+          fi
+
+      - name: Checkout
+        if: steps.expo-token.outputs.present == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Vite+
+        if: steps.expo-token.outputs.present == 'true'
+        uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/mobile...
+
+      - name: Expose pnpm
+        if: steps.expo-token.outputs.present == 'true'
+        run: |
+          pnpm_version="$(node --print "require('./package.json').packageManager.split('@').pop()")"
+          vp_pnpm_bin="$HOME/.vite-plus/package_manager/pnpm/$pnpm_version/pnpm/bin"
+          echo "$vp_pnpm_bin" >> "$GITHUB_PATH"
+          "$vp_pnpm_bin/pnpm" --version
+
+      - name: Setup Java
+        if: steps.expo-token.outputs.present == 'true'
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build signed Android bundle
+        if: steps.expo-token.outputs.present == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        # The local build plugin matches the CLI's build job version.
+        run: >-
+          pnpm dlx --allow-build=dtrace-provider
+          --package="eas-cli@$EAS_VERSION"
+          --package="eas-cli-local-build-plugin@$EAS_VERSION"
+          env EAS_LOCAL_BUILD_PLUGIN_PATH=eas-cli-local-build-plugin
+          eas build --local --platform android --profile production --non-interactive
+          --output "$RUNNER_TEMP/kinako.aab"
+
+      - name: Keep the Android bundle
+        if: steps.expo-token.outputs.present == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kinako-android-aab-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/kinako.aab
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Submit to Google Play
+        if: steps.expo-token.outputs.present == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: >-
+          pnpm dlx --allow-build=dtrace-provider "eas-cli@$EAS_VERSION"
+          submit --platform android --profile production --non-interactive
+          --path "$RUNNER_TEMP/kinako.aab"

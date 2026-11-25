@@ -1,10 +1,10 @@
 name: Fork release
 
 # Nightly desktop installers and CLI archives for this fork, built from main
-# and published as a GitHub prerelease on this repository, followed by an iOS
-# TestFlight build (fork-ios.yml). Versions follow upstream's nightly scheme,
-# so the apps and CLI follow the nightly update channel. Runs on GitHub-hosted
-# runners and builds with T3 Connect disabled. Packaging is delegated to
+# and published as a GitHub prerelease on this repository, followed by mobile
+# builds for TestFlight and Google Play Internal testing. Versions follow the
+# upstream nightly scheme so the apps and CLI use the nightly update channel.
+# Runs on GitHub-hosted runners and builds with T3 Connect disabled. Packaging is delegated to
 # upstream's release-desktop.yml, which signs when the signing secrets are
 # present. See FORK.md.
 
@@ -398,5 +398,15 @@ jobs:
     needs: [preflight, release]
     uses: ./.github/workflows/fork-ios.yml
     secrets: inherit
+    with:
+      ref: ${{ needs.preflight.outputs.ref }}
+
+  android:
+    if: inputs.cli_release_version == ''
+    name: Android Play Internal testing
+    needs: [preflight, release]
+    uses: ./.github/workflows/fork-android.yml
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     with:
       ref: ${{ needs.preflight.outputs.ref }}

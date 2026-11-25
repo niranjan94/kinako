@@ -90,7 +90,7 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 - **Windows:** installers are unsigned, so SmartScreen warns; choose **More info → Run anyway**.
 - **Linux:** use the `.AppImage` or install the `.deb` with `sudo apt install ./Kinako-*.deb`.
 
-The upstream package registries (Homebrew, winget, Scoop, AUR, nixpkgs) and the hosted app at app.t3.codes ship upstream's builds, not this fork. iOS nightlies go to an internal TestFlight group only, and there is no Android release.
+The upstream package registries (Homebrew, winget, Scoop, AUR, nixpkgs) and the hosted app at app.t3.codes ship upstream's builds, not this fork. [Mobile nightlies](./FORK.md#mobile-releases) go to an internal TestFlight group on iOS and Google Play Internal testing on Android.
 
 ## Documentation
 

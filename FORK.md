@@ -145,11 +145,11 @@ CI and `fork-release.yml` use Ubuntu 24.04, matching upstream. Playwright does n
 
 ## One-time setup
 
-1. **Actions:** enable Actions for the fork, then disable every upstream workflow except `ci.yml`, `release-desktop.yml`, and `agent-context-budget.yml`. The others expect upstream's runners, secrets, and accounts, and would otherwise queue or fail on every push. `agent-context-budget.yml` fails a pull request that grows `agentContextBudget.json` past `main`'s unless it carries the `agent-context-increase` label, and the fork's own `fork-agent-context-budget.yml` does the same for `agentContextBudget.fork.json`, which holds the bytes Kinako's tools add. Create that label in the fork. `fork-release.yml` calls `release-desktop.yml` and `fork-ios.yml`.
+1. **Actions:** enable Actions for the fork, then disable every upstream workflow except `ci.yml`, `release-desktop.yml`, and `agent-context-budget.yml`. The others expect upstream's runners, secrets, and accounts, and would otherwise queue or fail on every push. `agent-context-budget.yml` fails a pull request that grows `agentContextBudget.json` past `main`'s unless it carries the `agent-context-increase` label, and the fork's own `fork-agent-context-budget.yml` does the same for `agentContextBudget.fork.json`, which holds the bytes Kinako's tools add. Create that label in the fork. `fork-release.yml` calls `release-desktop.yml`, `fork-ios.yml`, and `fork-android.yml`.
 
    ```bash
    gh workflow list --repo niranjan94/kinako --all --json path --jq '.[].path' \
-     | grep -v -e '/ci.yml$' -e fork-release.yml -e fork-ios.yml -e release-desktop.yml -e agent-context-budget.yml \
+     | grep -v -e '/ci.yml$' -e fork-release.yml -e fork-ios.yml -e fork-android.yml -e release-desktop.yml -e agent-context-budget.yml \
      | xargs -n1 basename | xargs -I{} gh workflow disable {} --repo niranjan94/kinako
    ```
 
@@ -168,6 +168,8 @@ Actions → **Fork release** → Run workflow on `main`, usually after merging u
 - macOS builds are signed and notarized, so they open without warnings. Windows installers are unsigned: SmartScreen warns, choose **More info → Run anyway**.
 
 ## Mobile releases
+
+Android nightlies go to Google Play **Internal testing**. After publishing the GitHub release, `fork-release.yml` calls `fork-android.yml` at the same commit. To bootstrap or retry Android on its own, run **Fork Android** on `main`. The job uses the existing `EXPO_TOKEN` to build the production `io.niranjan.kinako` variant locally on a GitHub Ubuntu runner and submit the signed `.aab` with EAS. EAS manages the Android `versionCode`, the upload keystore, and the Play service account key assigned to this package in Expo Credentials. The signed bundle is kept as a workflow artifact for 14 days, including when submission fails. Add testers in Play Console and share the Internal testing opt-in link.
 
 iOS ships to TestFlight only as part of a nightly: once `fork-release.yml` publishes the GitHub release, it calls `fork-ios.yml`, which builds the production variant with `eas build --local` on a GitHub macOS runner and uploads it with `eas submit` to the App Store Connect app `6822450068`. Building on GitHub's runner spends no EAS build credits; EAS only stores the signing credentials and the App Store Connect API key and assigns the build number. Every build lands in the internal TestFlight group "Kinako Nightly", which has automatic distribution on. The marketing version is `version` in `apps/mobile/app.config.ts`. CI on each commit uses nothing from EAS, and upstream's `mobile-eas-*` workflows stay disabled. No over-the-air updates are published.
 
@@ -197,7 +199,7 @@ The production bundle ID is also the desktop App ID. EAS turns off any App ID ca
 | `APPLE_TEAM_ID`              | variable | `6456AUQBLS`                                                                                                                               |
 | `CLERK_PASSKEY_RP_DOMAINS`   | variable | `kinako.niranjan.io`                                                                                                                       |
 
-A signed build refuses to start without a passkey domain, which upstream derives from its Clerk key. Without Clerk the fork names `kinako.niranjan.io`. GitHub Pages serves it from the `gh-pages` branch, which holds the `CNAME`, the `apple-app-site-association` file (`webcredentials` for the desktop app and the three iOS bundle IDs, and `applinks` for `/threads/*`), and a `404.html` that opens a copied thread link in the desktop or mobile app through `kinako://`. Android has no verified app links because no signed fork APK is published, so Android uses that page. Edit that branch when the bundle IDs change.
+A signed build refuses to start without a passkey domain, which upstream derives from its Clerk key. Without Clerk the fork names `kinako.niranjan.io`. GitHub Pages serves it from the `gh-pages` branch, which holds the `CNAME`, the `apple-app-site-association` file (`webcredentials` for the desktop app and the three iOS bundle IDs, and `applinks` for `/threads/*`), and a `404.html` that opens a copied thread link in the desktop or mobile app through `kinako://`. Android uses that page for copied thread links. Edit that branch when the bundle IDs change.
 
 To replace the certificate (expiry, leak, or loss):
 
@@ -214,6 +216,6 @@ Unsigned. Adding the Azure Trusted Signing secrets that `release-desktop.yml` re
 
 ## Not covered yet
 
-- Android releases. There is no Play listing. The Clerk config plugin is still loaded in the mobile app even though the fork does not use Clerk.
+- The Clerk config plugin is still loaded in the mobile app even though the fork does not use Clerk.
 - Upstream links left as-is because they are user-initiated: marketing and legal pages (mobile Settings → Legal), the triage playbook, and the `app.t3.codes` entry in `packages/shared/src/providerAuthReturnUrl.ts`.
 - "T3" left on purpose: names providers and models read (client names and titles sent to Codex, Claude, Antigravity, Muse and other providers, the ChatGPT sign-in `agent_name_hint`, Cursor agent and API key names, OpenCode session titles, the MCP OAuth `resource_name`, reasons sent back to a provider) and all system prompts, agent instructions and MCP tool descriptions, including the "T3 thread" and "T3-owned" terms that pair with the `t3_*` tool names (the triage playbook alone names Kinako, because the agent diagnoses a Kinako install); T3 Connect strings (Connect is not built in); protocol and storage identifiers (`t3_*` MCP tools, `t3code:*` keys, `T3CODE_*` variables, the `owner: "t3"` credential binding).
