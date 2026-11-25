@@ -45,7 +45,10 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
-          persist-credentials: false
+
+      - name: Drop checkout credentials
+        if: steps.expo-token.outputs.present == 'true'
+        uses: ./.github/actions/drop-checkout-credentials
 
       - name: Setup Vite+
         if: steps.expo-token.outputs.present == 'true'
