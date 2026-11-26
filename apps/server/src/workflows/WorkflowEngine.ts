@@ -36,6 +36,7 @@ import {
 import { checkOutput, rejectionText } from "../orchestration-v2/runOutput.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { isMissedFixedTimeRun, nextScheduledRunAt } from "../scheduledTasks/Schedule.ts";
+import { currentScheduleId } from "./triggers.ts";
 import { constantTimeEquals } from "../scheduledTasks/webhookVerification.ts";
 import {
   answerStamped,
@@ -371,11 +372,29 @@ const make = Effect.fn("WorkflowEngine.make")(function* (
   const latestDefinitions = [...new Set(registered.map(([definition]) => definition.name))].map(
     (name) => latest(name)![0],
   );
+  // A daily schedule saved under an id that followed its spelling keeps that id, for its next
+  // time and for the keys of its runs: a time it has started is then not started again.
+  const savedIds = yield* store.triggerIds;
+  const stateId = (
+    definition: WorkflowDefinition,
+    trigger: Exclude<WorkflowDefinition["triggers"][number], { readonly kind: "webhook" }>,
+  ) => {
+    const prefix = `${definition.name}/`;
+    const id = `${prefix}${trigger.id}`;
+    if (trigger.kind !== "schedule" || savedIds.includes(id)) return id;
+    const earlier = savedIds
+      .filter(
+        (saved) =>
+          saved.startsWith(prefix) && currentScheduleId(saved.slice(prefix.length)) === trigger.id,
+      )
+      .toSorted();
+    return earlier[0] ?? id;
+  };
   // A schedule taken out and put back is new again: its first run is one interval away.
   yield* store.triggersKeep(
     latestDefinitions.flatMap((definition) =>
       definition.triggers.flatMap((trigger) =>
-        trigger.kind === "webhook" ? [] : [`${definition.name}/${trigger.id}`],
+        trigger.kind === "webhook" ? [] : [stateId(definition, trigger)],
       ),
     ),
   );
@@ -385,7 +404,7 @@ const make = Effect.fn("WorkflowEngine.make")(function* (
     for (const definition of latestDefinitions) {
       for (const trigger of definition.triggers) {
         if (trigger.kind !== "schedule") continue;
-        const id = `${definition.name}/${trigger.id}`;
+        const id = stateId(definition, trigger);
         const due = yield* store.triggerNext(id);
         if (due !== undefined) {
           const dueAt = DateTime.makeUnsafe(due);
@@ -435,7 +454,7 @@ const make = Effect.fn("WorkflowEngine.make")(function* (
     for (const definition of latestDefinitions) {
       for (const trigger of definition.triggers) {
         if (trigger.kind !== "issues" && trigger.kind !== "pullRequests") continue;
-        const id = `${definition.name}/${trigger.id}`;
+        const id = stateId(definition, trigger);
         const since = yield* store.triggerNext(id);
         if (since === undefined) {
           yield* store.triggerSet(id, DateTime.formatIso(now));
@@ -1299,15 +1318,16 @@ const make = Effect.fn("WorkflowEngine.make")(function* (
       };
     }),
     list: Effect.fn("Workflows.list")(function* (filter) {
-      const rows =
-        filter?.tag === undefined && filter?.subject === undefined
-          ? yield* store.runs(filter?.status)
-          : yield* store.runsWhere({
-              status: filter.status,
-              tag: filter.tag,
-              subject: filter.subject,
-            });
-      return rows.map(toRun);
+      if (filter?.tag === undefined && filter?.subject === undefined)
+        return (yield* store.runs(filter?.status)).map(toRun);
+      const where = { status: filter.status, tag: filter.tag, subject: filter.subject };
+      if (filter.status !== undefined) return (yield* store.runsWhere(where)).map(toRun);
+      // Skipped runs are counted apart, as in the unfiltered list, so they cannot push out the rest.
+      const rows = [
+        ...(yield* store.runsWhere({ ...where, skippedTopLevel: false })),
+        ...(yield* store.runsWhere({ ...where, skippedTopLevel: true })),
+      ];
+      return rows.toSorted((a, b) => b.started_at.localeCompare(a.started_at)).map(toRun);
     }),
     about: Effect.fn("Workflows.about")(function* (item) {
       // Keyed as the subject was kept, so an item named without its address is found too.

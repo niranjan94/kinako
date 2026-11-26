@@ -103,7 +103,7 @@ seam_files="$(
       .github/workflows/fork-release.yml .github/workflows/release-desktop.yml \
       .github/workflows/ci.yml \
       .devcontainer/devcontainer.json scripts/mobile-native-client.ts scripts/mobile-showcase.ts \
-      AGENTS.md README.md FORK.md
+      .agents/skills/launch-video/SKILL.md AGENTS.md README.md FORK.md
   } | sort -u
 )"
 
@@ -142,7 +142,7 @@ printf '\n'
 printf '== 4. Upstream identity literals on added lines\n\n'
 # label<TAB>extended regex. Kept broad on purpose: a false positive costs one
 # glance, a miss ships a build that collides with upstream T3 Code.
-patterns='scheme	t3code(-dev|-preview)?(://|:")|"t3code(-dev|-preview)?"
+patterns='scheme	t3code(-dev|-preview)?(://|:")|"t3code(-dev|-preview)?"|--scheme[=[:space:]]+t3code(-dev|-preview)?
 home-dir	~/\.t3([^a-z0-9]|$)|\$HOME/\.t3([^a-z0-9]|$)|["'"'"'/]\.t3(["'"'"'/]|$)
 app-id	com\.t3tools\.(t3code|T3Code)
 cli-exe	t3\.(exe|cmd)|["'"'"'/]t3["'"'"'`]|t3-\$\{?[a-zA-Z_]*[vV]ersion|lib/node_modules/t3

@@ -63,7 +63,7 @@
   "929a11e234f6e5d9": "Instala las herramientas de línea de comandos de Azure ({cli}) y activa la compatibilidad con Azure DevOps con {command}.",
   "ad599e9de33538dd": "Añade un token de Bitbucket en Ajustes → Control de versiones e issues.",
   "d810ecd91e8cf9d0": "Instala la CLI de Origin con {install} y ejecuta {login}.",
-  "eb0f60ef4f92ab7d": "Instala {fj} 0.6 o posterior desde {fjUrl} y ejecuta {fjLogin}, o instala {tea} 0.16 o posterior desde {teaUrl} y ejecuta {teaLogin} para cada servidor de Forgejo o Gitea.",
+  "1a04c8d36a7b29d3": "Instala {fj} 0.6 o posterior desde {fjUrl} y ejecuta {fjLogin}, o instala {gt} 2.0 o posterior desde {gtUrl} y ejecuta {gtLogin} para cada servidor de Forgejo o Gitea.",
   "d026a85e2e50e675": "Instala la CLI de GitCafe con {install} y ejecuta {login}, guarda un token en Ajustes o define {variable} en el servidor.",
   "22d3c0c48a34b5b3": "Instala la CLI de TanStack Source con {install} y ejecuta {login}, guarda un token en Ajustes o define {variable} en el servidor.",
   "756c80ad262ef315": "En espera en el hilo original",
@@ -3533,6 +3533,9 @@
   "f2a955905704b91d": "{hours} h {minutes} min",
   "3609f564a63c8eca": "{minutes} min",
   "9251bb742f60720d": "{hours} h",
+  "035aab5e99159bd8": "{count, plural, one {… No se muestra {hidden} carácter del medio.} other {… No se muestran {hidden} caracteres del medio.}} El texto termina con:",
+  "011b1ef726fa9928": "Desplázate en cada parte para leerla entera.",
+  "6c6e16b9488f8b91": "Desplázate para leerlo todo.",
   "a1e982c6047c0860": "Ir a la respuesta citada: {label}",
   "c156140c3f5ebb75": "Ir a la respuesta a la que contesta: {label}",
   "f8031a49c6e9fe25": "Ver el texto citado del asistente: {label}",
@@ -5288,12 +5291,13 @@
   "13cf3cd978eef92a": "Mantener los adjuntos en esta máquina",
   "a4ca7da61227002d": "Quita los adjuntos antes de elegir el enrutamiento automático y adjúntalos en la máquina seleccionada.",
   "512d8afab852df1a": "No se pudo cambiar de máquina",
+  "ee3ea4351c88e7d7": "Este proyecto ya no está disponible.",
   "32e421d1e2dfdaff": "Comprobando máquinas…",
   "0db14066bd4ce117": "Equilibrio automático no disponible",
   "55b562c00e37321b": "No se pudo forzar la detención del agente",
   "ede15a83eedec569": "Turno detenido; el agente aún se está cerrando",
   "f360accf1ccac178": "Turno detenido; el proceso del agente siguió ejecutándose",
-  "5b660a378c56cc91": "{others, plural, =0 {Se comparte con otros hilos en curso. Detenlos para liberarlo.} one {Se comparte con {others} hilo en curso. Detenlo para liberarlo.} other {Se comparte con {others} hilos en curso. Detenlos para liberarlo.}}",
+  "46f927ee332c1065": "{others, plural, =0 {Se comparte con otros hilos en curso. Detenlos para liberarlo.} one {Se comparte con {others} hilo en curso. Detenlo para liberarlo.} other {Se comparte con {others} hilos en curso. Detenlos para liberarlo.}}",
   "f5948facf9a10261": "{count, plural, one {Se inició {count} hilo en segundo plano} other {Se iniciaron {count} hilos en segundo plano}}",
   "d2a83704191622a6": "No se pudieron enviar los mensajes.",
   "c11072d4a6072902": "No se pudo enviar un prompt en segundo plano",
@@ -5888,6 +5892,7 @@
   "c928303400ccaf24": "No se pudo iniciar el device hub.",
   "4cb21672153c1f18": "No se encontraron simuladores ni emuladores en este entorno.",
   "c82410197256eb53": "Simuladores de iOS",
+  "31a71fec6b5f2bf3": "Dispositivos Android",
   "ac18a5e35195a258": "Emuladores de Android",
   "94215375ea2558b8": "En ejecución",
   "f8a65d4d662389b0": "Detenido",
@@ -7403,8 +7408,6 @@
   "0e3eede94227c151": "Preparando el checkout de la {term, select, mr {merge request} cr {solicitud de cambios} other {pull request}}...",
   "f5fd3733da6e3556": "No se pudo abrir un hilo para el checkout",
   "09f38e303898401f": "No se pudo preparar el checkout de la {term, select, mr {merge request} cr {solicitud de cambios} other {pull request}}",
-  "853a77d42f86c918": "Checkout hecho, pero el hilo se quedó donde estaba",
-  "0746dfa692f895cc": "El checkout está listo en `{branch}`. Apunta un hilo a él desde el selector de ramas y vuelve a preguntar.",
   "88db70a96177d202": "Checkout hecho aquí",
   "baa66fde3613022b": "Checkout hecho",
   "10feb68552356a08": "Este repositorio está en la rama de la {term, select, mr {merge request} cr {solicitud de cambios} other {pull request}}, con un hilo abierto en ella.",
@@ -7476,6 +7479,19 @@
   "36b7fbe31bde05f3": "Este repositorio no tiene etiquetas.",
   "2764eab1d2853980": "Este repositorio tiene más etiquetas de las que aparecen aquí. Aplica el resto en el host.",
   "5e5917c3b907c7d6": "Aplicada",
+  "4affc3da49f673c2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "comentó"
+    }
+  ],
   "404ee0e0134b60ae": "Buscando «{query}» en todos los hosts",
   "ca612a0074954046": "Comprobando...",
   "8b04f78f836b6c11": "No hay nada con estos filtros",
@@ -7507,6 +7523,7 @@
   "7074711ac6cc6f5c": "Fallidas",
   "75b2bb15e4624860": "No disponible",
   "ff6b088c383bf910": "Buscar autores",
+  "a766a8ac2670096c": "{count, plural, one {{count} fusión cargada} other {{count} fusiones cargadas}}",
   "d6179a157948c07c": "No se encontraron autores",
   "353773803bf92ad4": "No se pudieron buscar autores en el host",
   "e3e2d073449a0289": "Cualquiera",
@@ -7772,19 +7789,6 @@
       "t": "span",
       "i": 2,
       "c": "revisó"
-    }
-  ],
-  "4affc3da49f673c2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": "comentó"
     }
   ],
   "04ea50285b00dcdd": "General",
@@ -9562,7 +9566,10 @@
   "056721d1036d33fb": "Terminal: dividir verticalmente",
   "8b92648854e6ddaa": "Terminal: nueva",
   "16dfd6305f3951a3": "Terminal: cerrar",
+  "6394fa415ab91b34": "Terminal: anterior",
+  "2f766180f9d12615": "Terminal: siguiente",
   "0e54f664e6fdc156": "Panel derecho: alternar",
+  "da9e37b5bd1d3731": "Base de datos: Abrir",
   "81e0e9f4304d2f01": "Panel derecho: nuevo",
   "afdfe975da764288": "Panel del hilo: alternar",
   "329fd01696d446b8": "Panel derecho: alternar maximizado",
@@ -10027,7 +10034,6 @@
   "b76e857a764ea02a": "Regla de agrupación de {path} en {environment}",
   "e6e55f343639ae71": "Predeterminado ({mode})",
   "87158e7b8e714bc6": "Añade un proyecto desde la barra lateral para configurarlo aquí.",
-  "ee3ea4351c88e7d7": "Este proyecto ya no está disponible.",
   "062d19d24615e108": "El título del proyecto no puede estar vacío",
   "303af9de2741db90": "No se pudo renombrar el proyecto",
   "f578154800d7af01": "No se pudo actualizar el icono del proyecto",
@@ -10480,6 +10486,7 @@
   "9bc60e1d0ef816cf": "Bytes de almacenamiento",
   "85de927f664ee3cb": "Bytes lógicos",
   "ec1f81bc9b395fb9": "Todos los bytes de E/S",
+  "9fd31461cee8ff82": "{count, plural, one {{count} proceso} other {{count} procesos}}",
   "7905928d59208450": "Lectura",
   "637254a20a8e24a5": "Escritura",
   "ab9f29f78275f7bd": "Disponible cuando esta página se ejecuta dentro de la app de escritorio.",
@@ -10631,6 +10638,7 @@
   "543ef9fcaf8aa96f": "Apagado",
   "5173c50b0a60847c": "Actualización disponible: {serverVersion} → {clientVersion}",
   "987c5623ba70f390": "Rutas",
+  "36d52134b8b8d455": "{count, plural, one {{count} ruta} other {{count} rutas}}",
   "80a2ef2c87f7f180": "servidor {label}",
   "08f54865b364957d": "Actualizar",
   "b426469630d60955": "Apagar {label}",

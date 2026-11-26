@@ -788,15 +788,14 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     probeResult && Result.isSuccess(probeResult) ? probeResult.success : undefined;
   const probeFailure =
     probeResult && Result.isFailure(probeResult) ? probeResult.failure : undefined;
+  const reportedModels =
+    claudeSettings.hubModels === undefined
+      ? claudeReportedModels(modelCatalog, claudeSettings.customModels, capabilities?.models)
+      : [];
   const models = capClaudeCatalogEffort(
     modelCatalog,
     claudeProviderModels(
-      [
-        ...resolveClaudeModelsForVersion(modelCatalog, parsedVersion),
-        ...(claudeSettings.hubModels === undefined
-          ? claudeReportedModels(modelCatalog, claudeSettings.customModels, capabilities?.models)
-          : []),
-      ],
+      [...resolveClaudeModelsForVersion(modelCatalog, parsedVersion), ...reportedModels],
       claudeSettings.customModels,
     ),
     capabilities?.effortCapSources ?? [],
@@ -889,7 +888,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     parsedVersion
       ? yield* resolveResetCredits(parsedVersion)
       : undefined;
-  return buildServerProvider({
+  const provider = buildServerProvider({
     presentation: CLAUDE_PRESENTATION,
     enabled: claudeSettings.enabled,
     checkedAt,
@@ -915,6 +914,11 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       usageLimits: resetCredits ? { ...usageLimits, resetCredits } : usageLimits,
     },
   });
+  // Claude Code lists gateway models only while its one gateway cache holds this base URL, and
+  // then all of them, so a list without any may lack this gateway's models.
+  return claudeSettings.hubModels === undefined && reportedModels.length === 0
+    ? { ...provider, modelsIncomplete: true }
+    : provider;
 });
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);

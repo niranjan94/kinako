@@ -104,6 +104,7 @@ Some files cannot import TypeScript and repeat the values. Re-check them when me
 - `AGENTS.md`: the Kinako paragraph under the introduction, and the live database path in rule 2 and Test data.
 - `.github/triage/PLAYBOOK.md` and its byte-identical copy in `apps/server/src/cli/triagePrompt.ts`: the fork's repository for playbook updates, source clones, and issues, and the `kinako` CLI.
 - `docs/user/workflows.md` and `skills/t3-workflows/SKILL.md`: the `~/.kinako/workflows/` directory and `kinako workflow` commands.
+- `.agents/skills/launch-video/SKILL.md`: the `kinako-dev` mobile scheme and the warning against editing the live `~/.kinako` home.
 - `apps/desktop/src/app/DesktopUserData.ts`, `apps/desktop/src/app/DesktopLegacyLocalStorage.ts`: no import from upstream's desktop profiles. `resolveUserDataPath` copies nothing and `V1_PROFILE_NAMES` stays empty.
 
 `scripts/mobile-behavior/device.ts` targets Kinako's dev app ID and URL scheme through `forkBrand`, just like the native client and E2E runners. `scripts/metrics/mobile` reuses it, so the mobile metrics need no identity of their own.

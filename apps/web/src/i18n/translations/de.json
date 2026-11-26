@@ -63,7 +63,7 @@
   "929a11e234f6e5d9": "Installiere die Azure-Kommandozeilentools ({cli}) und aktiviere dann die Azure-DevOps-Unterstützung mit {command}.",
   "ad599e9de33538dd": "Füge unter Einstellungen → Versionskontrolle & Issues ein Bitbucket-Token hinzu.",
   "d810ecd91e8cf9d0": "Installiere die Origin CLI mit {install} und führe dann {login} aus.",
-  "eb0f60ef4f92ab7d": "Installiere {fj} 0.6 oder neuer von {fjUrl} und führe {fjLogin} aus, oder installiere {tea} 0.16 oder neuer von {teaUrl} und führe {teaLogin} für jeden Forgejo- oder Gitea-Server aus.",
+  "1a04c8d36a7b29d3": "Installiere {fj} 0.6 oder neuer von {fjUrl} und führe {fjLogin} aus, oder installiere {gt} 2.0 oder neuer von {gtUrl} und führe {gtLogin} für jeden Forgejo- oder Gitea-Server aus.",
   "d026a85e2e50e675": "Installiere die GitCafe CLI mit {install} und führe dann {login} aus, speichere ein Token in den Einstellungen oder setze {variable} auf dem Server.",
   "22d3c0c48a34b5b3": "Installiere die TanStack Source CLI mit {install} und führe dann {login} aus, speichere ein Token in den Einstellungen oder setze {variable} auf dem Server.",
   "756c80ad262ef315": "Wartet im ursprünglichen Thread",
@@ -3534,6 +3534,9 @@
   "f2a955905704b91d": "{hours} Std. {minutes} Min.",
   "3609f564a63c8eca": "{minutes} Min.",
   "9251bb742f60720d": "{hours} Std.",
+  "035aab5e99159bd8": "{count, plural, one {… {hidden} Zeichen in der Mitte wird nicht angezeigt.} other {… {hidden} Zeichen in der Mitte werden nicht angezeigt.}} Der Text endet mit:",
+  "011b1ef726fa9928": "Scrolle in beiden Teilen, um alles zu lesen.",
+  "6c6e16b9488f8b91": "Scrolle, um alles zu lesen.",
   "a1e982c6047c0860": "Zur zitierten Antwort: {label}",
   "c156140c3f5ebb75": "Zur Antwort, auf die sich dies bezieht: {label}",
   "f8031a49c6e9fe25": "Zitierten Assistententext anzeigen: {label}",
@@ -5291,12 +5294,13 @@
   "13cf3cd978eef92a": "Anhänge auf diesem Rechner behalten",
   "a4ca7da61227002d": "Entferne die Anhänge, bevor du automatisches Routing wählst, und hänge sie dann auf dem ausgewählten Rechner an.",
   "512d8afab852df1a": "Rechner konnte nicht gewechselt werden",
+  "ee3ea4351c88e7d7": "Dieses Projekt ist nicht mehr verfügbar.",
   "32e421d1e2dfdaff": "Rechner werden geprüft…",
   "0db14066bd4ce117": "Automatische Verteilung nicht verfügbar",
   "55b562c00e37321b": "Der Agent konnte nicht zwangsweise gestoppt werden",
   "ede15a83eedec569": "Runde gestoppt; der Agent wird noch beendet",
   "f360accf1ccac178": "Runde gestoppt; der Agentenprozess läuft weiter",
-  "5b660a378c56cc91": "{others, plural, =0 {Er wird mit anderen arbeitenden Threads geteilt. Stoppe diese, um ihn freizugeben.} one {Er wird mit {others} arbeitenden Thread geteilt. Stoppe diesen, um ihn freizugeben.} other {Er wird mit {others} arbeitenden Threads geteilt. Stoppe diese, um ihn freizugeben.}}",
+  "46f927ee332c1065": "{others, plural, =0 {Er wird mit anderen arbeitenden Threads geteilt. Stoppe diese, um ihn freizugeben.} one {Er wird mit {others} arbeitenden Thread geteilt. Stoppe diesen, um ihn freizugeben.} other {Er wird mit {others} arbeitenden Threads geteilt. Stoppe diese, um ihn freizugeben.}}",
   "f5948facf9a10261": "{count, plural, one {{count} Thread im Hintergrund gestartet} other {{count} Threads im Hintergrund gestartet}}",
   "d2a83704191622a6": "Nachrichten konnten nicht gesendet werden.",
   "c11072d4a6072902": "Ein Prompt im Hintergrund konnte nicht gesendet werden",
@@ -5890,6 +5894,7 @@
   "c928303400ccaf24": "Der Geräte-Hub konnte nicht gestartet werden.",
   "4cb21672153c1f18": "In dieser Umgebung wurden keine Simulatoren oder Emulatoren gefunden.",
   "c82410197256eb53": "iOS-Simulatoren",
+  "31a71fec6b5f2bf3": "Android-Geräte",
   "ac18a5e35195a258": "Android-Emulatoren",
   "94215375ea2558b8": "Läuft",
   "f8a65d4d662389b0": "Gestoppt",
@@ -7403,8 +7408,6 @@
   "0e3eede94227c151": "{term, select, mr {Checkout des Merge Requests wird vorbereitet...} cr {Checkout der Änderungsanfrage wird vorbereitet...} other {Checkout des Pull Requests wird vorbereitet...}}",
   "f5fd3733da6e3556": "Für den Checkout konnte kein Thread geöffnet werden",
   "09f38e303898401f": "{term, select, mr {Checkout des Merge Requests konnte nicht vorbereitet werden} cr {Checkout der Änderungsanfrage konnte nicht vorbereitet werden} other {Checkout des Pull Requests konnte nicht vorbereitet werden}}",
-  "853a77d42f86c918": "Ausgecheckt, aber der Thread ist geblieben, wo er war",
-  "0746dfa692f895cc": "Der Checkout ist auf `{branch}` bereit. Richte einen Thread über die Branch-Auswahl darauf aus und frage dann erneut.",
   "88db70a96177d202": "Hier ausgecheckt",
   "baa66fde3613022b": "Ausgecheckt",
   "10feb68552356a08": "{term, select, mr {Dieses Repository ist auf dem Branch des Merge Requests, mit einem darauf geöffneten Thread.} cr {Dieses Repository ist auf dem Branch der Änderungsanfrage, mit einem darauf geöffneten Thread.} other {Dieses Repository ist auf dem Branch des Pull Requests, mit einem darauf geöffneten Thread.}}",
@@ -7476,6 +7479,19 @@
   "36b7fbe31bde05f3": "Dieses Repository hat keine Labels.",
   "2764eab1d2853980": "Dieses Repository hat mehr Labels, als hier aufgelistet sind. Wende die übrigen auf dem Host an.",
   "5e5917c3b907c7d6": "Angewendet",
+  "4affc3da49f673c2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "hat kommentiert"
+    }
+  ],
   "404ee0e0134b60ae": "Alle Hosts werden nach „{query}“ durchsucht",
   "ca612a0074954046": "Wird geprüft...",
   "8b04f78f836b6c11": "Nichts mit diesen Filtern",
@@ -7507,6 +7523,7 @@
   "7074711ac6cc6f5c": "Fehlgeschlagen",
   "75b2bb15e4624860": "Nicht verfügbar",
   "ff6b088c383bf910": "Autoren durchsuchen",
+  "a766a8ac2670096c": "{count, plural, one {{count} Merge geladen} other {{count} Merges geladen}}",
   "d6179a157948c07c": "Keine Autoren gefunden",
   "353773803bf92ad4": "Autoren konnten auf dem Host nicht durchsucht werden",
   "e3e2d073449a0289": "Beliebig",
@@ -7771,19 +7788,6 @@
       "t": "span",
       "i": 2,
       "c": "hat ein Review abgegeben"
-    }
-  ],
-  "4affc3da49f673c2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": "hat kommentiert"
     }
   ],
   "04ea50285b00dcdd": "Übersicht",
@@ -9562,7 +9566,10 @@
   "056721d1036d33fb": "Terminal: Vertikal teilen",
   "8b92648854e6ddaa": "Terminal: Neu",
   "16dfd6305f3951a3": "Terminal: Schließen",
+  "6394fa415ab91b34": "Terminal: Vorheriges",
+  "2f766180f9d12615": "Terminal: Nächstes",
   "0e54f664e6fdc156": "Rechter Bereich: Umschalten",
+  "da9e37b5bd1d3731": "Datenbank: Öffnen",
   "81e0e9f4304d2f01": "Rechter Bereich: Neu",
   "afdfe975da764288": "Thread-Bereich: Umschalten",
   "329fd01696d446b8": "Rechter Bereich: Maximieren umschalten",
@@ -10027,7 +10034,6 @@
   "b76e857a764ea02a": "Gruppierungsregel für {path} auf {environment}",
   "e6e55f343639ae71": "Standard ({mode})",
   "87158e7b8e714bc6": "Füge über die Seitenleiste ein Projekt hinzu, um es hier zu konfigurieren.",
-  "ee3ea4351c88e7d7": "Dieses Projekt ist nicht mehr verfügbar.",
   "062d19d24615e108": "Projekttitel darf nicht leer sein",
   "303af9de2741db90": "Projekt konnte nicht umbenannt werden",
   "f578154800d7af01": "Projektsymbol konnte nicht aktualisiert werden",
@@ -10480,6 +10486,7 @@
   "9bc60e1d0ef816cf": "Speicher-Bytes",
   "85de927f664ee3cb": "Logische Bytes",
   "ec1f81bc9b395fb9": "Alle I/O-Bytes",
+  "9fd31461cee8ff82": "{count, plural, one {{count} Prozess} other {{count} Prozesse}}",
   "7905928d59208450": "Lesen",
   "637254a20a8e24a5": "Schreiben",
   "ab9f29f78275f7bd": "Verfügbar, wenn diese Seite in der Desktop-App läuft.",
@@ -10633,6 +10640,7 @@
   "543ef9fcaf8aa96f": "Ausgeschaltet",
   "5173c50b0a60847c": "Update verfügbar: {serverVersion} → {clientVersion}",
   "987c5623ba70f390": "Routen",
+  "36d52134b8b8d455": "{count, plural, one {{count} Route} other {{count} Routen}}",
   "80a2ef2c87f7f180": "Server {label}",
   "08f54865b364957d": "Aktualisieren",
   "b426469630d60955": "{label} ausschalten",
