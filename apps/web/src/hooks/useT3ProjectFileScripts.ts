@@ -17,6 +17,7 @@ export interface T3ProjectFileState {
   fileName: string;
   file: T3ProjectFile | null;
   scripts: ReadonlyArray<T3ProjectFileScript>;
+  refresh: () => void;
 }
 
 export function useT3ProjectFileState(
@@ -43,26 +44,22 @@ export function useT3ProjectFileState(
   const fileName = active.fileName;
   const contents = active.data && !active.data.truncated ? active.data.contents : null;
   const isPending = forkQuery.isPending || upstreamQuery.isPending;
-  return (() => {
-    if (contents === null) {
-      return {
-        status: isPending ? "loading" : "missing",
-        fileName,
-        file: null,
-        scripts: NO_SCRIPTS,
-      } as const;
-    }
-    const file = parseT3ProjectFile(contents);
-    if (file === null) {
-      return { status: "invalid", fileName, file: null, scripts: NO_SCRIPTS } as const;
-    }
-    return { status: "valid", fileName, file, scripts: file.scripts ?? NO_SCRIPTS } as const;
-  })();
-}
-
-export function useT3ProjectFileScripts(
-  environmentId: EnvironmentId,
-  cwd: string | null,
-): ReadonlyArray<T3ProjectFileScript> {
-  return useT3ProjectFileState(environmentId, cwd).scripts;
+  const refresh = () => {
+    forkQuery.refresh();
+    upstreamQuery.refresh();
+  };
+  if (contents === null) {
+    return {
+      status: isPending ? "loading" : "missing",
+      fileName,
+      file: null,
+      scripts: NO_SCRIPTS,
+      refresh,
+    } as const;
+  }
+  const file = parseT3ProjectFile(contents);
+  if (file === null) {
+    return { status: "invalid", fileName, file: null, scripts: NO_SCRIPTS, refresh } as const;
+  }
+  return { status: "valid", fileName, file, scripts: file.scripts ?? NO_SCRIPTS, refresh } as const;
 }

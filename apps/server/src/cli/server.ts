@@ -80,7 +80,7 @@ const { autoBootstrapProjectFromCwd: _, ...serveCommandFlags } = sharedServerCom
 export const serveCommand = Command.make("serve", serveCommandFlags).pipe(
   Command.withShortDescription(`Run ${FORK_DISPLAY_NAME} in this terminal, with no browser.`),
   Command.withDescription(
-    `Run ${FORK_DISPLAY_NAME} in this terminal without opening a browser, and print pairing details. The background service runs this. To set up access from your other devices, run \`${FORK_CLI_NAME} up\`.`,
+    `Run ${FORK_DISPLAY_NAME} in this terminal without opening a browser, and print pairing details. The background service runs this too, without printing them: pair with \`${FORK_CLI_NAME} pair\`. To set up access from your other devices, run \`${FORK_CLI_NAME} up\`.`,
   ),
   Command.withHandler((flags) =>
     runServerCommand(

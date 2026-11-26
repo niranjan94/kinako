@@ -1,4 +1,4 @@
-// T3 ingest retains events and forwards to PostHog; UUIDs deduplicate retries there.
+// T3 ingest retains events and deduplicates retries by UUID.
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { isDoNotTrackSet } from "@t3tools/shared/otelEnvironment";
 import type { ClientOs } from "@t3tools/contracts";
@@ -68,9 +68,12 @@ function retryDelayMs(failures: number, random: number): number {
 }
 
 const TelemetryEnvConfig = Config.all({
-  // Fork: no upstream project key; collection is opt-in with your own key.
-  posthogKey: Config.String("T3CODE_POSTHOG_KEY").pipe(Config.withDefault("")),
-  posthogHost: Config.String("T3CODE_POSTHOG_HOST").pipe(
+  ingestKey: Config.String("T3CODE_TELEMETRY_KEY").pipe(
+    Config.orElse(() => Config.String("T3CODE_POSTHOG_KEY")),
+    Config.withDefault(""),
+  ),
+  ingestHost: Config.String("T3CODE_TELEMETRY_HOST").pipe(
+    Config.orElse(() => Config.String("T3CODE_POSTHOG_HOST")),
     Config.withDefault("https://ingest.t3.codes"),
   ),
   enabled: Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(false)),
@@ -205,10 +208,10 @@ export const make = Effect.gen(function* () {
   const sendBatch = Effect.fn("AnalyticsService.sendBatch")(function* (
     events: ReadonlyArray<BufferedAnalyticsEvent>,
   ) {
-    if (!(yield* telemetryEnabled) || !telemetryConfig.posthogKey || !distinctId) return;
+    if (!(yield* telemetryEnabled) || !telemetryConfig.ingestKey || !distinctId) return;
 
     const payload = {
-      api_key: telemetryConfig.posthogKey,
+      api_key: telemetryConfig.ingestKey,
       batch: events.map((event) => ({
         uuid: event.uuid,
         event: event.event,
@@ -240,7 +243,7 @@ export const make = Effect.gen(function* () {
       })),
     };
 
-    yield* HttpClientRequest.post(`${telemetryConfig.posthogHost}/batch/`).pipe(
+    yield* HttpClientRequest.post(`${telemetryConfig.ingestHost}/batch/`).pipe(
       HttpClientRequest.bodyJson(payload),
       Effect.flatMap(httpClient.execute),
       Effect.flatMap(HttpClientResponse.filterStatusOk),
@@ -328,7 +331,7 @@ export const make = Effect.gen(function* () {
 
   const record: AnalyticsService["Service"]["record"] = Effect.fn("AnalyticsService.record")(
     function* (event, properties, options) {
-      if (!(yield* telemetryEnabled) || !telemetryConfig.posthogKey || !distinctId) return false;
+      if (!(yield* telemetryEnabled) || !telemetryConfig.ingestKey || !distinctId) return false;
 
       // Catch Node UUID defects too; best-effort telemetry drops events without UUIDs.
       const uuid = yield* Effect.exit(crypto.uuidV7());

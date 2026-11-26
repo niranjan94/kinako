@@ -7,6 +7,8 @@ import type {
 import {
   FULL_ACCESS_OVERRIDE_QUESTION,
   fullAccessOverrideExplanation,
+  PUSH_HOOKS_APPROVAL_QUESTION,
+  pushHooksApprovalRows,
 } from "@t3tools/client-runtime/state/thread-requests";
 import { FORK_DISPLAY_NAME } from "@t3tools/shared/forkBrand";
 import { T, useGT, useMessages } from "gt-react-native";
@@ -42,6 +44,8 @@ export function PendingApprovalCard(props: PendingApprovalCardProps) {
   const disabled = !canRespond || props.respondingApprovalId === props.approval.requestId;
   const [explanationOpen, setExplanationOpen] = useState(false);
   const autoReview = props.approval.autoReview;
+  // T3 Code's own question reads as the app asking: a plain sentence, then what it names.
+  const { pushHooks } = props.approval;
   return (
     <View className="gap-2.5 rounded-[20px] border border-border bg-card-alt p-4">
       <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-foreground-secondary">
@@ -50,9 +54,24 @@ export function PendingApprovalCard(props: PendingApprovalCardProps) {
           : gt("Approval needed")}
       </Text>
       <Text className="font-t3-bold text-lg text-foreground">
-        {props.approval.appName ?? props.approval.requestKind}
+        {pushHooks
+          ? m(PUSH_HOOKS_APPROVAL_QUESTION)
+          : (props.approval.appName ?? props.approval.requestKind)}
       </Text>
-      {props.approval.detail ? (
+      {pushHooks ? (
+        <View className="gap-1.5">
+          {pushHooksApprovalRows(pushHooks, m).map((row, index) => (
+            // oxlint-disable-next-line react/no-array-index-key -- rows never reorder and two hooks may read alike
+            <View key={index} className="gap-0.5">
+              <Text className="font-sans text-xs text-foreground-muted">{row.label}</Text>
+              <Text selectable className="font-sans text-sm leading-normal text-foreground">
+                {row.name ? `${row.name}  ` : null}
+                <Text className="font-mono text-sm text-foreground">{row.code}</Text>
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : props.approval.detail ? (
         <Text className="font-sans text-sm leading-normal text-foreground-secondary">
           {props.approval.detail}
         </Text>

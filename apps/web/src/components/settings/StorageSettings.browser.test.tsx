@@ -1,6 +1,10 @@
 import { act, fakeTimers, render, type Screen } from "../../../test/render";
 import { RegistryProvider } from "@effect/atom-react";
-import { DEFAULT_SERVER_SETTINGS, type StorageCleanupReport } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type StorageCleanupReport,
+  type WorktreeSnapshot,
+} from "@t3tools/contracts";
 import { type ReactNode } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
@@ -13,18 +17,26 @@ const state = vi.hoisted(() => ({
   run: vi.fn(),
   update: vi.fn(),
   report: null as StorageCleanupReport | null,
+  snapshots: [] as WorktreeSnapshot[],
+  cleanupUnsupported: false,
 }));
 
 vi.mock(import("../../state/server"), async (original) => {
   const actual = await original();
   const { Atom } = await import("effect/reactivity");
   const report = Atom.make(() => ({ _tag: "Success", value: state.report, waiting: false }));
+  const snapshots = Atom.make(() => ({ _tag: "Success", value: state.snapshots, waiting: false }));
   const allowed = Atom.make(true);
   return {
     ...actual,
     serverEnvironment: {
       ...actual.serverEnvironment,
       storageCleanupReport: (() => report) as never,
+      worktreeSnapshots: (() => snapshots) as never,
+      restoreWorktreeSnapshot: {
+        ...actual.serverEnvironment.restoreWorktreeSnapshot,
+        permissionAtom: () => allowed,
+      },
       runStorageCleanup: {
         ...actual.serverEnvironment.runStorageCleanup,
         permissionAtom: () => allowed,
@@ -46,15 +58,18 @@ vi.mock(import("./SettingsScopeContext"), async (original) => ({
         settings,
         environment: {
           capabilities: {
-            storageCleanup: true,
+            storageCleanup: !state.cleanupUnsupported || environmentId === "env-a",
             storageCleanupRun: true,
             settledWorktreeCleanup: true,
+            worktreeSnapshots: environmentId === "env-a",
           },
         },
       },
     }));
     return {
       scope: { kind: "all" },
+      search: {},
+      groups: [],
       environments,
       connectedEnvironments: environments,
       targets: state.targets,
@@ -118,6 +133,8 @@ function setup() {
     settings: state.settings,
   }));
   state.report = null;
+  state.snapshots = [];
+  state.cleanupUnsupported = false;
   state.run.mockReset();
   state.update.mockReset();
 }
@@ -159,6 +176,27 @@ it("keeps cleanup disabled when settled retention and all other rules are off", 
   expect(button.disabled).toBe(true);
   await act(async () => button.click());
   expect(state.run).not.toHaveBeenCalled();
+});
+
+it("shows recovery snapshots when another connected environment lacks cleanup", async () => {
+  setup();
+  state.cleanupUnsupported = true;
+  state.snapshots = [
+    {
+      repository: "/repo",
+      ref: "refs/snapshots/one",
+      threadId: null,
+      threadTitle: "Saved worktree",
+      branch: null,
+      worktreePath: "/repo/checkout",
+      createdAt: "2026-11-25T12:00:00Z",
+      fileCount: 1,
+    },
+  ];
+  await using screen = await render(panel());
+
+  await expect.element(screen.getByText("Saved worktree")).toBeInTheDocument();
+  await expect.element(screen.getByRole("button", { name: "Delete now" })).not.toBeInTheDocument();
 });
 
 const rule = "Delete old browser artifacts";

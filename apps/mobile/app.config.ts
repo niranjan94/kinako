@@ -185,6 +185,8 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
         android: {
           minWidth: 250,
           minHeight: 180,
+          minResizeWidth: 180,
+          minResizeHeight: 130,
           targetCellWidth: 4,
           targetCellHeight: 3,
           resizeMode: "both",
@@ -239,7 +241,7 @@ const config: ExpoConfig = {
   slug: "kinako",
   platforms: ["ios", "android"],
   scheme: variant.scheme,
-  version: repoEnv.T3CODE_MOBILE_VERSION ?? "2.3.0",
+  version: repoEnv.T3CODE_MOBILE_VERSION ?? "2.4.0",
   runtimeVersion: {
     // Skip costly fingerprinting on dev launches; preview and production OTAs require matching native projects.
     policy: runtimeVersionPolicy,
