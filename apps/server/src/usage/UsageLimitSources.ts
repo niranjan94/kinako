@@ -297,7 +297,12 @@ export const make = Effect.gen(function* () {
       yield* Effect.logDebug("usage limit source read failed", { id, cause: reading.failure });
       return { ...base, accounts: [], error: reading.failure.detail };
     }
-    return { ...base, ...reading.success };
+    const { unreadProviders, ...snapshot } = reading.success;
+    return {
+      ...base,
+      ...snapshot,
+      ...(unreadProviders.length > 0 ? { unreadProviders } : {}),
+    };
   });
 
   const recordQuotaHistory = Effect.fn("UsageLimitSources.recordQuotaHistory")(

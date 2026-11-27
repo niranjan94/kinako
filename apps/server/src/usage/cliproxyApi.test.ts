@@ -622,10 +622,30 @@ describe("CLIProxyAPI built-in management API", () => {
       expect(yield* api.readHub(config)).toEqual({
         accounts: [],
         credentials: [{ provider: "codex", total: 1, enabled: 0 }],
+        unreadProviders: [],
       });
       expect((yield* api.consume(config, "first.json", "credit").pipe(Effect.result))._tag).toBe(
         "Failure",
       );
+      expect(test.requests.every((request) => request.path.endsWith("/auth-files"))).toBe(true);
+    }),
+  );
+
+  it.effect("names the providers of enabled accounts it cannot read", () =>
+    Effect.gen(function* () {
+      const test = fixture({
+        accounts: [
+          { id: "kimi.json", auth_index: "k", provider: "kimi-ai" },
+          { id: "gemini.json", auth_index: "g", provider: "antigravity" },
+          { id: "other.json", auth_index: "o", provider: "kimi-ai" },
+          { id: "off.json", auth_index: "x", provider: "qwen", disabled: true },
+        ],
+      });
+      const api = yield* test.api;
+      expect(yield* api.readHub(config)).toMatchObject({
+        accounts: [],
+        unreadProviders: ["antigravity", "kimi-ai"],
+      });
       expect(test.requests.every((request) => request.path.endsWith("/auth-files"))).toBe(true);
     }),
   );

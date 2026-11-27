@@ -788,10 +788,10 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     probeResult && Result.isSuccess(probeResult) ? probeResult.success : undefined;
   const probeFailure =
     probeResult && Result.isFailure(probeResult) ? probeResult.failure : undefined;
-  const reportedModels =
+  const { models: reportedModels, hasNonCatalogModels } =
     claudeSettings.hubModels === undefined
       ? claudeReportedModels(modelCatalog, claudeSettings.customModels, capabilities?.models)
-      : [];
+      : { models: [], hasNonCatalogModels: false };
   const models = capClaudeCatalogEffort(
     modelCatalog,
     claudeProviderModels(
@@ -915,8 +915,8 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     },
   });
   // Claude Code lists gateway models only while its one gateway cache holds this base URL, and
-  // then all of them, so a list without any may lack this gateway's models.
-  return claudeSettings.hubModels === undefined && reportedModels.length === 0
+  // then all of them, including those already configured as custom models.
+  return claudeSettings.hubModels === undefined && !hasNonCatalogModels
     ? { ...provider, modelsIncomplete: true }
     : provider;
 });

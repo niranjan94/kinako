@@ -550,10 +550,10 @@ export const makeCliproxyApi = Effect.gen(function* () {
     return { id: account.id, driver: provider.driver, ...reading, historyKey };
   });
 
-  const readHub = Effect.fn("CliproxyApi.readHub")(function* (
-    hub: CliproxyHub,
-  ): Effect.fn.Return<
-    Pick<UsageLimitSourceSnapshot, "accounts" | "credentials">,
+  const readHub = Effect.fn("CliproxyApi.readHub")(function* (hub: CliproxyHub): Effect.fn.Return<
+    Pick<UsageLimitSourceSnapshot, "accounts" | "credentials"> & {
+      readonly unreadProviders: ReadonlyArray<string>;
+    },
     UsageLimitSourceError
   > {
     const files = yield* authFiles(hub).pipe(
@@ -575,6 +575,15 @@ export const makeCliproxyApi = Effect.gen(function* () {
       const provider = HUB_PROVIDERS.get(account.provider);
       return provider && !account.disabled ? [{ account, provider }] : [];
     });
+    const unreadProviders = [
+      ...new Set(
+        files.flatMap((account) =>
+          account.disabled || HUB_PROVIDERS.has(account.provider) || !account.provider.trim()
+            ? []
+            : [account.provider.trim()],
+        ),
+      ),
+    ].toSorted();
     // Model lists are optional, so their lookups run apart from the quota reads and stop at one
     // short deadline; a slow lookup must not push a refresh past its budget.
     const [readings, models] = yield* Effect.all(
@@ -598,7 +607,7 @@ export const makeCliproxyApi = Effect.gen(function* () {
       const listed = models[index];
       return listed && Option.isSome(listed) ? { ...reading, models: listed.value } : reading;
     });
-    return { accounts, credentials: [...credentials.values()] };
+    return { accounts, credentials: [...credentials.values()], unreadProviders };
   });
 
   const consume = Effect.fn("CliproxyApi.consume")(function* (
