@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
@@ -42,7 +43,12 @@ import * as ProjectService from "./ProjectService.ts";
 import * as RepositoryIdentityResolver from "./RepositoryIdentityResolver.ts";
 
 const layerEventPersistence = EventSink.layer.pipe(
-  Layer.provideMerge(Layer.merge(EventStore.layer, ProjectionStore.layer)),
+  Layer.provideMerge(
+    Layer.merge(
+      EventStore.layer,
+      ProjectionStore.layer.pipe(Layer.provide(NodeCrypto.layerDigest)),
+    ),
+  ),
 );
 const layerServices = (gitCalls: Ref.Ref<ReadonlyArray<ReadonlyArray<string>>>) =>
   Layer.mergeAll(

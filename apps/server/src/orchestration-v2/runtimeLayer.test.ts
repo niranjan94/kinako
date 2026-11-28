@@ -13880,7 +13880,7 @@ it.layer(layerSharedApplicationDataPlaneTest)("snooze projection", (it) => {
         reason: "user",
       });
       const projections = yield* ProjectionStore.ProjectionStoreV2.pipe(
-        Effect.provide(ProjectionStore.layer),
+        Effect.provide(ProjectionStore.layer.pipe(Layer.provide(NodeCrypto.layer))),
       );
       const [candidate] = yield* projections.getSettlementCandidates(threadId);
       assert.deepEqual(candidate?.lastSnoozeWakeAt, yield* DateTime.now);
@@ -15504,7 +15504,7 @@ it.layer(layerSharedApplicationDataPlaneTest)("snooze wake announcements", (it) 
       const orchestrator = yield* Orchestrator.OrchestratorV2;
       const sink = yield* EventSink.EventSinkV2;
       const store = yield* ProjectionStore.ProjectionStoreV2.pipe(
-        Effect.provide(ProjectionStore.layer),
+        Effect.provide(ProjectionStore.layer.pipe(Layer.provide(NodeCrypto.layerDigest))),
       );
       const projectId = ProjectId.make(`wake-project:${scenario}`);
       const threadId = ThreadId.make(`wake-thread:${scenario}`);
@@ -15674,7 +15674,7 @@ it.layer(layerSharedApplicationDataPlaneTest)("snooze wake scheduler", (it) => {
         const projects = yield* ProjectService.ProjectService;
         const orchestrator = yield* Orchestrator.OrchestratorV2;
         const store = yield* ProjectionStore.ProjectionStoreV2.pipe(
-          Effect.provide(ProjectionStore.layer),
+          Effect.provide(ProjectionStore.layer.pipe(Layer.provide(NodeCrypto.layerDigest))),
         );
         const projectId = ProjectId.make(`wake-scheduler:${scenario}`);
         const threadId = ThreadId.make(`wake-scheduler:${scenario}`);

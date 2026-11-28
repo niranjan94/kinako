@@ -57,7 +57,6 @@
       "entry": [
         "src/bin.ts!",
         "src/claude-history-worker.ts!",
-        "src/process-launcher.ts!",
         "scripts/cli.ts",
         "scripts/fetch-expo-schema.ts",
         "scripts/probe-claude-fork-local-rollback-replay.ts",
@@ -107,6 +106,7 @@
       // Worktree setup (scripts/setup-worktree.ts) runs this directly, evidence fixtures
       // run under node, and the office iframe loads its host script through Vite-injected HTML.
       "entry": [
+        "src/epubPreviewMain.tsx!",
         "scripts/warm-dep-cache.ts",
         "test/fixtures/**/*.mjs",
         "public/pixel-office/kinako-host.js!",

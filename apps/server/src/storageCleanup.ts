@@ -51,6 +51,7 @@ import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import { checkpointRefForScopeOrdinal } from "./orchestration-v2/CheckpointService.ts";
+import * as PendingSettleScripts from "./orchestration-v2/PendingSettleScripts.ts";
 import { threadHasQueuedTurnStart } from "./orchestration-v2/ThreadSettlementService.ts";
 import { MAX_OVERDUE_ARM_MS } from "./orchestration-v2/UsageLimitRecoveryWorker.ts";
 import * as WorktreeBranchSync from "./orchestration-v2/WorktreeBranchSync.ts";
@@ -345,6 +346,7 @@ const make = Effect.gen(function* () {
   const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
   const reconcileBranch = yield* WorktreeBranchSync.makeReconcile;
   const terminals = yield* TerminalManager.TerminalManager;
+  const pendingSettleScripts = yield* PendingSettleScripts.PendingSettleScripts;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const taskFolders = yield* TaskFolders.TaskFolders;
@@ -1603,6 +1605,8 @@ const make = Effect.gen(function* () {
         if (group.some((member) => member.branch !== worktreeBranch))
           return keep("a subagent thread's branch differs from this worktree's branch");
         if (yield* hasTerminal(guardedPaths)) return keep(waitForStop("open terminal"));
+        if (members.some((member) => pendingSettleScripts.has(member.thread.id)))
+          return keep(waitForStop("settle script is queued"));
         const includeFrom = (current: ServerSettings): WorktreeIncludeSource => ({
           sourceCwd: project.workspaceRoot,
           patterns: resolveProjectSettings(current, thread.projectId).settings
@@ -1673,6 +1677,8 @@ const make = Effect.gen(function* () {
           );
           const latest = bindings.filter((_binding, index) => bindingKeys[index] === worktreeKey);
           if (yield* hasTerminal(guardedPaths)) return waitForStop("open terminal");
+          if (latest.some((binding) => pendingSettleScripts.has(binding.threadId)))
+            return waitForStop("settle script is queued");
           if (deleted) {
             if (
               !resolveWorktreeCleanup(yield* settingsService.getSettings, thread.projectId)
@@ -2120,7 +2126,7 @@ const make = Effect.gen(function* () {
               // Git requires force for submodules; recursive checks above cannot make removal atomic.
               force: submodules.force,
               execute: git.execute,
-              run: (args) => cleanupGit(repository, [...args], "git worktree remove"),
+              run: (args, cwd) => cleanupGit(cwd, [...args], "git worktree remove"),
             }).pipe(Effect.tapError(() => noteLeftover(adminDir, entry)));
             entries.push({
               ...entry,
