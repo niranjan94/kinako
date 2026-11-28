@@ -63,6 +63,7 @@ T3 Connect is two things: an account service (sign-in, relay discovery, push not
 Upstream code usually reaches the tunnel through `hasCloudPublicConfig()` on clients, or `CloudManagedEndpointRuntime.inspectConnector` and the relay hook URL on the server. Current fallbacks, each with a test or a client-only gate:
 
 - MCP "Use in another app": `PublicRouteWizard` in `apps/web/src/components/mcp/UseInAnotherAppDialog.tsx`.
+- Sharing & access → MCP URL uses the host's live public route before its local address when there is no Connect tunnel.
 - Guest share links: `servedHostnames` in `apps/server/src/guest/GuestShareService.ts`.
 - Scheduled task webhook URLs: `webhookBaseUrl` in `apps/server/src/scheduledTasks/ScheduledTaskService.ts`.
 - Workflow webhooks: `kinako workflow hooks` prints paths served directly by `apps/server/src/scheduledTasks/webhookRoute.ts`. Use the host's public route address with those paths.

@@ -9,7 +9,7 @@ Open the command palette (`Cmd/Ctrl+K`) and run **Use T3 Code in another app (MC
 - Cloud assistants (like ChatGPT or Claude) require a [public route](./remote-access.md#public-routes-with-your-cloudflare-account) turned on for the environment.
 - When the app opens its sign-in page, choose **Get code** in the wizard and paste the code there. A code works once, for 5 minutes, and approves only the level you chose.
 - To also reach other machines through the same connection, enable **Settings → Labs → Linked environments** and [link them](./remote-access.md#link-another-environment).
-- To copy the raw MCP endpoint (`https://<environment-address>/mcp`), open an environment's menu in **Settings → Environments → Copy MCP URL**. OAuth requires `https://` or `localhost` (plain `http://` LAN/Tailscale addresses cannot complete OAuth).
+- To copy the raw MCP endpoint (`https://<environment-address>/mcp`) of the machine you are on, use **MCP URL** in **Settings → Sharing & access**: it is the T3 Connect address when the tunnel is on, otherwise a `localhost` or `https://` address. For a saved remote environment, open its menu in **Settings → Environments → Copy MCP URL**. OAuth requires `https://` or `localhost` (plain `http://` LAN/Tailscale addresses cannot complete OAuth).
 
 ### CLI clients and ChatGPT
 

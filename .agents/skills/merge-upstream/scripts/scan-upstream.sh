@@ -194,7 +194,7 @@ apps/server/src/device/DeviceHubProxy.ts apps/server/src/preview/ServerBrowserSt
 apps/server/src/preview/PreviewTunnel.ts apps/server/src/peer/http.ts
 apps/server/src/peer/linkThreadHttp.ts apps/server/src/speech/http.ts apps/server/src/speech/stream.ts
 apps/server/src/environment/ServerEnvironment.ts packages/contracts/src/environmentHttp.ts
-packages/contracts/src/auth.ts packages/shared/src/dpop.ts'
+packages/contracts/src/auth.ts packages/contracts/src/clientRpcPermissions.ts packages/shared/src/dpop.ts'
 printf 'Surface files:\n'
 # shellcheck disable=SC2086
 git diff --stat=120 "$base" "$upstream" -- $surface ':(exclude)*.test.ts' | sed 's/^/  /' | grep . || printf '  (none)\n'
